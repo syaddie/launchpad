@@ -15,7 +15,7 @@ You only do this once. After that, pushing to `main` deploys by itself (step 5),
    - **Publish the app** (Audience → *Publish app*, status *In production*). Leave it in *Testing* and Google expires the sign-in every 7 days. You do **not** need to submit for verification. Google will show a "Google hasn't verified this app" warning when you connect; click **Advanced → Go to Launchpad**. That's expected for a personal app.
 4. **APIs & Services → Credentials → Create credentials → OAuth client ID**:
    - Application type **Web application**, name `Launchpad`.
-   - **Authorised redirect URI**: `https://launchpad.yourdomain.com/api/auth/google/callback` (your real hostname from step 3 below).
+   - **Authorised redirect URI**: `https://launchpad.syaddy.com/api/auth/google/callback` (your real hostname from step 3 below).
    - Copy the **Client ID** and **Client secret**.
 
 ## 2. Run the container
@@ -45,21 +45,28 @@ Check it from another device on your network: `http://<server-lan-ip>:8090`. You
 
 > If you normally run `sudo docker …`, run the `docker login` with `sudo` too, and use `sudo crontab -e` in step 5, so the login and the cron job belong to the same user.
 
-## 3. Cloudflare Tunnel: give it a hostname
+## 3. Cloudflare Tunnel: launchpad.syaddy.com
 
-You can reuse the tunnel you already have for the busking site.
+Launchpad has its own tunnel, run by the `cloudflared` service in this repo's `docker-compose.yml`.
 
-1. Cloudflare dashboard → **Zero Trust → Networks → Tunnels** → click your existing tunnel → **Public Hostname** tab → **Add a public hostname**.
-2. Subdomain `launchpad`, your domain, type **HTTP**, URL **`<server-lan-ip>:8090`** (e.g. `192.168.1.50:8090`).
-   The busking site used `web:80` because its `cloudflared` runs in the same Compose project. Launchpad is a separate project, so the tunnel reaches it through the server's published port instead.
-3. Save, then visit `https://launchpad.yourdomain.com`.
+1. Cloudflare dashboard → **Zero Trust → Networks → Tunnels → Create a tunnel** → **Cloudflared** → name it `launchpad` → Save.
+2. On the next screen pick **Docker**. Cloudflare shows a `docker run … --token eyJ…` command. Don't run it; copy only the long value after `--token`.
+3. Put it in `.env` on the server:
+   ```
+   TUNNEL_TOKEN=eyJ...
+   ```
+4. Start it: `docker compose up -d`. The tunnel should show **Healthy** in the dashboard within a few seconds.
+5. Back in the tunnel → **Public Hostname** tab → **Add a public hostname**:
+   - Subdomain `launchpad`, domain `syaddy.com`
+   - Service type **HTTP**, URL **`launchpad:8080`** (the service name and container port, reachable because both run in the same Compose project)
+6. Save, then visit `https://launchpad.syaddy.com`.
 
 ## 4. Cloudflare Access: lock it to you
 
 Launchpad shows your calendar and reads your Gmail, so it must not be public.
 
 1. **Zero Trust → Access → Applications → Add an application → Self-hosted**.
-2. Application domain: `launchpad.yourdomain.com`. Session duration: **1 month** (so the new-tab page doesn't keep asking you to sign in).
+2. Application domain: `launchpad.syaddy.com`. Session duration: **1 month** (so the new-tab page doesn't keep asking you to sign in).
 3. Add a policy: Action **Allow**, Include **Emails** → your email. Save.
 4. Open the app's settings and copy the **Application Audience (AUD) Tag**. Your **team domain** is under Zero Trust → Settings → Custom pages (it looks like `yourteam.cloudflareaccess.com`).
 5. Add both to `.env` and restart:
@@ -72,7 +79,7 @@ Launchpad shows your calendar and reads your Gmail, so it must not be public.
    ```
    With these set, Launchpad itself rejects any request that didn't come through Access, including someone on your LAN hitting port 8090 directly.
 
-Now open `https://launchpad.yourdomain.com`, press the gear → **Connect Google**, and approve. Calendar, Tasks and shipping emails sync within a few seconds.
+Now open `https://launchpad.syaddy.com`, press the gear → **Connect Google**, and approve. Calendar, Tasks and shipping emails sync within a few seconds.
 
 Finally, set it as your new tab: in Chrome, install an extension such as **New Tab Redirect** and point it at the URL; in Firefox, Settings → Home → *New windows and tabs* → Custom URL.
 

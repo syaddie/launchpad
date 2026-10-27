@@ -8,11 +8,24 @@ services:
     restart: unless-stopped
     env_file: .env
     ports:
-      # Point the Cloudflare Tunnel's public hostname at http://<server-lan-ip>:8090
+      # For checking it on your LAN at http://<server-lan-ip>:8090. The tunnel
+      # below reaches the container directly and doesn't need this.
       - "8090:8080"
     volumes:
       # Bookmarks, notes, packages and the Google sign-in all live here.
       - launchpad-data:/data
+
+  # Cloudflare Tunnel for launchpad.syaddy.com. Token comes from TUNNEL_TOKEN in .env.
+  # In the tunnel's Public Hostname, set the service to HTTP  launchpad:8080
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: launchpad-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    depends_on:
+      - launchpad
 
 volumes:
   launchpad-data:
