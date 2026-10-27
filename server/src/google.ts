@@ -2,7 +2,7 @@
 import { config } from './config';
 import { store } from './store';
 import { addDays, startOfDay } from '../../shared/dates';
-import { extractTrackingNumbers, htmlToText, labelFor, type Candidate } from './gmail-parse';
+import { extractTrackingNumbers, htmlToText, labelFor, parseInboxMessage, type Candidate, type StoredEmail } from './gmail-parse';
 import type { CalEvent, CalendarInfo, Task, TaskList } from '../../shared/types';
 
 const SCOPES = [
@@ -216,7 +216,8 @@ const SHIPPING_QUERY = [
 
 const b64 = (s: string) => Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
 
-function bodyText(payload: any): string {
+/** Plain and HTML parts together, or with `either` the plain part alone when there is one. */
+function bodyText(payload: any, either = false): string {
   const plain: string[] = [];
   const html: string[] = [];
   const walk = (p: any) => {
@@ -229,6 +230,7 @@ function bodyText(payload: any): string {
   };
   walk(payload);
   // Use both: some senders only put the tracking number in the HTML part.
+  if (either && plain.some((p) => p.trim())) return plain.join('\n');
   return [...plain, ...html.map(htmlToText)].join('\n');
 }
 
@@ -257,3 +259,46 @@ export async function scanGmail(): Promise<GmailFind[]> {
   return finds;
 }
 
+
+// ---------- Inbox ----------
+
+const INBOX_QUERY = 'newer_than:7d -in:chats -in:spam -in:trash -in:sent -in:drafts';
+const INBOX_MAX = 150;
+
+async function listMessageIds(q: string, max: number): Promise<string[]> {
+  const ids: string[] = [];
+  let pageToken = '';
+  do {
+    const p = new URLSearchParams({ q, maxResults: String(Math.min(100, max - ids.length)) });
+    if (pageToken) p.set('pageToken', pageToken);
+    const page = await gapi<{ messages?: { id: string }[]; nextPageToken?: string }>(`${GMAIL}/messages?${p}`);
+    ids.push(...(page.messages || []).map((m) => m.id));
+    pageToken = page.nextPageToken || '';
+  } while (pageToken && ids.length < max);
+  return ids;
+}
+
+/**
+ * The last 7 days of mail, newest first. Only messages not in `cached` are
+ * downloaded; read/unread comes from one extra list call, so a 15-minute
+ * refresh costs two or three requests when nothing new has arrived.
+ */
+export async function fetchInbox(cached: StoredEmail[]): Promise<StoredEmail[]> {
+  const ids = await listMessageIds(INBOX_QUERY, INBOX_MAX);
+  const unread = new Set(await listMessageIds(`${INBOX_QUERY} is:unread`, INBOX_MAX));
+  const known = new Map(cached.map((e) => [e.id, e]));
+  const missing = ids.filter((id) => !known.has(id));
+  // A few at a time keeps well inside Gmail's per-user rate limit.
+  for (let i = 0; i < missing.length; i += 8) {
+    await Promise.all(
+      missing.slice(i, i + 8).map(async (id) => {
+        const msg = await gapi<any>(`${GMAIL}/messages/${id}?format=full`);
+        known.set(id, parseInboxMessage(msg, bodyText(msg.payload, true)));
+      }),
+    );
+  }
+  return ids
+    .map((id) => known.get(id)!)
+    .map((e) => ({ ...e, unread: unread.has(e.id) }))
+    .sort((a, b) => b.at.localeCompare(a.at));
+}

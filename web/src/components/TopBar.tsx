@@ -280,10 +280,11 @@ export function TopBar({ data, now, subline, search, onSearch, searchRef, smokes
     { key: 'gmail', name: 'Gmail packages', ok: 'Checked' },
     { key: 'carriers', name: 'Carriers', ok: 'Updated' },
     { key: 'news', name: 'News', ok: 'Updated' },
+    { key: 'inbox', name: 'Inbox', ok: 'Updated' },
     { key: 'weather', name: 'Weather', ok: 'Updated' },
     { key: 'speedtest', name: 'Speed test', ok: 'Ran' },
   ];
-  const needsGoogle = (k: SourceKey) => k === 'calendar' || k === 'tasks' || k === 'gmail';
+  const needsGoogle = (k: SourceKey) => k === 'calendar' || k === 'tasks' || k === 'gmail' || k === 'inbox';
   const connected = data.google.connected;
   const lines = sources
     .filter((s) => connected || !needsGoogle(s.key))
@@ -292,11 +293,13 @@ export function TopBar({ data, now, subline, search, onSearch, searchRef, smokes
       const off =
         s.key === 'news'
           ? !data.prefs.newsTopics.length
-          : s.key === 'weather'
-            ? !data.prefs.weatherArea
-            : s.key === 'speedtest'
-              ? !data.prefs.speedTestHours
-              : needsGoogle(s.key) && !data.prefs.sources[s.key as 'calendar'];
+          : s.key === 'inbox'
+            ? !data.prefs.sources.gmail || hidden.includes('view:inbox')
+            : s.key === 'weather'
+              ? !data.prefs.weatherArea
+              : s.key === 'speedtest'
+                ? !data.prefs.speedTestHours
+                : needsGoogle(s.key) && !data.prefs.sources[s.key as 'calendar'];
       if (off) return { name: s.name, text: 'Off', warn: false };
       if (failing(st)) return { name: s.name, text: `Couldn’t sync · last synced ${ago(st.lastSuccess, now)}`, warn: true };
       return { name: s.name, text: st.lastSuccess ? `${s.ok} ${ago(st.lastSuccess, now)}` : 'Waiting for first sync', warn: false };

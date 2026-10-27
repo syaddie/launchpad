@@ -9,9 +9,9 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { config, googleConfigured } from './config';
 import { authUrl, completeTask, createTask, exchangeCode, revoke } from './google';
 import { store, updatePackages } from './store';
-import { summariesEnabled } from './news';
+import { claudeEnabled } from './claude';
 import { MAX_PHOTOS, MAX_PHOTO_BYTES, readPhoto, removePhotoFile, sniffImage, writePhoto } from './photos';
-import { isRunning, newPackage, refreshNews, refreshPackage, refreshWeather, runAllGoogle, runIfStale, runSource, startScheduler } from './sync';
+import { isRunning, newPackage, refreshPackage, refreshSummaries, refreshWeather, runAllGoogle, runIfStale, runSource, startScheduler } from './sync';
 import { serverStats, startSampler } from './system';
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
 import { DEFAULT_ENGINES, HIDEABLE_KEYS } from '../../shared/defaults';
@@ -65,12 +65,25 @@ function state(): AppState {
         ? { topic, articles: n.articles, stories: n.stories, summarisedAt: n.summarisedAt, fetchedAt: n.fetchedAt, error: n.error }
         : { topic, articles: [], stories: null, summarisedAt: null, fetchedAt: null, error: null };
     }),
-    newsSummaries: summariesEnabled(),
+    newsSummaries: claudeEnabled(),
+    inbox: inboxState(),
     weather: store.weather(),
     photos: store.photos().map(({ id, focus }): Photo => ({ id, focus })),
     countdowns: store.countdowns(),
     smokes: recentSmokes(),
     moods: store.moods(),
+  };
+}
+
+/** Bodies and the ids behind each digest stay on the server. */
+function inboxState(): AppState['inbox'] {
+  const { emails, digests, fetchedAt, error } = store.inbox();
+  const digest = (d: (typeof digests)['2d']) => d && { overview: d.overview, items: d.items, skimmed: d.skimmed, emailCount: d.emailCount, summarisedAt: d.summarisedAt };
+  return {
+    emails: emails.map(({ body: _, ...e }) => e),
+    digests: { '2d': digest(digests['2d']), '7d': digest(digests['7d']) },
+    fetchedAt,
+    error,
   };
 }
 
@@ -156,6 +169,8 @@ app.put('/api/prefs', async (c) => {
   for (const k of ['calendar', 'tasks', 'gmail'] as const) {
     if (next.sources[k] && !prev.sources[k]) runSource(k);
   }
+  const inboxOn = (p: Prefs) => p.sources.gmail && !p.hidden.includes('view:inbox');
+  if (inboxOn(next) && !inboxOn(prev)) runSource('inbox');
   // A new area should show straight away; the page refreshes after saving.
   if (next.weatherArea && next.weatherArea !== prev.weatherArea) await refreshWeather();
   return c.json(next);
@@ -344,9 +359,9 @@ app.delete('/api/photos/:id', (c) => {
 
 app.post('/api/sync/:source', async (c) => {
   const key = c.req.param('source') as SourceKey;
-  if (!['calendar', 'tasks', 'gmail', 'carriers', 'news', 'weather', 'speedtest'].includes(key)) return c.json({ error: 'Unknown source' }, 400);
-  if (key === 'news') {
-    await refreshNews();
+  if (!['calendar', 'tasks', 'gmail', 'carriers', 'news', 'inbox', 'weather', 'speedtest'].includes(key)) return c.json({ error: 'Unknown source' }, 400);
+  if (key === 'news' || key === 'inbox') {
+    await refreshSummaries(key);
     return c.json(state());
   }
   // ?ifOlderThan=30 lets the page ask for a refresh on focus without hammering Google.

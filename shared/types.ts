@@ -21,8 +21,8 @@ export interface Note {
 export type ThemeMode = 'system' | 'light' | 'dark';
 export type AccentKey = 'sage' | 'slate' | 'terracotta';
 export type GoogleSource = 'calendar' | 'tasks' | 'gmail';
-export type SourceKey = GoogleSource | 'carriers' | 'news' | 'weather' | 'speedtest';
-export type ViewKey = 'home' | 'news' | 'you' | 'server';
+export type SourceKey = GoogleSource | 'carriers' | 'news' | 'inbox' | 'weather' | 'speedtest';
+export type ViewKey = 'home' | 'news' | 'inbox' | 'you' | 'server';
 
 /** One place to search: "yt lofi" opens url with %s replaced by "lofi". The first engine is the default. */
 export interface SearchEngine {
@@ -143,6 +143,55 @@ export interface NewsTopic {
   stories: NewsStory[] | null;
   summarisedAt: string | null;
   fetchedAt: string | null;
+  error: string | null;
+}
+
+/** How far back an inbox digest looks. */
+export type InboxRange = '2d' | '7d';
+
+export interface InboxEmail {
+  id: string;
+  threadId: string;
+  /** Display name, e.g. "DBS Bank". */
+  from: string;
+  fromEmail: string;
+  subject: string;
+  snippet: string;
+  /** ISO date-time Gmail received it. */
+  at: string;
+  unread: boolean;
+  /** Gmail's inbox tab: primary, updates, promotions, social or forums. */
+  category: string;
+}
+
+export interface InboxItem {
+  /** action: something to do · update: worth knowing · fyi: one line is enough. */
+  kind: 'action' | 'update' | 'fyi';
+  headline: string;
+  summary: string;
+  /** A deadline in the email's own words, e.g. "by Fri 31 Oct"; empty when there is none. */
+  due: string;
+  /** Ids of the emails it covers, newest first. */
+  emails: string[];
+}
+
+export interface InboxDigest {
+  overview: string;
+  items: InboxItem[];
+  /** One line on what was left out, e.g. "Also 23 promotions (Shopee, Grab) and 4 newsletters." */
+  skimmed: string;
+  /** How many emails the digest was written from. */
+  emailCount: number;
+  summarisedAt: string;
+}
+
+export interface InboxState {
+  /** The last 7 days, newest first. */
+  emails: InboxEmail[];
+  /** Claude's digest per range, or null before the first one (or without an API key). */
+  digests: Record<InboxRange, InboxDigest | null>;
+  fetchedAt: string | null;
+  /** The last summary failure, shown in the Inbox view. */
   error: string | null;
 }
 
@@ -286,8 +335,9 @@ export interface AppState {
   /** Carriers that get live status (SingPost always; others with a 17TRACK key). */
   tracking: { allCarriers: boolean };
   news: NewsTopic[];
-  /** ANTHROPIC_API_KEY is set, so topics get summaries and not just headlines. */
+  /** ANTHROPIC_API_KEY is set, so news topics and the inbox get summaries and not just lists. */
   newsSummaries: boolean;
+  inbox: InboxState;
   /** Latest reading for prefs.weatherArea, and the areas Settings can offer. */
   weather: { areas: string[]; now: Weather | null };
   /** Shown in the photo panels, in display order. The files are at /api/photos/:id. */

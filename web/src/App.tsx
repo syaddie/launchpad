@@ -6,6 +6,7 @@ import type { AppState, BookmarkGroup, Countdown, Mood, Note, Package, Photo, Pr
 import { api, cachedState, cacheState, localGet, localSet } from './api';
 import { Bookmarks } from './components/Bookmarks';
 import { AddPackageDrawer, Drawer, PANEL_ROWS, PackageDrawer, SettingsDrawer } from './components/Drawers';
+import { Inbox, inboxBadge } from './components/Inbox';
 import { News } from './components/News';
 import { FocusView, Notes } from './components/Notes';
 import { Packages } from './components/Packages';
@@ -36,12 +37,14 @@ const EMPTY: AppState = {
     gmail: { lastSuccess: null, lastAttempt: null, lastError: null },
     carriers: { lastSuccess: null, lastAttempt: null, lastError: null },
     news: { lastSuccess: null, lastAttempt: null, lastError: null },
+    inbox: { lastSuccess: null, lastAttempt: null, lastError: null },
     weather: { lastSuccess: null, lastAttempt: null, lastError: null },
     speedtest: { lastSuccess: null, lastAttempt: null, lastError: null },
   },
   tracking: { allCarriers: false },
   news: [],
   newsSummaries: false,
+  inbox: { emails: [], digests: { '2d': null, '7d': null }, fetchedAt: null, error: null },
   weather: { areas: [], now: null },
   photos: [],
   countdowns: [],
@@ -52,7 +55,7 @@ const EMPTY: AppState = {
 /** A cached copy from an older version can be missing newer fields. */
 function fromCache(c: AppState | null): AppState {
   if (!c) return EMPTY;
-  return { ...EMPTY, ...c, prefs: { ...DEFAULT_PREFS, ...c.prefs }, sync: { ...EMPTY.sync, ...c.sync } };
+  return { ...EMPTY, ...c, prefs: { ...DEFAULT_PREFS, ...c.prefs }, sync: { ...EMPTY.sync, ...c.sync }, inbox: c.inbox ?? EMPTY.inbox };
 }
 
 type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings' } | null;
@@ -127,6 +130,7 @@ export function App() {
   const [palette, setPalette] = useState(false);
   const [addCountdown, setAddCountdown] = useState(0);
   const [newsBusy, setNewsBusy] = useState(false);
+  const [inboxBusy, setInboxBusy] = useState(false);
   const [layout, setLayout] = useState<Layout>('desktop');
   const [search, setSearch] = useState('');
   const [drawer, setDrawer] = useState<DrawerState>(null);
@@ -225,9 +229,9 @@ export function App() {
     return () => ro.disconnect();
   }, []);
 
-  // Pick up anything the hourly news run fetched since the last poll.
+  // Pick up anything the hourly news run (or the inbox's) fetched since the last poll.
   useEffect(() => {
-    if (view === 'news') refresh();
+    if (view === 'news' || view === 'inbox') refresh();
   }, [view, refresh]);
 
   // ---------- actions ----------
@@ -268,6 +272,15 @@ export function App() {
       .then(merge)
       .catch((e) => showToast(`Couldn’t refresh news: ${e.message}`))
       .finally(() => setNewsBusy(false));
+  };
+
+  const refreshInbox = () => {
+    setInboxBusy(true);
+    api
+      .sync('inbox')
+      .then(merge)
+      .catch((e) => showToast(`Couldn’t refresh the inbox: ${e.message}`))
+      .finally(() => setInboxBusy(false));
   };
 
   const setNewsTopics = (newsTopics: string[]) => {
@@ -525,6 +538,7 @@ export function App() {
   const grid = gridLayout(layout, shown);
   const smokesToday = smokesOn(data.smokes, now).length;
   const todayMood = data.moods[ymd(now)];
+  const inboxCount = inboxBadge(data);
 
   // ---------- command palette ----------
 
@@ -545,6 +559,11 @@ export function App() {
     { id: 'a:speed', group: 'Actions', label: 'Run a speed test', icon: 'ph-gauge', words: 'internet', run: runSpeedTest },
     { id: 'a:package', group: 'Actions', label: 'Add a package', icon: 'ph-package', words: 'tracking', run: () => setDrawer({ type: 'add' }) },
     { id: 'a:news', group: 'Actions', label: 'Refresh the news', icon: 'ph-arrows-clockwise', run: () => (setView('news'), refreshNews()) },
+    {
+      id: 'a:inbox', group: 'Actions', label: 'Catch up on email', icon: 'ph-envelope-open', words: 'inbox gmail mail summary digest',
+      sub: inboxCount ? `${inboxCount} need${inboxCount === 1 ? 's' : ''} you` : undefined,
+      run: () => (setView('inbox'), refreshInbox()),
+    },
     { id: 'a:theme', group: 'Actions', label: dark ? 'Switch to the light theme' : 'Switch to the dark theme', icon: dark ? 'ph-sun' : 'ph-moon', run: () => setPrefs({ ...data.prefs, theme: dark ? 'light' : 'dark' }) },
     { id: 'a:settings', group: 'Actions', label: 'Open Settings', icon: 'ph-gear-six', words: 'preferences', run: () => setDrawer({ type: 'settings' }) },
     ...VIEWS.filter((v) => v.key !== view).map((v) => ({
@@ -594,11 +613,13 @@ export function App() {
   return (
     <div ref={rootRef} className="lp-root" data-layout={layout}>
       <div className="lp-shell">
-      <Rail view={view} hidden={data.prefs.hidden} onView={setView} onPalette={() => setPalette(true)} onSettings={() => setDrawer({ type: 'settings' })} />
+      <Rail view={view} hidden={data.prefs.hidden} badges={{ inbox: inboxCount }} onView={setView} onPalette={() => setPalette(true)} onSettings={() => setDrawer({ type: 'settings' })} />
       <div className="lp-inner">
         <TopBar data={data} now={now} subline={subline} search={search} onSearch={setSearch} searchRef={searchRef} smokesToday={smokesToday} onLogSmoke={logSmoke} />
         {view === 'news' ? (
           <News data={data} now={now} busy={newsBusy} onRefresh={refreshNews} onTopics={setNewsTopics} />
+        ) : view === 'inbox' ? (
+          <Inbox data={data} now={now} busy={inboxBusy} onRefresh={refreshInbox} onConnect={connect} onOpenSettings={() => setDrawer({ type: 'settings' })} />
         ) : view === 'you' ? (
           <You data={data} now={now} addSignal={addCountdown} onCountdowns={setCountdowns} onLogSmoke={logSmoke} onUndoSmoke={undoSmoke} onMood={setMood} />
         ) : view === 'server' ? (
