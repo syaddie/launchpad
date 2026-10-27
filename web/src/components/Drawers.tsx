@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import { CARRIERS, detectCarrier, trackUrl } from '../../../shared/carriers';
 import { startOfDay } from '../../../shared/dates';
-import type { AccentKey, AppState, Backup, BookmarkGroup, GoogleSource, Note, Package, Prefs, ThemeMode } from '../../../shared/types';
+import type { AccentKey, AppState, Backup, BookmarkGroup, GoogleSource, Note, Package, Photo, Prefs, ThemeMode } from '../../../shared/types';
+import { PhotoSettings } from './Photos';
 import { STEP_LABELS, ago, chipOf, fmtStamp, hm, segColor, statusText } from '../util';
 
 export function Drawer({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
@@ -206,7 +207,7 @@ const ACCENTS: { key: AccentKey; name: string; light: string; dark: string }[] =
   { key: 'terracotta', name: 'Terracotta', light: '#ad603f', dark: '#dd9b7b' },
 ];
 
-export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconnect, onImport }: {
+export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconnect, onImport, onAddPhotos, onRemovePhoto, onPhotoFocus }: {
   data: AppState;
   now: Date;
   dark: boolean;
@@ -214,6 +215,9 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
   onConnect: () => void;
   onDisconnect: () => void;
   onImport: (bookmarks: BookmarkGroup[] | undefined, notes: Note[] | undefined) => void;
+  onAddPhotos: (files: File[]) => Promise<string>;
+  onRemovePhoto: (id: string) => void;
+  onPhotoFocus: (id: string, focus: Photo['focus']) => void;
 }) {
   const [importMsg, setImportMsg] = useState('Exports bookmarks and all notepads in one file.');
   const fileRef = useRef<HTMLInputElement>(null);
@@ -378,6 +382,8 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
           ))}
         </div>
       </div>
+
+      <PhotoSettings photos={data.photos} onAdd={onAddPhotos} onRemove={onRemovePhoto} onFocus={onPhotoFocus} />
 
       <div className="drawer-section">
         <div className="drawer-label">Package tracking</div>

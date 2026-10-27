@@ -7,6 +7,8 @@ interface Props {
   data: AppState;
   now: Date;
   wide: boolean;
+  /** Shorter panel (a photo sits below it): tomorrow and later this week start collapsed. */
+  compact: boolean;
   onConnect: () => void;
   onRetry: () => Promise<void>;
 }
@@ -30,9 +32,10 @@ export function todayAgenda(data: AppState, now: Date) {
   return { timed, todays, cur, next, hidden };
 }
 
-export function Today({ data, now, wide, onConnect, onRetry }: Props) {
+export function Today({ data, now, wide, compact, onConnect, onRetry }: Props) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [weekOpen, setWeekOpen] = useState(false);
+  const [tomorrowOpen, setTomorrowOpen] = useState(false);
   const [retrying, setRetrying] = useState(false);
 
   const connected = data.google.connected;
@@ -57,7 +60,10 @@ export function Today({ data, now, wide, onConnect, onRetry }: Props) {
       return end > today && dayDiff(today, s) <= 6;
     });
 
-  const showWeek = weekOpen || wide;
+  const weekFixed = wide && !compact;
+  const showWeek = weekOpen || weekFixed;
+  const showTomorrow = tomorrowOpen || !compact;
+  const count = (n: number) => `${n} event${n === 1 ? '' : 's'}`;
 
   const row = (e: TimedEvent, kind: 'today' | 'tmr' | 'week') => {
     const cal = colors.get(e.calendarId);
@@ -166,21 +172,27 @@ export function Today({ data, now, wide, onConnect, onRetry }: Props) {
             {!todays.length && <div style={{ padding: '5px 10px', fontSize: 13, color: 'var(--t3)' }}>Nothing scheduled today.</div>}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <div className="section-toggle">
-              <span className="label">Tomorrow</span>
-              <span className="tnum">{fmtDay(addDays(today, 1))}</span>
-            </div>
-            {tomorrowEvents.map((e) => row(e, 'tmr'))}
-            {!tomorrowEvents.length && <div style={{ padding: '3px 10px', fontSize: 13, color: 'var(--t3)' }}>Nothing yet.</div>}
+            {compact && tomorrowEvents.length > 0 ? (
+              <button className="section-toggle" style={{ cursor: 'pointer' }} aria-expanded={tomorrowOpen} onClick={() => setTomorrowOpen(!tomorrowOpen)}>
+                <span className="label">Tomorrow</span>
+                <span className="tnum">{count(tomorrowEvents.length)}</span>
+                <i className={'ph-duotone ' + (tomorrowOpen ? 'ph-caret-up' : 'ph-caret-down')} style={{ fontSize: 12 }} />
+              </button>
+            ) : (
+              <div className="section-toggle">
+                <span className="label">Tomorrow</span>
+                <span className="tnum">{compact ? 'Nothing yet' : fmtDay(addDays(today, 1))}</span>
+              </div>
+            )}
+            {showTomorrow && tomorrowEvents.map((e) => row(e, 'tmr'))}
+            {!compact && !tomorrowEvents.length && <div style={{ padding: '3px 10px', fontSize: 13, color: 'var(--t3)' }}>Nothing yet.</div>}
           </div>
           {laterEvents.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <button className="section-toggle" style={{ cursor: wide ? 'default' : 'pointer' }} onClick={() => !wide && setWeekOpen(!weekOpen)}>
+              <button className="section-toggle" style={{ cursor: weekFixed ? 'default' : 'pointer' }} onClick={() => !weekFixed && setWeekOpen(!weekOpen)}>
                 <span className="label">Later this week</span>
-                <span className="tnum">
-                  {laterEvents.length} event{laterEvents.length === 1 ? '' : 's'}
-                </span>
-                {!wide && <i className={'ph-duotone ' + (showWeek ? 'ph-caret-up' : 'ph-caret-down')} style={{ fontSize: 12 }} />}
+                <span className="tnum">{count(laterEvents.length)}</span>
+                {!weekFixed && <i className={'ph-duotone ' + (showWeek ? 'ph-caret-up' : 'ph-caret-down')} style={{ fontSize: 12 }} />}
               </button>
               {showWeek && laterEvents.map((e) => row(e, 'week'))}
             </div>

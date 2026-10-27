@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
-import type { AppState, BookmarkGroup, Note, Package, Prefs, Task } from '../../shared/types';
+import type { AppState, BookmarkGroup, Note, Package, Photo, Prefs, Task } from '../../shared/types';
 import { api, cachedState, cacheState, localGet, localSet } from './api';
 import { Bookmarks } from './components/Bookmarks';
 import { AddPackageDrawer, Drawer, PackageDrawer, SettingsDrawer } from './components/Drawers';
 import { News } from './components/News';
 import { FocusView, Notes } from './components/Notes';
 import { Packages } from './components/Packages';
+import { PhotoPanel, shrinkImage, usePhotoSlots } from './components/Photos';
 import { Tasks } from './components/Tasks';
 import { Today, todayAgenda } from './components/Today';
 import { TopBar } from './components/TopBar';
@@ -32,6 +33,7 @@ const EMPTY: AppState = {
   tracking: { allCarriers: false },
   news: [],
   newsSummaries: false,
+  photos: [],
 };
 
 /** A cached copy from an older version can be missing newer fields. */
@@ -126,6 +128,7 @@ export function App() {
   const savedT = useRef(0);
   const toastT = useRef(0);
   const now = useMinuteNow();
+  const photoSlots = usePhotoSlots(data.photos.length);
   const systemDark = useSystemDark();
 
   const showToast = useCallback((msg: string) => {
@@ -343,6 +346,31 @@ export function App() {
     setDrawer(null);
   };
 
+  const addPhotos = async (files: File[]): Promise<string> => {
+    let added = 0;
+    for (const f of files) {
+      try {
+        const photo = await api.addPhoto(await shrinkImage(f));
+        update((d) => ({ ...d, photos: [...d.photos, photo] }));
+        added++;
+      } catch (e) {
+        return `${added ? `Added ${added}. ` : ''}Couldn’t add ${f.name}: ${(e as Error).message}`;
+      }
+    }
+    return added === 1 ? 'Added 1 photo.' : `Added ${added} photos.`;
+  };
+
+  const removePhoto = (id: string) => {
+    update((d) => ({ ...d, photos: d.photos.filter((p) => p.id !== id) }));
+    api.deletePhoto(id).catch(onSaveError);
+  };
+
+  const setPhotoFocus = (id: string, focus: Photo['focus']) => {
+    const photos = data.photos.map((p) => (p.id === id ? { ...p, focus } : p));
+    update((d) => ({ ...d, photos }));
+    api.putPhotos(photos).catch(onSaveError);
+  };
+
   const importBackup = (bookmarks?: BookmarkGroup[], notes?: Note[]) => {
     if (bookmarks) setBookmarks(bookmarks);
     if (notes) {
@@ -372,10 +400,11 @@ export function App() {
   const notes = data.notes.length ? data.notes : STARTER_NOTES;
   const activeId = notes.some((n) => n.id === activeNote) ? activeNote : notes[0].id;
   const drawerPkg = drawer?.type === 'pkg' ? data.packages.find((p) => p.id === drawer.id) : undefined;
+  const photoCount = Math.min(data.photos.length, 2);
   const drawerTitle = drawer?.type === 'settings' ? 'Settings' : drawer?.type === 'add' ? 'Add package' : drawerPkg ? 'Package' : '';
 
   return (
-    <div ref={rootRef} className="lp-root" data-layout={layout}>
+    <div ref={rootRef} className="lp-root" data-layout={layout} data-photos={photoCount || undefined}>
       <div className="lp-inner">
         <TopBar
           data={data}
@@ -396,10 +425,13 @@ export function App() {
               data={data}
               now={now}
               wide={layout === 'wide'}
+              compact={photoCount === 2 && layout !== 'narrow'}
               onConnect={connect}
               onRetry={() => api.sync('calendar').then(merge).catch(() => refresh())}
             />
             <Tasks data={data} now={now} onConnect={connect} onAdd={addTask} onComplete={completeTask} />
+            {photoCount > 0 && <PhotoPanel photos={data.photos} area="photo" index={photoSlots.shown[0]} onStep={(d) => photoSlots.step(0, d)} />}
+            {photoCount > 1 && <PhotoPanel photos={data.photos} area="photo2" index={photoSlots.shown[1]} onStep={(d) => photoSlots.step(1, d)} />}
             <Notes
               notes={notes}
               activeId={activeId}
@@ -436,6 +468,9 @@ export function App() {
               onConnect={connect}
               onDisconnect={() => api.disconnectGoogle().then(merge).catch(onSaveError)}
               onImport={importBackup}
+              onAddPhotos={addPhotos}
+              onRemovePhoto={removePhoto}
+              onPhotoFocus={setPhotoFocus}
             />
           )}
           {drawer.type === 'add' && <AddPackageDrawer onSubmit={addPackage} onCancel={() => setDrawer(null)} />}

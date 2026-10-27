@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { config } from './config';
+import type { StoredPhoto } from './photos';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
 import type {
   BookmarkGroup, CalEvent, CalendarInfo, NewsTopic, Note, Package, Prefs, SourceKey, SyncStatus, Task, TaskList,
@@ -88,6 +89,9 @@ export const store = {
 
   news: () => get<NewsCache>('news', {}),
   setNews: (v: NewsCache) => set('news', v),
+
+  photos: () => get<StoredPhoto[]>('photos', []),
+  setPhotos: (v: StoredPhoto[]) => set('photos', v),
 
   /** Gmail message ids already scanned for tracking numbers. */
   gmailSeen: () => get<string[]>('gmailSeen', []),

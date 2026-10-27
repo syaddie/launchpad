@@ -126,6 +126,12 @@ export interface NewsTopic {
   error: string | null;
 }
 
+export interface Photo {
+  id: string;
+  /** The point to keep in frame when the panel crops the photo, in percent from the top left. */
+  focus: { x: number; y: number };
+}
+
 export interface SyncStatus {
   lastSuccess: string | null;
   lastAttempt: string | null;
@@ -156,6 +162,8 @@ export interface AppState {
   news: NewsTopic[];
   /** ANTHROPIC_API_KEY is set, so topics get summaries and not just headlines. */
   newsSummaries: boolean;
+  /** Shown in the photo panels, in display order. The files are at /api/photos/:id. */
+  photos: Photo[];
 }
 
 export interface Backup {

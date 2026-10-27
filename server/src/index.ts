@@ -4,14 +4,16 @@ import path from 'node:path';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { config, googleConfigured } from './config';
 import { authUrl, completeTask, createTask, exchangeCode, revoke } from './google';
 import { store, updatePackages } from './store';
 import { summariesEnabled } from './news';
+import { MAX_PHOTOS, MAX_PHOTO_BYTES, readPhoto, removePhotoFile, sniffImage, writePhoto } from './photos';
 import { newPackage, refreshNews, refreshPackage, runAllGoogle, runIfStale, runSource, startScheduler } from './sync';
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
-import type { AppState, BookmarkGroup, NewsTopic, Note, Package, Prefs, SourceKey } from '../../shared/types';
+import type { AppState, BookmarkGroup, NewsTopic, Note, Package, Photo, Prefs, SourceKey } from '../../shared/types';
 
 const app = new Hono();
 
@@ -62,6 +64,7 @@ function state(): AppState {
         : { topic, articles: [], stories: null, summarisedAt: null, fetchedAt: null, error: null };
     }),
     newsSummaries: summariesEnabled(),
+    photos: store.photos().map(({ id, focus }): Photo => ({ id, focus })),
   };
 }
 
@@ -178,6 +181,58 @@ app.patch('/api/packages/:id', async (c) => {
 app.post('/api/packages/:id/refresh', async (c) => {
   await refreshPackage(c.req.param('id')).catch(() => {});
   return c.json(store.packages().find((p) => p.id === c.req.param('id')) || null);
+});
+
+// ---------- photos ----------
+
+app.post(
+  '/api/photos',
+  bodyLimit({ maxSize: MAX_PHOTO_BYTES, onError: (c) => c.json({ error: 'That photo is over 15 MB.' }, 413) }),
+  async (c) => {
+    if (store.photos().length >= MAX_PHOTOS) return c.json({ error: `Launchpad keeps up to ${MAX_PHOTOS} photos. Remove some first.` }, 400);
+    const bytes = new Uint8Array(await c.req.arrayBuffer());
+    const mime = sniffImage(bytes);
+    if (!mime) return c.json({ error: 'Use a JPEG, PNG, WebP or GIF image.' }, 415);
+    const photo = writePhoto(bytes, mime);
+    store.setPhotos([...store.photos(), photo]);
+    return c.json({ id: photo.id, focus: photo.focus } satisfies Photo);
+  },
+);
+
+app.get('/api/photos/:id', (c) => {
+  const meta = store.photos().find((p) => p.id === c.req.param('id'));
+  const file = meta && readPhoto(meta.id);
+  if (!meta || !file) return c.json({ error: 'Not found' }, 404);
+  // Ids are never reused, so the browser can keep a photo for good.
+  return c.body(new Uint8Array(file), 200, {
+    'Content-Type': meta.mime,
+    'Cache-Control': 'private, max-age=31536000, immutable',
+    'X-Content-Type-Options': 'nosniff',
+  });
+});
+
+/** Saves the order and focus points. Photos missing from the body stay, at the end. */
+app.put('/api/photos', async (c) => {
+  const body = await c.req.json();
+  if (!Array.isArray(body)) return c.json({ error: 'Expected a list of photos' }, 400);
+  const prev = store.photos();
+  const clamp = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(100, Math.max(0, v)) : d);
+  const ids = new Set<string>();
+  const next = body.flatMap((b: Partial<Photo>) => {
+    const p = b && !ids.has(b.id!) && prev.find((x) => x.id === b.id);
+    if (!p) return [];
+    ids.add(p.id);
+    return [{ ...p, focus: { x: clamp(b.focus?.x, p.focus.x), y: clamp(b.focus?.y, p.focus.y) } }];
+  });
+  store.setPhotos([...next, ...prev.filter((p) => !ids.has(p.id))]);
+  return c.json({ ok: true });
+});
+
+app.delete('/api/photos/:id', (c) => {
+  const id = c.req.param('id');
+  store.setPhotos(store.photos().filter((p) => p.id !== id));
+  removePhotoFile(id);
+  return c.json({ ok: true });
 });
 
 // ---------- sync ----------

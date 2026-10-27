@@ -105,6 +105,16 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
   grid-template-areas: 'today' 'tasks' 'pkgs' 'notes' 'bm';
 }
 
+/* Photo panels (Settings › Photos). One photo takes the top of the packages column;
+   a second one sits under a shorter Today. */
+[data-layout='desktop'][data-photos='1'] .lp-grid { grid-template-areas: 'today tasks photo' 'today notes pkgs' 'bm bm bm'; }
+[data-layout='desktop'][data-photos='2'] .lp-grid { grid-template-areas: 'today tasks photo' 'photo2 notes pkgs' 'bm bm bm'; }
+[data-layout='wide'][data-photos] .lp-grid { grid-template-rows: minmax(0, 1.2fr) minmax(0, 0.8fr) auto; }
+[data-layout='wide'][data-photos='1'] .lp-grid { grid-template-areas: 'today tasks notes photo' 'today tasks notes pkgs' 'bm bm bm bm'; }
+[data-layout='wide'][data-photos='2'] .lp-grid { grid-template-areas: 'today tasks notes photo' 'photo2 tasks notes pkgs' 'bm bm bm bm'; }
+[data-layout='narrow'][data-photos='1'] .lp-grid { grid-template-areas: 'today' 'tasks' 'photo' 'pkgs' 'notes' 'bm'; }
+[data-layout='narrow'][data-photos='2'] .lp-grid { grid-template-areas: 'today' 'tasks' 'photo' 'pkgs' 'notes' 'photo2' 'bm'; }
+
 /* ---------- top bar ---------- */
 
 .topbar { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 15px 40px; flex: none; }
@@ -456,6 +466,39 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .segmented button.on { background: var(--rz); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); color: var(--tx); font-weight: 600; }
 
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60; padding: 8px 15px; font-size: 13px; color: var(--t2); }
+
+/* ---------- photos ---------- */
+
+.photo-panel { position: relative; min-height: 0; border-radius: 4px; overflow: hidden; background: var(--sf); }
+[data-layout='narrow'] .photo-panel { aspect-ratio: 4 / 3; }
+.photo-panel img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; animation: lpFade 0.22s ease-out; }
+.photo-bar {
+  position: absolute;
+  inset: auto 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 36px 12px 10px;
+  background: linear-gradient(to top, rgba(20, 18, 16, 0.62), rgba(20, 18, 16, 0));
+  color: #fff;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.18s ease-out;
+}
+.photo-panel:hover .photo-bar, .photo-panel:focus-within .photo-bar { opacity: 1; }
+@media (hover: none) { .photo-bar { opacity: 1; } }
+.photo-btn { width: 34px; height: 34px; padding: 0; border: none; border-radius: 50%; background: rgba(20, 18, 16, 0.45); color: #fff; display: grid; place-items: center; font-size: 15px; cursor: pointer; }
+.photo-btn:hover { background: rgba(20, 18, 16, 0.65); }
+
+.photo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; align-items: start; }
+.photo-thumb { position: relative; }
+.photo-pick { position: relative; display: block; width: 100%; padding: 0; border: none; border-radius: 4px; overflow: hidden; background: var(--hv); cursor: crosshair; }
+.photo-pick img { display: block; width: 100%; height: auto; }
+.photo-focus { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35); pointer-events: none; }
+.photo-x { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; padding: 0; border: none; border-radius: 50%; background: var(--rz); box-shadow: var(--sh); color: var(--t2); display: grid; place-items: center; font-size: 11px; cursor: pointer; }
+.photo-x:hover { color: var(--wn); }
+.btn.disabled { opacity: 0.45; cursor: default; }
 
 /* ---------- news ---------- */
 

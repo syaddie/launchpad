@@ -7,9 +7,10 @@ A self-hosted new-tab dashboard. It shows:
 - **Notes**: multiple notepads with light Markdown (checklists, bullets, bold), autosaved
 - **Packages**: tracking numbers added by hand or picked up automatically from shipping emails in Gmail. SingPost status is fetched directly; other carriers through 17TRACK (optional)
 - **Bookmarks**: grouped launcher tiles, edited in place (drag to reorder, rename, add groups). `/` searches, `1`–`9` open the Daily bookmarks
+- **Photos**: your own pictures in two photo panels, one at the top right and one under a shorter Today. Add them in Settings › Photos (big ones are shrunk to 2400 px before upload) and click a thumbnail to choose the part that stays in frame. Each new tab moves on two photos; the arrows appear on hover. With one photo there's a single panel, and with none the dashboard keeps its usual layout
 - **News**: a second view (newspaper button in the top bar, or `N`) with a short digest per topic you follow, written by Claude from the last two days of Google News headlines. Add and remove topics right there. Without an Anthropic API key it shows the plain headlines
 
-Bookmarks, notes, packages, news topics and settings are edited in the page and stored on the server. Changing them never needs a code change or a rebuild.
+Bookmarks, notes, packages, news topics, photos and settings are edited in the page and stored on the server. Changing them never needs a code change or a rebuild.
 
 **Setting it up on the server:** see [`docs/setup.md`](docs/setup.md).
 
@@ -31,6 +32,7 @@ Bookmarks, notes, packages, news topics and settings are edited in the page and 
  │       Carrier status    every 20 min              │
  │       News headlines    every hour                │
  │   • SQLite at /data/launchpad.db  ◄── volume      │
+ │   • Photos in /data/photos                        │
  └───────────────────────────────────────────────────┘
 ```
 
@@ -45,9 +47,9 @@ Bookmarks, notes, packages, news topics and settings are edited in the page and 
 | Path | What's there |
 |---|---|
 | `web/src/` | The dashboard (React). `components/` has one file per panel plus the drawers |
-| `server/src/` | API (`index.ts`), Google calls (`google.ts`), carrier tracking (`tracking.ts`), news headlines and Claude summaries (`news.ts`), background sync (`sync.ts`), storage (`store.ts`) |
+| `server/src/` | API (`index.ts`), Google calls (`google.ts`), carrier tracking (`tracking.ts`), news headlines and Claude summaries (`news.ts`), background sync (`sync.ts`), storage (`store.ts`), photo files (`photos.ts`) |
 | `shared/` | Types, carrier detection and date helpers used by both sides |
-| `test/` | Unit tests for date parsing, carrier detection, Gmail extraction and tracking status |
+| `test/` | Unit tests for date parsing, carrier detection, Gmail extraction, tracking status and photo upload checks |
 | `design_handoff_launchpad/` | The Claude Design handoff this was built from |
 | `deploy/update.sh` | Auto-update script for cron |
 

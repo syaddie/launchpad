@@ -1,4 +1,4 @@
-import type { AppState, BookmarkGroup, Note, Package, Prefs, SourceKey, Task } from '../../shared/types';
+import type { AppState, BookmarkGroup, Note, Package, Photo, Prefs, SourceKey, Task } from '../../shared/types';
 
 const STATE_KEY = 'launchpad:state';
 const PREFS_KEY = 'launchpad:prefs';
@@ -39,10 +39,11 @@ export function localSet(key: string, value: string): void {
 }
 
 async function req<T>(method: string, url: string, body?: unknown, keepalive = false): Promise<T> {
+  const raw = body instanceof Blob;
   const res = await fetch(url, {
     method,
-    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    headers: body === undefined ? undefined : { 'Content-Type': raw ? body.type || 'application/octet-stream' : 'application/json' },
+    body: body === undefined ? undefined : raw ? body : JSON.stringify(body),
     keepalive,
   });
   if (res.status === 403) throw new Error('Not signed in through Cloudflare Access.');
@@ -66,4 +67,9 @@ export const api = {
   sync: (source: SourceKey, ifOlderThanSec = 0) =>
     req<AppState>('POST', `/api/sync/${source}${ifOlderThanSec ? `?ifOlderThan=${ifOlderThanSec}` : ''}`, {}),
   disconnectGoogle: () => req<AppState>('POST', '/api/auth/google/disconnect', {}),
+  addPhoto: (image: Blob) => req<Photo>('POST', '/api/photos', image),
+  putPhotos: (v: Photo[]) => req('PUT', '/api/photos', v),
+  deletePhoto: (id: string) => req('DELETE', `/api/photos/${encodeURIComponent(id)}`),
 };
+
+export const photoUrl = (id: string) => `/api/photos/${encodeURIComponent(id)}`;

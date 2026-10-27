@@ -4,6 +4,7 @@ import { parseDue } from '../shared/dates';
 import { extractTrackingNumbers, labelFor } from '../server/src/gmail-parse';
 import { parseNewsRss } from '../server/src/news';
 import { classify, parseSingpost, summarise } from '../server/src/tracking';
+import { sniffImage } from '../server/src/photos';
 
 const tue = new Date(2026, 9, 27); // Tue 27 Oct 2026
 
@@ -105,5 +106,24 @@ describe('parseNewsRss', () => {
   });
   it('ignores the channel title and empty feeds', () => {
     expect(parseNewsRss('<rss><channel><title>x</title></channel></rss>')).toEqual([]);
+  });
+});
+
+describe('sniffImage', () => {
+  const bytes = (head: number[] | string) => {
+    const b = new Uint8Array(16);
+    b.set(typeof head === 'string' ? [...head].map((c) => c.charCodeAt(0)) : head);
+    return b;
+  };
+  it('recognises JPEG, PNG, GIF and WebP from their first bytes', () => {
+    expect(sniffImage(bytes([0xff, 0xd8, 0xff, 0xe0]))).toBe('image/jpeg');
+    expect(sniffImage(bytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]))).toBe('image/png');
+    expect(sniffImage(bytes('GIF89a'))).toBe('image/gif');
+    expect(sniffImage(bytes('RIFF\0\0\0\0WEBP'))).toBe('image/webp');
+  });
+  it('rejects anything else, whatever it claims to be', () => {
+    expect(sniffImage(bytes('<svg xmlns="'))).toBeNull();
+    expect(sniffImage(bytes('<html><script>'))).toBeNull();
+    expect(sniffImage(new Uint8Array([0xff, 0xd8]))).toBeNull();
   });
 });
