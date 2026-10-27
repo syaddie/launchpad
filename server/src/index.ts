@@ -8,9 +8,10 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { config, googleConfigured } from './config';
 import { authUrl, completeTask, createTask, exchangeCode, revoke } from './google';
 import { store, updatePackages } from './store';
-import { newPackage, refreshPackage, runAllGoogle, runIfStale, runSource, startScheduler } from './sync';
+import { summariesEnabled } from './news';
+import { newPackage, refreshNews, refreshPackage, runAllGoogle, runIfStale, runSource, startScheduler } from './sync';
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
-import type { AppState, BookmarkGroup, Note, Package, Prefs, SourceKey } from '../../shared/types';
+import type { AppState, BookmarkGroup, NewsTopic, Note, Package, Prefs, SourceKey } from '../../shared/types';
 
 const app = new Hono();
 
@@ -39,10 +40,12 @@ function state(): AppState {
   const g = store.google();
   const cal = store.calendar();
   const tasks = store.tasks();
+  const prefs = store.prefs();
+  const news = store.news();
   return {
     bookmarks: store.bookmarks(),
     notes: store.notes(),
-    prefs: store.prefs(),
+    prefs,
     google: { configured: googleConfigured(), connected: !!g, email: g?.email, name: g?.name },
     calendars: cal.calendars,
     events: cal.events,
@@ -51,6 +54,14 @@ function state(): AppState {
     packages: store.packages().filter((p) => !p.archived),
     sync: store.sync(),
     tracking: { allCarriers: !!config.seventeenTrackKey },
+    // In the order of the topics in prefs; ones not fetched yet show as loading.
+    news: prefs.newsTopics.map((topic): NewsTopic => {
+      const n = news[topic.toLowerCase()];
+      return n
+        ? { topic, articles: n.articles, stories: n.stories, summarisedAt: n.summarisedAt, fetchedAt: n.fetchedAt, error: n.error }
+        : { topic, articles: [], stories: null, summarisedAt: null, fetchedAt: null, error: null };
+    }),
+    newsSummaries: summariesEnabled(),
   };
 }
 
@@ -83,6 +94,16 @@ app.put('/api/notes', async (c) => {
   return c.json({ ok: true });
 });
 
+/** Trimmed, de-duplicated (ignoring case), at most 8 topics of 60 characters. */
+function cleanTopics(v: unknown[]): string[] {
+  const seen = new Set<string>();
+  return v
+    .filter(isStr)
+    .map((t) => t.trim().replace(/\s+/g, ' ').slice(0, 60))
+    .filter((t) => t && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()))
+    .slice(0, 8);
+}
+
 app.put('/api/prefs', async (c) => {
   const body = (await c.req.json()) as Partial<Prefs>;
   const prev = store.prefs();
@@ -92,6 +113,7 @@ app.put('/api/prefs', async (c) => {
     accent: ['sage', 'slate', 'terracotta'].includes(body.accent as string) ? body.accent! : prev.accent,
     hiddenCalendars: Array.isArray(body.hiddenCalendars) ? body.hiddenCalendars.filter(isStr) : prev.hiddenCalendars,
     sources: { ...prev.sources, ...body.sources },
+    newsTopics: Array.isArray(body.newsTopics) ? cleanTopics(body.newsTopics) : prev.newsTopics,
   };
   store.setPrefs(next);
   // A source switched back on should sync straight away.
@@ -162,7 +184,11 @@ app.post('/api/packages/:id/refresh', async (c) => {
 
 app.post('/api/sync/:source', async (c) => {
   const key = c.req.param('source') as SourceKey;
-  if (!['calendar', 'tasks', 'gmail', 'carriers'].includes(key)) return c.json({ error: 'Unknown source' }, 400);
+  if (!['calendar', 'tasks', 'gmail', 'carriers', 'news'].includes(key)) return c.json({ error: 'Unknown source' }, 400);
+  if (key === 'news') {
+    await refreshNews();
+    return c.json(state());
+  }
   // ?ifOlderThan=30 lets the page ask for a refresh on focus without hammering Google.
   const minAge = Number(c.req.query('ifOlderThan') || 0) * 1000;
   await (minAge ? runIfStale(key, minAge) : runSource(key));

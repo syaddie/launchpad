@@ -7,7 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { config } from './config';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
 import type {
-  BookmarkGroup, CalEvent, CalendarInfo, Note, Package, Prefs, SourceKey, SyncStatus, Task, TaskList,
+  BookmarkGroup, CalEvent, CalendarInfo, NewsTopic, Note, Package, Prefs, SourceKey, SyncStatus, Task, TaskList,
 } from '../../shared/types';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
@@ -51,6 +51,8 @@ export interface GoogleTokens {
 
 export interface CalendarCache { calendars: CalendarInfo[]; events: CalEvent[] }
 export interface TasksCache { lists: TaskList[]; tasks: Task[] }
+/** Keyed by lower-cased topic. `summarisedUrls` are the headlines the current stories came from. */
+export type NewsCache = Record<string, NewsTopic & { summarisedUrls: string[] }>;
 
 const EMPTY_SYNC: SyncStatus = { lastSuccess: null, lastAttempt: null, lastError: null };
 
@@ -84,6 +86,9 @@ export const store = {
   packages: () => get<Package[]>('packages', []),
   setPackages: (v: Package[]) => set('packages', v),
 
+  news: () => get<NewsCache>('news', {}),
+  setNews: (v: NewsCache) => set('news', v),
+
   /** Gmail message ids already scanned for tracking numbers. */
   gmailSeen: () => get<string[]>('gmailSeen', []),
   setGmailSeen: (v: string[]) => set('gmailSeen', v.slice(-1000)),
@@ -99,6 +104,7 @@ export const store = {
       tasks: s.tasks || EMPTY_SYNC,
       gmail: s.gmail || EMPTY_SYNC,
       carriers: s.carriers || EMPTY_SYNC,
+      news: s.news || EMPTY_SYNC,
     };
   },
   setSync: (key: SourceKey, v: SyncStatus) => set('sync', { ...store.sync(), [key]: v }),

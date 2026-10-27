@@ -4,6 +4,7 @@ import type { AppState, BookmarkGroup, Note, Package, Prefs, Task } from '../../
 import { api, cachedState, cacheState, localGet, localSet } from './api';
 import { Bookmarks } from './components/Bookmarks';
 import { AddPackageDrawer, Drawer, PackageDrawer, SettingsDrawer } from './components/Drawers';
+import { News } from './components/News';
 import { FocusView, Notes } from './components/Notes';
 import { Packages } from './components/Packages';
 import { Tasks } from './components/Tasks';
@@ -26,11 +27,21 @@ const EMPTY: AppState = {
     tasks: { lastSuccess: null, lastAttempt: null, lastError: null },
     gmail: { lastSuccess: null, lastAttempt: null, lastError: null },
     carriers: { lastSuccess: null, lastAttempt: null, lastError: null },
+    news: { lastSuccess: null, lastAttempt: null, lastError: null },
   },
   tracking: { allCarriers: false },
+  news: [],
+  newsSummaries: false,
 };
 
+/** A cached copy from an older version can be missing newer fields. */
+function fromCache(c: AppState | null): AppState {
+  if (!c) return EMPTY;
+  return { ...EMPTY, ...c, prefs: { ...DEFAULT_PREFS, ...c.prefs }, sync: { ...EMPTY.sync, ...c.sync } };
+}
+
 type Layout = 'narrow' | 'desktop' | 'wide';
+type View = 'home' | 'news';
 type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings' } | null;
 
 /** Debounced saver for whole-document PUTs, flushed when the tab closes. */
@@ -98,7 +109,9 @@ function useSystemDark(): boolean {
 }
 
 export function App() {
-  const [data, setData] = useState<AppState>(() => cachedState() ?? EMPTY);
+  const [data, setData] = useState<AppState>(() => fromCache(cachedState()));
+  const [view, setView] = useState<View>('home');
+  const [newsBusy, setNewsBusy] = useState(false);
   const [layout, setLayout] = useState<Layout>('desktop');
   const [search, setSearch] = useState('');
   const [drawer, setDrawer] = useState<DrawerState>(null);
@@ -203,6 +216,7 @@ export function App() {
       if (e.key === 'Escape') {
         if (drawer) setDrawer(null);
         else if (focus) setFocus(false);
+        else if (view === 'news') setView('home');
         return;
       }
       const t = e.target as HTMLElement;
@@ -213,6 +227,10 @@ export function App() {
         searchRef.current?.focus();
         return;
       }
+      if (e.key === 'n' && !drawer && !focus) {
+        setView((v) => (v === 'news' ? 'home' : 'news'));
+        return;
+      }
       if (/^[1-9]$/.test(e.key) && !search && !drawer && !focus && !editBookmarks) {
         const daily = data.bookmarks.find((g) => g.name === 'Daily');
         const b = daily?.items[Number(e.key) - 1];
@@ -221,7 +239,12 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [drawer, focus, search, editBookmarks, data.bookmarks]);
+  }, [drawer, focus, search, editBookmarks, data.bookmarks, view]);
+
+  // Pick up anything the hourly news run fetched since the last poll.
+  useEffect(() => {
+    if (view === 'news') refresh();
+  }, [view, refresh]);
 
   // ---------- actions ----------
 
@@ -252,6 +275,29 @@ export function App() {
   const setPrefs = (prefs: Prefs) => {
     update((d) => ({ ...d, prefs }));
     api.putPrefs(prefs).then(() => refresh()).catch(onSaveError);
+  };
+
+  const refreshNews = () => {
+    setNewsBusy(true);
+    api
+      .sync('news')
+      .then(merge)
+      .catch((e) => showToast(`Couldn’t refresh news: ${e.message}`))
+      .finally(() => setNewsBusy(false));
+  };
+
+  const setNewsTopics = (newsTopics: string[]) => {
+    const prefs = { ...data.prefs, newsTopics };
+    const added = newsTopics.some((t) => !data.news.some((n) => n.topic.toLowerCase() === t.toLowerCase()));
+    update((d) => ({
+      ...d,
+      prefs,
+      news: newsTopics.map((t) => d.news.find((n) => n.topic.toLowerCase() === t.toLowerCase()) ?? { topic: t, articles: [], stories: null, summarisedAt: null, fetchedAt: null, error: null }),
+    }));
+    api
+      .putPrefs(prefs)
+      .then(() => (added ? refreshNews() : refresh()))
+      .catch(onSaveError);
   };
 
   const addTask = (listId: string, title: string, due: string | null) => {
@@ -339,38 +385,44 @@ export function App() {
           onSearch={setSearch}
           searchRef={searchRef}
           onOpenSettings={() => setDrawer({ type: 'settings' })}
+          newsOpen={view === 'news'}
+          onToggleNews={() => setView(view === 'news' ? 'home' : 'news')}
         />
-        <main className="lp-grid">
-          <Today
-            data={data}
-            now={now}
-            wide={layout === 'wide'}
-            onConnect={connect}
-            onRetry={() => api.sync('calendar').then(merge).catch(() => refresh())}
-          />
-          <Tasks data={data} now={now} onConnect={connect} onAdd={addTask} onComplete={completeTask} />
-          <Notes
-            notes={notes}
-            activeId={activeId}
-            onActive={pickNote}
-            onChange={setNotes}
-            saved={saved}
-            onOpenFocus={() => setFocus(true)}
-            onEditing={onNoteEditing}
-          />
-          <Packages
-            packages={data.packages}
-            now={now}
-            onOpen={(id) => setDrawer({ type: 'pkg', id })}
-            onAdd={() => setDrawer({ type: 'add' })}
-            onKeep={(id) => {
-              patchPackage(id, { isNew: false });
-              api.patchPackage(id, { isNew: false }).catch(onSaveError);
-            }}
-            onDismiss={archivePackage}
-          />
-          <Bookmarks groups={data.bookmarks} onChange={setBookmarks} search={search} edit={editBookmarks} setEdit={setEditBookmarks} />
-        </main>
+        {view === 'news' ? (
+          <News data={data} now={now} busy={newsBusy} onRefresh={refreshNews} onTopics={setNewsTopics} />
+        ) : (
+          <main className="lp-grid">
+            <Today
+              data={data}
+              now={now}
+              wide={layout === 'wide'}
+              onConnect={connect}
+              onRetry={() => api.sync('calendar').then(merge).catch(() => refresh())}
+            />
+            <Tasks data={data} now={now} onConnect={connect} onAdd={addTask} onComplete={completeTask} />
+            <Notes
+              notes={notes}
+              activeId={activeId}
+              onActive={pickNote}
+              onChange={setNotes}
+              saved={saved}
+              onOpenFocus={() => setFocus(true)}
+              onEditing={onNoteEditing}
+            />
+            <Packages
+              packages={data.packages}
+              now={now}
+              onOpen={(id) => setDrawer({ type: 'pkg', id })}
+              onAdd={() => setDrawer({ type: 'add' })}
+              onKeep={(id) => {
+                patchPackage(id, { isNew: false });
+                api.patchPackage(id, { isNew: false }).catch(onSaveError);
+              }}
+              onDismiss={archivePackage}
+            />
+            <Bookmarks groups={data.bookmarks} onChange={setBookmarks} search={search} edit={editBookmarks} setEdit={setEditBookmarks} />
+          </main>
+        )}
       </div>
 
       {drawer && drawerTitle && (

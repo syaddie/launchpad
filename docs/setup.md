@@ -107,6 +107,19 @@ SingPost status works out of the box. For Ninja Van, J&T, DHL, UPS, FedEx and Qx
 
 Without a key, those packages still appear (manually or from Gmail) with a "Track on …" link to the carrier's site.
 
+## 7. Optional: news summaries (Anthropic API)
+
+The News view (newspaper button, or press `N`) works without this and lists headlines for each topic. To get a short digest per topic instead:
+
+1. Create an API key at <https://platform.claude.com/> (Settings → API keys) and add some credit.
+2. Add it to `.env` and `docker compose up -d`:
+   ```
+   ANTHROPIC_API_KEY=sk-ant-...
+   ```
+3. Optional: `NEWS_MODEL` picks the model. The default is `claude-opus-5-5`; `claude-haiku-5-5` costs a small fraction of that and is plenty for summarising headlines.
+
+Summaries are written from headlines only, at most every 3 hours per topic and only when new headlines have appeared.
+
 ## Backups
 
 Everything is in one SQLite file inside the `launchpad-data` volume. Two ways to keep a copy:

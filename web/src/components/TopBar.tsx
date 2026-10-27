@@ -10,6 +10,8 @@ interface Props {
   onSearch: (q: string) => void;
   searchRef: React.RefObject<HTMLInputElement | null>;
   onOpenSettings: () => void;
+  newsOpen: boolean;
+  onToggleNews: () => void;
 }
 
 export function matchBookmark(b: Bookmark, q: string): boolean {
@@ -42,7 +44,7 @@ function failing(s: { lastSuccess: string | null; lastError: string | null }) {
   return !!s.lastError;
 }
 
-export function TopBar({ data, now, subline, search, onSearch, searchRef, onOpenSettings }: Props) {
+export function TopBar({ data, now, subline, search, onSearch, searchRef, onOpenSettings, newsOpen, onToggleNews }: Props) {
   const [focused, setFocused] = useState(false);
   const [sel, setSel] = useState(0);
   const [syncHover, setSyncHover] = useState(false);
@@ -82,13 +84,15 @@ export function TopBar({ data, now, subline, search, onSearch, searchRef, onOpen
     { key: 'tasks', name: 'Tasks', ok: 'Synced' },
     { key: 'gmail', name: 'Gmail packages', ok: 'Checked' },
     { key: 'carriers', name: 'Carriers', ok: 'Updated' },
+    { key: 'news', name: 'News', ok: 'Updated' },
   ];
+  const needsGoogle = (k: SourceKey) => k !== 'carriers' && k !== 'news';
   const connected = data.google.connected;
   const lines = sources
-    .filter((s) => connected || s.key === 'carriers')
+    .filter((s) => connected || !needsGoogle(s.key))
     .map((s) => {
       const st = data.sync[s.key];
-      const off = s.key !== 'carriers' && !data.prefs.sources[s.key as 'calendar'];
+      const off = s.key === 'news' ? !data.prefs.newsTopics.length : needsGoogle(s.key) && !data.prefs.sources[s.key as 'calendar'];
       if (off) return { name: s.name, text: 'Off', warn: false };
       if (failing(st)) return { name: s.name, text: `Couldn’t sync · last synced ${ago(st.lastSuccess, now)}`, warn: true };
       return { name: s.name, text: st.lastSuccess ? `${s.ok} ${ago(st.lastSuccess, now)}` : 'Waiting for first sync', warn: false };
@@ -173,6 +177,9 @@ export function TopBar({ data, now, subline, search, onSearch, searchRef, onOpen
               </div>
             )}
           </div>
+          <button className={'icon-btn lg' + (newsOpen ? ' on' : '')} title={newsOpen ? 'Back to dashboard (N)' : 'News (N)'} aria-pressed={newsOpen} onClick={onToggleNews}>
+            <i className="ph-duotone ph-newspaper" />
+          </button>
           <button className="icon-btn lg" title="Settings" onClick={onOpenSettings}>
             <i className="ph-duotone ph-gear-six" />
           </button>

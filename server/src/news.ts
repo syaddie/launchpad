@@ -1,0 +1,122 @@
+// News tab: headlines per topic from Google News RSS, and a short digest of
+// them written by Claude when ANTHROPIC_API_KEY is set.
+import Anthropic from '@anthropic-ai/sdk';
+import { config } from './config';
+import type { NewsArticle, NewsStory } from '../../shared/types';
+
+// Google News edition. Search results still come from everywhere; this mostly
+// sets the language and which local outlets rank first.
+const EDITION = 'hl=en-SG&gl=SG&ceid=SG:en';
+const MAX_ARTICLES = 20;
+
+// ---------- headlines ----------
+
+const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+
+function decode(s: string): string {
+  return s
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
+      if (e[0] === '#') return String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : Number(e.slice(1)));
+      return ENTITIES[e.toLowerCase()] ?? m;
+    })
+    .trim();
+}
+
+const tag = (xml: string, name: string) => {
+  const m = xml.match(new RegExp(`<${name}\\b[^>]*>([\\s\\S]*?)</${name}>`));
+  return m ? decode(m[1]) : '';
+};
+
+/** Parse a Google News RSS feed into articles, newest first, repeated titles dropped. */
+export function parseNewsRss(xml: string): NewsArticle[] {
+  const all: NewsArticle[] = [];
+  for (const [, item] of xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/g)) {
+    const rawSource = tag(item, 'source');
+    let title = tag(item, 'title');
+    // Google appends " - Outlet" to every title.
+    if (rawSource && title.endsWith(` - ${rawSource}`)) title = title.slice(0, -(rawSource.length + 3));
+    // A few outlets have their URL as their name.
+    const source = /^https?:\/\//.test(rawSource) ? rawSource.replace(/^https?:\/\/(www\.)?/, '').replace(/\/.*$/, '') : rawSource;
+    const url = tag(item, 'link');
+    const at = Date.parse(tag(item, 'pubDate'));
+    if (title && url) all.push({ title, url, source, publishedAt: new Date(Number.isNaN(at) ? Date.now() : at).toISOString() });
+  }
+  const seen = new Set<string>();
+  return all
+    .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
+    .filter((a) => !seen.has(a.title.toLowerCase()) && !!seen.add(a.title.toLowerCase()));
+}
+
+export async function fetchHeadlines(topic: string): Promise<NewsArticle[]> {
+  // Multi-word topics search as a phrase ("video games", not video + games), unless
+  // they already use search syntax. `when:2d` keeps it to the last two days.
+  const q = /\s/.test(topic) && !/["()]|\bOR\b/.test(topic) ? `"${topic}"` : topic;
+  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(`${q} when:2d`)}&${EDITION}`;
+  const res = await fetch(url, { headers: { 'User-Agent': 'Launchpad/1.0 (personal dashboard)' }, signal: AbortSignal.timeout(20_000) });
+  if (!res.ok) throw new Error(`Google News returned ${res.status}`);
+  return parseNewsRss(await res.text()).slice(0, MAX_ARTICLES);
+}
+
+// ---------- summaries ----------
+
+export const summariesEnabled = () => !!config.anthropicKey;
+
+let client: Anthropic | null = null;
+
+const SYSTEM = `You write the news digest on a personal dashboard. You get one topic and a numbered list of recent headlines about it.
+
+Group headlines that report the same story, and write 3 to 6 stories, most significant first. For each story give:
+- headline: a short, plain headline of your own (no clickbait, no emoji)
+- summary: one or two sentences saying what happened and why it matters to a fan of the topic
+- articles: the numbers of the headlines the story is based on
+
+Only use what the headlines say; don't add facts, dates or numbers they don't contain. Leave out headlines that aren't really about the topic, ads, listicles and quizzes.`;
+
+const SCHEMA = {
+  type: 'object',
+  properties: {
+    stories: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          headline: { type: 'string' },
+          summary: { type: 'string' },
+          articles: { type: 'array', items: { type: 'integer' } },
+        },
+        required: ['headline', 'summary', 'articles'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['stories'],
+  additionalProperties: false,
+};
+
+// Models that accept server-side refusal fallbacks.
+const FALLBACK_MODELS = ['claude-opus-5-5', 'claude-opus-5', 'claude-fable-5-1', 'claude-sonnet-5-5'];
+
+export async function summariseHeadlines(topic: string, articles: NewsArticle[]): Promise<NewsStory[]> {
+  client ??= new Anthropic({ apiKey: config.anthropicKey });
+  const list = articles.map((a, i) => `[${i}] ${a.title} (${a.source}, ${a.publishedAt.slice(0, 16).replace('T', ' ')} UTC)`).join('\n');
+  const fallback = FALLBACK_MODELS.includes(config.newsModel);
+  const res = await client.beta.messages.create({
+    model: config.newsModel,
+    max_tokens: 16000,
+    system: SYSTEM,
+    output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
+    messages: [{ role: 'user', content: `Topic: ${topic}\n\nHeadlines, newest first:\n${list}` }],
+    ...(fallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
+  });
+  if (res.stop_reason === 'refusal') throw new Error('Claude declined to summarise these headlines.');
+  if (res.stop_reason === 'max_tokens') throw new Error('The summary was cut off.');
+  const text = res.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('');
+  const parsed = JSON.parse(text) as { stories: { headline: string; summary: string; articles: number[] }[] };
+  return parsed.stories.map((s) => ({
+    headline: s.headline,
+    summary: s.summary,
+    // One link per outlet is enough.
+    links: [...new Map(s.articles.filter((i) => articles[i]).map((i) => [articles[i].source, { source: articles[i].source, url: articles[i].url }])).values()],
+  }));
+}

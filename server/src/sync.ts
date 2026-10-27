@@ -3,7 +3,8 @@
 import { randomUUID } from 'node:crypto';
 import { googleConfigured } from './config';
 import { fetchCalendar, fetchTasks, GoogleError, scanGmail } from './google';
-import { store, updatePackages } from './store';
+import { fetchHeadlines, summariesEnabled, summariseHeadlines } from './news';
+import { store, updatePackages, type NewsCache } from './store';
 import { canTrack, track, TrackingUnavailable } from './tracking';
 import type { Package, SourceKey } from '../../shared/types';
 
@@ -13,13 +14,18 @@ const EVERY: Record<SourceKey, number> = {
   tasks: 2 * MIN,
   gmail: 10 * MIN,
   carriers: 20 * MIN,
+  news: 60 * MIN,
 };
 const ARCHIVE_AFTER = 3 * 24 * 60 * MIN;
+// Summaries cost an API call, so a topic is re-summarised at most this often
+// on the schedule. Pressing refresh in the News tab skips the wait.
+const RESUMMARISE_AFTER = 3 * 60 * MIN;
 
 const running = new Map<SourceKey, Promise<void>>();
 
 function enabled(key: SourceKey): boolean {
   if (key === 'carriers') return true;
+  if (key === 'news') return store.prefs().newsTopics.length > 0;
   return googleConfigured() && !!store.google() && store.prefs().sources[key];
 }
 
@@ -64,14 +70,55 @@ async function runCarriers() {
   if (active.length && errors.length === active.length) throw new Error(errors[0]);
 }
 
-const JOBS: Record<SourceKey, () => Promise<void>> = {
+async function runNews(force: boolean) {
+  const prev = store.news();
+  const results = await Promise.all(
+    store.prefs().newsTopics.map(async (topic) => {
+      const old = prev[topic.toLowerCase()];
+      const entry = {
+        topic,
+        articles: old?.articles ?? [],
+        stories: summariesEnabled() ? old?.stories ?? null : null,
+        summarisedAt: old?.summarisedAt ?? null,
+        summarisedUrls: old?.summarisedUrls ?? [],
+        fetchedAt: old?.fetchedAt ?? null,
+        error: null as string | null,
+      };
+      try {
+        entry.articles = await fetchHeadlines(topic);
+        entry.fetchedAt = new Date().toISOString();
+        const known = new Set(entry.summarisedUrls);
+        const fresh = entry.articles.some((a) => !known.has(a.url));
+        const due = force || !entry.summarisedAt || Date.now() - Date.parse(entry.summarisedAt) > RESUMMARISE_AFTER;
+        if (summariesEnabled() && entry.articles.length && (!entry.stories || (fresh && due))) {
+          entry.stories = await summariseHeadlines(topic, entry.articles);
+          entry.summarisedUrls = entry.articles.map((a) => a.url);
+          entry.summarisedAt = new Date().toISOString();
+        }
+      } catch (e) {
+        entry.error = (e as Error).message;
+      }
+      return entry;
+    }),
+  );
+  // A topic removed meanwhile is hidden by state(); one added meanwhile is fetched by refreshNews().
+  const next: NewsCache = {};
+  for (const r of results) next[r.topic.toLowerCase()] = r;
+  store.setNews(next);
+  const failed = results.filter((r) => r.error);
+  if (failed.length && failed.length === results.length) throw new Error(`${failed[0].topic}: ${failed[0].error}`);
+}
+
+const JOBS: Record<SourceKey, (force: boolean) => Promise<void>> = {
   calendar: runCalendar,
   tasks: runTasks,
   gmail: runGmail,
   carriers: runCarriers,
+  news: runNews,
 };
 
-export function runSource(key: SourceKey): Promise<void> {
+/** `force` only matters for news: summarise new headlines now instead of waiting. */
+export function runSource(key: SourceKey, force = false): Promise<void> {
   const existing = running.get(key);
   if (existing) return existing;
   if (!enabled(key)) return Promise.resolve();
@@ -79,7 +126,7 @@ export function runSource(key: SourceKey): Promise<void> {
     const prev = store.sync()[key];
     const at = new Date().toISOString();
     try {
-      await JOBS[key]();
+      await JOBS[key](force);
       store.setSync(key, { lastSuccess: new Date().toISOString(), lastAttempt: at, lastError: null });
     } catch (e) {
       const err = e as Error;
@@ -101,8 +148,14 @@ export function runIfStale(key: SourceKey, minAgeMs: number): Promise<void> {
   return runSource(key);
 }
 
+/** Refresh news on request: waits out a scheduled run first, so topics added during it are included. */
+export async function refreshNews(): Promise<void> {
+  await running.get('news');
+  return runSource('news', true);
+}
+
 export function runAllGoogle(): Promise<void> {
-  return Promise.all((['calendar', 'tasks', 'gmail'] as const).map(runSource)).then(() => {});
+  return Promise.all((['calendar', 'tasks', 'gmail'] as const).map((k) => runSource(k))).then(() => {});
 }
 
 export function startScheduler(): void {

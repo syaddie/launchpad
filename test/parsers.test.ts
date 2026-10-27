@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { detectCarrier } from '../shared/carriers';
 import { parseDue } from '../shared/dates';
 import { extractTrackingNumbers, labelFor } from '../server/src/gmail-parse';
+import { parseNewsRss } from '../server/src/news';
 import { classify, parseSingpost, summarise } from '../server/src/tracking';
 
 const tue = new Date(2026, 9, 27); // Tue 27 Oct 2026
@@ -81,5 +82,28 @@ describe('tracking status', () => {
     expect(r.stage).toBe(3);
     expect(r.deliveredAt).toBe('2026-10-28T06:05:00.000Z');
     expect(r.timeline[0].location).toBe('Tampines');
+  });
+});
+
+describe('parseNewsRss', () => {
+  const item = (title: string, source: string, date: string, id: string) =>
+    `<item><title>${title} - ${source}</title><link>https://news.google.com/rss/articles/${id}?oc=5</link><pubDate>${date}</pubDate><source url="https://x.example">${source}</source></item>`;
+  const feed = `<?xml version="1.0"?><rss><channel><title>"K-pop" - Google News</title>
+    ${item('Older story &amp; more', 'Soompi', 'Mon, 26 Oct 2026 10:00:00 GMT', 'a')}
+    ${item('NewJeans announce &#8220;comeback&#8221;', 'Korea JoongAng Daily', 'Tue, 27 Oct 2026 04:34:30 GMT', 'b')}
+    ${item('NEWJEANS ANNOUNCE “COMEBACK”', 'Kpopmap', 'Tue, 27 Oct 2026 05:00:00 GMT', 'c')}
+  </channel></rss>`;
+
+  it('strips the outlet suffix, decodes entities and sorts newest first', () => {
+    const items = parseNewsRss(feed);
+    expect(items.map((a) => a.title)).toEqual(['NEWJEANS ANNOUNCE “COMEBACK”', 'Older story & more']);
+    expect(items[0]).toMatchObject({ source: 'Kpopmap', url: 'https://news.google.com/rss/articles/c?oc=5', publishedAt: '2026-10-27T05:00:00.000Z' });
+  });
+  it('turns an outlet URL into its host name', () => {
+    const [a] = parseNewsRss(item('Ten islands to visit', 'https://www.islands.com/', 'Tue, 27 Oct 2026 01:00:00 GMT', 'd'));
+    expect(a).toMatchObject({ title: 'Ten islands to visit', source: 'islands.com' });
+  });
+  it('ignores the channel title and empty feeds', () => {
+    expect(parseNewsRss('<rss><channel><title>x</title></channel></rss>')).toEqual([]);
   });
 });

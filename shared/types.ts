@@ -21,7 +21,7 @@ export interface Note {
 export type ThemeMode = 'system' | 'light' | 'dark';
 export type AccentKey = 'sage' | 'slate' | 'terracotta';
 export type GoogleSource = 'calendar' | 'tasks' | 'gmail';
-export type SourceKey = GoogleSource | 'carriers';
+export type SourceKey = GoogleSource | 'carriers' | 'news';
 
 export interface Prefs {
   /** Name used in the greeting. */
@@ -32,6 +32,8 @@ export interface Prefs {
   hiddenCalendars: string[];
   /** Per-source on/off switches from Settings. */
   sources: Record<GoogleSource, boolean>;
+  /** Search terms for the News tab, in display order. */
+  newsTopics: string[];
 }
 
 export interface CalendarInfo {
@@ -98,6 +100,32 @@ export interface Package {
   trackingError: string | null;
 }
 
+export interface NewsArticle {
+  title: string;
+  url: string;
+  source: string;
+  /** ISO date-time. */
+  publishedAt: string;
+}
+
+export interface NewsStory {
+  headline: string;
+  summary: string;
+  /** The headlines this story was written from. */
+  links: { source: string; url: string }[];
+}
+
+export interface NewsTopic {
+  topic: string;
+  /** Newest first. */
+  articles: NewsArticle[];
+  /** Claude's digest of the headlines, or null before the first one (or without an API key). */
+  stories: NewsStory[] | null;
+  summarisedAt: string | null;
+  fetchedAt: string | null;
+  error: string | null;
+}
+
 export interface SyncStatus {
   lastSuccess: string | null;
   lastAttempt: string | null;
@@ -125,6 +153,9 @@ export interface AppState {
   sync: Record<SourceKey, SyncStatus>;
   /** Carriers that get live status (SingPost always; others with a 17TRACK key). */
   tracking: { allCarriers: boolean };
+  news: NewsTopic[];
+  /** ANTHROPIC_API_KEY is set, so topics get summaries and not just headlines. */
+  newsSummaries: boolean;
 }
 
 export interface Backup {

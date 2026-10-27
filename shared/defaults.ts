@@ -19,4 +19,5 @@ export const DEFAULT_PREFS: Prefs = {
   accent: 'sage',
   hiddenCalendars: [],
   sources: { calendar: true, tasks: true, gmail: true },
+  newsTopics: ['K-pop', 'Video games'],
 };
