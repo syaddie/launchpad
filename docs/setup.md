@@ -116,7 +116,7 @@ The News view (newspaper button, or press `N`) works without this and lists head
    ```
    ANTHROPIC_API_KEY=sk-ant-...
    ```
-3. Optional: `NEWS_MODEL` picks the model. The default is `claude-opus-5-5`; `claude-haiku-5-5` costs a small fraction of that and is plenty for summarising headlines.
+3. Optional: `NEWS_MODEL` picks the model. The default, `claude-haiku-5-5`, costs a few cents a month here; `claude-opus-5-5` writes richer summaries at about 40 times the price.
 
 Summaries are written from headlines only, at most every 3 hours per topic and only when new headlines have appeared.
 
