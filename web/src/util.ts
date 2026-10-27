@@ -88,3 +88,22 @@ export function newId(prefix: string): string {
 }
 
 export { parseYmd, dayDiff };
+
+/** Phosphor icon for a Meteorological Service Singapore forecast. */
+export function weatherIcon(forecast: string, night: boolean): string {
+  const f = forecast.toLowerCase();
+  if (f.includes('thunder')) return 'ph-cloud-lightning';
+  if (f.includes('rain') || f.includes('shower') || f.includes('drizzle')) return 'ph-cloud-rain';
+  if (f.includes('haz') || f.includes('mist') || f.includes('fog')) return 'ph-cloud-fog';
+  if (f.includes('wind')) return 'ph-wind';
+  if (f.includes('partly')) return night ? 'ph-cloud-moon' : 'ph-cloud-sun';
+  if (f.includes('cloud') || f.includes('overcast')) return 'ph-cloud';
+  if (f.includes('fair') || f.includes('sunny') || f.includes('clear')) return night ? 'ph-moon' : 'ph-sun';
+  return 'ph-cloud';
+}
+
+/** "Partly Cloudy (Night)" → "Partly cloudy". */
+export function weatherLabel(forecast: string): string {
+  const s = forecast.replace(/\s*\((day|night)\)\s*$/i, '').trim().toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}

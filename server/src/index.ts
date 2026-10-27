@@ -11,7 +11,7 @@ import { authUrl, completeTask, createTask, exchangeCode, revoke } from './googl
 import { store, updatePackages } from './store';
 import { summariesEnabled } from './news';
 import { MAX_PHOTOS, MAX_PHOTO_BYTES, readPhoto, removePhotoFile, sniffImage, writePhoto } from './photos';
-import { newPackage, refreshNews, refreshPackage, runAllGoogle, runIfStale, runSource, startScheduler } from './sync';
+import { newPackage, refreshNews, refreshPackage, refreshWeather, runAllGoogle, runIfStale, runSource, startScheduler } from './sync';
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
 import type { AppState, BookmarkGroup, NewsTopic, Note, Package, Photo, Prefs, SourceKey } from '../../shared/types';
 
@@ -64,6 +64,7 @@ function state(): AppState {
         : { topic, articles: [], stories: null, summarisedAt: null, fetchedAt: null, error: null };
     }),
     newsSummaries: summariesEnabled(),
+    weather: store.weather(),
     photos: store.photos().map(({ id, focus }): Photo => ({ id, focus })),
   };
 }
@@ -117,12 +118,15 @@ app.put('/api/prefs', async (c) => {
     hiddenCalendars: Array.isArray(body.hiddenCalendars) ? body.hiddenCalendars.filter(isStr) : prev.hiddenCalendars,
     sources: { ...prev.sources, ...body.sources },
     newsTopics: Array.isArray(body.newsTopics) ? cleanTopics(body.newsTopics) : prev.newsTopics,
+    weatherArea: isStr(body.weatherArea) ? body.weatherArea.trim().slice(0, 60) : prev.weatherArea,
   };
   store.setPrefs(next);
   // A source switched back on should sync straight away.
   for (const k of ['calendar', 'tasks', 'gmail'] as const) {
     if (next.sources[k] && !prev.sources[k]) runSource(k);
   }
+  // A new area should show straight away; the page refreshes after saving.
+  if (next.weatherArea && next.weatherArea !== prev.weatherArea) await refreshWeather();
   return c.json(next);
 });
 
@@ -239,7 +243,7 @@ app.delete('/api/photos/:id', (c) => {
 
 app.post('/api/sync/:source', async (c) => {
   const key = c.req.param('source') as SourceKey;
-  if (!['calendar', 'tasks', 'gmail', 'carriers', 'news'].includes(key)) return c.json({ error: 'Unknown source' }, 400);
+  if (!['calendar', 'tasks', 'gmail', 'carriers', 'news', 'weather'].includes(key)) return c.json({ error: 'Unknown source' }, 400);
   if (key === 'news') {
     await refreshNews();
     return c.json(state());

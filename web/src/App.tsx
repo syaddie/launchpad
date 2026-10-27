@@ -29,10 +29,12 @@ const EMPTY: AppState = {
     gmail: { lastSuccess: null, lastAttempt: null, lastError: null },
     carriers: { lastSuccess: null, lastAttempt: null, lastError: null },
     news: { lastSuccess: null, lastAttempt: null, lastError: null },
+    weather: { lastSuccess: null, lastAttempt: null, lastError: null },
   },
   tracking: { allCarriers: false },
   news: [],
   newsSummaries: false,
+  weather: { areas: [], now: null },
   photos: [],
 };
 

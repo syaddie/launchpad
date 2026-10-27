@@ -5,6 +5,8 @@ import { extractTrackingNumbers, labelFor } from '../server/src/gmail-parse';
 import { parseNewsRss } from '../server/src/news';
 import { classify, parseSingpost, summarise } from '../server/src/tracking';
 import { sniffImage } from '../server/src/photos';
+import { pickWeather } from '../server/src/weather';
+import { weatherIcon, weatherLabel } from '../web/src/util';
 
 const tue = new Date(2026, 9, 27); // Tue 27 Oct 2026
 
@@ -125,5 +127,62 @@ describe('sniffImage', () => {
     expect(sniffImage(bytes('<svg xmlns="'))).toBeNull();
     expect(sniffImage(bytes('<html><script>'))).toBeNull();
     expect(sniffImage(new Uint8Array([0xff, 0xd8]))).toBeNull();
+  });
+});
+
+describe('pickWeather', () => {
+  const forecast = {
+    data: {
+      area_metadata: [
+        { name: 'Bishan', label_location: { latitude: 1.35, longitude: 103.839 } },
+        { name: 'City', label_location: { latitude: 1.292, longitude: 103.844 } },
+      ],
+      items: [{
+        timestamp: '2026-10-27T19:12:00+08:00',
+        valid_period: { end: '2026-10-27T21:00:00+08:00' },
+        forecasts: [{ area: 'Bishan', forecast: 'Thundery Showers' }, { area: 'City', forecast: 'Cloudy' }],
+      }],
+    },
+  };
+  const temps = {
+    data: {
+      stations: [
+        { id: 'S109', name: 'Ang Mo Kio Avenue 5', location: { latitude: 1.3793, longitude: 103.85 } },
+        { id: 'S24', name: 'Upper Changi Road North', location: { latitude: 1.3678, longitude: 103.9826 } },
+        { id: 'S43', name: 'Kim Chuan Road', location: { latitude: 1.3399, longitude: 103.8878 } },
+      ],
+      readings: [{ timestamp: '2026-10-27T19:13:00+08:00', data: [{ stationId: 'S109', value: 27.4 }, { stationId: 'S24', value: 29 }, { stationId: 'S43', value: 28.1 }] }],
+    },
+  };
+  it('takes the area forecast and the nearest station with a reading', () => {
+    const { areas, now } = pickWeather(forecast, temps, 'Bishan');
+    expect(areas).toEqual(['Bishan', 'City']);
+    expect(now).toMatchObject({ area: 'Bishan', forecast: 'Thundery Showers', tempC: 27.4, station: 'Ang Mo Kio Avenue 5', validUntil: '2026-10-27T21:00:00+08:00' });
+  });
+  it('falls back to City for an unknown area, and copes without temperatures', () => {
+    expect(pickWeather(forecast, {}, 'Atlantis').now).toMatchObject({ area: 'City', forecast: 'Cloudy', tempC: null, station: null });
+  });
+  it('throws when the response has no forecast', () => {
+    expect(() => pickWeather({ data: { items: [] } }, temps, 'City')).toThrow();
+  });
+});
+
+describe('weather display', () => {
+  it.each([
+    ['Heavy Thundery Showers with Gusty Winds', false, 'ph-cloud-lightning'],
+    ['Light Rain', false, 'ph-cloud-rain'],
+    ['Passing Showers', true, 'ph-cloud-rain'],
+    ['Slightly Hazy', false, 'ph-cloud-fog'],
+    ['Partly Cloudy (Night)', true, 'ph-cloud-moon'],
+    ['Partly Cloudy (Day)', false, 'ph-cloud-sun'],
+    ['Cloudy', false, 'ph-cloud'],
+    ['Fair and Warm', false, 'ph-sun'],
+    ['Fair (Night)', true, 'ph-moon'],
+  ])('%s → %s', (f, night, icon) => {
+    expect(weatherIcon(f, night)).toBe(icon);
+  });
+  it('drops the day/night suffix and uses sentence case', () => {
+    expect(weatherLabel('Partly Cloudy (Night)')).toBe('Partly cloudy');
+    expect(weatherLabel('Thundery Showers')).toBe('Thundery showers');
   });
 });

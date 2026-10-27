@@ -18,6 +18,8 @@ export const config = {
   anthropicKey: env.ANTHROPIC_API_KEY || '',
   /** Claude model that writes the news summaries. */
   newsModel: env.NEWS_MODEL || 'claude-haiku-5-5',
+  /** Optional: data.gov.sg API key for the weather. It works without one, at a lower rate limit. */
+  dataGovKey: env.DATA_GOV_SG_API_KEY || '',
   /** Optional: verify Cloudflare Access JWTs so only your Access login can reach the app. */
   access: {
     teamDomain: (env.CF_ACCESS_TEAM_DOMAIN || '').replace(/^https?:\/\//, '').replace(/\/+$/, ''),

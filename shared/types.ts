@@ -21,7 +21,7 @@ export interface Note {
 export type ThemeMode = 'system' | 'light' | 'dark';
 export type AccentKey = 'sage' | 'slate' | 'terracotta';
 export type GoogleSource = 'calendar' | 'tasks' | 'gmail';
-export type SourceKey = GoogleSource | 'carriers' | 'news';
+export type SourceKey = GoogleSource | 'carriers' | 'news' | 'weather';
 
 export interface Prefs {
   /** Name used in the greeting. */
@@ -34,6 +34,8 @@ export interface Prefs {
   sources: Record<GoogleSource, boolean>;
   /** Search terms for the News tab, in display order. */
   newsTopics: string[];
+  /** 2-hour forecast area for the weather beside the clock (e.g. "Bishan"); empty hides it. */
+  weatherArea: string;
 }
 
 export interface CalendarInfo {
@@ -126,6 +128,20 @@ export interface NewsTopic {
   error: string | null;
 }
 
+export interface Weather {
+  /** The forecast area actually used (City when the chosen one isn't listed). */
+  area: string;
+  /** Meteorological Service Singapore wording, e.g. "Thundery Showers", "Partly Cloudy (Night)". */
+  forecast: string;
+  /** ISO date-time the 2-hour forecast runs to. */
+  validUntil: string | null;
+  /** Air temperature at the station nearest the area. */
+  tempC: number | null;
+  station: string | null;
+  observedAt: string | null;
+  issuedAt: string;
+}
+
 export interface Photo {
   id: string;
   /** The point to keep in frame when the panel crops the photo, in percent from the top left. */
@@ -162,6 +178,8 @@ export interface AppState {
   news: NewsTopic[];
   /** ANTHROPIC_API_KEY is set, so topics get summaries and not just headlines. */
   newsSummaries: boolean;
+  /** Latest reading for prefs.weatherArea, and the areas Settings can offer. */
+  weather: { areas: string[]; now: Weather | null };
   /** Shown in the photo panels, in display order. The files are at /api/photos/:id. */
   photos: Photo[];
 }

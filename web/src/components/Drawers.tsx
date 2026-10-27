@@ -383,6 +383,25 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
         </div>
       </div>
 
+      <div className="drawer-section">
+        <div className="drawer-label">Weather</div>
+        <select
+          className="input sm"
+          style={{ maxWidth: 240 }}
+          aria-label="Weather area"
+          value={p.weatherArea}
+          onChange={(e) => onPrefs({ ...p, weatherArea: e.target.value })}
+        >
+          <option value="">Off</option>
+          {[...new Set([...data.weather.areas, p.weatherArea].filter(Boolean))].sort().map((a) => (
+            <option key={a} value={a}>
+              {a}
+            </option>
+          ))}
+        </select>
+        <div style={{ fontSize: 12, color: 'var(--t3)' }}>2-hour forecast and nearest temperature from the Meteorological Service Singapore, beside the clock.</div>
+      </div>
+
       <PhotoSettings photos={data.photos} onAdd={onAddPhotos} onRemove={onRemovePhoto} onFocus={onPhotoFocus} />
 
       <div className="drawer-section">

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AppState, Bookmark, SourceKey } from '../../../shared/types';
-import { ago, favicon, fmtDay, hm, host } from '../util';
+import type { AppState, Bookmark, SourceKey, Weather } from '../../../shared/types';
+import { ago, favicon, fmtDay, hm, host, weatherIcon, weatherLabel } from '../util';
 
 interface Props {
   data: AppState;
@@ -18,7 +18,7 @@ export function matchBookmark(b: Bookmark, q: string): boolean {
   return !q || b.name.toLowerCase().includes(q) || b.url.toLowerCase().includes(q);
 }
 
-function Clock() {
+function Clock({ weather }: { weather: Weather | null }) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const iv = setInterval(() => setNow(new Date()), 1000);
@@ -30,7 +30,26 @@ function Clock() {
       <span className="tnum" style={{ fontSize: 13, color: 'var(--t2)', whiteSpace: 'nowrap' }}>
         {fmtDay(now)} · {tzLabel()}
       </span>
+      {weather && <WeatherNow w={weather} now={now} />}
     </div>
+  );
+}
+
+function WeatherNow({ w, now }: { w: Weather; now: Date }) {
+  // Hide a reading the sync has stopped refreshing rather than show old weather as current.
+  if (now.getTime() - Date.parse(w.issuedAt) > 3 * 3600_000) return null;
+  const night = /\(night\)/i.test(w.forecast) || now.getHours() >= 19 || now.getHours() < 7;
+  const label = weatherLabel(w.forecast);
+  const until = w.validUntil ? ` until ${hm(new Date(w.validUntil))}` : '';
+  const title = [`${label} in ${w.area}${until}`, w.tempC !== null && w.station ? `${w.tempC.toFixed(1)}°C at ${w.station}` : '']
+    .filter(Boolean)
+    .join('\n');
+  return (
+    <span className="weather tnum" title={title}>
+      <i className={'ph-duotone ' + weatherIcon(w.forecast, night)} aria-hidden="true" />
+      {w.tempC !== null && <span>{Math.round(w.tempC)}°</span>}
+      <span className="weather-text">{label}</span>
+    </span>
   );
 }
 
@@ -85,14 +104,16 @@ export function TopBar({ data, now, subline, search, onSearch, searchRef, onOpen
     { key: 'gmail', name: 'Gmail packages', ok: 'Checked' },
     { key: 'carriers', name: 'Carriers', ok: 'Updated' },
     { key: 'news', name: 'News', ok: 'Updated' },
+    { key: 'weather', name: 'Weather', ok: 'Updated' },
   ];
-  const needsGoogle = (k: SourceKey) => k !== 'carriers' && k !== 'news';
+  const needsGoogle = (k: SourceKey) => k === 'calendar' || k === 'tasks' || k === 'gmail';
   const connected = data.google.connected;
   const lines = sources
     .filter((s) => connected || !needsGoogle(s.key))
     .map((s) => {
       const st = data.sync[s.key];
-      const off = s.key === 'news' ? !data.prefs.newsTopics.length : needsGoogle(s.key) && !data.prefs.sources[s.key as 'calendar'];
+      const off =
+        s.key === 'news' ? !data.prefs.newsTopics.length : s.key === 'weather' ? !data.prefs.weatherArea : needsGoogle(s.key) && !data.prefs.sources[s.key as 'calendar'];
       if (off) return { name: s.name, text: 'Off', warn: false };
       if (failing(st)) return { name: s.name, text: `Couldn’t sync · last synced ${ago(st.lastSuccess, now)}`, warn: true };
       return { name: s.name, text: st.lastSuccess ? `${s.ok} ${ago(st.lastSuccess, now)}` : 'Waiting for first sync', warn: false };
@@ -111,7 +132,7 @@ export function TopBar({ data, now, subline, search, onSearch, searchRef, onOpen
         <div className="subline">{subline}</div>
       </div>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: '15px 30px', flexWrap: 'wrap' }}>
-        <Clock />
+        <Clock weather={data.prefs.weatherArea ? data.weather.now : null} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <div className="search">
             <i className="ph-duotone ph-magnifying-glass" />

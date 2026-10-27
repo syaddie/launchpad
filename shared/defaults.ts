@@ -20,4 +20,5 @@ export const DEFAULT_PREFS: Prefs = {
   hiddenCalendars: [],
   sources: { calendar: true, tasks: true, gmail: true },
   newsTopics: ['K-pop', 'Video games'],
+  weatherArea: 'City',
 };

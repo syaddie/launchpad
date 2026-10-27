@@ -126,6 +126,10 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 [data-layout='wide'] .clock { font-size: 60px; }
 [data-layout='narrow'] .clock { font-size: 36px; }
 
+.weather { display: inline-flex; align-items: baseline; gap: 5px; font-size: 13px; color: var(--t2); white-space: nowrap; cursor: default; }
+.weather i { align-self: center; font-size: 16px; }
+[data-layout='narrow'] .weather-text { display: none; }
+
 .search { position: relative; z-index: 15; }
 .search input {
   width: 230px;

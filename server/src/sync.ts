@@ -6,6 +6,7 @@ import { fetchCalendar, fetchTasks, GoogleError, scanGmail } from './google';
 import { fetchHeadlines, summariesEnabled, summariseHeadlines } from './news';
 import { store, updatePackages, type NewsCache } from './store';
 import { canTrack, track, TrackingUnavailable } from './tracking';
+import { fetchWeather } from './weather';
 import type { Package, SourceKey } from '../../shared/types';
 
 const MIN = 60_000;
@@ -15,6 +16,8 @@ const EVERY: Record<SourceKey, number> = {
   gmail: 10 * MIN,
   carriers: 20 * MIN,
   news: 60 * MIN,
+  // Forecasts are issued every 30 min; temperatures every minute.
+  weather: 10 * MIN,
 };
 const ARCHIVE_AFTER = 3 * 24 * 60 * MIN;
 // Summaries cost an API call, so a topic is re-summarised at most this often
@@ -26,6 +29,7 @@ const running = new Map<SourceKey, Promise<void>>();
 function enabled(key: SourceKey): boolean {
   if (key === 'carriers') return true;
   if (key === 'news') return store.prefs().newsTopics.length > 0;
+  if (key === 'weather') return !!store.prefs().weatherArea;
   return googleConfigured() && !!store.google() && store.prefs().sources[key];
 }
 
@@ -109,12 +113,17 @@ async function runNews(force: boolean) {
   if (failed.length && failed.length === results.length) throw new Error(`${failed[0].topic}: ${failed[0].error}`);
 }
 
+async function runWeather() {
+  store.setWeather(await fetchWeather(store.prefs().weatherArea));
+}
+
 const JOBS: Record<SourceKey, (force: boolean) => Promise<void>> = {
   calendar: runCalendar,
   tasks: runTasks,
   gmail: runGmail,
   carriers: runCarriers,
   news: runNews,
+  weather: runWeather,
 };
 
 /** `force` only matters for news: summarise new headlines now instead of waiting. */
@@ -152,6 +161,12 @@ export function runIfStale(key: SourceKey, minAgeMs: number): Promise<void> {
 export async function refreshNews(): Promise<void> {
   await running.get('news');
   return runSource('news', true);
+}
+
+/** Fetch the weather for a newly chosen area, after any run still using the old one. */
+export async function refreshWeather(): Promise<void> {
+  await running.get('weather');
+  return runSource('weather');
 }
 
 export function runAllGoogle(): Promise<void> {

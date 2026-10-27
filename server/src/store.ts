@@ -8,7 +8,7 @@ import { config } from './config';
 import type { StoredPhoto } from './photos';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
 import type {
-  BookmarkGroup, CalEvent, CalendarInfo, NewsTopic, Note, Package, Prefs, SourceKey, SyncStatus, Task, TaskList,
+  BookmarkGroup, CalEvent, CalendarInfo, NewsTopic, Note, Package, Prefs, SourceKey, SyncStatus, Task, TaskList, Weather,
 } from '../../shared/types';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
@@ -90,6 +90,9 @@ export const store = {
   news: () => get<NewsCache>('news', {}),
   setNews: (v: NewsCache) => set('news', v),
 
+  weather: () => get<{ areas: string[]; now: Weather | null }>('weather', { areas: [], now: null }),
+  setWeather: (v: { areas: string[]; now: Weather | null }) => set('weather', v),
+
   photos: () => get<StoredPhoto[]>('photos', []),
   setPhotos: (v: StoredPhoto[]) => set('photos', v),
 
@@ -109,6 +112,7 @@ export const store = {
       gmail: s.gmail || EMPTY_SYNC,
       carriers: s.carriers || EMPTY_SYNC,
       news: s.news || EMPTY_SYNC,
+      weather: s.weather || EMPTY_SYNC,
     };
   },
   setSync: (key: SourceKey, v: SyncStatus) => set('sync', { ...store.sync(), [key]: v }),
