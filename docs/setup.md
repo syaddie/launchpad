@@ -1,6 +1,6 @@
 # Setting up Launchpad on the home server
 
-This assumes the same setup as `streamlit-portfolio`: Ubuntu + CasaOS with Docker, and a Cloudflare Tunnel (`buskersyaddy-tunnel`) already running. Do the steps in order; each one can be checked before moving on.
+This assumes the same setup as `streamlit-portfolio`: Ubuntu + CasaOS with Docker, and a Cloudflare account with Zero Trust. Launchpad runs its own Cloudflare Tunnel from this repo's `docker-compose.yml` (step 3). Do the steps in order; each one can be checked before moving on.
 
 You only do this once. After that, pushing to `main` deploys by itself (step 5), and bookmarks and notes are edited in the page.
 
