@@ -109,7 +109,7 @@ Without a key, those packages still appear (manually or from Gmail) with a "Trac
 
 ## 7. Optional: news summaries (Anthropic API)
 
-The News view (newspaper button, or press `N`) works without this and lists headlines for each topic. To get a short digest per topic instead:
+The News view (in the rail on the left, or press `N`) works without this and lists headlines for each topic. To get a short digest per topic instead:
 
 1. Create an API key at <https://platform.claude.com/> (Settings → API keys) and add some credit.
 2. Add it to `.env` and `docker compose up -d`:
@@ -119,6 +119,25 @@ The News view (newspaper button, or press `N`) works without this and lists head
 3. Optional: `NEWS_MODEL` picks the model. The default, `claude-haiku-5-5`, costs a few cents a month here; `claude-opus-5-5` writes richer summaries at about 40 times the price.
 
 Summaries are written from headlines only, at most every 3 hours per topic and only when new headlines have appeared.
+
+## 8. Server view: network traffic and containers
+
+The Server view (rail on the left, or `G` then `S`) shows CPU, memory, disk, network traffic, internet speed tests and your containers. CPU, memory, disk and speed tests work with no setup. Two parts need the extras that `docker-compose.yml` already includes:
+
+- **Network traffic for the whole machine.** The host's `/proc` is mounted read-only at `/host/proc` and `HOST_PROC` points at it. Without it, the chart shows only the container's own traffic and says so.
+- **The container list.** The `docker-proxy` service gives Launchpad a read-only view of Docker: it answers questions about containers and refuses anything that would change them. `DOCKER_HOST` points Launchpad at it.
+
+If your server copy of the repo is older than this, pick them up once:
+
+```bash
+cd ~/launchpad
+git pull
+docker compose up -d
+```
+
+To leave either out, delete its lines from `docker-compose.yml` (the `/proc` volume and `HOST_PROC`, or the `docker-proxy` service and `DOCKER_HOST`); that part of the view then explains what's missing.
+
+**Speed tests** run from the server against Cloudflare's speed test (the one behind speed.cloudflare.com) every 3 hours by default. Each moves about 130 MB. Change the interval, turn them off or add your plan's speed in Settings › Trackers; the view's **Test now** runs one straight away.
 
 ## Backups
 

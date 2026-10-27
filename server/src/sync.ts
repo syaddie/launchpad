@@ -5,6 +5,7 @@ import { googleConfigured } from './config';
 import { fetchCalendar, fetchTasks, GoogleError, scanGmail } from './google';
 import { fetchHeadlines, summariesEnabled, summariseHeadlines } from './news';
 import { store, updatePackages, type NewsCache } from './store';
+import { runSpeedTest } from './speedtest';
 import { canTrack, track, TrackingUnavailable } from './tracking';
 import { fetchWeather } from './weather';
 import type { Package, SourceKey } from '../../shared/types';
@@ -18,6 +19,8 @@ const EVERY: Record<SourceKey, number> = {
   news: 60 * MIN,
   // Forecasts are issued every 30 min; temperatures every minute.
   weather: 10 * MIN,
+  // Checks whether a test is due; the interval itself is prefs.speedTestHours.
+  speedtest: 10 * MIN,
 };
 const ARCHIVE_AFTER = 3 * 24 * 60 * MIN;
 // Summaries cost an API call, so a topic is re-summarised at most this often
@@ -26,8 +29,14 @@ const RESUMMARISE_AFTER = 3 * 60 * MIN;
 
 const running = new Map<SourceKey, Promise<void>>();
 
-function enabled(key: SourceKey): boolean {
+function enabled(key: SourceKey, force: boolean): boolean {
   if (key === 'carriers') return true;
+  if (key === 'speedtest') {
+    const hours = store.prefs().speedTestHours;
+    const last = store.sync().speedtest.lastAttempt;
+    // Leave a few minutes of slack so a 3-hour test doesn't slip a whole tick each time.
+    return force || (hours > 0 && (!last || Date.now() - Date.parse(last) >= hours * 60 * MIN - 5 * MIN));
+  }
   if (key === 'news') return store.prefs().newsTopics.length > 0;
   if (key === 'weather') return !!store.prefs().weatherArea;
   return googleConfigured() && !!store.google() && store.prefs().sources[key];
@@ -117,6 +126,10 @@ async function runWeather() {
   store.setWeather(await fetchWeather(store.prefs().weatherArea));
 }
 
+async function runSpeed() {
+  store.addSpeedTest(await runSpeedTest());
+}
+
 const JOBS: Record<SourceKey, (force: boolean) => Promise<void>> = {
   calendar: runCalendar,
   tasks: runTasks,
@@ -124,13 +137,14 @@ const JOBS: Record<SourceKey, (force: boolean) => Promise<void>> = {
   carriers: runCarriers,
   news: runNews,
   weather: runWeather,
+  speedtest: runSpeed,
 };
 
-/** `force` only matters for news: summarise new headlines now instead of waiting. */
+/** `force` summarises new news headlines now instead of waiting, and runs a speed test even when one isn't due. */
 export function runSource(key: SourceKey, force = false): Promise<void> {
   const existing = running.get(key);
   if (existing) return existing;
-  if (!enabled(key)) return Promise.resolve();
+  if (!enabled(key, force)) return Promise.resolve();
   const p = (async () => {
     const prev = store.sync()[key];
     const at = new Date().toISOString();
@@ -168,6 +182,8 @@ export async function refreshWeather(): Promise<void> {
   await running.get('weather');
   return runSource('weather');
 }
+
+export const isRunning = (key: SourceKey) => running.has(key);
 
 export function runAllGoogle(): Promise<void> {
   return Promise.all((['calendar', 'tasks', 'gmail'] as const).map((k) => runSource(k))).then(() => {});

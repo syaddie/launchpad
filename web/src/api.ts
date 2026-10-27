@@ -1,4 +1,4 @@
-import type { AppState, BookmarkGroup, Note, Package, Photo, Prefs, SourceKey, Task } from '../../shared/types';
+import type { AppState, BookmarkGroup, Countdown, Mood, Note, Package, Photo, Prefs, ServerStats, SourceKey, Task } from '../../shared/types';
 
 const STATE_KEY = 'launchpad:state';
 const PREFS_KEY = 'launchpad:prefs';
@@ -70,6 +70,12 @@ export const api = {
   addPhoto: (image: Blob) => req<Photo>('POST', '/api/photos', image),
   putPhotos: (v: Photo[]) => req('PUT', '/api/photos', v),
   deletePhoto: (id: string) => req('DELETE', `/api/photos/${encodeURIComponent(id)}`),
+  putCountdowns: (v: Countdown[]) => req<Countdown[]>('PUT', '/api/countdowns', v),
+  addSmoke: () => req<string[]>('POST', '/api/smokes', {}),
+  removeSmoke: (at?: string) => req<string[]>('DELETE', `/api/smokes${at ? `?at=${encodeURIComponent(at)}` : ''}`),
+  putMood: (date: string, mood: Mood | { level: 0 }) => req<Record<string, Mood>>('PUT', `/api/moods/${date}`, mood),
+  server: (iface?: string) => req<ServerStats>('GET', `/api/server${iface ? `?iface=${encodeURIComponent(iface)}` : ''}`),
+  speedTest: () => req<ServerStats['speed']>('POST', '/api/speedtest', {}),
 };
 
 export const photoUrl = (id: string) => `/api/photos/${encodeURIComponent(id)}`;

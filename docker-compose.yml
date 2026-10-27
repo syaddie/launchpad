@@ -11,9 +11,16 @@ services:
       # For checking it on your LAN at http://<server-lan-ip>:8090. The tunnel
       # below reaches the container directly and doesn't need this.
       - "8090:8080"
+    environment:
+      # Server view: the host's network traffic, and the container list through
+      # docker-proxy below. Both are optional; see docs/setup.md step 8.
+      - HOST_PROC=/host/proc
+      - DOCKER_HOST=tcp://docker-proxy:2375
     volumes:
       # Bookmarks, notes, packages and the Google sign-in all live here.
       - launchpad-data:/data
+      # Read-only, for the network counters of the host rather than the container.
+      - /proc:/host/proc:ro
 
   # Cloudflare Tunnel for launchpad.syaddy.com. Token comes from TUNNEL_TOKEN in .env.
   # In the tunnel's Public Hostname, set the service to HTTP  launchpad:8080
@@ -26,6 +33,19 @@ services:
       - TUNNEL_TOKEN=${TUNNEL_TOKEN}
     depends_on:
       - launchpad
+
+  # A read-only window on Docker for the Server view's container list. It answers
+  # GET requests about containers and refuses everything else (starting, stopping,
+  # exec…), so Launchpad never holds the Docker socket itself. Not exposed outside
+  # this compose network.
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: launchpad-docker-proxy
+    restart: unless-stopped
+    environment:
+      - CONTAINERS=1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
 
 volumes:
   launchpad-data:
