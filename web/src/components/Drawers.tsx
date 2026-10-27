@@ -230,7 +230,7 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
   const sourceRows: { key: GoogleSource; name: string; icon: string }[] = [
     { key: 'calendar', name: 'Google Calendar', icon: 'ph-calendar-blank' },
     { key: 'tasks', name: 'Google Tasks', icon: 'ph-check-square' },
-    { key: 'gmail', name: 'Gmail (package detection)', icon: 'ph-envelope-simple' },
+    { key: 'gmail', name: 'Gmail (packages and inbox)', icon: 'ph-envelope-simple' },
   ];
 
   const exportJson = () => {
@@ -491,6 +491,7 @@ export const PANEL_ROWS: { section: string; hint?: string; rows: { key: string; 
     hint: 'In the rail on the left',
     rows: [
       { key: 'view:news', name: 'News' },
+      { key: 'view:inbox', name: 'Inbox', meta: 'Claude’s digest of your Gmail' },
       { key: 'view:you', name: 'You', meta: 'Countdowns, cigarettes, mood' },
       { key: 'view:server', name: 'Server', meta: 'Health, internet speed, services' },
     ],

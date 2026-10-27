@@ -5,10 +5,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { config } from './config';
+import type { StoredEmail } from './gmail-parse';
 import type { StoredPhoto } from './photos';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
 import type {
-  BookmarkGroup, CalEvent, CalendarInfo, Countdown, Mood, NewsTopic, Note, Package, Prefs, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Weather,
+  BookmarkGroup, CalEvent, CalendarInfo, Countdown, InboxDigest, InboxRange, Mood, NewsTopic, Note, Package, Prefs, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Weather,
 } from '../../shared/types';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
@@ -55,6 +56,15 @@ export interface TasksCache { lists: TaskList[]; tasks: Task[] }
 /** Keyed by lower-cased topic. `summarisedUrls` are the headlines the current stories came from. */
 export type NewsCache = Record<string, NewsTopic & { summarisedUrls: string[] }>;
 
+/** `emailIds` are the emails each digest was written from. */
+export interface InboxCache {
+  emails: StoredEmail[];
+  digests: Record<InboxRange, (InboxDigest & { emailIds: string[] }) | null>;
+  fetchedAt: string | null;
+  error: string | null;
+}
+const EMPTY_INBOX: InboxCache = { emails: [], digests: { '2d': null, '7d': null }, fetchedAt: null, error: null };
+
 const EMPTY_SYNC: SyncStatus = { lastSuccess: null, lastAttempt: null, lastError: null };
 
 export const store = {
@@ -76,6 +86,7 @@ export const store = {
     delStmt.run('google');
     delStmt.run('calendar');
     delStmt.run('tasks');
+    delStmt.run('inbox');
   },
 
   calendar: () => get<CalendarCache>('calendar', { calendars: [], events: [] }),
@@ -89,6 +100,12 @@ export const store = {
 
   news: () => get<NewsCache>('news', {}),
   setNews: (v: NewsCache) => set('news', v),
+
+  inbox: (): InboxCache => {
+    const v = get<Partial<InboxCache>>('inbox', {});
+    return { ...EMPTY_INBOX, ...v, digests: { ...EMPTY_INBOX.digests, ...v.digests } };
+  },
+  setInbox: (v: InboxCache) => set('inbox', v),
 
   weather: () => get<{ areas: string[]; now: Weather | null }>('weather', { areas: [], now: null }),
   setWeather: (v: { areas: string[]; now: Weather | null }) => set('weather', v),
@@ -129,6 +146,7 @@ export const store = {
       gmail: s.gmail || EMPTY_SYNC,
       carriers: s.carriers || EMPTY_SYNC,
       news: s.news || EMPTY_SYNC,
+      inbox: s.inbox || EMPTY_SYNC,
       weather: s.weather || EMPTY_SYNC,
       speedtest: s.speedtest || EMPTY_SYNC,
     };

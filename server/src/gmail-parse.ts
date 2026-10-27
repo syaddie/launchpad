@@ -1,5 +1,6 @@
 // Pull tracking numbers out of shipping emails. Kept free of I/O so it can be unit tested.
 import { detectCarrier } from '../../shared/carriers';
+import type { InboxEmail } from '../../shared/types';
 
 export interface Candidate {
   number: string;
@@ -73,4 +74,66 @@ export function htmlToText(html: string): string {
     .replace(/&amp;/g, '&')
     .replace(/&#(\d+);/g, (_, d) => String.fromCharCode(Number(d)))
     .replace(/[ \t]+/g, ' ');
+}
+
+// ---------- inbox ----------
+
+/** An inbox email plus the excerpt of its body that goes to Claude (never sent to the page). */
+export interface StoredEmail extends InboxEmail {
+  body: string;
+}
+
+const CATEGORIES: Record<string, string> = {
+  CATEGORY_PERSONAL: 'primary',
+  CATEGORY_UPDATES: 'updates',
+  CATEGORY_PROMOTIONS: 'promotions',
+  CATEGORY_SOCIAL: 'social',
+  CATEGORY_FORUMS: 'forums',
+};
+
+/** Promotions and social notifications are summed up from the subject and snippet alone. */
+export const BODY_CATEGORIES = new Set(['primary', 'updates', 'forums']);
+const BODY_CHARS = 1000;
+
+/** Body text trimmed for a prompt: no quoted replies, links or runs of blank lines. */
+export function cleanBody(text: string, max = BODY_CHARS): string {
+  const lines: string[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const l = line.trim();
+    // Everything after "On Mon, 27 Oct … wrote:" or a forwarded/quoted block is older mail.
+    if (/^On .{6,120}wrote:$/.test(l) || /^-{2,}\s*(Original|Forwarded) Message/i.test(l) || /^>/.test(l)) break;
+    lines.push(l.replace(/https?:\/\/\S+/g, '').replace(/[ \t]{2,}/g, ' ').trim());
+  }
+  const out = lines.join('\n').replace(/\n{2,}/g, '\n').trim();
+  return out.length > max ? out.slice(0, max).trimEnd() + '…' : out;
+}
+
+/** "DBS <alerts@dbs.com>" → "alerts@dbs.com". */
+export function senderEmail(from: string): string {
+  return (from.match(/<([^>]+)>/)?.[1] || from).trim().toLowerCase();
+}
+
+const decodeEntities = (s: string) =>
+  s.replace(/&#(\d+);/g, (_, d) => String.fromCharCode(Number(d))).replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+
+/** A Gmail API message (format=full) and its body text → what the inbox keeps. */
+export function parseInboxMessage(msg: any, body: string): StoredEmail {
+  const headers: { name: string; value: string }[] = msg.payload?.headers || [];
+  const h = (n: string) => headers.find((x) => x.name.toLowerCase() === n)?.value || '';
+  const labels: string[] = msg.labelIds || [];
+  const from = h('from');
+  const category = labels.map((l) => CATEGORIES[l]).find(Boolean) || 'primary';
+  return {
+    id: msg.id,
+    threadId: msg.threadId || msg.id,
+    from: senderName(from),
+    fromEmail: senderEmail(from),
+    subject: h('subject').trim() || '(no subject)',
+    // Gmail escapes snippets as HTML.
+    snippet: decodeEntities(msg.snippet || '').replace(/\s+/g, ' ').trim().slice(0, 200),
+    at: new Date(Number(msg.internalDate) || Date.parse(h('date')) || Date.now()).toISOString(),
+    unread: labels.includes('UNREAD'),
+    category,
+    body: BODY_CATEGORIES.has(category) ? cleanBody(body) : '',
+  };
 }

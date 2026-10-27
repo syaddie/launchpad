@@ -432,6 +432,7 @@ const SYNCS: { key: SourceKey; name: string }[] = [
   { key: 'gmail', name: 'Gmail packages' },
   { key: 'carriers', name: 'Carriers' },
   { key: 'news', name: 'News' },
+  { key: 'inbox', name: 'Inbox' },
   { key: 'weather', name: 'Weather and air' },
   { key: 'speedtest', name: 'Speed test' },
 ];

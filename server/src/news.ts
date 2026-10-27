@@ -1,6 +1,6 @@
 // News tab: headlines per topic from Google News RSS, and a short digest of
 // them written by Claude when ANTHROPIC_API_KEY is set.
-import Anthropic from '@anthropic-ai/sdk';
+import { askJson, claudeEnabled } from './claude';
 import { config } from './config';
 import type { NewsArticle, NewsStory } from '../../shared/types';
 
@@ -60,9 +60,7 @@ export async function fetchHeadlines(topic: string): Promise<NewsArticle[]> {
 
 // ---------- summaries ----------
 
-export const summariesEnabled = () => !!config.anthropicKey;
-
-let client: Anthropic | null = null;
+export const summariesEnabled = claudeEnabled;
 
 const SYSTEM = `You write the news digest on a personal dashboard. You get one topic and a numbered list of recent headlines about it.
 
@@ -94,25 +92,16 @@ const SCHEMA = {
   additionalProperties: false,
 };
 
-// Models that accept server-side refusal fallbacks.
-const FALLBACK_MODELS = ['claude-opus-5-5', 'claude-opus-5', 'claude-fable-5-1', 'claude-sonnet-5-5'];
-
 export async function summariseHeadlines(topic: string, articles: NewsArticle[]): Promise<NewsStory[]> {
-  client ??= new Anthropic({ apiKey: config.anthropicKey });
   const list = articles.map((a, i) => `[${i}] ${a.title} (${a.source}, ${a.publishedAt.slice(0, 16).replace('T', ' ')} UTC)`).join('\n');
-  const fallback = FALLBACK_MODELS.includes(config.newsModel);
-  const res = await client.beta.messages.create({
+  const parsed = await askJson<{ stories: { headline: string; summary: string; articles: number[] }[] }>({
     model: config.newsModel,
-    max_tokens: 16000,
     system: SYSTEM,
-    output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
-    messages: [{ role: 'user', content: `Topic: ${topic}\n\nHeadlines, newest first:\n${list}` }],
-    ...(fallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
+    user: `Topic: ${topic}\n\nHeadlines, newest first:\n${list}`,
+    schema: SCHEMA,
+    effort: 'low',
+    task: 'summarise these headlines',
   });
-  if (res.stop_reason === 'refusal') throw new Error('Claude declined to summarise these headlines.');
-  if (res.stop_reason === 'max_tokens') throw new Error('The summary was cut off.');
-  const text = res.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('');
-  const parsed = JSON.parse(text) as { stories: { headline: string; summary: string; articles: number[] }[] };
   return parsed.stories.map((s) => ({
     headline: s.headline,
     summary: s.summary,

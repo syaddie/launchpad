@@ -14,10 +14,12 @@ export const config = {
   },
   /** Optional: 17TRACK API key for carriers other than SingPost. */
   seventeenTrackKey: env.SEVENTEEN_TRACK_API_KEY || '',
-  /** Optional: Anthropic API key for the News tab's summaries. Without it the tab shows plain headlines. */
+  /** Optional: Anthropic API key for the News and Inbox summaries. Without it they show plain lists. */
   anthropicKey: env.ANTHROPIC_API_KEY || '',
   /** Claude model that writes the news summaries. */
   newsModel: env.NEWS_MODEL || 'claude-haiku-5-5',
+  /** Claude model that writes the inbox digests. */
+  inboxModel: env.INBOX_MODEL || 'claude-haiku-5-5',
   /** Optional: data.gov.sg API key for the weather. It works without one, at a lower rate limit. */
   dataGovKey: env.DATA_GOV_SG_API_KEY || '',
   /** Optional: where the host's /proc is mounted (e.g. /host/proc), so the Server view sees the host's network traffic. */
