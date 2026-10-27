@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/broadsheet-3b7ed825-d63b-479d-8fb8-16d85c59a1e0/styles.css">
+<script src="_ds/broadsheet-3b7ed825-d63b-479d-8fb8-16d85c59a1e0/_ds_bundle.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&display=swap">
+<style>
+html,body{margin:0;background:#e6e3de}
+a{color:#43604a;text-decoration:none}
+a:hover{color:#22201e;text-decoration:underline}
+</style>
+</helmet>
+<section style="display:flex; flex-direction:column; gap:80px; padding:80px; font-family:'Geist', system-ui, sans-serif; color:#22201e;">
+  <div style="display:flex; flex-direction:column; gap:10px; max-width:900px;">
+    <div style="font-family:'Source Serif 4', Georgia, serif; font-size:56px; line-height:1.05; letter-spacing:-0.01em;">Launchpad</div>
+    <div style="font-size:18px; line-height:1.5; color:#5c5853; text-wrap:pretty;">New-tab dashboard. Every artboard is live: click events, complete tasks, type in notes, open drawers. Accent comparison first, then the nine screens, then the large and narrow sizes, then tokens.</div>
+  </div>
+
+  <div style="display:flex; flex-direction:column; gap:30px;">
+    <div style="font-family:'Source Serif 4', Georgia, serif; font-size:32px;">Accent</div>
+    <div style="display:flex; flex-wrap:wrap; gap:60px;">
+      <div id="1a" style="display:flex; flex-direction:column; gap:15px;">
+        <div style="display:flex; align-items:center; gap:10px; font-size:18px;"><span style="padding:2px 10px; background:#22201e; color:#fff; border-radius:3px; font-weight:600;">1a</span>Sage, light (recommended)</div>
+        <div style="width:1440px; height:900px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,0.12);"><dc-import name="Launchpad" screen="main" theme="light" accent="sage" keyboard="{{ false }}" height="900px" hint-size="1440px,900px"></dc-import></div>
+      </div>
+      <div id="1b" style="display:flex; flex-direction:column; gap:15px;">
+        <div style="display:flex; align-items:center; gap:10px; font-size:18px;"><span style="padding:2px 10px; background:#22201e; color:#fff; border-radius:3px; font-weight:600;">1b</span>Slate blue, light</div>
+        <div style="width:1440px; height:900px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,0.12);"><dc-import name="Launchpad" screen="main" theme="light" accent="slate" keyboard="{{ false }}" height="900px" hint-size="1440px,900px"></dc-import></div>
+      </div>
+      <div id="1c" style="display:flex; flex-direction:column; gap:15px;">
+        <div style="display:flex; align-items:center; gap:10px; font-size:18px;"><span style="padding:2px 10px; background:#22201e; color:#fff; border-radius:3px; font-weight:600;">1c</span>Terracotta, light</div>
+        <div style="width:1440px; height:900px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,0.12);"><dc-import name="Launchpad" screen="main" theme="light" accent="terracotta" keyboard="{{ false }}" height="900px" hint-size="1440px,900px"></dc-import></div>
+      </div>
+    </div>
+    <div style="max-width:900px; font-size:16px; line-height:1.55; color:#5c5853; text-wrap:pretty;">Sage reads calmest against the warm neutrals and stays clearly apart from the clay-red used for overdue and exceptions. Terracotta sits too close to that warning colour, so “next event” and “overdue” start to look alike. Slate blue works but feels cooler than the rest of the palette.</div>
+  </div>
+
+  <div style="display:flex; flex-direction:column; gap:30px;">
+    <div style="font-family:'Source Serif 4', Georgia, serif; font-size:32px;">Screens · 1440 × 900</div>
+    <div style="display:flex; flex-wrap:wrap; gap:60px;">
+      <div id="2a" style="display:flex; flex-direction:column; gap:15px;"><div style="display:flex; align-items:center; gap:10px; font-size:18px;"><span style="padding:2px 10px; background:#22201e; color:#fff; border-radius:3px; font-weight:600;">2a</span>Main, dark</div><div style="width:1440px; height:900px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,0.12);"><dc-import name="Launchpad" screen="main" theme="dark" accent="sage" keyboard="{{ false }}" height="900px" hint-size="1440px,900px"></dc-import></div></div>
+      <div id="2b" style="display:flex; flex-direction:column; gap:15px;"><div style="display:flex; align-items:center; gap:10px; font-size:18px;"><span style="padding:2px 10px; background:#22201e; color:#fff; border-radius:3px; font-weight:600;">2b</span>Bookmarks in edit mode, Linear tile open</div><div style="width:1440px; height:900px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,0.12);"><dc-import name="Launchpad" screen="editBookmarks" theme="light" accent="sage" keyboard="{{ false }}" height="900px" hint-size="1440px,900px"></dc-import></div></div>
+      <div id="2c" style="display:flex; flex-direction:column; gap:15px;"><div style="display:flex; align-items:center; gap:10px; font-size:18px;"><span style="padding:2px 10px; background:#22201e; color:#fff; border-radius:3px; font-weight:600;">2c</span>Package detail drawer (SingPost)</div><div style="width:1440px; height:900px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,0.12);"><dc-import name="Launchpad" screen="packageDrawer" theme="light" accent="sage" keyboard="{{ false }}" height="900px" hint-size="1440px,900px"></dc-import></div></div>
+      <div id="2d" style="display:flex; flex-direction:column; gap:15px;"><div style="display:flex; align-items:center; gap:10px; font-size:18px;"><span style="padding:2px 10px; background:#22201e; color:#fff; border-radius:3px; font-weight:600;">2d</span>Add package</div><div style="width:1440px; height:900px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,0.12);"><dc-import name="Launchpad" screen="addPackage" theme="light" accent="sage" keyboard="{{ false }}" height="900px" hint-size="1440px,900px"></dc-import></div></div>
+      <div id="2e" style="display:flex; flex-direction:column; gap:15px;"><div style="display:flex; align-items:center; gap:10px; font-size:18px;"><span style="padding:2px 10px; background:#22201e; color:#fff; border-radius:3px; font-weight:600;">2e</span>Notes focus view</div><div style="width:1440px; height:900px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,0.12);"><dc-import name="Launchpad" screen="notesFocus" theme="light" accent="sage" keyboard="{{ false }}" height="900px" hint-size="1440px,900px"></dc-import></div></div>
+      <div id="2f" style="display:flex; flex-direction:column; gap:15px;"><div style="display:flex; align-items:center; gap:10px; font-size:18px;"><span style="padding:2px 10px; background:#22201e; color:#fff; border-radius:3px; font-weight:600;">2f</span>Empty / first run</div><div style="width:1440px; height:900px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,0.12);"><dc-import name="Launchpad" screen="empty" theme="light" accent="sage" keyboard="{{ false }}" height="900px" hint-size="1440px,900px"></dc-import></div></div>
+      <div id="2g" style="display:flex; flex-direction:column; gap:15px;"><div style="display:flex; align-items:center; gap:10px; font-size:18px;"><span style="padding:2px 10px; background:#22201e; color:#fff; border-radius:3px; font-weight:600;">2g</span>Error / stale: calendar sync failing, J&amp;T exception</div><div style="width:1440px; height:900px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,0.12);"><dc-import name="Launchpad" screen="error" theme="light" accent="sage" keyboard="{{ false }}" height="900px" hint-size="1440px,900px"></dc-import></div></div>
+      <div id="2h" style="display:flex; flex-direction:column; gap:15px;"><div style="display:flex; align-items:center; gap:10px; font-size:18px;"><span style="padding:2px 10px; background:#22201e; color:#fff; border-radius:3px; font-weight:600;">2h</span>Settings</div><div style="width:1440px; height:900px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,0.12);"><dc-import name="Launchpad" screen="settings" theme="light" accent="sage" keyboard="{{ false }}" height="900px" hint-size="1440px,900px"></dc-import></div></div>
+    </div>
+  </div>
+
+  <div style="display:flex; flex-direction:column; gap:30px;">
+    <div style="font-family:'Source Serif 4', Georgia, serif; font-size:32px;">Sizes</div>
+    <div style="display:flex; flex-wrap:wrap; align-items:flex-start; gap:60px;">
+      <div id="3a" style="display:flex; flex-direction:column; gap:15px;"><div style="display:flex; align-items:center; gap:10px; font-size:18px;"><span style="padding:2px 10px; background:#22201e; color:#fff; border-radius:3px; font-weight:600;">3a</span>2560 × 1440: four columns, week agenda open, larger margins</div><div style="width:2560px; height:1440px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,0.12);"><dc-import name="Launchpad" screen="main" theme="light" accent="sage" keyboard="{{ false }}" height="1440px" hint-size="2560px,1440px"></dc-import></div></div>
+      <div id="3b" style="display:flex; flex-direction:column; gap:15px;"><div style="display:flex; align-items:center; gap:10px; font-size:18px;"><span style="padding:2px 10px; background:#22201e; color:#fff; border-radius:3px; font-weight:600;">3b</span>420 wide, light</div><div style="width:420px; height:2560px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,0.12);"><dc-import name="Launchpad" screen="main" theme="light" accent="sage" keyboard="{{ false }}" height="2560px" hint-size="420px,2560px"></dc-import></div></div>
+      <div id="3c" style="display:flex; flex-direction:column; gap:15px;"><div style="display:flex; align-items:center; gap:10px; font-size:18px;"><span style="padding:2px 10px; background:#22201e; color:#fff; border-radius:3px; font-weight:600;">3c</span>420 wide, dark</div><div style="width:420px; height:2560px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,0.12);"><dc-import name="Launchpad" screen="main" theme="dark" accent="sage" keyboard="{{ false }}" height="2560px" hint-size="420px,2560px"></dc-import></div></div>
+    </div>
+  </div>
+
+  <div id="4a" style="display:flex; flex-direction:column; gap:40px; max-width:1440px;">
+    <div style="display:flex; align-items:center; gap:10px;"><span style="padding:2px 10px; background:#22201e; color:#fff; border-radius:3px; font-weight:600; font-size:18px;">4a</span><span style="font-family:'Source Serif 4', Georgia, serif; font-size:32px;">Tokens for the rebuild</span></div>
+    <div style="display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:60px; font-size:15px; line-height:1.6;">
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div style="font-weight:600;">Spacing (Broadsheet scale)</div>
+        <div style="color:#5c5853;">5 · 10 · 15 · 20 · 30 · 40 px. Row padding 8/10, panel padding 20/10 (30/20 at 2560), grid gap 20 (15 narrow, 30 wide), page margin 30/40 (64/96 wide). Radius 4 on panels, rows and inputs; 3 on small buttons; pills 10.</div>
+        <div style="font-weight:600; margin-top:15px;">Type</div>
+        <div style="color:#5c5853;">Serif: Source Serif 4. Clock 46 (60 wide, 36 narrow) tabular; greeting 28; panel titles 18/600; focus-view title 32, body 19/1.65.<br>Sans: Geist. Body 14/20; meta 12/16; chips 11/600; section labels 12/600. Mono: Geist Mono 11 for tracking numbers. All times use tabular-nums.</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div style="font-weight:600;">Light</div>
+        <div style="display:grid; grid-template-columns:auto 1fr; gap:4px 15px; font-family:'Geist Mono', monospace; font-size:13px; color:#5c5853;">
+          <span>--bg</span><span>#f1efeb</span><span>--sf (panel)</span><span>#f8f7f4</span><span>--rz (raised)</span><span>#fffefc</span><span>--tx</span><span>#22201e</span><span>--t2</span><span>#5c5853</span><span>--t3</span><span>#77716a</span><span>--ln</span><span>#22201e @10%</span><span>--hv</span><span>#22201e @4.5%</span><span>--wn</span><span>#ad432c</span><span>--ac sage</span><span>#5a7a5c / deep #43604a / tint #e2eadf</span><span>--ac slate</span><span>#4e6a8d / #3c5575 / #e0e7ef</span><span>--ac terracotta</span><span>#ad603f / #8c492d / #f3e4da</span>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div style="font-weight:600;">Dark</div>
+        <div style="display:grid; grid-template-columns:auto 1fr; gap:4px 15px; font-family:'Geist Mono', monospace; font-size:13px; color:#5c5853;">
+          <span>--bg</span><span>#1d1c1a</span><span>--sf</span><span>#252422</span><span>--rz</span><span>#2e2d2a</span><span>--tx</span><span>#ebe7e1</span><span>--t2</span><span>#b3ada5</span><span>--t3</span><span>#8d877f</span><span>--ln</span><span>#ebe7e1 @10%</span><span>--hv</span><span>#ebe7e1 @5%</span><span>--wn</span><span>#e5957c</span><span>--ac sage</span><span>#9cb99a / #b6cfb3 / 15% tint</span><span>--ac slate</span><span>#a0b5d2 / #bdcce2</span><span>--ac terracotta</span><span>#dd9b7b / #eab69c</span>
+        </div>
+        <div style="color:#5c5853; margin-top:10px;">Calendars: Personal #5f8fa3, Work #b08844, Family #a06a8c.</div>
+      </div>
+    </div>
+    <div style="font-size:15px; line-height:1.6; color:#5c5853; max-width:900px; text-wrap:pretty;">Components: one panel (surface fill, no border), one list row (hover tint, used for events, tasks, packages, search results), one chip (pill, tint + deep text), one drawer (right sheet over a scrim, used for package detail, add package and settings), one popover (bookmark editor, note menu, sync tooltip). Color appears only on the next event, the out-for-delivery package, overdue dates and exceptions.</div>
+  </div>
+</section>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/broadsheet-3b7ed825-d63b-479d-8fb8-16d85c59a1e0/styles.css">
+<script src="_ds/broadsheet-3b7ed825-d63b-479d-8fb8-16d85c59a1e0/_ds_bundle.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/duotone/style.css">
+<style>
+html,body{margin:0;padding:0;background:#f1efeb}
+a{color:inherit;text-decoration:none}
+a:hover{color:inherit;text-decoration:underline}
+@keyframes lpFade{from{opacity:0}}
+@keyframes lpSlide{from{opacity:0;transform:translateX(16px)}}
+@keyframes lpRise{from{opacity:0;transform:translateY(6px)}}
+</style>
+</helmet>
+<div ref="{{ rootRef }}" data-screen-label="{{ screenLabel }}" style="position:relative; width:100%; height:{{ rootH }}; overflow:{{ rootOverflow }}; background:var(--bg); color:var(--tx); font-family:'Geist', system-ui, sans-serif; font-size:14px; line-height:1.45; -webkit-font-smoothing:antialiased; transition:background .3s, color .3s;">
+<div style="box-sizing:border-box; height:{{ innerH }}; display:flex; flex-direction:column; gap:{{ gap }}px; padding:{{ pad }}; max-width:{{ maxW }}; margin:0 auto;">
+
+<header style="display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:15px 40px; flex:none;">
+  <div style="display:flex; flex-direction:column; gap:5px; min-width:0;">
+    <div style="font-family:'Source Serif 4', Georgia, serif; font-size:{{ greetSize }}px; line-height:1.15; letter-spacing:-0.01em;">{{ greeting }}, Syaddie</div>
+    <div style="font-size:13px; color:var(--t2);">{{ subline }}</div>
+  </div>
+  <div style="display:flex; align-items:flex-end; gap:15px 30px; flex-wrap:wrap;">
+    <div style="display:flex; align-items:baseline; gap:10px;">
+      <span style="font-family:'Source Serif 4', Georgia, serif; font-size:{{ clockSize }}px; line-height:0.9; font-variant-numeric:tabular-nums lining-nums; letter-spacing:-0.02em;">{{ clock }}</span>
+      <span style="font-size:13px; color:var(--t2); font-variant-numeric:tabular-nums; white-space:nowrap;">{{ dateLabel }}</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:5px;">
+      <div style="position:relative; z-index:15;">
+        <i class="ph-duotone ph-magnifying-glass" style="position:absolute; left:10px; top:9px; font-size:15px; color:var(--t3); pointer-events:none;"></i>
+        <input ref="{{ searchRef }}" value="{{ search }}" onChange="{{ onSearch }}" onKeyDown="{{ onSearchKey }}" onFocus="{{ onSearchFocus }}" onBlur="{{ onSearchBlur }}" placeholder="Search or jump to…" style="box-sizing:border-box; width:{{ searchW }}; height:34px; padding:0 30px 0 32px; border:1px solid transparent; border-radius:4px; background:var(--sf); color:var(--tx); font:inherit; font-size:13px; outline:none; transition:border-color .15s;" style-focus="border-color: var(--ac)">
+        <span style="position:absolute; right:10px; top:8px; font-size:11px; color:var(--t3); font-family:'Geist Mono', monospace; pointer-events:none;">/</span>
+        <sc-if value="{{ showDrop }}">
+          <div style="position:absolute; top:40px; right:0; width:300px; background:var(--rz); box-shadow:var(--sh); border-radius:4px; padding:5px; animation:lpRise .15s ease-out;">
+            <sc-for list="{{ results }}" as="r">
+              <a href="{{ r.url }}" target="_blank" onMouseDown="{{ r.open }}" style="display:flex; align-items:center; gap:10px; padding:7px 10px; border-radius:3px; background:{{ r.bg }}; text-decoration:none;">
+                <span style="width:20px; height:20px; border-radius:4px; background:var(--hv); display:grid; place-items:center; font-size:11px; font-weight:600; color:var(--t2); position:relative; overflow:hidden; flex:none;">{{ r.letter }}<sc-if value="{{ r.hasFav }}"><img src="{{ r.fav }}" alt="" onError="{{ hideImg }}" style="position:absolute; inset:2px; width:16px; height:16px;"></sc-if></span>
+                <span style="font-size:13px; color:var(--tx);">{{ r.name }}</span>
+                <span style="margin-left:auto; font-size:11px; color:var(--t3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px;">{{ r.host }}</span>
+              </a>
+            </sc-for>
+            <div style="display:flex; align-items:center; gap:10px; padding:7px 10px; border-radius:3px; background:{{ webBg }}; font-size:13px; color:var(--t2);"><i class="ph-duotone ph-globe-simple" style="font-size:16px;"></i><span>Search the web for “{{ search }}”</span><span style="margin-left:auto; font-size:11px; color:var(--t3);">↵</span></div>
+          </div>
+        </sc-if>
+      </div>
+      <div onMouseEnter="{{ syncOn }}" onMouseLeave="{{ syncOff }}" style="position:relative; width:30px; height:34px; display:grid; place-items:center; z-index:14;">
+        <span style="width:7px; height:7px; border-radius:50%; background:{{ syncDot }}; transition:background .3s;"></span>
+        <sc-if value="{{ syncHover }}">
+          <div style="position:absolute; top:38px; right:-40px; width:250px; background:var(--rz); box-shadow:var(--sh); border-radius:4px; padding:10px 15px; display:flex; flex-direction:column; gap:5px; animation:lpRise .15s ease-out;">
+            <sc-for list="{{ syncLines }}" as="sl">
+              <div style="display:flex; justify-content:space-between; gap:10px; font-size:12px;"><span style="color:var(--t2);">{{ sl.name }}</span><span style="color:{{ sl.color }}; text-align:right;">{{ sl.text }}</span></div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+      <button onClick="{{ openSettings }}" title="Settings" style="width:34px; height:34px; border:none; border-radius:4px; background:transparent; color:var(--t2); cursor:pointer; display:grid; place-items:center; font-size:18px;" style-hover="background: var(--hv)"><i class="ph-duotone ph-gear-six"></i></button>
+    </div>
+  </div>
+</header>
+
+<main style="flex:1; min-height:0; display:grid; grid-template-columns:{{ cols }}; grid-template-rows:{{ rows }}; grid-template-areas:{{ areas }}; gap:{{ gap }}px;">
+
+  <section data-screen-label="Today" style="grid-area:today; background:var(--sf); border-radius:var(--radius-lg); padding:{{ panelPad }}; display:flex; flex-direction:column; min-height:0; overflow:hidden;">
+    <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding:0 10px 10px;">
+      <h2 style="margin:0; font-family:'Source Serif 4', Georgia, serif; font-weight:600; font-size:18px; line-height:1.2;">Today</h2>
+      <span style="font-size:12px; color:var(--t3);">{{ calMeta }}</span>
+    </div>
+    <sc-if value="{{ calErrorLine }}">
+      <div style="display:flex; align-items:center; gap:5px; margin:0 10px 10px; font-size:12px; color:var(--wn);">
+        <i class="ph-duotone ph-cloud-slash" style="font-size:14px;"></i><span>{{ calErrorText }}</span><span style="color:var(--t3);">·</span>
+        <button onClick="{{ retry }}" style="border:none; background:none; padding:0; font:inherit; color:var(--wn); text-decoration:underline; text-underline-offset:2px; cursor:pointer;">{{ retryLabel }}</button>
+      </div>
+    </sc-if>
+    <sc-if value="{{ connected }}">
+      <div style="flex:1; min-height:0; overflow:auto; display:flex; flex-direction:column; gap:2px; opacity:{{ calOpacity }}; transition:opacity .3s;">
+        <sc-for list="{{ allDay }}" as="ad">
+          <div style="display:flex; align-items:center; gap:10px; margin:0 0 10px; padding:5px 10px; border-radius:4px; background:var(--hv); font-size:12px; color:var(--t2);">
+            <span style="width:6px; height:6px; border-radius:50%; background:{{ ad.dot }}; flex:none;"></span>
+            <span style="font-variant-numeric:tabular-nums; color:var(--t3);">{{ ad.day }}</span><span>{{ ad.title }}</span><span style="margin-left:auto; color:var(--t3);">All day</span>
+          </div>
+        </sc-for>
+        <sc-for list="{{ calSections }}" as="sec" hint-placeholder-count="2">
+          <div style="display:flex; flex-direction:column; gap:2px;">
+            <sc-if value="{{ sec.hasHeader }}">
+              <button onClick="{{ sec.toggle }}" style="display:flex; align-items:center; gap:10px; padding:15px 10px 5px; border:none; background:none; font:inherit; font-size:12px; color:var(--t3); cursor:{{ sec.cursor }}; text-align:left;">
+                <span style="font-weight:600; color:var(--t2);">{{ sec.label }}</span><span style="font-variant-numeric:tabular-nums;">{{ sec.sub }}</span>
+                <sc-if value="{{ sec.isToggle }}"><i class="ph-duotone {{ sec.chev }}" style="font-size:12px;"></i></sc-if>
+              </button>
+            </sc-if>
+            <sc-for list="{{ sec.items }}" as="ev">
+              <div style="border-radius:4px; background:{{ ev.bg }}; opacity:{{ ev.opacity }}; transition:opacity .3s, background .3s;">
+                <div onClick="{{ ev.toggle }}" style="display:grid; grid-template-columns:{{ timeCol }} 8px minmax(0,1fr) auto; gap:10px; align-items:start; padding:8px 10px; border-radius:4px; cursor:pointer;" style-hover="background: var(--hv)">
+                  <div style="font-variant-numeric:tabular-nums; font-size:13px; line-height:20px; color:var(--t2); white-space:nowrap;">{{ ev.time }}<sc-if value="{{ ev.hasEnd }}"><div style="font-size:12px; line-height:16px; color:var(--t3);">{{ ev.end }}</div></sc-if></div>
+                  <span style="width:8px; height:8px; border-radius:50%; background:{{ ev.dot }}; margin-top:6px;"></span>
+                  <div style="min-width:0;">
+                    <div style="font-size:14px; line-height:20px; font-weight:{{ ev.weight }}; color:{{ ev.color }};">{{ ev.title }}</div>
+                    <div style="font-size:12px; line-height:16px; color:var(--t3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ ev.meta }}</div>
+                  </div>
+                  <div style="display:flex; flex-direction:column; align-items:flex-end; gap:5px;">
+                    <sc-if value="{{ ev.showLabel }}"><span style="font-size:12px; line-height:20px; font-weight:600; color:var(--acd); white-space:nowrap; font-variant-numeric:tabular-nums;">{{ ev.label }}</span></sc-if>
+                    <sc-if value="{{ ev.hasJoin }}"><a href="{{ ev.joinUrl }}" target="_blank" onClick="{{ stop }}" style="display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:4px; background:var(--ac); color:var(--on); font-size:12px; font-weight:600; text-decoration:none;" style-hover="filter: brightness(0.94)"><i class="ph-duotone ph-video-camera" style="font-size:14px;"></i>Join</a></sc-if>
+                  </div>
+                </div>
+                <sc-if value="{{ ev.expanded }}">
+                  <div style="display:flex; flex-direction:column; gap:5px; padding:0 10px 10px calc({{ timeCol }} + 38px); font-size:13px; color:var(--t2); animation:lpRise .18s ease-out;">
+                    <sc-if value="{{ ev.hasLoc }}"><div style="display:flex; gap:5px; align-items:center;"><i class="ph-duotone ph-map-pin" style="color:var(--t3);"></i>{{ ev.loc }}</div></sc-if>
+                    <sc-if value="{{ ev.hasVideo }}"><a href="{{ ev.joinUrl }}" target="_blank" style="display:flex; gap:5px; align-items:center; color:var(--acd);"><i class="ph-duotone ph-video-camera"></i>{{ ev.video }}</a></sc-if>
+                    <sc-if value="{{ ev.hasDesc }}"><div style="color:var(--t2); text-wrap:pretty;">{{ ev.desc }}</div></sc-if>
+                    <a href="https://calendar.google.com" target="_blank" style="display:flex; gap:5px; align-items:center; font-size:12px; color:var(--t3);">Open in Google Calendar<i class="ph-duotone ph-arrow-up-right"></i></a>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+    <sc-if value="{{ notConnected }}">
+      <div style="display:flex; flex-direction:column; align-items:flex-start; gap:15px; padding:10px;">
+        <p style="margin:0; color:var(--t2); text-wrap:pretty;">Connect your Google account to see today’s agenda here.</p>
+        <button onClick="{{ connect }}" style="display:inline-flex; align-items:center; gap:8px; padding:8px 15px; border:none; border-radius:4px; background:var(--ac); color:var(--on); font:inherit; font-size:13px; font-weight:600; cursor:pointer;" style-hover="filter: brightness(0.94)"><i class="ph-duotone ph-google-logo" style="font-size:16px;"></i>Connect Google</button>
+      </div>
+    </sc-if>
+  </section>
+
+  <section data-screen-label="Tasks" style="grid-area:tasks; background:var(--sf); border-radius:var(--radius-lg); padding:{{ panelPad }}; display:flex; flex-direction:column; min-height:0; overflow:hidden;">
+    <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding:0 10px 10px; flex-wrap:wrap;">
+      <h2 style="margin:0; font-family:'Source Serif 4', Georgia, serif; font-weight:600; font-size:18px; line-height:1.2;">Tasks</h2>
+      <sc-if value="{{ connected }}">
+        <div style="display:flex; gap:2px;">
+          <sc-for list="{{ listTabs }}" as="lt">
+            <button onClick="{{ lt.pick }}" style="border:none; border-radius:3px; padding:2px 8px; background:{{ lt.bg }}; color:{{ lt.color }}; font:inherit; font-size:12px; font-weight:{{ lt.weight }}; cursor:pointer;" style-hover="color: var(--tx)">{{ lt.name }}</button>
+          </sc-for>
+        </div>
+      </sc-if>
+    </div>
+    <sc-if value="{{ connected }}">
+      <div style="display:flex; align-items:center; gap:10px; padding:6px 10px; margin-bottom:5px; border-radius:4px;">
+        <i class="ph-duotone ph-plus" style="font-size:16px; color:var(--t3); width:16px;"></i>
+        <input value="{{ newTask }}" onChange="{{ onNewTask }}" onKeyDown="{{ onNewTaskKey }}" placeholder="Add a task… try “call bank fri”" style="flex:1; min-width:0; border:none; background:transparent; color:var(--tx); font:inherit; font-size:14px; outline:none; padding:0;">
+        <sc-if value="{{ hasDueHint }}"><span style="font-size:12px; color:var(--acd); white-space:nowrap; animation:lpFade .15s;">{{ dueHint }}</span></sc-if>
+      </div>
+      <div style="flex:1; min-height:0; overflow:auto; display:flex; flex-direction:column; gap:10px;">
+        <sc-for list="{{ taskGroups }}" as="tg" hint-placeholder-count="3">
+          <div style="display:flex; flex-direction:column;">
+            <div style="padding:5px 10px; font-size:12px; font-weight:600; color:{{ tg.labelColor }};">{{ tg.label }}</div>
+            <sc-for list="{{ tg.items }}" as="t">
+              <div style="display:flex; align-items:flex-start; gap:10px; padding:6px 10px; border-radius:4px; opacity:{{ t.opacity }}; transition:opacity .35s;" style-hover="background: var(--hv)">
+                <button onClick="{{ t.toggle }}" aria-label="Complete" style="flex:none; width:16px; height:16px; margin-top:2px; padding:0; border-radius:4px; border:1.5px solid {{ t.checkBorder }}; background:{{ t.checkBg }}; color:var(--on); display:grid; place-items:center; cursor:pointer; font-size:11px; transition:background .2s;"><sc-if value="{{ t.done }}"><i class="ph-duotone ph-check"></i></sc-if></button>
+                <span style="flex:1; min-width:0; font-size:14px; line-height:20px; text-decoration:{{ t.deco }}; text-wrap:pretty;">{{ t.title }}</span>
+                <span style="font-size:12px; line-height:20px; color:{{ t.dueColor }}; white-space:nowrap; font-variant-numeric:tabular-nums;">{{ t.dueLabel }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-for>
+        <sc-if value="{{ noTasks }}"><div style="padding:5px 10px; font-size:13px; color:var(--t3);">Nothing here. Enjoy it.</div></sc-if>
+      </div>
+      <sc-if value="{{ hasUndo }}">
+        <div style="display:flex; align-items:center; gap:10px; margin-top:10px; padding:8px 10px; border-radius:4px; background:var(--hv); font-size:13px; animation:lpRise .2s ease-out;">
+          <span style="flex:1; min-width:0; color:var(--t2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Completed “{{ undoTitle }}”</span>
+          <button onClick="{{ undo }}" style="border:none; background:none; padding:0; font:inherit; font-weight:600; color:var(--acd); cursor:pointer;">Undo</button>
+        </div>
+      </sc-if>
+    </sc-if>
+    <sc-if value="{{ notConnected }}">
+      <div style="display:flex; flex-direction:column; align-items:flex-start; gap:15px; padding:10px;">
+        <p style="margin:0; color:var(--t2);">Your Google Tasks will show up here once you connect.</p>
+        <button onClick="{{ connect }}" style="padding:8px 15px; border:1px solid var(--ln); border-radius:4px; background:transparent; color:var(--tx); font:inherit; font-size:13px; font-weight:500; cursor:pointer;" style-hover="background: var(--hv)">Connect Google</button>
+      </div>
+    </sc-if>
+  </section>
+
+  <section data-screen-label="Notes" style="grid-area:notes; background:var(--sf); border-radius:var(--radius-lg); padding:{{ panelPad }}; display:flex; flex-direction:column; min-height:0; overflow:visible; position:relative;">
+    <div style="display:flex; align-items:center; gap:15px; padding:0 10px 10px;">
+      <h2 style="margin:0; font-family:'Source Serif 4', Georgia, serif; font-weight:600; font-size:18px; line-height:1.2;">Notes</h2>
+      <div style="display:flex; align-items:center; gap:2px; min-width:0; overflow-x:auto; flex:1;">
+        <sc-for list="{{ noteTabs }}" as="nt">
+          <div style="position:relative; flex:none;">
+            <sc-if value="{{ nt.renaming }}">
+              <input value="{{ nt.name }}" onChange="{{ nt.rename }}" onKeyDown="{{ nt.renameKey }}" onBlur="{{ endRename }}" autoFocus="{{ true }}" style="width:90px; border:none; border-bottom:1px solid var(--ac); background:transparent; color:var(--tx); font:inherit; font-size:13px; padding:2px 4px; outline:none;">
+            </sc-if>
+            <sc-if value="{{ nt.notRenaming }}">
+              <button onClick="{{ nt.pick }}" onContextMenu="{{ nt.menu }}" onDoubleClick="{{ nt.startRename }}" style="border:none; border-radius:3px; padding:2px 8px; background:{{ nt.bg }}; color:{{ nt.color }}; font:inherit; font-size:13px; font-weight:{{ nt.weight }}; cursor:pointer; white-space:nowrap;" style-hover="color: var(--tx)">{{ nt.name }}</button>
+            </sc-if>
+          </div>
+        </sc-for>
+        <button onClick="{{ addNote }}" title="New notepad" style="flex:none; width:24px; height:24px; border:none; border-radius:3px; background:transparent; color:var(--t3); cursor:pointer; display:grid; place-items:center;" style-hover="background: var(--hv); color: var(--tx)"><i class="ph-duotone ph-plus"></i></button>
+      </div>
+      <span style="font-size:12px; color:var(--t3); opacity:{{ savedOpacity }}; transition:opacity .6s; white-space:nowrap;">Saved</span>
+      <button onClick="{{ toggleNoteMenu }}" title="Notepad options" style="flex:none; width:26px; height:26px; border:none; border-radius:3px; background:transparent; color:var(--t2); cursor:pointer; display:grid; place-items:center;" style-hover="background: var(--hv)"><i class="ph-duotone ph-dots-three"></i></button>
+      <button onClick="{{ openFocus }}" title="Focus view" style="flex:none; width:26px; height:26px; border:none; border-radius:3px; background:transparent; color:var(--t2); cursor:pointer; display:grid; place-items:center;" style-hover="background: var(--hv)"><i class="ph-duotone ph-arrows-out-simple"></i></button>
+      <sc-if value="{{ noteMenu }}">
+        <div style="position:absolute; top:44px; right:50px; z-index:12; width:150px; background:var(--rz); box-shadow:var(--sh); border-radius:4px; padding:5px; display:flex; flex-direction:column; animation:lpRise .15s ease-out;">
+          <button onClick="{{ menuRename }}" style="display:flex; gap:8px; align-items:center; padding:6px 10px; border:none; border-radius:3px; background:transparent; color:var(--tx); font:inherit; font-size:13px; text-align:left; cursor:pointer;" style-hover="background: var(--hv)"><i class="ph-duotone ph-pencil-simple"></i>Rename</button>
+          <button onClick="{{ menuDelete }}" disabled="{{ cantDeleteNote }}" style="display:flex; gap:8px; align-items:center; padding:6px 10px; border:none; border-radius:3px; background:transparent; color:var(--wn); font:inherit; font-size:13px; text-align:left; cursor:pointer;" style-hover="background: var(--hv)"><i class="ph-duotone ph-trash"></i>Delete</button>
+        </div>
+      </sc-if>
+    </div>
+    <div style="flex:1; min-height:0; overflow:auto; padding:0 10px;">
+      <sc-if value="{{ editing }}">
+        <textarea value="{{ noteText }}" onChange="{{ onNote }}" onBlur="{{ stopEdit }}" autoFocus="{{ true }}" placeholder="Start typing…" style="box-sizing:border-box; width:100%; height:100%; min-height:120px; border:none; background:transparent; color:var(--tx); font:inherit; font-size:14px; line-height:22px; resize:none; outline:none; padding:0;"></textarea>
+      </sc-if>
+      <sc-if value="{{ notEditing }}">
+        <div onClick="{{ startEdit }}" style="min-height:100%; cursor:text;">
+          <sc-for list="{{ noteLines }}" as="ln">
+            <div style="display:flex; gap:8px; align-items:flex-start; min-height:22px; font-size:14px; line-height:22px; opacity:{{ ln.opacity }}; text-decoration:{{ ln.deco }};">
+              <sc-if value="{{ ln.isCheck }}"><button onClick="{{ ln.toggle }}" style="flex:none; width:14px; height:14px; margin-top:4px; padding:0; border-radius:3px; border:1.5px solid {{ ln.checkBorder }}; background:{{ ln.checkBg }}; color:var(--on); display:grid; place-items:center; font-size:10px; cursor:pointer;"><sc-if value="{{ ln.checked }}"><i class="ph-duotone ph-check"></i></sc-if></button></sc-if>
+              <sc-if value="{{ ln.isBullet }}"><span style="flex:none; width:4px; height:4px; border-radius:50%; background:var(--t3); margin:9px 5px 0 5px;"></span></sc-if>
+              <span style="min-width:0; overflow-wrap:anywhere;"><sc-for list="{{ ln.segs }}" as="sg"><span style="font-weight:{{ sg.w }};">{{ sg.t }}</span></sc-for></span>
+            </div>
+          </sc-for>
+          <sc-if value="{{ noteEmpty }}"><div style="color:var(--t3); font-size:14px;">Click to start writing. Use “- [ ]” for a checklist.</div></sc-if>
+        </div>
+      </sc-if>
+    </div>
+  </section>
+
+  <section data-screen-label="Packages" style="grid-area:pkgs; background:var(--sf); border-radius:var(--radius-lg); padding:{{ panelPad }}; display:flex; flex-direction:column; min-height:0; overflow:hidden;">
+    <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding:0 10px 10px;">
+      <h2 style="margin:0; font-family:'Source Serif 4', Georgia, serif; font-weight:600; font-size:18px; line-height:1.2;">Packages</h2>
+      <button onClick="{{ openAdd }}" style="display:inline-flex; align-items:center; gap:5px; padding:3px 8px; border:none; border-radius:3px; background:transparent; color:var(--t2); font:inherit; font-size:12px; font-weight:500; cursor:pointer;" style-hover="background: var(--hv); color: var(--tx)"><i class="ph-duotone ph-plus"></i>Add package</button>
+    </div>
+    <div style="flex:1; min-height:0; overflow:auto; display:flex; flex-direction:column; gap:2px;">
+      <sc-for list="{{ activePkgs }}" as="p" hint-placeholder-count="3">
+        <div onClick="{{ p.open }}" style="display:flex; flex-direction:column; gap:8px; padding:12px 10px; border-radius:4px; cursor:pointer;" style-hover="background: var(--hv)">
+          <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px;">
+            <span style="font-size:14px; font-weight:500; min-width:0;">{{ p.label }}</span>
+            <span style="flex:none; padding:1px 8px; border-radius:10px; background:{{ p.chipBg }}; color:{{ p.chipColor }}; font-size:11px; font-weight:600; white-space:nowrap;">{{ p.chip }}</span>
+          </div>
+          <div style="font-size:13px; color:{{ p.statusColor }};">{{ p.status }}</div>
+          <div style="display:flex; gap:3px;">
+            <sc-for list="{{ p.segs }}" as="s"><span style="flex:1; height:3px; border-radius:2px; background:{{ s.bg }};"></span></sc-for>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px; font-size:12px; color:var(--t3); min-width:0;">
+            <span style="white-space:nowrap;">{{ p.carrier }}</span>
+            <span style="font-family:'Geist Mono', monospace; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;">{{ p.num }}</span>
+            <span style="margin-left:auto; flex:none; display:inline-flex; align-items:center; gap:4px; padding:0 6px; border:1px solid var(--ln); border-radius:3px; font-size:11px; white-space:nowrap;"><i class="ph-duotone {{ p.srcIcon }}"></i>{{ p.source }}</span>
+          </div>
+          <sc-if value="{{ p.isNew }}">
+            <div style="display:flex; align-items:center; gap:10px; font-size:12px; color:var(--t2);">
+              <span style="flex:1;">New from Gmail. Keep tracking?</span>
+              <button onClick="{{ p.keep }}" style="padding:2px 10px; border:none; border-radius:3px; background:var(--act); color:var(--acd); font:inherit; font-size:12px; font-weight:600; cursor:pointer;">Keep</button>
+              <button onClick="{{ p.dismiss }}" style="padding:2px 10px; border:none; border-radius:3px; background:transparent; color:var(--t2); font:inherit; font-size:12px; cursor:pointer;" style-hover="background: var(--hv)">Dismiss</button>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+      <sc-if value="{{ noPkgs }}">
+        <div style="display:flex; flex-direction:column; align-items:flex-start; gap:15px; padding:10px;">
+          <p style="margin:0; color:var(--t2);">No packages on the way. Paste a tracking number to follow one.</p>
+          <button onClick="{{ openAdd }}" style="padding:8px 15px; border:1px solid var(--ln); border-radius:4px; background:transparent; color:var(--tx); font:inherit; font-size:13px; font-weight:500; cursor:pointer;" style-hover="background: var(--hv)">Add package</button>
+        </div>
+      </sc-if>
+      <sc-if value="{{ hasDelivered }}">
+        <button onClick="{{ toggleDelivered }}" style="display:flex; align-items:center; gap:10px; padding:15px 10px 5px; border:none; background:none; font:inherit; font-size:12px; color:var(--t3); cursor:pointer; text-align:left;">
+          <span style="font-weight:600; color:var(--t2);">Delivered</span><span>{{ deliveredCount }}</span><i class="ph-duotone {{ deliveredChev }}" style="font-size:12px;"></i><span style="margin-left:auto;">Archived after 3 days</span>
+        </button>
+        <sc-for list="{{ deliveredPkgs }}" as="p">
+          <div onClick="{{ p.open }}" style="display:flex; align-items:baseline; gap:10px; padding:8px 10px; border-radius:4px; cursor:pointer; font-size:13px; color:var(--t2); animation:lpRise .18s ease-out;" style-hover="background: var(--hv)">
+            <span style="min-width:0;">{{ p.label }}</span><span style="margin-left:auto; font-size:12px; color:var(--t3); white-space:nowrap;">{{ p.status }}</span>
+          </div>
+        </sc-for>
+      </sc-if>
+    </div>
+  </section>
+
+  <section data-screen-label="Bookmarks" style="grid-area:bm; background:var(--sf); border-radius:var(--radius-lg); padding:{{ panelPad }}; display:flex; flex-direction:column; gap:5px; position:relative; z-index:{{ bmZ }};">
+    <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding:0 10px;">
+      <h2 style="margin:0; font-family:'Source Serif 4', Georgia, serif; font-weight:600; font-size:18px; line-height:1.2;">Bookmarks</h2>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <sc-if value="{{ edit }}"><button onClick="{{ addGroup }}" style="display:inline-flex; align-items:center; gap:5px; padding:3px 8px; border:none; border-radius:3px; background:transparent; color:var(--t2); font:inherit; font-size:12px; cursor:pointer;" style-hover="background: var(--hv)"><i class="ph-duotone ph-plus"></i>Group</button></sc-if>
+        <button onClick="{{ toggleEdit }}" style="display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border:none; border-radius:3px; background:{{ editBtnBg }}; color:{{ editBtnColor }}; font:inherit; font-size:12px; font-weight:600; cursor:pointer;" style-hover="filter: brightness(0.96)"><i class="ph-duotone {{ editIcon }}"></i>{{ editLabel }}</button>
+      </div>
+    </div>
+    <div style="display:flex; flex-wrap:wrap; gap:10px {{ groupGap }}px;">
+      <sc-for list="{{ bmGroups }}" as="g" hint-placeholder-count="4">
+        <div onDragOver="{{ allowDrop }}" onDrop="{{ g.drop }}" style="display:flex; flex-direction:column; gap:2px; padding:5px; margin:-5px; border-radius:4px; outline:{{ g.outline }}; outline-offset:-1px; opacity:{{ g.opacity }};">
+          <div style="display:flex; align-items:center; gap:5px; padding:0 5px; height:22px;">
+            <sc-if value="{{ edit }}">
+              <span draggable="true" onDragStart="{{ g.dragStart }}" onDragEnd="{{ dragEnd }}" title="Drag to reorder" style="cursor:grab; color:var(--t3); display:grid; place-items:center;"><i class="ph-duotone ph-dots-six-vertical"></i></span>
+              <input value="{{ g.name }}" onChange="{{ g.rename }}" style="width:90px; border:none; border-bottom:1px solid var(--ln); background:transparent; color:var(--tx); font:inherit; font-size:12px; font-weight:600; padding:1px 2px; outline:none;" style-focus="border-bottom-color: var(--ac)">
+              <button onClick="{{ g.remove }}" title="Delete group" style="border:none; background:none; color:var(--t3); cursor:pointer; padding:0; display:grid; place-items:center;" style-hover="color: var(--wn)"><i class="ph-duotone ph-trash"></i></button>
+            </sc-if>
+            <sc-if value="{{ notEdit }}"><span style="font-size:12px; font-weight:600; color:var(--t3);">{{ g.name }}</span></sc-if>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:2px;">
+            <sc-for list="{{ g.items }}" as="b">
+              <div style="position:relative;">
+                <a href="{{ b.href }}" target="_blank" onClick="{{ b.click }}" draggable="{{ b.draggable }}" onDragStart="{{ b.dragStart }}" onDragEnd="{{ dragEnd }}" onDragOver="{{ allowDrop }}" onDrop="{{ b.drop }}" onMouseEnter="{{ b.enter }}" onMouseLeave="{{ b.leave }}" style="box-sizing:border-box; width:{{ tileW }}px; display:flex; flex-direction:column; align-items:center; gap:5px; padding:8px 4px 6px; border-radius:4px; text-decoration:none; background:{{ b.bg }}; opacity:{{ b.opacity }}; outline:{{ b.outline }}; outline-offset:-1px; cursor:{{ b.cursor }}; transition:opacity .2s, background .15s;" style-hover="background: var(--hv); text-decoration: none">
+                  <span style="width:30px; height:30px; border-radius:6px; background:var(--rz); display:grid; place-items:center; font-size:13px; font-weight:600; color:var(--t2); position:relative; overflow:hidden;">{{ b.letter }}<sc-if value="{{ b.hasFav }}"><img src="{{ b.fav }}" alt="" onError="{{ hideImg }}" style="position:absolute; inset:7px; width:16px; height:16px;"></sc-if></span>
+                  <span style="max-width:100%; font-size:12px; color:var(--t2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ b.name }}</span>
+                </a>
+                <sc-if value="{{ b.showNum }}"><span style="position:absolute; top:3px; right:6px; font-family:'Geist Mono', monospace; font-size:10px; color:var(--t3); pointer-events:none; animation:lpFade .15s;">{{ b.num }}</span></sc-if>
+                <sc-if value="{{ edit }}"><button onClick="{{ b.remove }}" title="Remove" style="position:absolute; top:-2px; right:2px; width:18px; height:18px; padding:0; border:none; border-radius:50%; background:var(--rz); box-shadow:0 0 0 1px var(--ln); color:var(--t2); display:grid; place-items:center; font-size:10px; cursor:pointer;" style-hover="color: var(--wn)"><i class="ph-duotone ph-x"></i></button></sc-if>
+                <sc-if value="{{ b.editing }}">
+                  <div onClick="{{ stop }}" style="position:absolute; bottom:calc(100% + 8px); left:0; z-index:30; width:260px; background:var(--rz); box-shadow:var(--sh); border-radius:4px; padding:15px; display:flex; flex-direction:column; gap:10px; animation:lpRise .15s ease-out;">
+                    <label style="display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--t3);">Name<input value="{{ draftName }}" onChange="{{ onDraftName }}" onKeyDown="{{ onDraftKey }}" autoFocus="{{ true }}" style="box-sizing:border-box; height:32px; padding:0 10px; border:1px solid var(--ln); border-radius:4px; background:var(--bg); color:var(--tx); font:inherit; font-size:13px; outline:none;" style-focus="border-color: var(--ac)"></label>
+                    <label style="display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--t3);">URL<input value="{{ draftUrl }}" onChange="{{ onDraftUrl }}" onKeyDown="{{ onDraftKey }}" style="box-sizing:border-box; height:32px; padding:0 10px; border:1px solid var(--ln); border-radius:4px; background:var(--bg); color:var(--tx); font-family:'Geist Mono', monospace; font-size:12px; outline:none;" style-focus="border-color: var(--ac)"></label>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                      <button onClick="{{ b.remove }}" style="border:none; background:none; padding:0; font:inherit; font-size:13px; color:var(--wn); cursor:pointer;">Remove</button>
+                      <button onClick="{{ cancelTile }}" style="margin-left:auto; padding:5px 10px; border:none; border-radius:4px; background:transparent; color:var(--t2); font:inherit; font-size:13px; cursor:pointer;" style-hover="background: var(--hv)">Cancel</button>
+                      <button onClick="{{ saveTile }}" style="padding:5px 12px; border:none; border-radius:4px; background:var(--ac); color:var(--on); font:inherit; font-size:13px; font-weight:600; cursor:pointer;">Save</button>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+            <sc-if value="{{ edit }}">
+              <button onClick="{{ g.addTile }}" title="Add bookmark" style="box-sizing:border-box; width:{{ tileW }}px; display:flex; flex-direction:column; align-items:center; gap:5px; padding:8px 4px 6px; border:none; border-radius:4px; background:transparent; color:var(--t3); font:inherit; cursor:pointer;" style-hover="background: var(--hv); color: var(--tx)">
+                <span style="box-sizing:border-box; width:30px; height:30px; border-radius:6px; border:1px dashed var(--t3); display:grid; place-items:center; font-size:14px;"><i class="ph-duotone ph-plus"></i></span>
+                <span style="font-size:12px;">Add</span>
+              </button>
+            </sc-if>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+</main>
+</div>
+
+<sc-if value="{{ anyDrawer }}">
+  <div onClick="{{ closeDrawers }}" style="position:absolute; inset:0; z-index:40; background:var(--scrim); animation:lpFade .2s ease-out;"></div>
+  <aside data-screen-label="{{ drawerTitle }}" style="position:absolute; top:0; right:0; bottom:0; z-index:41; box-sizing:border-box; width:{{ drawerW }}; background:var(--rz); box-shadow:var(--sh); display:flex; flex-direction:column; animation:lpSlide .22s ease-out;">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:20px 30px 10px;">
+      <h2 style="margin:0; font-family:'Source Serif 4', Georgia, serif; font-weight:600; font-size:20px; line-height:1.2;">{{ drawerTitle }}</h2>
+      <button onClick="{{ closeDrawers }}" title="Close" style="width:32px; height:32px; border:none; border-radius:4px; background:transparent; color:var(--t2); cursor:pointer; display:grid; place-items:center; font-size:16px;" style-hover="background: var(--hv)"><i class="ph-duotone ph-x"></i></button>
+    </div>
+    <div style="flex:1; min-height:0; overflow:auto; padding:10px 30px 30px; display:flex; flex-direction:column; gap:30px;">
+
+      <sc-if value="{{ hasDrawerPkg }}">
+        <div style="display:flex; flex-direction:column; gap:15px;">
+          <label style="display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--t3);">Label<input value="{{ dp.label }}" onChange="{{ dp.rename }}" style="box-sizing:border-box; height:36px; padding:0 10px; border:1px solid var(--ln); border-radius:4px; background:var(--bg); color:var(--tx); font:inherit; font-size:15px; font-weight:500; outline:none;" style-focus="border-color: var(--ac)"></label>
+          <div style="display:flex; align-items:center; gap:10px; font-size:13px; color:var(--t2); flex-wrap:wrap;">
+            <span>{{ dp.carrier }}</span>
+            <span style="font-family:'Geist Mono', monospace; font-size:12px; color:var(--t3);">{{ dp.num }}</span>
+            <button onClick="{{ dp.copy }}" title="Copy tracking number" style="border:none; background:none; padding:0; color:var(--t3); cursor:pointer; display:grid; place-items:center;" style-hover="color: var(--tx)"><i class="ph-duotone {{ dp.copyIcon }}"></i></button>
+            <span style="margin-left:auto; padding:1px 8px; border-radius:10px; background:{{ dp.chipBg }}; color:{{ dp.chipColor }}; font-size:11px; font-weight:600;">{{ dp.chip }}</span>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:3px;">
+            <sc-for list="{{ dp.steps }}" as="st">
+              <div style="display:flex; flex-direction:column; gap:6px;">
+                <span style="height:3px; border-radius:2px; background:{{ st.bg }};"></span>
+                <span style="font-size:11px; line-height:1.3; color:{{ st.color }}; font-weight:{{ st.weight }};">{{ st.label }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="display:flex; flex-direction:column;">
+          <div style="font-size:12px; font-weight:600; color:var(--t3); padding-bottom:10px;">Tracking history</div>
+          <sc-for list="{{ dp.timeline }}" as="tl">
+            <div style="display:grid; grid-template-columns:12px minmax(0,1fr); gap:15px;">
+              <div style="display:flex; flex-direction:column; align-items:center;">
+                <span style="width:8px; height:8px; margin-top:6px; border-radius:50%; background:{{ tl.dot }}; flex:none;"></span>
+                <span style="flex:1; width:1px; background:{{ tl.line }};"></span>
+              </div>
+              <div style="padding-bottom:15px;">
+                <div style="font-size:14px; line-height:20px; color:{{ tl.color }}; font-weight:{{ tl.weight }};">{{ tl.event }}</div>
+                <div style="font-size:12px; color:var(--t3); font-variant-numeric:tabular-nums;">{{ tl.when }} · {{ tl.loc }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <a href="{{ dp.trackUrl }}" target="_blank" style="display:inline-flex; align-items:center; gap:5px; padding:8px 15px; border-radius:4px; background:var(--ac); color:var(--on); font-size:13px; font-weight:600; text-decoration:none;" style-hover="filter: brightness(0.94); text-decoration: none">Track on {{ dp.carrier }}<i class="ph-duotone ph-arrow-up-right"></i></a>
+          <button onClick="{{ dp.archive }}" style="display:inline-flex; align-items:center; gap:5px; padding:8px 15px; border:1px solid var(--ln); border-radius:4px; background:transparent; color:var(--t2); font:inherit; font-size:13px; cursor:pointer;" style-hover="background: var(--hv)"><i class="ph-duotone ph-archive"></i>Archive</button>
+          <span style="margin-left:auto; font-size:12px; color:var(--t3);">{{ dp.sourceLine }}</span>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ addOpen }}">
+        <div style="display:flex; flex-direction:column; gap:15px;">
+          <label style="display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--t3);">Tracking number<input value="{{ addNum }}" onChange="{{ onAddNum }}" onKeyDown="{{ onAddKey }}" autoFocus="{{ true }}" placeholder="Paste a tracking number" style="box-sizing:border-box; height:36px; padding:0 10px; border:1px solid var(--ln); border-radius:4px; background:var(--bg); color:var(--tx); font-family:'Geist Mono', monospace; font-size:13px; outline:none;" style-focus="border-color: var(--ac)"></label>
+          <label style="display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--t3);">Label <span style="display:contents;">(optional)</span><input value="{{ addLabel }}" onChange="{{ onAddLabel }}" onKeyDown="{{ onAddKey }}" placeholder="e.g. New keyboard" style="box-sizing:border-box; height:36px; padding:0 10px; border:1px solid var(--ln); border-radius:4px; background:var(--bg); color:var(--tx); font:inherit; font-size:14px; outline:none;" style-focus="border-color: var(--ac)"></label>
+          <label style="display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--t3);">Carrier
+            <select value="{{ addCarrierSel }}" onChange="{{ onAddCarrier }}" style="box-sizing:border-box; height:36px; padding:0 8px; border:1px solid var(--ln); border-radius:4px; background:var(--bg); color:var(--tx); font:inherit; font-size:14px; outline:none;">
+              <option value="">{{ autoOption }}</option>
+              <sc-for list="{{ carriers }}" as="c"><option value="{{ c }}">{{ c }}</option></sc-for>
+            </select>
+          </label>
+          <div style="font-size:12px; color:{{ detectColor }};">{{ detectLine }}</div>
+          <div style="display:flex; gap:10px; justify-content:flex-end;">
+            <button onClick="{{ closeDrawers }}" style="padding:8px 15px; border:none; border-radius:4px; background:transparent; color:var(--t2); font:inherit; font-size:13px; cursor:pointer;" style-hover="background: var(--hv)">Cancel</button>
+            <button onClick="{{ submitAdd }}" disabled="{{ addDisabled }}" style="padding:8px 15px; border:none; border-radius:4px; background:var(--ac); color:var(--on); font:inherit; font-size:13px; font-weight:600; cursor:pointer; opacity:{{ addBtnOpacity }};">Track package</button>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ settings }}">
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <div style="font-size:12px; font-weight:600; color:var(--t3);">Google account</div>
+          <sc-if value="{{ connected }}">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="width:32px; height:32px; border-radius:50%; background:var(--act); color:var(--acd); display:grid; place-items:center; font-weight:600;">S</span>
+              <div style="display:flex; flex-direction:column;"><span style="font-size:14px; font-weight:500;">Syaddie</span><span style="font-size:12px; color:var(--t3);">syaddie@gmail.com</span></div>
+              <button onClick="{{ disconnect }}" style="margin-left:auto; border:none; background:none; padding:0; font:inherit; font-size:12px; color:var(--t2); text-decoration:underline; text-underline-offset:2px; cursor:pointer;">Disconnect</button>
+            </div>
+            <div style="display:flex; flex-direction:column;">
+              <sc-for list="{{ syncRows }}" as="sr">
+                <div style="display:flex; align-items:center; gap:10px; padding:8px 0;">
+                  <i class="ph-duotone {{ sr.icon }}" style="font-size:17px; color:var(--t2);"></i>
+                  <div style="display:flex; flex-direction:column; flex:1; min-width:0;"><span style="font-size:14px;">{{ sr.name }}</span><span style="font-size:12px; color:{{ sr.color }};">{{ sr.last }}</span></div>
+                  <button onClick="{{ sr.toggle }}" role="switch" style="position:relative; width:34px; height:20px; padding:0; border:none; border-radius:10px; background:{{ sr.track }}; cursor:pointer; transition:background .2s;"><span style="position:absolute; top:2px; left:{{ sr.knob }}px; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.2); transition:left .2s;"></span></button>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{ notConnected }}">
+            <button onClick="{{ connect }}" style="align-self:flex-start; display:inline-flex; align-items:center; gap:8px; padding:8px 15px; border:none; border-radius:4px; background:var(--ac); color:var(--on); font:inherit; font-size:13px; font-weight:600; cursor:pointer;"><i class="ph-duotone ph-google-logo"></i>Connect Google</button>
+          </sc-if>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <div style="font-size:12px; font-weight:600; color:var(--t3);">Calendars to show</div>
+          <sc-for list="{{ calRows }}" as="cr">
+            <button onClick="{{ cr.toggle }}" style="display:flex; align-items:center; gap:10px; padding:2px 0; border:none; background:none; font:inherit; color:var(--tx); cursor:pointer; text-align:left;">
+              <span style="width:16px; height:16px; border-radius:4px; border:1.5px solid {{ cr.dot }}; background:{{ cr.fill }}; color:#fff; display:grid; place-items:center; font-size:11px;"><sc-if value="{{ cr.on }}"><i class="ph-duotone ph-check"></i></sc-if></span>
+              <span style="font-size:14px;">{{ cr.name }}</span>
+            </button>
+          </sc-for>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <div style="font-size:12px; font-weight:600; color:var(--t3);">Theme</div>
+          <div style="display:inline-flex; align-self:flex-start; padding:2px; border-radius:4px; background:var(--hv);">
+            <sc-for list="{{ themeOpts }}" as="to">
+              <button onClick="{{ to.pick }}" style="padding:5px 15px; border:none; border-radius:3px; background:{{ to.bg }}; box-shadow:{{ to.shadow }}; color:{{ to.color }}; font:inherit; font-size:13px; font-weight:{{ to.weight }}; cursor:pointer;">{{ to.name }}</button>
+            </sc-for>
+          </div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <div style="font-size:12px; font-weight:600; color:var(--t3);">Accent</div>
+          <div style="display:flex; gap:15px;">
+            <sc-for list="{{ accentOpts }}" as="ao">
+              <button onClick="{{ ao.pick }}" style="display:flex; align-items:center; gap:8px; border:none; background:none; padding:0; font:inherit; font-size:13px; color:{{ ao.color }}; cursor:pointer;">
+                <span style="width:18px; height:18px; border-radius:50%; background:{{ ao.swatch }}; box-shadow:{{ ao.ring }};"></span>{{ ao.name }}
+              </button>
+            </sc-for>
+          </div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <div style="font-size:12px; font-weight:600; color:var(--t3);">Bookmarks and notes</div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button onClick="{{ exportJson }}" style="display:inline-flex; align-items:center; gap:5px; padding:7px 12px; border:1px solid var(--ln); border-radius:4px; background:transparent; color:var(--tx); font:inherit; font-size:13px; cursor:pointer;" style-hover="background: var(--hv)"><i class="ph-duotone ph-download-simple"></i>Export JSON</button>
+            <label style="display:inline-flex; align-items:center; gap:5px; padding:7px 12px; border:1px solid var(--ln); border-radius:4px; color:var(--tx); font-size:13px; cursor:pointer;" style-hover="background: var(--hv)"><i class="ph-duotone ph-upload-simple"></i>Import JSON<input type="file" accept=".json,application/json" onChange="{{ importJson }}" style="display:none;"></label>
+          </div>
+          <div style="font-size:12px; color:var(--t3);">{{ importMsg }}</div>
+        </div>
+      </sc-if>
+    </div>
+  </aside>
+</sc-if>
+
+<sc-if value="{{ focus }}">
+  <div data-screen-label="Notes focus" style="position:absolute; inset:0; z-index:50; background:var(--bg); display:flex; flex-direction:column; align-items:center; animation:lpFade .22s ease-out;">
+    <div style="box-sizing:border-box; width:100%; max-width:760px; flex:1; min-height:0; display:flex; flex-direction:column; gap:20px; padding:{{ focusPad }};">
+      <div style="display:flex; align-items:center; gap:15px;">
+        <div style="display:flex; gap:2px; flex:1; min-width:0; overflow-x:auto;">
+          <sc-for list="{{ noteTabs }}" as="nt">
+            <button onClick="{{ nt.pick }}" style="flex:none; border:none; border-radius:3px; padding:3px 10px; background:{{ nt.bg }}; color:{{ nt.color }}; font:inherit; font-size:13px; font-weight:{{ nt.weight }}; cursor:pointer;">{{ nt.name }}</button>
+          </sc-for>
+        </div>
+        <span style="font-size:12px; color:var(--t3); opacity:{{ savedOpacity }}; transition:opacity .6s;">Saved</span>
+        <span style="font-size:12px; color:var(--t3); font-variant-numeric:tabular-nums;">{{ wordCount }}</span>
+        <button onClick="{{ closeFocus }}" title="Close focus view (Esc)" style="width:32px; height:32px; border:none; border-radius:4px; background:transparent; color:var(--t2); cursor:pointer; display:grid; place-items:center; font-size:16px;" style-hover="background: var(--hv)"><i class="ph-duotone ph-arrows-in-simple"></i></button>
+      </div>
+      <div style="font-family:'Source Serif 4', Georgia, serif; font-size:32px; line-height:1.15; letter-spacing:-0.01em;">{{ noteName }}</div>
+      <textarea value="{{ noteText }}" onChange="{{ onNote }}" autoFocus="{{ true }}" placeholder="Start typing…" style="flex:1; min-height:0; border:none; background:transparent; color:var(--tx); font-family:'Source Serif 4', Georgia, serif; font-size:19px; line-height:1.65; resize:none; outline:none; padding:0;"></textarea>
+      <div style="font-size:12px; color:var(--t3);">“- [ ]” checklist · “- ” bullet · **bold** · Esc to close</div>
+    </div>
+  </div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;screen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;main&quot;,&quot;editBookmarks&quot;,&quot;packageDrawer&quot;,&quot;addPackage&quot;,&quot;notesFocus&quot;,&quot;empty&quot;,&quot;error&quot;,&quot;settings&quot;],&quot;default&quot;:&quot;main&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;system&quot;,&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;system&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;accent&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;sage&quot;,&quot;slate&quot;,&quot;terracotta&quot;],&quot;default&quot;:&quot;sage&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;keyboard&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;height&quot;:{&quot;editor&quot;:null,&quot;default&quot;:&quot;100vh&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+const DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const dayOf=o=>new Date(2026,9,27+o);
+const fmtDay=o=>{const d=dayOf(o);return DOW[d.getDay()]+' '+d.getDate()+' '+MON[d.getMonth()];};
+const shortDay=o=>o===0?'Today':o===1?'Tomorrow':(o>1&&o<7?DOW[dayOf(o).getDay()]:fmtDay(o));
+const hm=m=>String(Math.floor(m/60)%24).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
+const THEMES={
+  light:{bg:'#f1efeb',sf:'#f8f7f4',rz:'#fffefc',tx:'#22201e',t2:'#5c5853',t3:'#77716a',ln:'rgba(34,32,30,0.10)',hv:'rgba(34,32,30,0.045)',scrim:'rgba(34,32,30,0.16)',wn:'#ad432c',wnt:'#f6e3dc',sh:'0 12px 32px rgba(45,43,43,0.14), 0 0 0 1px rgba(34,32,30,0.04)'},
+  dark:{bg:'#1d1c1a',sf:'#252422',rz:'#2e2d2a',tx:'#ebe7e1',t2:'#b3ada5',t3:'#8d877f',ln:'rgba(235,231,225,0.10)',hv:'rgba(235,231,225,0.05)',scrim:'rgba(0,0,0,0.42)',wn:'#e5957c',wnt:'rgba(229,149,124,0.14)',sh:'0 14px 36px rgba(0,0,0,0.45), 0 0 0 1px rgba(235,231,225,0.06)'}};
+const ACCENTS={
+  sage:{name:'Sage',light:{ac:'#5a7a5c',acd:'#43604a',act:'#e2eadf',on:'#fff'},dark:{ac:'#9cb99a',acd:'#b6cfb3',act:'rgba(156,185,154,0.15)',on:'#1d1c1a'}},
+  slate:{name:'Slate blue',light:{ac:'#4e6a8d',acd:'#3c5575',act:'#e0e7ef',on:'#fff'},dark:{ac:'#a0b5d2',acd:'#bdcce2',act:'rgba(160,181,210,0.15)',on:'#1d1c1a'}},
+  terracotta:{name:'Terracotta',light:{ac:'#ad603f',acd:'#8c492d',act:'#f3e4da',on:'#fff'},dark:{ac:'#dd9b7b',acd:'#eab69c',act:'rgba(221,155,123,0.15)',on:'#1d1c1a'}}};
+const CAL={Personal:'#5f8fa3',Work:'#b08844',Family:'#a06a8c'};
+const EV_TODAY=[
+  {id:'e1',s:540,e:570,t:'Standup',cal:'Work',video:'meet.google.com/std-upxx-day',vtype:'Google Meet'},
+  {id:'e2',s:750,e:810,t:'Lunch with Wei Ling',cal:'Personal',loc:'Tiong Bahru Market'},
+  {id:'e3',s:900,e:945,t:'Design review',cal:'Work',video:'meet.google.com/xpa-qwer-tyu',vtype:'Google Meet',desc:'Walk through the Q4 onboarding screens.'},
+  {id:'e4',s:1050,e:1110,t:'Gym',cal:'Personal'},
+  {id:'e5',s:1200,e:1260,t:'Call with Mum',cal:'Family'}];
+const EV_TMR=[
+  {id:'e6',s:600,t:'Dentist',cal:'Personal',loc:'Novena'},
+  {id:'e7',s:840,t:'1:1 with Arjun',cal:'Work',video:'zoom.us/j/84213377210',vtype:'Zoom'}];
+const EV_WEEK=[{id:'e8',day:3,s:1140,t:'Dinner at Burnt Ends',cal:'Personal',loc:'Dempsey Road'},{id:'e9',day:4,s:540,t:'Badminton',cal:'Personal'}];
+const ALLDAY=[{id:'a1',day:2,t:'Deepavali (public holiday)',cal:'Family'}];
+const TASKS=()=>[
+  {id:'t1',title:'Renew passport photos',due:-1,list:'Personal'},
+  {id:'t2',title:'Pay credit card bill',due:0,list:'Personal'},
+  {id:'t3',title:'Reply to landlord about aircon servicing',due:0,list:'Errands'},
+  {id:'t4',title:'Book flights for December',due:3,list:'Personal'},
+  {id:'t5',title:'Return library books',due:4,list:'Errands'},
+  {id:'t6',title:'Research standing desks',due:null,list:'Personal'}];
+const NOTES=()=>[
+  {id:'n1',name:'Scratch',text:'Wi-Fi for guests: BlueFern-5G / pw on fridge\n- call Shopee re: refund\n- ask Arjun for Q4 deck'},
+  {id:'n2',name:'Groceries',text:'- [ ] eggs\n- [ ] oat milk\n- [ ] kangkong\n- [ ] rice (10kg)\n- [x] dish soap'},
+  {id:'n3',name:'Ideas',text:'Weekend: try the kopi place near Jalan Besar\n- **Launchpad**: a weather line under the clock?\n- learn laksa from scratch, start with the rempah\n- photo walk along the Rail Corridor'}];
+const PKGS=()=>[
+  {id:'p1',label:'New mechanical keyboard',carrier:'SingPost',num:'SPNSV000000518244',stage:2,status:'Out for delivery',src:'manual',timeline:[
+    ['27 Oct 08:12','Singapore Post Centre','Out for delivery'],['27 Oct 05:40','Singapore Post Centre','Processed at sorting centre'],['26 Oct 19:05','Changi Airfreight Centre','Arrived in Singapore'],['25 Oct 22:30','Shenzhen, CN','Departed origin facility'],['24 Oct 14:02','Shenzhen, CN','Shipment information received']]},
+  {id:'p2',label:'Shopee order: phone case',carrier:'Ninja Van',num:'NVSGSHOPE0001234567',stage:1,status:'In transit · sorting facility',src:'gmail',isNew:true,timeline:[
+    ['27 Oct 11:20','Ninja Van Hub, Tuas','At sorting facility'],['26 Oct 18:44','Seller warehouse','Picked up from seller'],['26 Oct 09:15','Shopee','Order information received']]},
+  {id:'p4',label:'Lazada: desk lamp',carrier:'J&T Express',num:'JT0001234567SG',stage:2,exception:true,status:'Failed delivery attempt · will retry tomorrow',src:'gmail',timeline:[
+    ['27 Oct 13:05','Tampines','Delivery attempted, no one home. Will retry 28 Oct'],['27 Oct 07:50','J&T Hub, Jurong','Out for delivery'],['26 Oct 16:30','J&T Hub, Jurong','In transit'],['25 Oct 10:02','Lazada','Shipment information received']]},
+  {id:'p3',label:'Amazon: USB-C hub',carrier:'DHL',num:'1234567890',stage:3,status:'Delivered yesterday 16:10',src:'gmail',timeline:[
+    ['26 Oct 16:10','Singapore','Delivered, signed by S. Syaddie'],['26 Oct 08:30','Singapore','Out for delivery'],['25 Oct 21:15','Singapore Hub','Arrived at facility'],['23 Oct 12:00','Amazon','Shipment information received']]}];
+const B=(id,name,url)=>({id,name,url});
+const BM=()=>[
+  {id:'g1',name:'Daily',items:[B('b1','Gmail','https://mail.google.com'),B('b2','Calendar','https://calendar.google.com'),B('b3','YouTube','https://youtube.com'),B('b4','Reddit','https://reddit.com'),B('b5','Claude','https://claude.ai'),B('b6','WhatsApp','https://web.whatsapp.com')]},
+  {id:'g2',name:'Work',items:[B('b7','GitHub','https://github.com'),B('b8','Linear','https://linear.app'),B('b9','Figma','https://figma.com'),B('b10','Notion','https://notion.so')]},
+  {id:'g3',name:'Finance',items:[B('b11','DBS','https://dbs.com.sg'),B('b12','Syfe','https://syfe.com'),B('b13','Endowus','https://endowus.com')]},
+  {id:'g4',name:'Tools',items:[B('b14','Cloudflare','https://dash.cloudflare.com'),B('b15','Portainer','http://192.168.1.20:9000'),B('b16','Home Assistant','http://homeassistant.local:8123'),B('b17','Router','http://192.168.1.1')]}];
+const STARTER_BM=()=>[
+  {id:'g1',name:'Daily',items:[B('b1','Gmail','https://mail.google.com'),B('b2','Calendar','https://calendar.google.com'),B('b3','YouTube','https://youtube.com')]},
+  {id:'g2',name:'Work',items:[B('b7','GitHub','https://github.com')]}];
+const DAYW={sun:0,sunday:0,mon:1,monday:1,tue:2,tues:2,tuesday:2,wed:3,wednesday:3,thu:4,thur:4,thurs:4,thursday:4,fri:5,friday:5,sat:6,saturday:6};
+function parseDue(text){
+  const m=text.trim().match(/^(.+?)\s+(today|tod|tomorrow|tmr|tmrw|next week|[a-z]+)$/i);
+  if(!m)return {title:text.trim()};
+  const w=m[2].toLowerCase();let due;
+  if(w==='today'||w==='tod')due=0;else if(w==='tomorrow'||w==='tmr'||w==='tmrw')due=1;else if(w==='next week')due=6;else if(w in DAYW)due=((DAYW[w]-2+7)%7)||7;
+  return due===undefined?{title:text.trim()}:{title:m[1].trim(),due};
+}
+const CARRIERS=['SingPost','Ninja Van','J&T Express','DHL','Qxpress','UPS','FedEx'];
+function detect(n){n=(n||'').trim().toUpperCase();if(!n)return '';
+  if(/^NV/.test(n))return 'Ninja Van';if(/^JT/.test(n))return 'J&T Express';if(/^SP|^[A-Z]{2}\d{9}SG$/.test(n))return 'SingPost';
+  if(/^1Z/.test(n))return 'UPS';if(/^\d{10}$/.test(n))return 'DHL';if(/^\d{12}$/.test(n))return 'FedEx';if(/^QX/.test(n))return 'Qxpress';return '';}
+const TRACK={'SingPost':n=>'https://www.singpost.com/track-items?trackingid='+n,'Ninja Van':n=>'https://www.ninjavan.co/en-sg/tracking?id='+n,'J&T Express':n=>'https://www.jtexpress.sg/tracking?awb='+n,'DHL':n=>'https://www.dhl.com/sg-en/home/tracking.html?tracking-id='+n,'UPS':n=>'https://www.ups.com/track?tracknum='+n,'FedEx':n=>'https://www.fedex.com/fedextrack/?trknbr='+n,'Qxpress':n=>'https://www.qxpress.net/Tracking?trackNo='+n};
+const host=u=>{try{return new URL(u).host}catch(e){return u}};
+const isLocal=u=>/^(\d+\.){3}\d+|\.local$|^localhost/.test(host(u).split(':')[0]);
+const STEP_LABELS=['Info received','In transit','Out for delivery','Delivered'];
+
+class Component extends DCLogic {
+  rootRef=React.createRef(); searchRef=React.createRef(); t0=Date.now(); drag=null; uid=100;
+  state=Object.assign(this.base(),this.preset(this.props.screen||'main'),{w:1440,dark:false});
+  base(){return {connected:true,calError:false,retrying:false,themeO:null,accentO:null,search:'',sel:0,searchFocus:false,syncHover:false,expanded:null,weekOpen:false,list:'All',tasks:TASKS(),newTask:'',undo:null,notes:NOTES(),activeNote:'n1',editing:false,savedOn:false,noteMenu:false,renaming:null,focus:false,pkgs:PKGS(),drawer:null,addOpen:false,add:{num:'',label:'',carrier:''},deliveredOpen:false,bm:BM(),edit:false,editTile:null,draft:null,hoverTile:null,dragId:null,dropG:null,settings:false,cals:{Personal:true,Work:true,Family:true},sync:{Calendar:true,Tasks:true,Gmail:true},copied:false,importMsg:'Exports bookmarks and all notepads in one file.'};}
+  preset(s){switch(s){
+    case 'editBookmarks':return {edit:true,editTile:'b8',draft:{name:'Linear',url:'https://linear.app/syaddie'}};
+    case 'packageDrawer':return {drawer:'p1'};
+    case 'addPackage':return {addOpen:true,add:{num:'SPNSV000000623917',label:'',carrier:''}};
+    case 'notesFocus':return {focus:true,activeNote:'n3'};
+    case 'empty':return {connected:false,pkgs:[],tasks:[],notes:[{id:'n1',name:'Scratch',text:''}],activeNote:'n1',bm:STARTER_BM()};
+    case 'error':return {calError:true};
+    case 'settings':return {settings:true};
+    default:return {};}}
+  componentDidMount(){
+    this.iv=setInterval(()=>this.forceUpdate(),1000);
+    this.mq=window.matchMedia('(prefers-color-scheme: dark)');
+    this.mqH=()=>this.setState({dark:this.mq.matches});this.mq.addEventListener('change',this.mqH);this.mqH();
+    if(this.rootRef.current){this.ro=new ResizeObserver(es=>{const w=Math.round(es[0].contentRect.width);if(w&&w!==this.state.w)this.setState({w});});this.ro.observe(this.rootRef.current);}
+    this.keyH=e=>this.onKey(e);window.addEventListener('keydown',this.keyH);
+    this.applyVars();
+  }
+  componentWillUnmount(){clearInterval(this.iv);this.ro&&this.ro.disconnect();window.removeEventListener('keydown',this.keyH);this.mq&&this.mq.removeEventListener('change',this.mqH);clearTimeout(this.undoT);clearTimeout(this.savedT);}
+  componentDidUpdate(prev){
+    if(prev.screen!==this.props.screen)this.setState(Object.assign(this.base(),this.preset(this.props.screen||'main')));
+    this.applyVars();
+  }
+  themeMode(){return this.state.themeO||this.props.theme||'system';}
+  isDark(){const m=this.themeMode();return m==='dark'||(m==='system'&&this.state.dark);}
+  accentKey(){return this.state.accentO||this.props.accent||'sage';}
+  applyVars(){const el=this.rootRef.current;if(!el)return;const d=this.isDark()?'dark':'light';const v=Object.assign({},THEMES[d],(ACCENTS[this.accentKey()]||ACCENTS.sage)[d]);
+    const k=d+this.accentKey();if(this._vk===k)return;this._vk=k;for(const n in v)el.style.setProperty('--'+n,v[n]);el.style.colorScheme=d;}
+  nowMin(){return 872+Math.floor((Date.now()-this.t0)/60000);}
+  overlayOpen(){const s=this.state;return !!(s.drawer||s.addOpen||s.settings||s.focus);}
+  closeAll(){this.setState({drawer:null,addOpen:false,settings:false,focus:false,noteMenu:false,editTile:null,draft:null});}
+  onKey(e){
+    if(this.props.keyboard===false)return;
+    if(e.key==='Escape'){this.closeAll();return;}
+    const t=e.target,typing=/INPUT|TEXTAREA|SELECT/.test(t.tagName||'')||t.isContentEditable;
+    if(typing||e.metaKey||e.ctrlKey||e.altKey)return;
+    if(e.key==='/'){e.preventDefault();this.searchRef.current&&this.searchRef.current.focus();return;}
+    if(/^[1-9]$/.test(e.key)&&!this.state.search&&!this.overlayOpen()&&!this.state.edit){const g=this.state.bm.find(x=>x.name==='Daily');const it=g&&g.items[+e.key-1];if(it)window.open(it.url,'_blank');}
+  }
+  setNotes(fn){this.setState(s=>({notes:s.notes.map(n=>n.id===s.activeNote?fn(n):n),savedOn:false}));clearTimeout(this.savedT);
+    this.savedT=setTimeout(()=>{this.setState({savedOn:true});this.savedT=setTimeout(()=>this.setState({savedOn:false}),1500);},500);}
+  completeTask(id){
+    const s=this.state,t=s.tasks.find(x=>x.id===id);if(!t)return;
+    if(t.done){this.undoTask();return;}
+    clearTimeout(this.undoT);
+    this.setState(st=>({tasks:st.tasks.filter(x=>!(st.undo&&x.id===st.undo.id)).map(x=>x.id===id?Object.assign({},x,{done:true}):x),undo:{id,title:t.title}}));
+    this.undoT=setTimeout(()=>this.setState(st=>({tasks:st.tasks.filter(x=>x.id!==id),undo:null})),5000);
+  }
+  undoTask(){clearTimeout(this.undoT);this.setState(st=>({tasks:st.tasks.map(x=>st.undo&&x.id===st.undo.id?Object.assign({},x,{done:false}):x),undo:null}));}
+  moveTile(gi,ii){const d=this.drag;if(!d)return;this.setState(s=>{const bm=s.bm.map(g=>Object.assign({},g,{items:g.items.slice()}));
+    if(d.type==='tile'){const [it]=bm[d.g].items.splice(d.i,1);let idx=ii==null?bm[gi].items.length:ii;bm[gi].items.splice(idx,0,it);}
+    else if(d.type==='group'){const [g]=bm.splice(d.g,1);bm.splice(gi,0,g);}
+    return {bm,dragId:null,dropG:null};});this.drag=null;}
+  mutTile(id,fn){this.setState(s=>({bm:s.bm.map(g=>Object.assign({},g,{items:fn?g.items.map(b=>b.id===id?fn(b):b).filter(Boolean):g.items}))}));}
+
+  renderVals(){
+    const s=this.state,now=this.nowMin(),mode=s.w<760?'narrow':s.w>=2000?'wide':'desktop';
+    const narrow=mode==='narrow',wide=mode==='wide';
+    const hr=Math.floor(now/60),greeting=hr<5?'Good evening':hr<12?'Good morning':hr<18?'Good afternoon':'Good evening';
+    const calOn=c=>s.cals[c]!==false;
+    // calendar
+    const today=EV_TODAY.filter(e=>calOn(e.cal));
+    const cur=today.find(e=>e.s<=now&&now<e.e),nxt=today.find(e=>e.s>now),focusEv=cur||nxt;
+    const rel=m=>m<60?'in '+m+' min':'in '+Math.floor(m/60)+' h'+(m%60?' '+(m%60)+' min':'');
+    const mk=(e,kind,dayOff)=>{const past=kind==='today'&&e.e<=now,isF=focusEv&&e.id===focusEv.id,isCur=cur&&e.id===cur.id;
+      const meta=[e.cal,e.loc,e.vtype].filter(Boolean).join(' · ');
+      return {id:e.id,time:kind==='week'?DOW[dayOf(dayOff).getDay()]+' '+hm(e.s):hm(e.s),end:e.e?hm(e.e):'',hasEnd:kind==='today'&&!!e.e,title:e.t,meta,dot:CAL[e.cal],
+        opacity:past?0.5:1,bg:isF?'var(--act)':'transparent',weight:isF?600:400,color:kind==='today'?'var(--tx)':'var(--t2)',
+        showLabel:!!isF,label:isF?(isCur?'now · ends '+hm(e.e):rel(e.s-now)):'',
+        hasJoin:!!(isF&&e.video),joinUrl:e.video?'https://'+e.video:'',
+        expanded:s.expanded===e.id,toggle:()=>this.setState(st=>({expanded:st.expanded===e.id?null:e.id})),
+        hasLoc:!!e.loc,loc:e.loc||'',hasVideo:!!e.video,video:e.video||'',hasDesc:!!e.desc,desc:e.desc||''};};
+    const weekOpen=s.weekOpen||wide;
+    const weekItems=EV_WEEK.filter(e=>calOn(e.cal));
+    const calSections=[
+      {hasHeader:false,items:today.map(e=>mk(e,'today'))},
+      {hasHeader:true,label:'Tomorrow',sub:fmtDay(1),isToggle:false,cursor:'default',toggle:()=>{},items:EV_TMR.filter(e=>calOn(e.cal)).map(e=>mk(e,'tmr'))},
+      {hasHeader:true,label:'Later this week',sub:weekItems.length+' events',isToggle:!wide,chev:weekOpen?'ph-caret-up':'ph-caret-down',cursor:wide?'default':'pointer',toggle:()=>!wide&&this.setState(st=>({weekOpen:!st.weekOpen})),items:weekOpen?weekItems.map(e=>mk(e,'week',e.day)):[]}];
+    const allDay=ALLDAY.filter(a=>calOn(a.cal)).map(a=>({day:DOW[dayOf(a.day).getDay()]+' '+dayOf(a.day).getDate(),title:a.t,dot:CAL[a.cal]}));
+    let subline='Connect Google to see what’s next';
+    if(s.connected){subline=cur?cur.t+' now · ends '+hm(cur.e):nxt?'Next: '+nxt.t+' '+rel(nxt.s-now)+(nxt.video?' · '+nxt.vtype:''):'Nothing else on today';
+      const od=s.tasks.filter(t=>t.due<0&&!t.done).length;if(od)subline+=' · '+od+' overdue task'+(od>1?'s':'');}
+    const outPk=s.pkgs.filter(p=>p.stage===2&&!p.exception).length;if(outPk)subline+=' · '+outPk+' package out for delivery';
+    // tasks
+    const lists=['All','Personal','Errands','Work'];
+    const vis=s.tasks.filter(t=>s.list==='All'||t.list===s.list);
+    const grp=[['Overdue',t=>t.due!=null&&t.due<0,'var(--wn)'],['Today',t=>t.due===0,'var(--t2)'],['Upcoming',t=>t.due>0,'var(--t2)'],['No date',t=>t.due==null,'var(--t2)']];
+    const taskGroups=grp.map(([label,f,c])=>({label,labelColor:c,items:vis.filter(f).map(t=>({id:t.id,title:t.title,done:!!t.done,
+      dueLabel:t.due==null||t.due===0?'':t.due<0?fmtDay(t.due):shortDay(t.due),dueColor:t.due<0?'var(--wn)':'var(--t3)',
+      opacity:t.done?0.45:1,deco:t.done?'line-through':'none',checkBg:t.done?'var(--ac)':'transparent',checkBorder:t.done?'var(--ac)':'var(--t3)',
+      toggle:()=>this.completeTask(t.id)}))})).filter(g=>g.items.length);
+    const pd=parseDue(s.newTask);
+    // notes
+    const note=s.notes.find(n=>n.id===s.activeNote)||s.notes[0]||{id:'',name:'',text:''};
+    const lines=note.text.split('\n');
+    const segs=txt=>txt.split(/(\*\*[^*]+\*\*)/).filter(Boolean).map(x=>/^\*\*.+\*\*$/.test(x)?{t:x.slice(2,-2),w:600}:{t:x,w:400});
+    const noteLines=note.text?lines.map((l,i)=>{const c=l.match(/^\s*[-*] \[( |x|X)\]\s?(.*)$/),b=!c&&l.match(/^\s*[-*] (.*)$/);const checked=!!(c&&c[1].toLowerCase()==='x');
+      return {isCheck:!!c,isBullet:!!b,checked,segs:segs(c?c[2]:b?b[1]:l),opacity:checked?0.5:1,deco:checked?'line-through':'none',checkBg:checked?'var(--ac)':'transparent',checkBorder:checked?'var(--ac)':'var(--t3)',
+        toggle:e=>{e.stopPropagation();this.setNotes(n=>{const ls=n.text.split('\n');ls[i]=ls[i].replace(/\[( |x|X)\]/,checked?'[ ]':'[x]');return Object.assign({},n,{text:ls.join('\n')});});}};}):[];
+    const noteTabs=s.notes.map(n=>{const a=n.id===note.id;return {id:n.id,name:n.name,bg:a?'var(--hv)':'transparent',color:a?'var(--tx)':'var(--t3)',weight:a?600:400,renaming:s.renaming===n.id,notRenaming:s.renaming!==n.id,
+      pick:()=>this.setState({activeNote:n.id,editing:false,noteMenu:false}),menu:e=>{e.preventDefault();this.setState({activeNote:n.id,noteMenu:true});},startRename:()=>this.setState({activeNote:n.id,renaming:n.id}),
+      rename:e=>{const v=e.target.value;this.setState(st=>({notes:st.notes.map(x=>x.id===n.id?Object.assign({},x,{name:v}):x)}));},renameKey:e=>{if(e.key==='Enter'||e.key==='Escape')this.setState({renaming:null});}};});
+    const words=note.text.trim()?note.text.trim().split(/\s+/).length:0;
+    // packages
+    const chipOf=p=>p.exception?['Exception','var(--wnt)','var(--wn)']:[['Info received','var(--hv)','var(--t2)'],['In transit','var(--hv)','var(--t2)'],['Out for delivery','var(--act)','var(--acd)'],['Delivered','var(--hv)','var(--t3)']][p.stage];
+    const segBg=(p,i)=>i>p.stage?'var(--ln)':p.exception&&i===p.stage?'var(--wn)':p.stage===2&&!p.exception?'var(--ac)':'var(--t3)';
+    const pv=p=>{const [chip,chipBg,chipColor]=chipOf(p);return {id:p.id,label:p.label,carrier:p.carrier,num:p.num,status:p.status,chip,chipBg,chipColor,
+      statusColor:p.exception?'var(--wn)':p.stage===2?'var(--acd)':'var(--t2)',segs:[0,1,2,3].map(i=>({bg:segBg(p,i)})),
+      source:p.src==='gmail'?'from Gmail':'Added manually',srcIcon:p.src==='gmail'?'ph-envelope-simple':'ph-hand-pointing',isNew:!!p.isNew,
+      open:()=>this.setState({drawer:p.id}),keep:e=>{e.stopPropagation();this.setState(st=>({pkgs:st.pkgs.map(x=>x.id===p.id?Object.assign({},x,{isNew:false}):x)}));},
+      dismiss:e=>{e.stopPropagation();this.setState(st=>({pkgs:st.pkgs.filter(x=>x.id!==p.id)}));}};};
+    const active=s.pkgs.filter(p=>p.stage<3).map(pv),deliv=s.pkgs.filter(p=>p.stage===3).map(pv);
+    const dpk=s.pkgs.find(p=>p.id===s.drawer);
+    let dp={};
+    if(dpk){const v=pv(dpk);dp=Object.assign(v,{
+      rename:e=>{const val=e.target.value;this.setState(st=>({pkgs:st.pkgs.map(x=>x.id===dpk.id?Object.assign({},x,{label:val}):x)}));},
+      copy:()=>{navigator.clipboard&&navigator.clipboard.writeText(dpk.num).catch(()=>{});this.setState({copied:true});setTimeout(()=>this.setState({copied:false}),1400);},
+      copyIcon:s.copied?'ph-check':'ph-copy',
+      steps:STEP_LABELS.map((l,i)=>({label:dpk.exception&&i===dpk.stage?'Failed attempt':l,bg:segBg(dpk,i),color:i===dpk.stage?(dpk.exception?'var(--wn)':'var(--tx)'):i<dpk.stage?'var(--t2)':'var(--t3)',weight:i===dpk.stage?600:400})),
+      timeline:(dpk.timeline||[]).map((t,i,a)=>({when:t[0],loc:t[1],event:t[2],dot:i===0?(dpk.exception?'var(--wn)':dpk.stage===2?'var(--ac)':'var(--t2)'):'var(--ln)',line:i<a.length-1?'var(--ln)':'transparent',color:i===0?'var(--tx)':'var(--t2)',weight:i===0?500:400})),
+      trackUrl:(TRACK[dpk.carrier]||(n=>'https://www.google.com/search?q='+n))(dpk.num),
+      archive:()=>this.setState(st=>({pkgs:st.pkgs.filter(x=>x.id!==dpk.id),drawer:null})),
+      sourceLine:dpk.src==='gmail'?'Detected from Gmail':'Added manually'});}
+    const det=detect(s.add.num),carrierFinal=s.add.carrier||det;
+    // bookmarks
+    const q=s.search.trim().toLowerCase();
+    const all=[];s.bm.forEach(g=>g.items.forEach(b=>all.push(b)));
+    const match=b=>!q||b.name.toLowerCase().includes(q)||b.url.toLowerCase().includes(q);
+    const results=q?all.filter(match).slice(0,6):[];
+    const sel=Math.min(s.sel,results.length);
+    const fav=b=>isLocal(b.url)?'':'https://www.google.com/s2/favicons?domain='+host(b.url)+'&sz=64';
+    const bmGroups=s.bm.map((g,gi)=>({id:g.id,name:g.name,opacity:s.dragId===g.id?0.4:1,outline:s.edit&&s.dropG===g.id?'1px dashed var(--t3)':'none',
+      dragStart:e=>{this.drag={type:'group',g:gi};e.dataTransfer.effectAllowed='move';this.setState({dragId:g.id});},
+      drop:e=>{e.preventDefault();this.moveTile(gi,null);},
+      rename:e=>{const v=e.target.value;this.setState(st=>({bm:st.bm.map(x=>x.id===g.id?Object.assign({},x,{name:v}):x)}));},
+      remove:()=>this.setState(st=>({bm:st.bm.filter(x=>x.id!==g.id)})),
+      addTile:()=>{const id='b'+(++this.uid);this.setState(st=>({bm:st.bm.map(x=>x.id===g.id?Object.assign({},x,{items:x.items.concat([B(id,'New bookmark','https://')])}):x),editTile:id,draft:{name:'New bookmark',url:'https://'}}));},
+      items:g.items.map((b,ii)=>({id:b.id,name:b.name,letter:b.name[0],fav:fav(b),hasFav:!!fav(b),href:s.edit?undefined:b.url,
+        num:g.name==='Daily'&&ii<9?String(ii+1):'',showNum:!s.edit&&g.name==='Daily'&&ii<9&&s.hoverTile===b.id,
+        opacity:s.dragId===b.id?0.35:(q&&!match(b)?0.3:1),bg:s.editTile===b.id?'var(--hv)':'transparent',outline:s.edit?'1px dashed var(--ln)':'none',cursor:s.edit?'grab':'pointer',
+        draggable:s.edit?'true':'false',editing:s.edit&&s.editTile===b.id,
+        click:e=>{if(s.edit){e.preventDefault();this.setState({editTile:b.id,draft:{name:b.name,url:b.url}});}},
+        enter:()=>this.setState({hoverTile:b.id}),leave:()=>this.setState(st=>st.hoverTile===b.id?{hoverTile:null}:null),
+        dragStart:e=>{if(!s.edit)return;e.stopPropagation();this.drag={type:'tile',g:gi,i:ii};e.dataTransfer.effectAllowed='move';this.setState({dragId:b.id,editTile:null});},
+        drop:e=>{e.preventDefault();e.stopPropagation();if(this.drag&&this.drag.type==='tile')this.moveTile(gi,ii);else this.moveTile(gi,null);},
+        remove:e=>{e&&e.preventDefault&&e.preventDefault();e&&e.stopPropagation&&e.stopPropagation();this.mutTile(b.id,()=>null);this.setState({editTile:null,draft:null});}}))}));
+    // sync
+    const syncLines=s.connected?[
+      {name:'Calendar',text:s.calError?'Couldn’t sync · last synced 2 h ago':'Synced 2 min ago',color:s.calError?'var(--wn)':'var(--t3)'},
+      {name:'Tasks',text:'Synced just now',color:'var(--t3)'},{name:'Gmail packages',text:'Checked 6 min ago',color:'var(--t3)'},
+      {name:'Carriers',text:'Updated 12 min ago',color:'var(--t3)'}]:[{name:'Google',text:'Not connected',color:'var(--t3)'}];
+    const tm=this.themeMode(),ak=this.accentKey(),dark=this.isDark();
+    const layouts={
+      desktop:{cols:'minmax(0,1fr) minmax(0,1.08fr) minmax(0,1fr)',rows:'minmax(0,1.2fr) minmax(0,0.8fr) auto',areas:'"today tasks pkgs" "today notes pkgs" "bm bm bm"'},
+      wide:{cols:'minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)',rows:'minmax(0,1fr) auto',areas:'"today tasks notes pkgs" "bm bm bm bm"'},
+      narrow:{cols:'minmax(0,1fr)',rows:'auto',areas:'"today" "tasks" "pkgs" "notes" "bm"'}}[mode];
+    const drawerTitle=s.settings?'Settings':s.addOpen?'Add package':dpk?'Package':'';
+    return Object.assign({},layouts,{
+      rootRef:this.rootRef,searchRef:this.searchRef,screenLabel:'Launchpad · '+(this.props.screen||'main'),
+      rootH:this.props.height||'100vh',rootOverflow:narrow?'auto':'hidden',innerH:narrow?'auto':'100%',
+      pad:narrow?'20px 15px 30px':wide?'64px 96px':'30px 40px 30px',gap:narrow?15:wide?30:20,maxW:wide?'2200px':'none',
+      panelPad:wide?'30px 20px':'20px 10px',greetSize:narrow?24:wide?36:28,clockSize:narrow?36:wide?60:46,searchW:narrow?'calc(100vw - 110px)':wide?'300px':'230px',
+      timeCol:'44px',tileW:wide?88:64,groupGap:wide?60:25,drawerW:narrow?'100%':'440px',focusPad:narrow?'20px 15px':'40px 30px',
+      greeting,subline,clock:hm(now),dateLabel:fmtDay(0)+' · SGT',
+      stop:e=>e.stopPropagation(),hideImg:e=>{e.target.style.display='none';},
+      search:s.search,onSearch:e=>this.setState({search:e.target.value,sel:0}),
+      onSearchFocus:()=>this.setState({searchFocus:true}),onSearchBlur:()=>setTimeout(()=>this.setState({searchFocus:false}),120),
+      onSearchKey:e=>{const n=results.length;
+        if(e.key==='ArrowDown'){e.preventDefault();this.setState({sel:Math.min(sel+1,n)});}
+        else if(e.key==='ArrowUp'){e.preventDefault();this.setState({sel:Math.max(sel-1,0)});}
+        else if(e.key==='Escape'){this.setState({search:''});e.target.blur();}
+        else if(e.key==='Enter'&&s.search.trim()){const r=results[sel];window.open(r?r.url:'https://www.google.com/search?q='+encodeURIComponent(s.search.trim()),'_blank');this.setState({search:''});}},
+      showDrop:!!(q&&s.searchFocus),webBg:sel===results.length?'var(--hv)':'transparent',
+      results:results.map((b,i)=>({name:b.name,url:b.url,host:host(b.url),letter:b.name[0],fav:fav(b),hasFav:!!fav(b),bg:i===sel?'var(--hv)':'transparent',open:()=>this.setState({search:''})})),
+      syncHover:s.syncHover,syncOn:()=>this.setState({syncHover:true}),syncOff:()=>this.setState({syncHover:false}),
+      syncDot:!s.connected?'var(--ln)':s.calError?'var(--wn)':'var(--t3)',syncLines,
+      openSettings:()=>this.setState({settings:true,addOpen:false,drawer:null}),
+      connected:s.connected,notConnected:!s.connected,connect:()=>this.setState({connected:true,tasks:TASKS(),pkgs:s.pkgs.length?s.pkgs:PKGS().filter(p=>p.src==='gmail')}),
+      disconnect:()=>this.setState({connected:false}),
+      calMeta:s.connected?(s.calError?'':'Synced 2 min ago'):'',calErrorLine:s.connected&&(s.calError||s.retrying),calErrorText:s.retrying?'Syncing…':'Couldn’t sync · showing data from 12:31',
+      retryLabel:s.retrying?'':'Retry',calOpacity:s.calError?0.85:1,
+      retry:()=>{this.setState({retrying:true,calError:false});setTimeout(()=>this.setState({retrying:false}),1200);},
+      allDay,calSections,
+      listTabs:lists.map(l=>({name:l,bg:s.list===l?'var(--hv)':'transparent',color:s.list===l?'var(--tx)':'var(--t3)',weight:s.list===l?600:400,pick:()=>this.setState({list:l})})),
+      newTask:s.newTask,onNewTask:e=>this.setState({newTask:e.target.value}),
+      onNewTaskKey:e=>{if(e.key==='Enter'&&s.newTask.trim()){const p=parseDue(s.newTask);this.setState(st=>({tasks:[{id:'t'+(++this.uid),title:p.title,due:p.due===undefined?null:p.due,list:st.list==='All'?'Personal':st.list}].concat(st.tasks),newTask:''}));}},
+      hasDueHint:pd.due!==undefined,dueHint:pd.due!==undefined?'Due '+fmtDay(pd.due):'',
+      taskGroups,noTasks:!taskGroups.length,hasUndo:!!s.undo,undoTitle:s.undo?s.undo.title:'',undo:()=>this.undoTask(),
+      noteTabs,noteLines,noteText:note.text,noteName:note.name,noteEmpty:!note.text,editing:s.editing,notEditing:!s.editing,wordCount:words+' words',
+      startEdit:()=>this.setState({editing:true}),stopEdit:()=>this.setState({editing:false}),
+      onNote:e=>{const v=e.target.value;this.setNotes(n=>Object.assign({},n,{text:v}));},
+      savedOpacity:s.savedOn?1:0,
+      addNote:()=>{const id='n'+(++this.uid);this.setState(st=>({notes:st.notes.concat([{id,name:'Untitled',text:''}]),activeNote:id,renaming:id,editing:false}));},
+      endRename:()=>this.setState({renaming:null}),
+      noteMenu:s.noteMenu,toggleNoteMenu:()=>this.setState(st=>({noteMenu:!st.noteMenu})),
+      menuRename:()=>this.setState({renaming:note.id,noteMenu:false}),cantDeleteNote:s.notes.length<2,
+      menuDelete:()=>{if(s.notes.length<2)return;this.setState(st=>{const rest=st.notes.filter(n=>n.id!==note.id);return {notes:rest,activeNote:rest[0].id,noteMenu:false};});},
+      focus:s.focus,openFocus:()=>this.setState({focus:true,noteMenu:false}),closeFocus:()=>this.setState({focus:false}),
+      activePkgs:active,deliveredPkgs:s.deliveredOpen?deliv:[],hasDelivered:deliv.length>0,deliveredCount:String(deliv.length),deliveredChev:s.deliveredOpen?'ph-caret-up':'ph-caret-down',
+      toggleDelivered:()=>this.setState(st=>({deliveredOpen:!st.deliveredOpen})),noPkgs:!s.pkgs.length,
+      openAdd:()=>this.setState({addOpen:true,drawer:null,settings:false,add:{num:'',label:'',carrier:''}}),
+      anyDrawer:!!(dpk||s.addOpen||s.settings),drawerTitle,closeDrawers:()=>this.setState({drawer:null,addOpen:false,settings:false}),
+      hasDrawerPkg:!!dpk&&!s.addOpen&&!s.settings,dp,
+      addOpen:s.addOpen&&!s.settings,addNum:s.add.num,addLabel:s.add.label,addCarrierSel:s.add.carrier,carriers:CARRIERS,
+      autoOption:det?'Auto-detected: '+det:'Auto-detect',
+      detectLine:!s.add.num.trim()?'Carrier is detected from the number format.':s.add.carrier?'Using '+s.add.carrier+' (manual override).':det?'Looks like a '+det+' number.':'Couldn’t recognise this format. Pick a carrier.',
+      detectColor:s.add.num.trim()&&!carrierFinal?'var(--wn)':'var(--t3)',
+      onAddNum:e=>{const v=e.target.value;this.setState(st=>({add:Object.assign({},st.add,{num:v})}));},
+      onAddLabel:e=>{const v=e.target.value;this.setState(st=>({add:Object.assign({},st.add,{label:v})}));},
+      onAddCarrier:e=>{const v=e.target.value;this.setState(st=>({add:Object.assign({},st.add,{carrier:v})}));},
+      addDisabled:!(s.add.num.trim()&&carrierFinal),addBtnOpacity:s.add.num.trim()&&carrierFinal?1:0.45,
+      submitAdd:()=>this.submitAdd(carrierFinal),onAddKey:e=>{if(e.key==='Enter')this.submitAdd(carrierFinal);},
+      settings:s.settings,
+      syncRows:['Calendar','Tasks','Gmail'].map(n=>{const on=s.sync[n];return {name:n==='Gmail'?'Gmail (package detection)':'Google '+n,icon:n==='Calendar'?'ph-calendar-blank':n==='Tasks'?'ph-check-square':'ph-envelope-simple',
+        last:!on?'Off':n==='Calendar'&&s.calError?'Failing · last synced 12:31':n==='Calendar'?'Last synced 14:30':n==='Tasks'?'Last synced 14:32':'Last checked 14:26',
+        color:on&&n==='Calendar'&&s.calError?'var(--wn)':'var(--t3)',track:on?'var(--ac)':'var(--ln)',knob:on?16:2,toggle:()=>this.setState(st=>({sync:Object.assign({},st.sync,{[n]:!st.sync[n]})}))};}),
+      calRows:Object.keys(CAL).map(c=>({name:c,on:calOn(c),dot:CAL[c],fill:calOn(c)?CAL[c]:'transparent',toggle:()=>this.setState(st=>({cals:Object.assign({},st.cals,{[c]:!calOn(c)})}))})),
+      themeOpts:['system','light','dark'].map(t=>({name:t[0].toUpperCase()+t.slice(1),bg:tm===t?'var(--rz)':'transparent',shadow:tm===t?'0 1px 2px rgba(0,0,0,0.12)':'none',color:tm===t?'var(--tx)':'var(--t2)',weight:tm===t?600:400,pick:()=>this.setState({themeO:t})})),
+      accentOpts:Object.keys(ACCENTS).map(k=>({name:ACCENTS[k].name,swatch:ACCENTS[k][dark?'dark':'light'].ac,ring:ak===k?'0 0 0 2px var(--rz), 0 0 0 3.5px var(--tx)':'none',color:ak===k?'var(--tx)':'var(--t2)',pick:()=>this.setState({accentO:k})})),
+      exportJson:()=>{const blob=new Blob([JSON.stringify({version:1,exported:new Date().toISOString(),bookmarks:s.bm,notes:s.notes},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='launchpad-backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);},
+      importJson:e=>{const f=e.target.files&&e.target.files[0];if(!f)return;f.text().then(t=>{const d=JSON.parse(t);this.setState(st=>({bm:d.bookmarks||st.bm,notes:d.notes||st.notes,activeNote:(d.notes&&d.notes[0]&&d.notes[0].id)||st.activeNote,importMsg:'Imported '+(d.bookmarks?d.bookmarks.length+' groups':'')+(d.notes?', '+d.notes.length+' notepads':'')+'.'}));}).catch(()=>this.setState({importMsg:'That file isn’t a Launchpad backup.'}));},
+      importMsg:s.importMsg,
+      edit:s.edit,notEdit:!s.edit,bmGroups,bmZ:s.edit?5:1,
+      toggleEdit:()=>this.setState(st=>({edit:!st.edit,editTile:null,draft:null})),
+      editLabel:s.edit?'Done':'Edit',editIcon:s.edit?'ph-check':'ph-pencil-simple',editBtnBg:s.edit?'var(--ac)':'transparent',editBtnColor:s.edit?'var(--on)':'var(--t2)',
+      addGroup:()=>this.setState(st=>({bm:st.bm.concat([{id:'g'+(++this.uid),name:'New group',items:[]}])})),
+      allowDrop:e=>{e.preventDefault();},dragEnd:()=>{this.drag=null;this.setState({dragId:null,dropG:null});},
+      draftName:s.draft?s.draft.name:'',draftUrl:s.draft?s.draft.url:'',
+      onDraftName:e=>{const v=e.target.value;this.setState(st=>({draft:Object.assign({},st.draft,{name:v})}));},
+      onDraftUrl:e=>{const v=e.target.value;this.setState(st=>({draft:Object.assign({},st.draft,{url:v})}));},
+      onDraftKey:e=>{if(e.key==='Enter')this.saveTile();if(e.key==='Escape')this.setState({editTile:null,draft:null});},
+      saveTile:e=>{e&&e.stopPropagation();this.saveTile();},cancelTile:e=>{e&&e.stopPropagation();this.setState({editTile:null,draft:null});}
+    });
+  }
+  saveTile(){const s=this.state;if(!s.editTile||!s.draft)return;const d=s.draft;this.mutTile(s.editTile,b=>Object.assign({},b,{name:d.name.trim()||b.name,url:d.url.trim()||b.url}));this.setState({editTile:null,draft:null});}
+  submitAdd(carrier){const a=this.state.add;if(!a.num.trim()||!carrier)return;const id='p'+(++this.uid);
+    this.setState(st=>({pkgs:[{id,label:a.label.trim()||carrier+' parcel',carrier,num:a.num.trim().toUpperCase(),stage:0,status:'Info received · waiting for first scan',src:'manual',timeline:[['27 Oct '+hm(this.nowMin()),carrier,'Tracking added to Launchpad']]}].concat(st.pkgs),addOpen:false,drawer:null}));}
+}
+</script>
+</body>
+</html>
