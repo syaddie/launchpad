@@ -1,60 +1,58 @@
 # Launchpad
 
-A self-hosted personal dashboard for my browser's new-tab page. It shows:
+A self-hosted new-tab dashboard. It shows:
 
-- **Today**: Google Calendar agenda (auto-synced, read-only)
-- **Tasks**: Google Tasks (two-way: complete and add from the dashboard)
-- **Notes**: multiple notepads, edited in place
-- **Packages**: tracking for SingPost and other carriers, added by hand or detected automatically from shipping emails in Gmail
-- **Bookmarks**: grouped launcher tiles, edited in place
+- **Today**: Google Calendar agenda (read-only, synced every 5 min), with a Join button for the next Meet/Zoom call
+- **Tasks**: Google Tasks, two-way. Add with natural dates ("call bank fri"), tick off with a 5-second undo
+- **Notes**: multiple notepads with light Markdown (checklists, bullets, bold), autosaved
+- **Packages**: tracking numbers added by hand or picked up automatically from shipping emails in Gmail. SingPost status is fetched directly; other carriers through 17TRACK (optional)
+- **Bookmarks**: grouped launcher tiles, edited in place (drag to reorder, rename, add groups). `/` searches, `1`–`9` open the Daily bookmarks
 
-**Status:** design phase. The visual design is being worked out in Claude Design using [`design/claude-design-prompt.md`](design/claude-design-prompt.md).
+Bookmarks, notes, packages and settings are edited in the page and stored on the server. Changing them never needs a code change or a rebuild.
 
-## Goals
+**Setting it up on the server:** see [`docs/setup.md`](docs/setup.md).
 
-1. **Content is data, not code.** Bookmarks, notes, task lists and packages are edited in the UI and stored in a database on a mounted volume. Changing them never means touching the repo or rebuilding the container.
-2. **Everything else syncs by itself.** A background worker pulls Calendar, Tasks and Gmail on a schedule and refreshes package tracking.
-3. **Deploys without manual rebuilds.** Pushing to `main` builds the image in GitHub Actions and publishes it to GHCR, and the host pulls the new image automatically. No `git pull && docker build` on the server.
-4. **Private.** It's only reachable through Cloudflare, behind Cloudflare Access.
-
-## Planned architecture
+## How it fits together
 
 ```
- Browser (new tab)
-      │  https://launchpad.<my-domain>
-      ▼
- Cloudflare  ── Access (only my login gets through)
-      │  Cloudflare Tunnel
-      ▼
- Home server: Docker
- ┌─────────────────────────────────────────────┐
- │ launchpad container                         │
- │  • web UI (static SPA)                      │
- │  • API: bookmarks / notes / packages / tasks│
- │  • sync worker (cron-style jobs)            │
- │      - Google Calendar   every ~5 min       │
- │      - Google Tasks      every ~2 min       │
- │      - Gmail shipping    every ~15 min      │
- │      - Carrier tracking  every ~30–60 min   │
- │  • SQLite at /data/launchpad.db  ◄── volume │
- └─────────────────────────────────────────────┘
- cloudflared container (tunnel)
- watchtower (auto-pulls new images from GHCR)
+ Browser (new tab) → https://launchpad.<domain>
+      │
+ Cloudflare Access (only your login) → Cloudflare Tunnel
+      │
+ Home server, Docker
+ ┌───────────────────────────────────────────────────┐
+ │ launchpad container  (port 8090 → 8080)           │
+ │   • web app (React, built with Vite)              │
+ │   • API + sync worker (Node, Hono)                │
+ │       Google Calendar   every 5 min               │
+ │       Google Tasks      every 2 min + on tab focus│
+ │       Gmail shipping    every 10 min              │
+ │       Carrier status    every 20 min              │
+ │   • SQLite at /data/launchpad.db  ◄── volume      │
+ └───────────────────────────────────────────────────┘
 ```
 
-- **Google:** a single OAuth sign-in with scopes for Calendar (read-only), Tasks (read/write) and Gmail (read-only). The refresh token is stored on the data volume.
-- **Packages:** carrier is detected from the tracking-number format. Status comes from each carrier's public tracking (starting with SingPost), with a tracking-aggregator API as a possible fallback. Gmail detection searches shipping and order emails for tracking numbers and offers them as "Keep / Dismiss".
-- **Backups:** the whole state lives in one SQLite file, plus JSON export/import from Settings.
+- **Deploys:** pushing to `main` builds `ghcr.io/syaddie/launchpad:latest` in GitHub Actions. A cron job on the server runs `deploy/update.sh`, which pulls the new image and restarts the container only if it changed.
+- **Instant paint:** the page renders from a localStorage copy first, then refreshes from the server, so a new tab never waits on the network.
+- **Gmail detection:** scans recent shipping and order emails for tracking-number formats (SingPost, Ninja Van, J&T, UPS, Qxpress, plus DHL/FedEx numbers next to the word "tracking"). New finds appear with a "Keep / Dismiss" prompt.
+- **Delivered** packages move to a collapsed section and archive after 3 days.
 
-Stack choices (framework, language) will be decided after the design is settled.
+## Project layout
 
-## Roadmap
+| Path | What's there |
+|---|---|
+| `web/src/` | The dashboard (React). `components/` has one file per panel plus the drawers |
+| `server/src/` | API (`index.ts`), Google calls (`google.ts`), carrier tracking (`tracking.ts`), background sync (`sync.ts`), storage (`store.ts`) |
+| `shared/` | Types, carrier detection and date helpers used by both sides |
+| `test/` | Unit tests for date parsing, carrier detection, Gmail extraction and tracking status |
+| `design_handoff_launchpad/` | The Claude Design handoff this was built from |
+| `deploy/update.sh` | Auto-update script for cron |
 
-- [ ] Finalise the visual design in Claude Design
-- [ ] Scaffold the app, Dockerfile and docker-compose (app + cloudflared + watchtower)
-- [ ] Bookmarks + notes (local data, editable)
-- [ ] Google OAuth → Calendar + Tasks
-- [ ] Packages: manual add + SingPost tracking
-- [ ] Packages: Gmail auto-detection + more carriers
-- [ ] GitHub Actions → GHCR image, auto-update on host
-- [ ] Cloudflare Tunnel + Access setup guide
+## Development
+
+```bash
+npm install
+npm run dev      # web on http://localhost:5173, API on :8787
+npm test
+npm run build    # typecheck + production bundles in dist/
+```

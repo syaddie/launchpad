@@ -1,0 +1,18 @@
+services:
+  launchpad:
+    # Built by GitHub Actions on every push to main. deploy/update.sh pulls new
+    # versions automatically; `docker compose up -d --build` builds locally instead.
+    image: ghcr.io/syaddie/launchpad:latest
+    build: .
+    container_name: launchpad
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      # Point the Cloudflare Tunnel's public hostname at http://<server-lan-ip>:8090
+      - "8090:8080"
+    volumes:
+      # Bookmarks, notes, packages and the Google sign-in all live here.
+      - launchpad-data:/data
+
+volumes:
+  launchpad-data:
