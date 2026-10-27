@@ -1,17 +1,24 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
-import type { AppState, BookmarkGroup, Note, Package, Photo, Prefs, Task } from '../../shared/types';
+import { ymd } from '../../shared/dates';
+import { MOOD_WORDS, engineUrl, fmtDuration, parseSearch, smokesOn } from '../../shared/trackers';
+import type { AppState, BookmarkGroup, Countdown, Mood, Note, Package, Photo, Prefs, Task, ViewKey } from '../../shared/types';
 import { api, cachedState, cacheState, localGet, localSet } from './api';
 import { Bookmarks } from './components/Bookmarks';
-import { AddPackageDrawer, Drawer, PackageDrawer, SettingsDrawer } from './components/Drawers';
+import { AddPackageDrawer, Drawer, PANEL_ROWS, PackageDrawer, SettingsDrawer } from './components/Drawers';
 import { News } from './components/News';
 import { FocusView, Notes } from './components/Notes';
 import { Packages } from './components/Packages';
+import { Palette, type PaletteItem } from './components/Palette';
 import { PhotoPanel, shrinkImage, usePhotoSlots } from './components/Photos';
+import { Rail, VIEWS } from './components/Rail';
+import { Server } from './components/Server';
 import { Tasks } from './components/Tasks';
 import { Today, todayAgenda } from './components/Today';
 import { TopBar } from './components/TopBar';
-import { dayDiff, hm, inMinutes, parseYmd } from './util';
+import { You, nearestCountdown } from './components/You';
+import { gridLayout, type Area, type Layout } from './layout';
+import { dayDiff, hm, host, inMinutes, parseYmd } from './util';
 
 const EMPTY: AppState = {
   bookmarks: STARTER_BOOKMARKS,
@@ -30,12 +37,16 @@ const EMPTY: AppState = {
     carriers: { lastSuccess: null, lastAttempt: null, lastError: null },
     news: { lastSuccess: null, lastAttempt: null, lastError: null },
     weather: { lastSuccess: null, lastAttempt: null, lastError: null },
+    speedtest: { lastSuccess: null, lastAttempt: null, lastError: null },
   },
   tracking: { allCarriers: false },
   news: [],
   newsSummaries: false,
   weather: { areas: [], now: null },
   photos: [],
+  countdowns: [],
+  smokes: [],
+  moods: {},
 };
 
 /** A cached copy from an older version can be missing newer fields. */
@@ -44,8 +55,6 @@ function fromCache(c: AppState | null): AppState {
   return { ...EMPTY, ...c, prefs: { ...DEFAULT_PREFS, ...c.prefs }, sync: { ...EMPTY.sync, ...c.sync } };
 }
 
-type Layout = 'narrow' | 'desktop' | 'wide';
-type View = 'home' | 'news';
 type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings' } | null;
 
 /** Debounced saver for whole-document PUTs, flushed when the tab closes. */
@@ -114,7 +123,9 @@ function useSystemDark(): boolean {
 
 export function App() {
   const [data, setData] = useState<AppState>(() => fromCache(cachedState()));
-  const [view, setView] = useState<View>('home');
+  const [view, setView] = useState<ViewKey>('home');
+  const [palette, setPalette] = useState(false);
+  const [addCountdown, setAddCountdown] = useState(0);
   const [newsBusy, setNewsBusy] = useState(false);
   const [layout, setLayout] = useState<Layout>('desktop');
   const [search, setSearch] = useState('');
@@ -123,7 +134,7 @@ export function App() {
   const [editBookmarks, setEditBookmarks] = useState(false);
   const [activeNote, setActiveNote] = useState(() => localGet('activeNote') || '');
   const [saved, setSaved] = useState(false);
-  const [toast, setToast] = useState('');
+  const [toast, setToast] = useState<{ msg: string; action?: { label: string; run: () => void } } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const noteEditing = useRef(false);
@@ -133,10 +144,10 @@ export function App() {
   const photoSlots = usePhotoSlots(data.photos.length);
   const systemDark = useSystemDark();
 
-  const showToast = useCallback((msg: string) => {
-    setToast(msg);
+  const showToast = useCallback((msg: string, action?: { label: string; run: () => void }) => {
+    setToast({ msg, action });
     clearTimeout(toastT.current);
-    toastT.current = window.setTimeout(() => setToast(''), 4000);
+    toastT.current = window.setTimeout(() => setToast(null), action ? 6000 : 4000);
   }, []);
   const onSaveError = useCallback((e: Error) => showToast(`Couldn’t save: ${e.message}`), [showToast]);
 
@@ -213,38 +224,6 @@ export function App() {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-
-  // ---------- keyboard ----------
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (drawer) setDrawer(null);
-        else if (focus) setFocus(false);
-        else if (view === 'news') setView('home');
-        return;
-      }
-      const t = e.target as HTMLElement;
-      const typing = /INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable;
-      if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === '/') {
-        e.preventDefault();
-        searchRef.current?.focus();
-        return;
-      }
-      if (e.key === 'n' && !drawer && !focus) {
-        setView((v) => (v === 'news' ? 'home' : 'news'));
-        return;
-      }
-      if (/^[1-9]$/.test(e.key) && !search && !drawer && !focus && !editBookmarks) {
-        const daily = data.bookmarks.find((g) => g.name === 'Daily');
-        const b = daily?.items[Number(e.key) - 1];
-        if (b) window.open(b.url, '_blank', 'noopener');
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [drawer, focus, search, editBookmarks, data.bookmarks, view]);
 
   // Pick up anything the hourly news run fetched since the last poll.
   useEffect(() => {
@@ -373,6 +352,62 @@ export function App() {
     api.putPhotos(photos).catch(onSaveError);
   };
 
+  // ---------- trackers ----------
+
+  const smokeSaver = useRef(Promise.resolve());
+  /** Server calls for the cigarette log run in order, and the server's list replaces the optimistic one. */
+  const smokeCall = (call: () => Promise<string[]>) => {
+    smokeSaver.current = smokeSaver.current
+      .then(call)
+      .then((smokes) => update((d) => ({ ...d, smokes })))
+      .catch((e) => {
+        showToast(`Couldn’t save: ${e.message}`);
+        refresh();
+      });
+  };
+
+  const undoSmoke = (at: string) => {
+    update((d) => ({ ...d, smokes: d.smokes.filter((x) => x !== at) }));
+    smokeCall(() => api.removeSmoke(at));
+  };
+
+  const logSmoke = () => {
+    const at = new Date().toISOString();
+    const count = smokesOn([...data.smokes, at], new Date()).length;
+    update((d) => ({ ...d, smokes: [...d.smokes, at] }));
+    smokeCall(() => api.addSmoke());
+    const limit = data.prefs.cigaretteLimit;
+    showToast(`Logged · ${count} today${limit ? ` of ${limit}` : ''}`, { label: 'Undo', run: () => undoSmoke(at) });
+  };
+
+  const setMood = (date: string, mood: Mood | null) => {
+    update((d) => {
+      const moods = { ...d.moods };
+      if (mood) moods[date] = mood;
+      else delete moods[date];
+      return { ...d, moods };
+    });
+    api
+      .putMood(date, mood ?? { level: 0 })
+      .then((moods) => update((d) => ({ ...d, moods })))
+      .catch(onSaveError);
+  };
+
+  const setCountdowns = (countdowns: Countdown[]) => {
+    update((d) => ({ ...d, countdowns }));
+    api.putCountdowns(countdowns).catch(onSaveError);
+  };
+
+  const toggleHidden = (key: string) => {
+    const hidden = data.prefs.hidden.includes(key) ? data.prefs.hidden.filter((h) => h !== key) : [...data.prefs.hidden, key];
+    setPrefs({ ...data.prefs, hidden });
+  };
+
+  const runSpeedTest = () => {
+    setView('server');
+    api.speedTest().catch((e) => showToast(`Couldn’t start a speed test: ${e.message}`));
+  };
+
   const importBackup = (bookmarks?: BookmarkGroup[], notes?: Note[]) => {
     if (bookmarks) setBookmarks(bookmarks);
     if (notes) {
@@ -380,6 +415,72 @@ export function App() {
       pickNote(notes[0].id);
     }
   };
+
+  // ---------- keyboard ----------
+
+  const gAt = useRef(0);
+  const keyActions = useRef({ logSmoke });
+  keyActions.current = { logSmoke };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // ⌘K / Ctrl K works everywhere, even while typing.
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPalette((v) => !v);
+        return;
+      }
+      if (e.key === 'Escape') {
+        if (palette) setPalette(false);
+        else if (drawer) setDrawer(null);
+        else if (focus) setFocus(false);
+        else if (view !== 'home') setView('home');
+        return;
+      }
+      const t = e.target as HTMLElement;
+      const typing = /INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable;
+      if (typing || e.metaKey || e.ctrlKey || e.altKey || palette) return;
+      const key = e.key.toLowerCase();
+      // G then a letter jumps to a view.
+      if (Date.now() - gAt.current < 1500) {
+        gAt.current = 0;
+        const v = VIEWS.find((x) => x.letter.toLowerCase() === key);
+        if (v && !drawer && !focus) {
+          setView(v.key);
+          return;
+        }
+      }
+      if (key === 'g' && !e.shiftKey) {
+        gAt.current = Date.now();
+        return;
+      }
+      if (e.key === '/') {
+        e.preventDefault();
+        searchRef.current?.focus();
+        return;
+      }
+      if (drawer || focus) return;
+      if (key === 'n') {
+        setView((v) => (v === 'news' ? 'home' : 'news'));
+        return;
+      }
+      if (key === 'c' && !e.shiftKey) {
+        keyActions.current.logSmoke();
+        return;
+      }
+      if (key === 'm' && !e.shiftKey) {
+        setView('you');
+        return;
+      }
+      if (/^[1-9]$/.test(e.key) && !search && !editBookmarks && view === 'home') {
+        const daily = data.bookmarks.find((g) => g.name === 'Daily');
+        const b = daily?.items[Number(e.key) - 1];
+        if (b) window.open(b.url, '_blank', 'noopener');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [drawer, focus, search, editBookmarks, data.bookmarks, view, palette]);
 
   // ---------- derived ----------
 
@@ -397,32 +498,114 @@ export function App() {
   }
   const outPk = data.packages.filter((p) => p.stage === 2 && !p.exception).length;
   if (outPk) subline += ` · ${outPk} package${outPk > 1 ? 's' : ''} out for delivery`;
+  const soon = data.prefs.hidden.includes('top:countdown') ? '' : nearestCountdown(data.countdowns, now);
+  if (soon) subline += ` · ${soon}`;
   subline = subline.replace(/^ · /, '');
 
   const notes = data.notes.length ? data.notes : STARTER_NOTES;
   const activeId = notes.some((n) => n.id === activeNote) ? activeNote : notes[0].id;
   const drawerPkg = drawer?.type === 'pkg' ? data.packages.find((p) => p.id === drawer.id) : undefined;
-  const photoCount = Math.min(data.photos.length, 2);
+  const hidden = new Set(data.prefs.hidden);
+  const photoCount = hidden.has('panel:photos') ? 0 : Math.min(data.photos.length, 2);
+  const shown = new Set<Area>(
+    (
+      [
+        ['today', 'panel:today'],
+        ['tasks', 'panel:tasks'],
+        ['notes', 'panel:notes'],
+        ['pkgs', 'panel:packages'],
+        ['bm', 'panel:bookmarks'],
+      ] as const
+    )
+      .filter(([, k]) => !hidden.has(k))
+      .map(([a]) => a),
+  );
+  if (photoCount > 0) shown.add('photo');
+  if (photoCount > 1) shown.add('photo2');
+  const grid = gridLayout(layout, shown);
+  const smokesToday = smokesOn(data.smokes, now).length;
+  const todayMood = data.moods[ymd(now)];
+
+  // ---------- command palette ----------
+
+  const paletteItems: PaletteItem[] = [
+    {
+      id: 'a:smoke', group: 'Actions', label: 'Log a cigarette', icon: 'ph-cigarette', keys: ['C'], words: 'smoke',
+      sub: `${smokesToday} today${data.smokes.length ? ` · last one ${fmtDuration(now.getTime() - Date.parse(data.smokes[data.smokes.length - 1]))} ago` : ''}`,
+      run: logSmoke,
+    },
+    { id: 'a:mood', group: 'Actions', label: 'Log today’s mood', icon: 'ph-smiley', keys: ['M'], sub: todayMood ? `Today: ${MOOD_WORDS[todayMood.level - 1]}` : 'Not logged yet today', run: () => setView('you') },
+    {
+      id: 'a:countdown', group: 'Actions', label: 'Add a countdown', icon: 'ph-hourglass-medium',
+      run: () => {
+        setView('you');
+        setAddCountdown((n) => n + 1);
+      },
+    },
+    { id: 'a:speed', group: 'Actions', label: 'Run a speed test', icon: 'ph-gauge', words: 'internet', run: runSpeedTest },
+    { id: 'a:package', group: 'Actions', label: 'Add a package', icon: 'ph-package', words: 'tracking', run: () => setDrawer({ type: 'add' }) },
+    { id: 'a:news', group: 'Actions', label: 'Refresh the news', icon: 'ph-arrows-clockwise', run: () => (setView('news'), refreshNews()) },
+    { id: 'a:theme', group: 'Actions', label: dark ? 'Switch to the light theme' : 'Switch to the dark theme', icon: dark ? 'ph-sun' : 'ph-moon', run: () => setPrefs({ ...data.prefs, theme: dark ? 'light' : 'dark' }) },
+    { id: 'a:settings', group: 'Actions', label: 'Open Settings', icon: 'ph-gear-six', words: 'preferences', run: () => setDrawer({ type: 'settings' }) },
+    ...VIEWS.filter((v) => v.key !== view).map((v) => ({
+      id: 'v:' + v.key, group: 'Go to', label: v.name, icon: v.icon, keys: ['G', v.letter], words: 'view', run: () => setView(v.key),
+    })),
+    ...PANEL_ROWS.flatMap((sec) =>
+      sec.rows.map((r) => ({
+        id: 'p:' + r.key,
+        group: 'Panels',
+        label: `${hidden.has(r.key) ? 'Show' : 'Hide'} ${sec.section === 'Views' ? `the ${r.name} view` : r.name}`,
+        sub: sec.section,
+        icon: hidden.has(r.key) ? 'ph-eye' : 'ph-eye-slash',
+        words: 'panel toggle',
+        onlyWhenTyping: true,
+        run: () => toggleHidden(r.key),
+      })),
+    ),
+    ...data.bookmarks.flatMap((g) =>
+      g.items.map((b, i) => ({
+        id: 'b:' + b.id,
+        group: 'Bookmarks',
+        label: b.name,
+        sub: `${g.name} · ${host(b.url)}`,
+        icon: (b.name || '?')[0].toUpperCase(),
+        keys: g.name === 'Daily' && i < 9 ? [String(i + 1)] : undefined,
+        words: b.url,
+        onlyWhenTyping: true,
+        run: () => window.open(b.url, '_blank', 'noopener'),
+      })),
+    ),
+  ];
+
+  const paletteSearches = (q: string): PaletteItem[] => {
+    const engines = data.prefs.searchEngines;
+    const { engine, term } = parseSearch(q, engines);
+    return (engine ? [engine] : engines).map((e) => ({
+      id: 's:' + e.prefix,
+      group: 'Search the web',
+      label: `Search ${e.name} for “${term}”`,
+      icon: e.name[0].toUpperCase(),
+      keys: [e.prefix],
+      run: () => window.open(engineUrl(e, term), '_blank', 'noopener'),
+    }));
+  };
   const drawerTitle = drawer?.type === 'settings' ? 'Settings' : drawer?.type === 'add' ? 'Add package' : drawerPkg ? 'Package' : '';
 
   return (
-    <div ref={rootRef} className="lp-root" data-layout={layout} data-photos={photoCount || undefined}>
+    <div ref={rootRef} className="lp-root" data-layout={layout}>
+      <div className="lp-shell">
+      <Rail view={view} hidden={data.prefs.hidden} onView={setView} onPalette={() => setPalette(true)} onSettings={() => setDrawer({ type: 'settings' })} />
       <div className="lp-inner">
-        <TopBar
-          data={data}
-          now={now}
-          subline={subline}
-          search={search}
-          onSearch={setSearch}
-          searchRef={searchRef}
-          onOpenSettings={() => setDrawer({ type: 'settings' })}
-          newsOpen={view === 'news'}
-          onToggleNews={() => setView(view === 'news' ? 'home' : 'news')}
-        />
+        <TopBar data={data} now={now} subline={subline} search={search} onSearch={setSearch} searchRef={searchRef} smokesToday={smokesToday} onLogSmoke={logSmoke} />
         {view === 'news' ? (
           <News data={data} now={now} busy={newsBusy} onRefresh={refreshNews} onTopics={setNewsTopics} />
+        ) : view === 'you' ? (
+          <You data={data} now={now} addSignal={addCountdown} onCountdowns={setCountdowns} onLogSmoke={logSmoke} onUndoSmoke={undoSmoke} onMood={setMood} />
+        ) : view === 'server' ? (
+          <Server data={data} now={now} onOpenSettings={() => setDrawer({ type: 'settings' })} />
         ) : (
-          <main className="lp-grid">
+          <main className="lp-grid" style={{ gridTemplateAreas: grid.areas, gridTemplateColumns: grid.columns, gridTemplateRows: grid.rows }}>
+            {shown.has('today') && (
             <Today
               data={data}
               now={now}
@@ -431,9 +614,11 @@ export function App() {
               onConnect={connect}
               onRetry={() => api.sync('calendar').then(merge).catch(() => refresh())}
             />
-            <Tasks data={data} now={now} onConnect={connect} onAdd={addTask} onComplete={completeTask} />
+            )}
+            {shown.has('tasks') && <Tasks data={data} now={now} onConnect={connect} onAdd={addTask} onComplete={completeTask} />}
             {photoCount > 0 && <PhotoPanel photos={data.photos} area="photo" index={photoSlots.shown[0]} onStep={(d) => photoSlots.step(0, d)} />}
             {photoCount > 1 && <PhotoPanel photos={data.photos} area="photo2" index={photoSlots.shown[1]} onStep={(d) => photoSlots.step(1, d)} />}
+            {shown.has('notes') && (
             <Notes
               notes={notes}
               activeId={activeId}
@@ -443,6 +628,8 @@ export function App() {
               onOpenFocus={() => setFocus(true)}
               onEditing={onNoteEditing}
             />
+            )}
+            {shown.has('pkgs') && (
             <Packages
               packages={data.packages}
               now={now}
@@ -454,9 +641,21 @@ export function App() {
               }}
               onDismiss={archivePackage}
             />
-            <Bookmarks groups={data.bookmarks} onChange={setBookmarks} search={search} edit={editBookmarks} setEdit={setEditBookmarks} />
+            )}
+            {shown.has('bm') && <Bookmarks groups={data.bookmarks} onChange={setBookmarks} search={search} edit={editBookmarks} setEdit={setEditBookmarks} />}
+            {!shown.size && (
+              <div className="panel" style={{ gridColumn: '1 / -1' }}>
+                <div className="empty">
+                  <p>Every home panel is switched off.</p>
+                  <button className="btn btn-secondary" onClick={() => setDrawer({ type: 'settings' })}>
+                    Open Settings
+                  </button>
+                </div>
+              </div>
+            )}
           </main>
         )}
+      </div>
       </div>
 
       {drawer && drawerTitle && (
@@ -482,9 +681,23 @@ export function App() {
 
       {focus && <FocusView notes={notes} activeId={activeId} onActive={pickNote} onChange={setNotes} saved={saved} onClose={() => setFocus(false)} />}
 
+      {palette && <Palette items={paletteItems} searches={paletteSearches} onClose={() => setPalette(false)} />}
+
       {toast && (
         <div className="popover toast" role="status">
-          {toast}
+          {toast.msg}
+          {toast.action && (
+            <button
+              className="btn-link"
+              style={{ marginLeft: 12, color: 'var(--tx)', fontWeight: 600 }}
+              onClick={() => {
+                toast.action!.run();
+                setToast(null);
+              }}
+            >
+              {toast.action.label}
+            </button>
+          )}
         </div>
       )}
     </div>

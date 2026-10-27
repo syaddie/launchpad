@@ -21,7 +21,15 @@ export interface Note {
 export type ThemeMode = 'system' | 'light' | 'dark';
 export type AccentKey = 'sage' | 'slate' | 'terracotta';
 export type GoogleSource = 'calendar' | 'tasks' | 'gmail';
-export type SourceKey = GoogleSource | 'carriers' | 'news' | 'weather';
+export type SourceKey = GoogleSource | 'carriers' | 'news' | 'weather' | 'speedtest';
+export type ViewKey = 'home' | 'news' | 'you' | 'server';
+
+/** One place to search: "yt lofi" opens url with %s replaced by "lofi". The first engine is the default. */
+export interface SearchEngine {
+  prefix: string;
+  name: string;
+  url: string;
+}
 
 export interface Prefs {
   /** Name used in the greeting. */
@@ -36,6 +44,16 @@ export interface Prefs {
   newsTopics: string[];
   /** 2-hour forecast area for the weather beside the clock (e.g. "Bishan"); empty hides it. */
   weatherArea: string;
+  /** Things switched off in Settings › Panels, e.g. "panel:notes", "top:cig", "view:server" (see HIDEABLE). */
+  hidden: string[];
+  /** Where the search box and ⌘K search the web. */
+  searchEngines: SearchEngine[];
+  /** Cigarettes a day to stay under; 0 means no limit. */
+  cigaretteLimit: number;
+  /** Hours between automatic internet speed tests; 0 turns them off. */
+  speedTestHours: number;
+  /** The internet plan's download speed, drawn on the speed chart; 0 hides the line. */
+  speedPlanMbps: number;
 }
 
 export interface CalendarInfo {
@@ -140,6 +158,98 @@ export interface Weather {
   station: string | null;
   observedAt: string | null;
   issuedAt: string;
+  /** Optional extras; each is null when its feed failed (and missing in older cached copies). */
+  air?: AirQuality | null;
+  uv?: UvIndex | null;
+  rain?: Rain | null;
+  outlook?: OutlookDay[];
+}
+
+export interface AirQuality {
+  /** PSI region nearest the area: north, south, east, west or central. */
+  region: string;
+  /** 24-hour PSI. */
+  psi: number;
+  /** 24-hour PM2.5 in µg/m³. */
+  pm25: number;
+  at: string;
+}
+
+export interface UvIndex {
+  value: number;
+  at: string;
+  /** Today's highest hourly reading so far. */
+  peak: number;
+  peakAt: string;
+}
+
+export interface Rain {
+  station: string;
+  /** 5-minute totals for the last hour, oldest first. */
+  steps: { at: string; mm: number }[];
+  mmLastHour: number;
+  /** The latest 5-minute reading had rain. */
+  raining: boolean;
+}
+
+export interface OutlookDay {
+  /** YYYY-MM-DD. */
+  date: string;
+  forecast: string;
+  low: number;
+  high: number;
+}
+
+export interface Countdown {
+  id: string;
+  title: string;
+  /** YYYY-MM-DD. For yearly ones, the month and day repeat. */
+  date: string;
+  yearly: boolean;
+  /** ISO date-time; the progress bar runs from here to the date. */
+  createdAt: string;
+}
+
+export interface Mood {
+  /** 1 Rough · 2 Low · 3 Okay · 4 Good · 5 Great. */
+  level: number;
+  note: string;
+}
+
+export interface SpeedTest {
+  /** ISO date-time. */
+  at: string;
+  downMbps: number;
+  upMbps: number;
+  pingMs: number;
+  jitterMs: number;
+}
+
+export interface ContainerInfo {
+  name: string;
+  image: string;
+  /** running, exited, restarting… */
+  state: string;
+  /** Docker's own wording, e.g. "Up 3 days (healthy)". */
+  status: string;
+}
+
+export interface ServerStats {
+  at: string;
+  hostname: string;
+  uptimeSec: number;
+  load: [number, number, number];
+  cpu: { pct: number; cores: number; tempC: number | null };
+  mem: { usedBytes: number; totalBytes: number };
+  /** The filesystem holding the data folder. */
+  disk: { usedBytes: number; totalBytes: number } | null;
+  data: { photosBytes: number; dbBytes: number };
+  /** Bytes per second every 5 s for the last 5 min, oldest first. `host` is false when only the container's own traffic is visible. */
+  net: { iface: string; ifaces: string[]; host: boolean; samples: { at: string; rxBps: number; txBps: number }[] } | null;
+  /** null when Docker isn't connected (DOCKER_HOST). */
+  containers: ContainerInfo[] | null;
+  containersError: string | null;
+  speed: { tests: SpeedTest[]; running: boolean };
 }
 
 export interface Photo {
@@ -182,6 +292,11 @@ export interface AppState {
   weather: { areas: string[]; now: Weather | null };
   /** Shown in the photo panels, in display order. The files are at /api/photos/:id. */
   photos: Photo[];
+  countdowns: Countdown[];
+  /** When each cigarette was logged (ISO), oldest first, for the last 60 days. */
+  smokes: string[];
+  /** Keyed by YYYY-MM-DD. */
+  moods: Record<string, Mood>;
 }
 
 export interface Backup {

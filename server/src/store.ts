@@ -8,7 +8,7 @@ import { config } from './config';
 import type { StoredPhoto } from './photos';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
 import type {
-  BookmarkGroup, CalEvent, CalendarInfo, NewsTopic, Note, Package, Prefs, SourceKey, SyncStatus, Task, TaskList, Weather,
+  BookmarkGroup, CalEvent, CalendarInfo, Countdown, Mood, NewsTopic, Note, Package, Prefs, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Weather,
 } from '../../shared/types';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
@@ -96,6 +96,23 @@ export const store = {
   photos: () => get<StoredPhoto[]>('photos', []),
   setPhotos: (v: StoredPhoto[]) => set('photos', v),
 
+  countdowns: () => get<Countdown[]>('countdowns', []),
+  setCountdowns: (v: Countdown[]) => set('countdowns', v),
+
+  /** ISO times, oldest first. Two years is plenty for any chart. */
+  smokes: () => get<string[]>('smokes', []),
+  setSmokes: (v: string[]) => set('smokes', v.slice(-20_000)),
+
+  moods: () => get<Record<string, Mood>>('moods', {}),
+  setMoods: (v: Record<string, Mood>) => set('moods', v),
+
+  /** Oldest first, the last 30 days. */
+  speedTests: () => get<SpeedTest[]>('speedTests', []),
+  addSpeedTest: (t: SpeedTest) => {
+    const since = Date.now() - 30 * 86_400_000;
+    set('speedTests', [...store.speedTests().filter((x) => Date.parse(x.at) >= since), t]);
+  },
+
   /** Gmail message ids already scanned for tracking numbers. */
   gmailSeen: () => get<string[]>('gmailSeen', []),
   setGmailSeen: (v: string[]) => set('gmailSeen', v.slice(-1000)),
@@ -113,6 +130,7 @@ export const store = {
       carriers: s.carriers || EMPTY_SYNC,
       news: s.news || EMPTY_SYNC,
       weather: s.weather || EMPTY_SYNC,
+      speedtest: s.speedtest || EMPTY_SYNC,
     };
   },
   setSync: (key: SourceKey, v: SyncStatus) => set('sync', { ...store.sync(), [key]: v }),

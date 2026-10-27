@@ -107,3 +107,25 @@ export function weatherLabel(forecast: string): string {
   const s = forecast.replace(/\s*\((day|night)\)\s*$/i, '').trim().toLowerCase();
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
+
+/** NEA's PSI bands. `bad` from Unhealthy up. */
+export function psiBand(psi: number): { name: string; index: number; bad: boolean } {
+  const index = psi <= 50 ? 0 : psi <= 100 ? 1 : psi <= 200 ? 2 : psi <= 300 ? 3 : 4;
+  return { name: ['Good', 'Moderate', 'Unhealthy', 'Very unhealthy', 'Hazardous'][index], index, bad: index >= 2 };
+}
+
+export function uvBand(uv: number): { name: string; index: number } {
+  const index = uv <= 2 ? 0 : uv <= 5 ? 1 : uv <= 7 ? 2 : uv <= 10 ? 3 : 4;
+  return { name: ['Low', 'Moderate', 'High', 'Very high', 'Extreme'][index], index };
+}
+
+/** "1.2 GB", "412 MB" */
+export function fmtBytes(n: number): string {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0;
+  while (n >= 1000 && i < units.length - 1) {
+    n /= 1000;
+    i++;
+  }
+  return `${n >= 100 || i === 0 ? Math.round(n) : n.toFixed(n >= 10 ? 1 : 2)} ${units[i]}`;
+}

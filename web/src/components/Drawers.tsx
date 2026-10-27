@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import { CARRIERS, detectCarrier, trackUrl } from '../../../shared/carriers';
 import { startOfDay } from '../../../shared/dates';
-import type { AccentKey, AppState, Backup, BookmarkGroup, GoogleSource, Note, Package, Photo, Prefs, ThemeMode } from '../../../shared/types';
+import { DEFAULT_ENGINES } from '../../../shared/defaults';
+import type { AccentKey, AppState, Backup, BookmarkGroup, GoogleSource, Note, Package, Photo, Prefs, SearchEngine, ThemeMode } from '../../../shared/types';
 import { PhotoSettings } from './Photos';
 import { STEP_LABELS, ago, chipOf, fmtStamp, hm, segColor, statusText } from '../util';
 
@@ -224,6 +225,7 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
   const p = data.prefs;
   const g = data.google;
   const [name, setName] = useState(p.name);
+  const [tab, setTab] = useState<SettingsTab>('general');
 
   const sourceRows: { key: GoogleSource; name: string; icon: string }[] = [
     { key: 'calendar', name: 'Google Calendar', icon: 'ph-calendar-blank' },
@@ -265,6 +267,19 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
 
   return (
     <>
+      <div className="tabs settings-tabs" role="tablist">
+        {SETTINGS_TABS.map((t) => (
+          <button key={t.key} role="tab" aria-selected={tab === t.key} className={'tab' + (tab === t.key ? ' active' : '')} onClick={() => setTab(t.key)}>
+            {t.name}
+          </button>
+        ))}
+      </div>
+      {tab === 'panels' && <PanelSettings prefs={p} onPrefs={onPrefs} photoCount={data.photos.length} />}
+      {tab === 'search' && <SearchSettings prefs={p} onPrefs={onPrefs} />}
+      {tab === 'trackers' && <TrackerSettings prefs={p} onPrefs={onPrefs} />}
+      {tab === 'photos' && <PhotoSettings photos={data.photos} onAdd={onAddPhotos} onRemove={onRemovePhoto} onFocus={onPhotoFocus} />}
+      {tab === 'general' && (
+      <>
       <div className="drawer-section">
         <div className="drawer-label">Google account</div>
         {g.connected ? (
@@ -402,8 +417,6 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
         <div style={{ fontSize: 12, color: 'var(--t3)' }}>2-hour forecast and nearest temperature from the Meteorological Service Singapore, beside the clock.</div>
       </div>
 
-      <PhotoSettings photos={data.photos} onAdd={onAddPhotos} onRemove={onRemovePhoto} onFocus={onPhotoFocus} />
-
       <div className="drawer-section">
         <div className="drawer-label">Package tracking</div>
         <div style={{ fontSize: 13, color: 'var(--t2)' }}>
@@ -428,6 +441,189 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
           </label>
         </div>
         <div style={{ fontSize: 12, color: 'var(--t3)' }}>{importMsg}</div>
+      </div>
+      </>
+      )}
+    </>
+  );
+}
+
+type SettingsTab = 'general' | 'panels' | 'search' | 'trackers' | 'photos';
+const SETTINGS_TABS: { key: SettingsTab; name: string }[] = [
+  { key: 'general', name: 'General' },
+  { key: 'panels', name: 'Panels' },
+  { key: 'search', name: 'Search' },
+  { key: 'trackers', name: 'Trackers' },
+  { key: 'photos', name: 'Photos' },
+];
+
+function Switch({ on, label, onChange }: { on: boolean; label: string; onChange: (on: boolean) => void }) {
+  return (
+    <button role="switch" aria-checked={on} aria-label={label} className={'switch' + (on ? ' on' : '')} onClick={() => onChange(!on)}>
+      <span />
+    </button>
+  );
+}
+
+export const PANEL_ROWS: { section: string; hint?: string; rows: { key: string; name: string; meta?: string }[] }[] = [
+  {
+    section: 'Home panels',
+    rows: [
+      { key: 'panel:today', name: 'Today' },
+      { key: 'panel:tasks', name: 'Tasks' },
+      { key: 'panel:notes', name: 'Notes' },
+      { key: 'panel:packages', name: 'Packages' },
+      { key: 'panel:photos', name: 'Photos' },
+      { key: 'panel:bookmarks', name: 'Bookmarks' },
+    ],
+  },
+  {
+    section: 'Top bar',
+    rows: [
+      { key: 'top:weather', name: 'Weather', meta: 'Beside the clock; pick the area in General' },
+      { key: 'top:air', name: 'Air quality, UV and rain', meta: 'The PSI chip and the extras in the weather details' },
+      { key: 'top:cig', name: 'Cigarette button', meta: 'Today’s count; C logs one from anywhere' },
+      { key: 'top:countdown', name: 'Nearest countdown', meta: 'In the line under the greeting' },
+    ],
+  },
+  {
+    section: 'Views',
+    hint: 'In the rail on the left',
+    rows: [
+      { key: 'view:news', name: 'News' },
+      { key: 'view:you', name: 'You', meta: 'Countdowns, cigarettes, mood' },
+      { key: 'view:server', name: 'Server', meta: 'Health, internet speed, services' },
+    ],
+  },
+];
+
+function PanelSettings({ prefs, onPrefs, photoCount }: { prefs: Prefs; onPrefs: (p: Prefs) => void; photoCount: number }) {
+  const set = (key: string, on: boolean) => onPrefs({ ...prefs, hidden: on ? prefs.hidden.filter((h) => h !== key) : [...prefs.hidden, key] });
+  return (
+    <>
+      {PANEL_ROWS.map((s) => (
+        <div key={s.section} className="drawer-section" style={{ gap: 0 }}>
+          <div className="split" style={{ paddingBottom: 6 }}>
+            <span className="drawer-label">{s.section}</span>
+            {s.hint && <span className="meta">{s.hint}</span>}
+          </div>
+          {s.rows.map((r) => {
+            const on = !prefs.hidden.includes(r.key);
+            const meta = r.key === 'panel:photos' ? (photoCount ? `${photoCount} photo${photoCount > 1 ? 's' : ''}` : 'Add photos in the Photos tab') : r.meta;
+            return (
+              <div key={r.key} className="setting-row">
+                <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', opacity: on ? 1 : 0.55 }}>
+                  <span style={{ fontSize: 14 }}>{r.name}</span>
+                  {meta && <span className="meta">{meta}</span>}
+                </span>
+                <Switch on={on} label={`Show ${r.name}`} onChange={(v) => set(r.key, v)} />
+              </div>
+            );
+          })}
+        </div>
+      ))}
+      <div className="meta">Hidden views stay reachable from ⌘K and with G then a letter.</div>
+    </>
+  );
+}
+
+function SearchSettings({ prefs, onPrefs }: { prefs: Prefs; onPrefs: (p: Prefs) => void }) {
+  const [list, setList] = useState<SearchEngine[]>(prefs.searchEngines);
+  const [msg, setMsg] = useState('');
+  const save = (next: SearchEngine[]) => {
+    setList(next);
+    const clean = next.filter((e) => e.prefix.trim() && /^https?:\/\//i.test(e.url.trim()));
+    const prefixes = clean.map((e) => e.prefix.trim().toLowerCase());
+    if (new Set(prefixes).size !== prefixes.length) return setMsg('Each prefix can only be used once.');
+    setMsg(clean.length < next.length ? 'Rows without a prefix or an http(s) address aren’t saved.' : '');
+    onPrefs({ ...prefs, searchEngines: clean });
+  };
+  const edit = (i: number, patch: Partial<SearchEngine>) => setList(list.map((e, j) => (j === i ? { ...e, ...patch } : e)));
+  return (
+    <>
+      <div className="drawer-section">
+        <div className="drawer-label">Search engines</div>
+        <div className="meta">
+          Type a prefix and a space in the search box or ⌘K, like “yt lofi”. Plain searches use the first engine. Put <span className="mono">%s</span> where the search
+          words go.
+        </div>
+        <div className="engines">
+          {list.map((e, i) => (
+            <div key={i} className="engine-row">
+              <input className="input sm mono" aria-label="Prefix" value={e.prefix} onChange={(ev) => edit(i, { prefix: ev.target.value })} onBlur={() => save(list)} style={{ width: 56 }} />
+              <input className="input sm" aria-label="Name" value={e.name} onChange={(ev) => edit(i, { name: ev.target.value })} onBlur={() => save(list)} style={{ width: 110 }} />
+              <input className="input sm" aria-label="Address" value={e.url} onChange={(ev) => edit(i, { url: ev.target.value })} onBlur={() => save(list)} style={{ flex: 1, minWidth: 0 }} />
+              <button className="icon-btn" title={i ? 'Make default' : 'Default'} disabled={!i} onClick={() => save([e, ...list.filter((_, j) => j !== i)])}>
+                <i className={'ph-duotone ' + (i ? 'ph-arrow-up' : 'ph-star')} />
+              </button>
+              <button className="icon-btn" title="Remove" disabled={list.length <= 1} onClick={() => save(list.filter((_, j) => j !== i))}>
+                <i className="ph-duotone ph-trash" />
+              </button>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button className="btn btn-secondary btn-small" disabled={list.length >= 12} onClick={() => setList([...list, { prefix: '', name: '', url: 'https://' }])}>
+            <i className="ph-duotone ph-plus" />
+            Add engine
+          </button>
+          <button className="btn btn-ghost btn-small" onClick={() => save(DEFAULT_ENGINES)}>
+            Reset to defaults
+          </button>
+        </div>
+        {msg && <div className="meta" style={{ color: 'var(--wn)' }}>{msg}</div>}
+      </div>
+    </>
+  );
+}
+
+function NumberField({ label, value, min, max, suffix, onSave }: { label: string; value: number; min: number; max: number; suffix?: string; onSave: (v: number) => void }) {
+  const [v, setV] = useState(String(value || ''));
+  const commit = () => {
+    const n = Math.min(max, Math.max(min, Math.round(Number(v) || 0)));
+    setV(n ? String(n) : '');
+    if (n !== value) onSave(n);
+  };
+  return (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--t2)' }}>
+      <input
+        className="input sm tnum"
+        type="number"
+        inputMode="numeric"
+        min={min}
+        max={max}
+        aria-label={label}
+        placeholder="None"
+        value={v}
+        onChange={(e) => setV(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+        style={{ width: 96 }}
+      />
+      {suffix}
+    </label>
+  );
+}
+
+function TrackerSettings({ prefs, onPrefs }: { prefs: Prefs; onPrefs: (p: Prefs) => void }) {
+  return (
+    <>
+      <div className="drawer-section">
+        <div className="drawer-label">Cigarettes</div>
+        <NumberField label="Daily limit" value={prefs.cigaretteLimit} min={0} max={99} suffix="a day at most" onSave={(n) => onPrefs({ ...prefs, cigaretteLimit: n })} />
+        <div className="meta">Drawn as a line on the chart in You. Leave it empty for no limit.</div>
+      </div>
+      <div className="drawer-section">
+        <div className="drawer-label">Internet speed test</div>
+        <div className="segmented">
+          {[0, 1, 3, 6, 12, 24].map((h) => (
+            <button key={h} className={prefs.speedTestHours === h ? 'on' : ''} onClick={() => onPrefs({ ...prefs, speedTestHours: h })}>
+              {h ? `${h} h` : 'Off'}
+            </button>
+          ))}
+        </div>
+        <div className="meta">How often the server tests its connection, against Cloudflare. Each test moves about 130 MB.</div>
+        <NumberField label="Plan speed" value={prefs.speedPlanMbps} min={0} max={100000} suffix="Mbps plan, shown as a line on the chart" onSave={(n) => onPrefs({ ...prefs, speedPlanMbps: n })} />
       </div>
     </>
   );

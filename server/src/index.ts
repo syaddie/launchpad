@@ -11,9 +11,11 @@ import { authUrl, completeTask, createTask, exchangeCode, revoke } from './googl
 import { store, updatePackages } from './store';
 import { summariesEnabled } from './news';
 import { MAX_PHOTOS, MAX_PHOTO_BYTES, readPhoto, removePhotoFile, sniffImage, writePhoto } from './photos';
-import { newPackage, refreshNews, refreshPackage, refreshWeather, runAllGoogle, runIfStale, runSource, startScheduler } from './sync';
+import { isRunning, newPackage, refreshNews, refreshPackage, refreshWeather, runAllGoogle, runIfStale, runSource, startScheduler } from './sync';
+import { serverStats, startSampler } from './system';
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
-import type { AppState, BookmarkGroup, NewsTopic, Note, Package, Photo, Prefs, SourceKey } from '../../shared/types';
+import { DEFAULT_ENGINES, HIDEABLE_KEYS } from '../../shared/defaults';
+import type { AppState, BookmarkGroup, Countdown, Mood, NewsTopic, Note, Package, Photo, Prefs, SearchEngine, SourceKey } from '../../shared/types';
 
 const app = new Hono();
 
@@ -66,8 +68,14 @@ function state(): AppState {
     newsSummaries: summariesEnabled(),
     weather: store.weather(),
     photos: store.photos().map(({ id, focus }): Photo => ({ id, focus })),
+    countdowns: store.countdowns(),
+    smokes: recentSmokes(),
+    moods: store.moods(),
   };
 }
+
+const SMOKES_IN_STATE = 60 * 86_400_000;
+const recentSmokes = () => store.smokes().filter((s) => Date.now() - Date.parse(s) < SMOKES_IN_STATE);
 
 app.get('/api/state', (c) => c.json(state()));
 
@@ -108,6 +116,23 @@ function cleanTopics(v: unknown[]): string[] {
     .slice(0, 8);
 }
 
+/** Prefixes are single words, unique ignoring case; URLs must be http(s). At most 12. */
+function cleanEngines(v: unknown[]): SearchEngine[] {
+  const seen = new Set<string>();
+  const out: SearchEngine[] = [];
+  for (const e of v as Partial<SearchEngine>[]) {
+    if (!e || !isStr(e.prefix) || !isStr(e.name) || !isStr(e.url)) continue;
+    const prefix = e.prefix.trim().toLowerCase().replace(/\s+/g, '').slice(0, 12);
+    const url = e.url.trim();
+    if (!prefix || seen.has(prefix) || !/^https?:\/\//i.test(url)) continue;
+    seen.add(prefix);
+    out.push({ prefix, name: e.name.trim().slice(0, 40) || prefix, url: url.slice(0, 500) });
+  }
+  return out.slice(0, 12);
+}
+
+const num = (v: unknown, min: number, max: number, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, Math.round(v))) : d);
+
 app.put('/api/prefs', async (c) => {
   const body = (await c.req.json()) as Partial<Prefs>;
   const prev = store.prefs();
@@ -119,7 +144,13 @@ app.put('/api/prefs', async (c) => {
     sources: { ...prev.sources, ...body.sources },
     newsTopics: Array.isArray(body.newsTopics) ? cleanTopics(body.newsTopics) : prev.newsTopics,
     weatherArea: isStr(body.weatherArea) ? body.weatherArea.trim().slice(0, 60) : prev.weatherArea,
+    hidden: Array.isArray(body.hidden) ? [...new Set(body.hidden.filter((h) => isStr(h) && HIDEABLE_KEYS.includes(h)))] : prev.hidden,
+    searchEngines: Array.isArray(body.searchEngines) ? cleanEngines(body.searchEngines) : prev.searchEngines,
+    cigaretteLimit: num(body.cigaretteLimit, 0, 99, prev.cigaretteLimit),
+    speedTestHours: num(body.speedTestHours, 0, 24, prev.speedTestHours),
+    speedPlanMbps: num(body.speedPlanMbps, 0, 100_000, prev.speedPlanMbps),
   };
+  if (!next.searchEngines.length) next.searchEngines = DEFAULT_ENGINES;
   store.setPrefs(next);
   // A source switched back on should sync straight away.
   for (const k of ['calendar', 'tasks', 'gmail'] as const) {
@@ -187,6 +218,76 @@ app.post('/api/packages/:id/refresh', async (c) => {
   return c.json(store.packages().find((p) => p.id === c.req.param('id')) || null);
 });
 
+// ---------- countdowns, cigarettes, mood ----------
+
+const isYmd = (v: unknown): v is string => isStr(v) && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v));
+
+app.put('/api/countdowns', async (c) => {
+  const body = await c.req.json();
+  if (!Array.isArray(body)) return c.json({ error: 'Expected a list of countdowns' }, 400);
+  const list: Countdown[] = body
+    .filter((x: Partial<Countdown>) => x && isStr(x.id) && isStr(x.title) && x.title.trim() && isYmd(x.date))
+    .slice(0, 50)
+    .map((x: Countdown) => ({
+      id: x.id.slice(0, 40),
+      title: x.title.trim().slice(0, 60),
+      date: x.date,
+      yearly: x.yearly === true,
+      createdAt: isStr(x.createdAt) && !Number.isNaN(Date.parse(x.createdAt)) ? x.createdAt : new Date().toISOString(),
+    }));
+  store.setCountdowns(list);
+  return c.json(list);
+});
+
+/** Log a cigarette now (or at `at`, for one logged late). Returns the recent log. */
+app.post('/api/smokes', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const at = isStr(body.at) && !Number.isNaN(Date.parse(body.at)) ? new Date(body.at) : new Date();
+  if (at.getTime() > Date.now() + 60_000) return c.json({ error: 'That time is in the future' }, 400);
+  store.setSmokes([...store.smokes(), at.toISOString()].sort());
+  return c.json(recentSmokes());
+});
+
+/** Undo: remove one logged cigarette, by its time, or the latest one. */
+app.delete('/api/smokes', async (c) => {
+  const at = c.req.query('at');
+  const list = store.smokes();
+  // The page undoes with the time it logged locally, which can be a moment off the server's.
+  const near = (s: string) => Math.abs(Date.parse(s) - Date.parse(at!));
+  let i = at ? list.lastIndexOf(at) : list.length - 1;
+  if (at && i < 0) {
+    const best = list.reduce((b, s, j) => (near(s) < 120_000 && (b < 0 || near(s) < near(list[b])) ? j : b), -1);
+    i = best;
+  }
+  if (i >= 0) store.setSmokes([...list.slice(0, i), ...list.slice(i + 1)]);
+  return c.json(recentSmokes());
+});
+
+/** Set a day's mood; level 0 clears it. */
+app.put('/api/moods/:date', async (c) => {
+  const date = c.req.param('date');
+  if (!isYmd(date)) return c.json({ error: 'Expected a YYYY-MM-DD date' }, 400);
+  const body = (await c.req.json()) as Partial<Mood>;
+  const level = num(body.level, 0, 5, 0);
+  const moods = { ...store.moods() };
+  if (level === 0) delete moods[date];
+  else moods[date] = { level, note: isStr(body.note) ? body.note.trim().slice(0, 280) : moods[date]?.note ?? '' };
+  store.setMoods(moods);
+  return c.json(moods);
+});
+
+// ---------- server health ----------
+
+const speedInfo = () => ({ tests: store.speedTests(), running: isRunning('speedtest') });
+
+app.get('/api/server', async (c) => c.json(await serverStats(c.req.query('iface'), speedInfo())));
+
+/** Start a speed test now; it takes 10–30 s, so this returns at once and the page polls. */
+app.post('/api/speedtest', (c) => {
+  runSource('speedtest', true);
+  return c.json(speedInfo());
+});
+
 // ---------- photos ----------
 
 app.post(
@@ -243,7 +344,7 @@ app.delete('/api/photos/:id', (c) => {
 
 app.post('/api/sync/:source', async (c) => {
   const key = c.req.param('source') as SourceKey;
-  if (!['calendar', 'tasks', 'gmail', 'carriers', 'news', 'weather'].includes(key)) return c.json({ error: 'Unknown source' }, 400);
+  if (!['calendar', 'tasks', 'gmail', 'carriers', 'news', 'weather', 'speedtest'].includes(key)) return c.json({ error: 'Unknown source' }, 400);
   if (key === 'news') {
     await refreshNews();
     return c.json(state());
@@ -320,3 +421,4 @@ serve({ fetch: app.fetch, port: config.port }, (info) => {
 });
 
 startScheduler();
+startSampler();
