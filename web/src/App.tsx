@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
 import { ymd } from '../../shared/dates';
-import { STARTER_MONEY } from '../../shared/money';
+import { starterMoney } from '../../shared/money';
 import { MOOD_WORDS, engineUrl, fmtDuration, parseSearch, smokesOn } from '../../shared/trackers';
 import type { AppState, BookmarkGroup, Countdown, Money, Mood, Note, Package, Photo, Prefs, Task, ViewKey } from '../../shared/types';
 import { api, cachedState, cacheState, localGet, localSet } from './api';
@@ -52,13 +52,13 @@ const EMPTY: AppState = {
   countdowns: [],
   smokes: [],
   moods: {},
-  money: STARTER_MONEY,
+  money: starterMoney(new Date()),
 };
 
 /** A cached copy from an older version can be missing newer fields. */
 function fromCache(c: AppState | null): AppState {
   if (!c) return EMPTY;
-  return { ...EMPTY, ...c, prefs: { ...DEFAULT_PREFS, ...c.prefs }, sync: { ...EMPTY.sync, ...c.sync }, inbox: c.inbox ?? EMPTY.inbox, money: c.money ?? EMPTY.money };
+  return { ...EMPTY, ...c, prefs: { ...DEFAULT_PREFS, ...c.prefs }, sync: { ...EMPTY.sync, ...c.sync }, inbox: c.inbox ?? EMPTY.inbox, money: Array.isArray(c.money?.entries) ? c.money : EMPTY.money };
 }
 
 type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings' } | null;
@@ -648,7 +648,7 @@ export function App() {
         ) : view === 'you' ? (
           <You data={data} now={now} addSignal={addCountdown} onCountdowns={setCountdowns} onLogSmoke={logSmoke} onUndoSmoke={undoSmoke} onMood={setMood} />
         ) : view === 'money' ? (
-          <MoneyView money={data.money} saved={moneySaved} onChange={setMoney} onImport={importMoney} />
+          <MoneyView money={data.money} now={now} saved={moneySaved} onChange={setMoney} onImport={importMoney} notify={showToast} />
         ) : view === 'server' ? (
           <Server data={data} now={now} onOpenSettings={() => setDrawer({ type: 'settings' })} />
         ) : (

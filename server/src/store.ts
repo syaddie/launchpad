@@ -8,7 +8,7 @@ import { config } from './config';
 import type { StoredEmail } from './gmail-parse';
 import type { StoredPhoto } from './photos';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
-import { STARTER_MONEY } from '../../shared/money';
+import { cleanMoney } from '../../shared/money';
 import type {
   BookmarkGroup, CalEvent, CalendarInfo, Countdown, InboxDigest, InboxRange, Money, Mood, NewsTopic, Note, Package, Prefs, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Weather,
 } from '../../shared/types';
@@ -124,7 +124,7 @@ export const store = {
   moods: () => get<Record<string, Mood>>('moods', {}),
   setMoods: (v: Record<string, Mood>) => set('moods', v),
 
-  money: () => get<Money>('money', STARTER_MONEY),
+  money: (): Money => cleanMoney(get<unknown>('money', null)),
   setMoney: (v: Money) => set('money', v),
 
   /** Oldest first, the last 30 days. */

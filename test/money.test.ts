@@ -1,33 +1,58 @@
 import { deflateRawSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { STARTER_MONEY, calcMonths, calcTotals, cleanMoney, fmtMoney, moneyFromWorkbook, parseMoney, wishStats } from '../shared/money';
-import type { Money } from '../shared/types';
+import {
+  affordableFrom, balanceOn, byCategory, calcMonths, calcTotals, cleanMoney, fmtMoney, lowestAhead, monthKeys, moneyFromWorkbook, parseMoney, repeatDates, toReview, wishStats,
+} from '../shared/money';
+import type { Money, MoneyEntry } from '../shared/types';
 import { readXlsx } from '../shared/xlsx';
 
-const money = (): Money => {
-  const m = cleanMoney(STARTER_MONEY);
-  m.opening = 100;
-  m.months[0].days[0] = { out: 150, in: null, outNote: 'rent', inNote: '' };
-  m.months[0].days[9] = { out: null, in: 200, outNote: '', inNote: 'pay' };
-  m.months[1].days[4] = { out: 0.1, in: 0.2, outNote: '', inNote: '' };
-  return m;
-};
+let seq = 0;
+const e = (date: string, kind: 'in' | 'out', amount: number, planned = false, category: MoneyEntry['category'] = ''): MoneyEntry => ({ id: `e${seq++}`, date, kind, amount, note: '', category, planned });
+const money = (): Money => ({
+  start: '2026-10-01',
+  opening: 100,
+  entries: [e('2026-10-01', 'out', 150, false, 'Food'), e('2026-10-10', 'in', 200), e('2026-10-27', 'out', 30, true), e('2026-11-05', 'out', 0.1, true), e('2026-11-05', 'in', 0.2, true)],
+  wishlist: [],
+});
 
 describe('money formulas', () => {
-  it('runs the balance day by day and carries each closing into the next month', () => {
-    const [a, b, c] = calcMonths(money());
-    expect(a.balances[0]).toBe(-50);
-    expect(a.balances[9]).toBe(150);
-    expect(a).toMatchObject({ opening: 100, totalIn: 200, totalOut: 150, net: 50, closing: 150, lowest: -50, daysBelow: 9 });
-    expect(b.opening).toBe(150);
-    expect(b.closing).toBe(150.1);
-    expect(c.opening).toBe(150.1);
+  it('shows every month from the start to this month or the last entry', () => {
+    expect(monthKeys(money(), '2026-10-28')).toEqual(['2026-10', '2026-11']);
+    expect(monthKeys({ ...money(), entries: [] }, '2027-01-03')).toEqual(['2026-10', '2026-11', '2026-12', '2027-01']);
   });
-  it('rolls every month up like the Summary sheet', () => {
-    expect(calcTotals(money())).toMatchObject({ opening: 100, totalIn: 200.2, totalOut: 150.1, net: 50.1, closing: 150.1, lowest: -50, daysBelow: 9 });
+  it('runs the balance day by day over real month lengths and carries it into the next month', () => {
+    const [oct, nov] = calcMonths(money(), ['2026-10', '2026-11']);
+    expect(oct.balances).toHaveLength(31);
+    expect(nov.balances).toHaveLength(30);
+    expect(oct.balances[0]).toBe(-50);
+    expect(oct.balances[9]).toBe(150);
+    expect(oct).toMatchObject({ opening: 100, totalIn: 200, totalOut: 180, net: 20, closing: 120, lowest: -50, daysBelow: 9, plannedOut: 30, plannedIn: 0 });
+    expect(nov).toMatchObject({ opening: 120, closing: 120.1, plannedIn: 0.2 });
+    expect(calcTotals(money(), [oct, nov])).toMatchObject({ opening: 100, totalIn: 200.2, totalOut: 180.1, closing: 120.1, lowest: -50, daysBelow: 9 });
+  });
+  it('tells what happened apart from the plan', () => {
+    expect(balanceOn(money(), '2026-10-28', true)).toBe(150);
+    expect(balanceOn(money(), '2026-10-28')).toBe(120);
+    expect(toReview(money(), '2026-10-28').map((x) => x.date)).toEqual(['2026-10-27']);
+  });
+  it('finds the lowest balance ahead and when a price fits', () => {
+    const months = calcMonths(money(), ['2026-10', '2026-11']);
+    expect(lowestAhead(months, '2026-10-28')).toEqual({ balance: 120, date: '2026-10-28' });
+    expect(affordableFrom(100, months, '2026-10-28')).toBe('2026-10-28');
+    expect(affordableFrom(120.05, months, '2026-10-28')).toBe('2026-11-05');
+    expect(affordableFrom(500, months, '2026-10-28')).toBeNull();
+  });
+  it('repeats an entry weekly, fortnightly or monthly up to a month', () => {
+    expect(repeatDates('2026-10-04', 'week', '2026-10')).toEqual(['2026-10-04', '2026-10-11', '2026-10-18', '2026-10-25']);
+    expect(repeatDates('2026-10-28', 'fortnight', '2026-11')).toEqual(['2026-10-28', '2026-11-11', '2026-11-25']);
+    expect(repeatDates('2026-10-31', 'month', '2027-01')).toEqual(['2026-10-31', '2026-11-30', '2026-12-31', '2027-01-31']);
+    expect(repeatDates('2026-10-31', 'once', '2027-01')).toEqual(['2026-10-31']);
+  });
+  it('totals spending by category', () => {
+    expect(byCategory(money().entries)).toEqual([{ category: 'Food', amount: 150 }, { category: 'Not set', amount: 30.1 }]);
   });
   it('leaves bought and dropped things out of still to buy', () => {
-    const w = (status: string, price: number) => ({ id: status, name: status, category: '', priority: '' as const, status: status as never, price, notes: '' });
+    const w = (status: string, price: number) => ({ id: status, name: status, category: '', priority: '' as const, status: status as never, price, target: '', notes: '' });
     expect(wishStats([w('Wanted', 100), w('Purchased', 40), w('Dropped', 10)])).toEqual({ items: 3, total: 150, purchased: 40, stillToBuy: 100 });
   });
 });
@@ -47,12 +72,25 @@ describe('amounts', () => {
     expect(fmtMoney(700, true)).toBe('+$700');
   });
   it('cleans what the page sends', () => {
-    const m = cleanMoney({ opening: 'x', months: [{ id: 'a', name: '', days: [{ out: 'no', in: 5 }] }], wishlist: [{ id: 'w', name: 'Cam', priority: 'Urgent', status: 'Wanted', price: 9 }] });
+    const m = cleanMoney(
+      {
+        opening: 'x',
+        entries: [
+          { id: 'b', date: '2026-10-05', kind: 'out', amount: -20, category: 'Snacks' },
+          { id: 'a', date: '2026-10-02', kind: 'out', amount: 10, planned: false },
+          { id: 'c', date: '2026-02-30', kind: 'in', amount: 5 },
+        ],
+        wishlist: [{ id: 'w', name: 'Cam', priority: 'Urgent', status: 'Wanted', price: 9, target: '2026-13' }],
+      },
+      new Date(2026, 9, 28),
+    );
+    expect(m.start).toBe('2026-10-01');
     expect(m.opening).toBe(0);
-    expect(m.months[0].name).toBe('Month 1');
-    expect(m.months[0].days).toHaveLength(31);
-    expect(m.months[0].days[0]).toEqual({ out: null, in: 5, outNote: '', inNote: '' });
-    expect(m.wishlist[0]).toMatchObject({ priority: '', status: 'Wanted', price: 9, notes: '' });
+    expect(m.entries).toEqual([
+      { id: 'a', date: '2026-10-02', kind: 'out', amount: 10, note: '', category: '', planned: false },
+      { id: 'b', date: '2026-10-05', kind: 'in', amount: 20, note: '', category: '', planned: true },
+    ]);
+    expect(m.wishlist[0]).toMatchObject({ priority: '', status: 'Wanted', price: 9, target: '' });
   });
 });
 
@@ -116,12 +154,13 @@ describe('importing the workbook', () => {
         row(10, '<c r="B10" s="0"/>'),
       ),
     });
-    const m = moneyFromWorkbook(await readXlsx(xlsx));
-    expect(m.opening).toBe(250);
-    expect(m.months.map((x) => x.name)).toEqual(['Month 1']);
-    expect(m.months[0].days[0]).toEqual({ out: 60, in: null, outNote: 'weekly', inNote: '' });
-    expect(m.months[0].days[1].in).toBe(1200);
-    expect(m.wishlist).toEqual([{ id: 'w1', name: 'Korea & Japan', category: '', priority: '', status: 'Saving up', price: 3000, notes: 'Dec 2026' }]);
+    const m = moneyFromWorkbook(await readXlsx(xlsx), '2026-10', '2026-10-02');
+    expect(m).toMatchObject({ start: '2026-10-01', opening: 250 });
+    expect(m.entries.map(({ date, kind, amount, note, planned }) => ({ date, kind, amount, note, planned }))).toEqual([
+      { date: '2026-10-01', kind: 'out', amount: 60, note: 'weekly', planned: false },
+      { date: '2026-10-02', kind: 'in', amount: 1200, note: '', planned: true },
+    ]);
+    expect(m.wishlist).toEqual([{ id: 'w1', name: 'Korea & Japan', category: '', priority: '', status: 'Saving up', price: 3000, target: '2026-12', notes: '' }]);
   });
   it('says so when the file isn’t a workbook', async () => {
     await expect(readXlsx(new TextEncoder().encode('hello').buffer as ArrayBuffer)).rejects.toThrow(/isn’t an Excel/);

@@ -265,19 +265,19 @@ export interface Mood {
   note: string;
 }
 
-/** One day of a money month. Amounts are dollars, null when the cell is empty. */
-export interface MoneyDay {
-  out: number | null;
-  in: number | null;
-  outNote: string;
-  inNote: string;
-}
+export type MoneyCategory = 'Food' | 'Transport' | 'Shopping' | 'Bills' | 'Family' | 'Fun' | 'Travel' | 'Pay' | 'Other';
 
-export interface MoneyMonth {
+/** One amount of money in or out on a day. Planned ones are the forecast; done ones actually happened. */
+export interface MoneyEntry {
   id: string;
-  name: string;
-  /** Days 1–31, always 31 of them. */
-  days: MoneyDay[];
+  /** YYYY-MM-DD. */
+  date: string;
+  kind: 'in' | 'out';
+  amount: number;
+  note: string;
+  /** Optional; empty when not set. */
+  category: MoneyCategory | '';
+  planned: boolean;
 }
 
 export type WishPriority = '' | 'High' | 'Medium' | 'Low';
@@ -290,14 +290,18 @@ export interface WishItem {
   priority: WishPriority;
   status: WishStatus;
   price: number | null;
+  /** YYYY-MM the item is wanted by; empty when there's no target. */
+  target: string;
   notes: string;
 }
 
 /** The money tracker: what's typed in. Balances and totals are worked out from it (shared/money.ts). */
 export interface Money {
-  /** The first month's opening balance; every later month opens with the one before's closing. */
+  /** The first day tracked (YYYY-MM-DD) and the balance that morning. */
+  start: string;
   opening: number;
-  months: MoneyMonth[];
+  /** Sorted by date, then in the order they were added. */
+  entries: MoneyEntry[];
   wishlist: WishItem[];
 }
 

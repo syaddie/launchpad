@@ -295,10 +295,10 @@ app.put('/api/moods/:date', async (c) => {
 
 // ---------- money ----------
 
-/** The whole tracker and wishlist, as typed; the page works out the balances. */
+/** The whole tracker (starting balance, entries) and wishlist; the page works out the balances. */
 app.put('/api/money', bodyLimit({ maxSize: 1024 * 1024, onError: (c) => c.json({ error: 'That’s too much to save at once.' }, 413) }), async (c) => {
   const body = await c.req.json();
-  if (!body || typeof body !== 'object' || !Array.isArray(body.months)) return c.json({ error: 'Invalid money tracker' }, 400);
+  if (!body || typeof body !== 'object' || !Array.isArray(body.entries)) return c.json({ error: 'Invalid money tracker' }, 400);
   const money = cleanMoney(body);
   store.setMoney(money);
   return c.json(money);

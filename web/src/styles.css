@@ -813,20 +813,21 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 [data-layout='wide'] .money-body { gap: 30px; }
 [data-layout='narrow'] .money-body { overflow: visible; gap: 15px; }
 
-/* Spreadsheet cells. Inputs are the white cells; worked-out values sit on the panel colour. */
+/* Spreadsheet cells. Inputs are the typed-in values; worked-out ones are plain text. */
 .sheet { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; }
 .sheet th { padding: 6px 8px; font-size: 12px; font-weight: 600; color: var(--t2); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sheet td { padding: 0; height: 30px; border-top: 1px solid var(--ln); }
+.sheet td { padding: 0; height: 32px; border-top: 1px solid var(--ln); }
 .sheet .r { text-align: right; }
+.sheet .c { text-align: center; }
 .sheet thead th { border-bottom: 1px solid var(--ln); }
 .sheet tfoot th, .sheet tfoot td { border-top: 1px solid var(--t3); }
 .sheet tfoot th { padding: 7px 8px; color: var(--tx); }
-.sheet td.r, .sheet td.meta { padding: 0 8px; }
+.sheet td.r { padding: 0 8px; }
 .sheet .neg { color: var(--wn); }
 .cell {
   display: block;
   width: 100%;
-  height: 29px;
+  height: 30px;
   padding: 0 8px;
   border: none;
   border-radius: 2px;
@@ -841,48 +842,84 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .cell.num { text-align: right; }
 .cell.bad, .cell.bad:focus { box-shadow: inset 0 0 0 1.5px var(--wn); color: var(--wn); }
 .cell::placeholder { color: var(--t3); }
+.cell.date { padding-right: 2px; }
+.cell.date::-webkit-calendar-picker-indicator { opacity: 0.45; cursor: pointer; }
+.cell.inline { display: inline-block; width: auto; height: 26px; vertical-align: middle; }
+.sheet td.in .cell { color: var(--acd); font-weight: 500; }
 .calc { white-space: nowrap; color: var(--t2); }
 .calc.strong { font-weight: 600; color: var(--tx); }
 .calc.neg { color: var(--wn); }
+.cell.pick { appearance: none; cursor: pointer; color: var(--t3); }
+.cell.pick.tone-neutral { color: var(--t2); font-weight: 600; }
+.cell.pick.tone-accent { color: var(--acd); font-weight: 600; }
+.cell.pick.tone-muted { color: var(--t3); font-weight: 600; }
+.cell.pick option { color: var(--tx); background: var(--rz); font-weight: 400; }
+.row-x { width: 24px; height: 24px; margin: 0 auto; opacity: 0; }
+.sheet tr:hover .row-x, .row-x:focus-visible { opacity: 1; }
+@media (hover: none) { .row-x { opacity: 0.6; } }
+/* inline-size containment keeps a wide table scrolling inside its panel instead of widening the page. */
+.sum-scroll { overflow-x: auto; contain: inline-size; }
 
-.mt-row { flex: 1; min-height: 0; display: flex; gap: 20px; overflow-x: auto; padding-bottom: 2px; }
-[data-layout='wide'] .mt-row { gap: 30px; }
-.mt-block { flex: 1 0 400px; min-width: 0; padding: 15px 10px 0; gap: 8px; }
-.mt-head { display: flex; align-items: center; gap: 6px; padding: 0 0 0 2px; }
-.mt-name { flex: 1; min-width: 0; height: 30px; padding: 0 6px; border: none; border-radius: 3px; background: transparent; color: var(--tx); font-size: 18px; font-weight: 600; outline: none; }
-.mt-name:hover { background: var(--hv); }
-.mt-name:focus { background: var(--rz); box-shadow: inset 0 0 0 1.5px var(--ac); }
-.mt-head .icon-btn { opacity: 0; transition: opacity 0.15s; }
-.mt-block:hover .mt-head .icon-btn, .mt-head .icon-btn:focus-visible { opacity: 1; }
-.mt-opening { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 34px; padding: 0 8px; border-radius: 4px; background: var(--bg); font-size: 13px; color: var(--t2); }
-.mt-opening .cell.opening { width: 110px; font-weight: 600; }
-.mt-scroll { flex: 1; min-height: 0; overflow: auto; margin: 0 -10px; padding: 0 10px; contain: inline-size; }
-.mt-scroll thead th { position: sticky; top: 0; z-index: 1; background: var(--sf); }
-.mt-scroll tfoot th, .mt-scroll tfoot td { position: sticky; bottom: 0; z-index: 1; background: var(--sf); height: 36px; }
-.sheet .day, .sheet .day-h { padding: 0 2px; text-align: center; }
-.sheet .day { font-size: 12px; color: var(--t3); }
-.sheet td.in .cell { color: var(--acd); font-weight: 500; }
-[data-layout='narrow'] .mt-row { flex-direction: column; overflow: visible; gap: 15px; }
-[data-layout='narrow'] .mt-block { flex: none; padding-bottom: 6px; }
-[data-layout='narrow'] .mt-scroll { overflow: visible; }
+/* Month: the entries for one calendar month, planned and done. */
+.month-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 30px; }
+.month-nav { display: flex; align-items: center; gap: 4px; }
+.month-title { min-width: 170px; margin: 0; font-size: 24px; font-weight: 600; text-align: center; }
+[data-layout='narrow'] .month-title { min-width: 0; font-size: 20px; }
+.month-sums { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 22px; font-size: 13px; color: var(--t2); }
+.month-sums > span { display: inline-flex; align-items: center; gap: 6px; }
+.month-sums .cell.opening { width: 96px; height: 28px; font-weight: 600; background: var(--sf); }
+.review-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 14px; border-radius: 4px; background: var(--wnt); color: var(--wn); font-size: 13px; }
+.review-bar i { font-size: 17px; }
+.review-bar span { flex: 1; min-width: 200px; }
+.ledger { padding: 10px 10px 16px; }
+.sheet.entries { min-width: 720px; }
+.sheet.entries thead { position: sticky; top: 0; z-index: 2; background: var(--sf); }
+.sheet.entries .add-row td { border-top: none; background: var(--bg); }
+.sheet.entries .add-row td:first-child { border-radius: 4px 0 0 0; }
+.sheet.entries .add-row td:last-child { border-radius: 0 4px 0 0; padding-right: 6px; }
+.sheet.entries .add-opts td { height: 34px; border-top: none; background: var(--bg); }
+.sheet.entries .add-opts td:first-child { border-radius: 0 0 0 4px; }
+.sheet.entries .add-opts td:last-child { border-radius: 0 0 4px 0; padding-right: 8px; }
+.add-opts-in { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; }
+.sheet.entries .add-opts .cell.pick { color: var(--t2); font-weight: 600; }
+.add-plus { color: var(--t3); font-size: 15px; }
+.sheet.entries tbody tr:first-child td { border-top: none; }
+.sheet.entries tbody tr.new-day td { border-top-color: var(--t3); border-top-color: color-mix(in srgb, var(--t3) 45%, transparent); }
+.sheet.entries .check { margin: 0 auto; }
+.sheet.entries tr.same-day .cell.date:not(:focus):not(:hover) { color: transparent; }
+.sheet.entries tr.planned .cell, .sheet.entries tr.planned .calc { font-style: italic; }
+.sheet.entries tr.planned .cell { color: var(--t2); }
+.sheet.entries tr.planned td.in .cell { color: var(--acd); }
+.sheet.entries tr.late .check { border-color: var(--wn); }
+.sheet.entries tr.late td:first-child { box-shadow: inset 3px 0 0 var(--wn); }
+.today-row td { height: 34px; padding: 0 10px; border-top: 1.5px solid var(--ac) !important; background: var(--act); color: var(--acd); font-size: 13px; }
+.today-row b { font-weight: 600; }
+.month-empty { margin: 0; padding: 18px 10px 6px; color: var(--t2); max-width: 70ch; }
 
-.m-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
-.m-stat { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: 4px; background: var(--sf); }
+.m-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.m-stat { display: flex; flex-direction: column; gap: 3px; padding: 14px 16px; border: none; border-radius: 4px; background: var(--sf); color: var(--tx); font: inherit; text-align: left; }
 .m-stat .serif { font-size: 28px; line-height: 1.05; letter-spacing: -0.01em; font-variant-numeric: tabular-nums lining-nums; }
 .m-stat.hero { background: var(--act); }
 .m-stat.hero .serif { color: var(--acd); }
-/* inline-size containment keeps a wide table scrolling inside its panel instead of widening the page. */
-.sum-scroll { overflow-x: auto; contain: inline-size; }
+button.m-stat { cursor: default; }
+.m-stat.warn { background: var(--wnt); cursor: pointer; }
+.m-stat.warn .serif, .m-stat.warn .meta { color: var(--wn); }
+.m-stat.warn:hover { filter: brightness(0.97); }
 .sheet.sum { min-width: 720px; }
 .sheet.sum td { height: 34px; }
 .sheet.sum tbody th { padding: 0 8px; font-weight: 500; color: var(--tx); border-top: 1px solid var(--ln); }
 .sheet.sum tfoot .calc { font-weight: 600; color: var(--tx); }
+.month-link { display: inline-flex; align-items: center; gap: 8px; padding: 0; border: none; background: none; color: inherit; font: inherit; cursor: pointer; }
+.month-link:hover { text-decoration: underline; text-underline-offset: 2px; }
 
-.you-row > .m-chart { flex: 1.4 1 440px; min-width: 0; min-height: 300px; }
+.you-row > .m-chart { flex: 1.5 1 460px; min-width: 0; min-height: 300px; }
 .you-row > .m-chart.io { flex: 1 1 320px; }
+.you-row > .m-chart.cats { flex: 0.8 1 260px; }
 .bal-chart { position: relative; flex: 1; min-height: 220px; }
 .bal-month { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--ln); }
 .bal-zero { position: absolute; left: 0; right: 0; border-top: 1.5px solid var(--t3); opacity: 0.6; }
+.bal-today { position: absolute; top: -4px; bottom: 0; width: 0; border-left: 1.5px solid var(--acd); opacity: 0.7; }
+.bal-today span { position: absolute; top: -14px; left: 4px; font-size: 11px; font-weight: 600; color: var(--acd); }
 .bal-cross { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--t3); opacity: 0.5; pointer-events: none; }
 .bal-dot { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; box-shadow: 0 0 0 2px var(--sf); pointer-events: none; }
 .bal-label { text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px; }
@@ -891,23 +928,24 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .io-plot { display: flex; align-items: stretch; }
 .io-col { position: relative; flex: 1; min-width: 0; display: flex; align-items: flex-end; justify-content: center; gap: 2px; border-radius: 4px; outline-offset: -2px; }
 .io-col.on { background: var(--hv); }
-.io-bar { width: 32%; max-width: 44px; min-height: 2px; border-radius: 4px 4px 0 0; transition: height 0.3s ease-out; }
+.io-bar { width: 32%; max-width: 44px; min-height: 2px; display: flex; flex-direction: column; border-radius: 4px 4px 0 0; overflow: hidden; transition: height 0.3s ease-out; }
+.io-bar > span { min-height: 0; }
 .io-col .chart-tip { left: 50%; top: 8px; transform: translateX(-50%); }
 .io-col .chart-tip.left { left: auto; right: 50%; transform: none; }
+.cat-list { display: flex; flex-direction: column; gap: 9px; }
+.cat-row { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto; align-items: center; gap: 10px; font-size: 13px; }
+.cat-track { height: 8px; border-radius: 4px; background: var(--ln); overflow: hidden; }
+.cat-track span { display: block; height: 8px; border-radius: 4px; background: var(--t2); }
 
-.sheet.wish { min-width: 760px; }
-.sheet.wish td:last-child { text-align: center; }
-.sheet.wish .row-x { width: 24px; height: 24px; margin: 0 auto; opacity: 0; }
-.sheet.wish tr:hover .row-x, .sheet.wish .row-x:focus-visible { opacity: 1; }
+.sheet.wish { min-width: 900px; }
 .sheet.wish tr.done .cell, .sheet.wish tr.done .pick { color: var(--t3); }
 .sheet.wish tr.done .wish-name { text-decoration: line-through; }
 .sheet.wish tr.ghost td { border-top-style: dashed; }
+.sheet.wish .fits { padding: 0 8px; font-size: 13px; color: var(--t2); white-space: nowrap; }
+.sheet.wish .fits .ok { color: var(--acd); font-weight: 600; }
 .cell.wish-name { font-weight: 500; }
-.cell.pick { appearance: none; cursor: pointer; padding-right: 8px; color: var(--t3); }
-.cell.pick.tone-neutral { color: var(--t2); font-weight: 600; }
-.cell.pick.tone-accent { color: var(--acd); font-weight: 600; }
-.cell.pick.tone-muted { color: var(--t3); font-weight: 600; }
-.cell.pick option { color: var(--tx); background: var(--rz); font-weight: 400; }
+/* An empty month input shows "--------- ----"; keep it blank until it's used. */
+.cell.unset:not(:focus) { color: transparent; }
 
 /* ---------- settings tabs ---------- */
 
