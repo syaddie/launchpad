@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
 import { ymd } from '../../shared/dates';
+import { STARTER_MONEY } from '../../shared/money';
 import { MOOD_WORDS, engineUrl, fmtDuration, parseSearch, smokesOn } from '../../shared/trackers';
-import type { AppState, BookmarkGroup, Countdown, Mood, Note, Package, Photo, Prefs, Task, ViewKey } from '../../shared/types';
+import type { AppState, BookmarkGroup, Countdown, Money, Mood, Note, Package, Photo, Prefs, Task, ViewKey } from '../../shared/types';
 import { api, cachedState, cacheState, localGet, localSet } from './api';
 import { Bookmarks } from './components/Bookmarks';
 import { AddPackageDrawer, Drawer, PANEL_ROWS, PackageDrawer, SettingsDrawer } from './components/Drawers';
 import { Inbox, inboxBadge } from './components/Inbox';
+import { MoneyView } from './components/Money';
 import { News } from './components/News';
 import { FocusView, Notes } from './components/Notes';
 import { Packages } from './components/Packages';
@@ -50,12 +52,13 @@ const EMPTY: AppState = {
   countdowns: [],
   smokes: [],
   moods: {},
+  money: STARTER_MONEY,
 };
 
 /** A cached copy from an older version can be missing newer fields. */
 function fromCache(c: AppState | null): AppState {
   if (!c) return EMPTY;
-  return { ...EMPTY, ...c, prefs: { ...DEFAULT_PREFS, ...c.prefs }, sync: { ...EMPTY.sync, ...c.sync }, inbox: c.inbox ?? EMPTY.inbox };
+  return { ...EMPTY, ...c, prefs: { ...DEFAULT_PREFS, ...c.prefs }, sync: { ...EMPTY.sync, ...c.sync }, inbox: c.inbox ?? EMPTY.inbox, money: c.money ?? EMPTY.money };
 }
 
 type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings' } | null;
@@ -138,11 +141,13 @@ export function App() {
   const [editBookmarks, setEditBookmarks] = useState(false);
   const [activeNote, setActiveNote] = useState(() => localGet('activeNote') || '');
   const [saved, setSaved] = useState(false);
+  const [moneySaved, setMoneySaved] = useState(false);
   const [toast, setToast] = useState<{ msg: string; action?: { label: string; run: () => void } } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const noteEditing = useRef(false);
   const savedT = useRef(0);
+  const moneySavedT = useRef(0);
   const toastT = useRef(0);
   const now = useMinuteNow();
   const photoSlots = usePhotoSlots(data.photos.length);
@@ -161,7 +166,14 @@ export function App() {
     savedT.current = window.setTimeout(() => setSaved(false), 1500);
   }, []);
 
+  const flashMoneySaved = useCallback(() => {
+    setMoneySaved(true);
+    clearTimeout(moneySavedT.current);
+    moneySavedT.current = window.setTimeout(() => setMoneySaved(false), 1500);
+  }, []);
+
   const bookmarkSaver = useSaver(api.putBookmarks, 400, undefined, onSaveError);
+  const moneySaver = useSaver(api.putMoney, 500, flashMoneySaved, onSaveError);
   const noteSaver = useSaver(api.putNotes, 500, flashSaved, onSaveError);
 
   // ---------- data ----------
@@ -181,9 +193,10 @@ export function App() {
         ...s,
         bookmarks: bookmarkSaver.busy() ? prev.bookmarks : s.bookmarks,
         notes: noteSaver.busy() || noteEditing.current ? prev.notes : s.notes,
+        money: moneySaver.busy() ? prev.money : s.money,
       }));
     },
-    [update, bookmarkSaver, noteSaver],
+    [update, bookmarkSaver, noteSaver, moneySaver],
   );
 
   const refresh = useCallback(() => api.state().then(merge).catch((e) => console.warn('refresh failed', e)), [merge]);
@@ -411,6 +424,18 @@ export function App() {
     api.putCountdowns(countdowns).catch(onSaveError);
   };
 
+  const setMoney = (money: Money) => {
+    setMoneySaved(false);
+    update((d) => ({ ...d, money }));
+    moneySaver.schedule(money);
+  };
+
+  const importMoney = (money: Money, summary: string) => {
+    const before = data.money;
+    setMoney(money);
+    showToast(summary, { label: 'Undo', run: () => setMoney(before) });
+  };
+
   const toggleHidden = (key: string) => {
     const hidden = data.prefs.hidden.includes(key) ? data.prefs.hidden.filter((h) => h !== key) : [...data.prefs.hidden, key];
     setPrefs({ ...data.prefs, hidden });
@@ -622,6 +647,8 @@ export function App() {
           <Inbox data={data} now={now} busy={inboxBusy} onRefresh={refreshInbox} onConnect={connect} onOpenSettings={() => setDrawer({ type: 'settings' })} />
         ) : view === 'you' ? (
           <You data={data} now={now} addSignal={addCountdown} onCountdowns={setCountdowns} onLogSmoke={logSmoke} onUndoSmoke={undoSmoke} onMood={setMood} />
+        ) : view === 'money' ? (
+          <MoneyView money={data.money} saved={moneySaved} onChange={setMoney} onImport={importMoney} />
         ) : view === 'server' ? (
           <Server data={data} now={now} onOpenSettings={() => setDrawer({ type: 'settings' })} />
         ) : (

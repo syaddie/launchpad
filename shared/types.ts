@@ -22,7 +22,7 @@ export type ThemeMode = 'system' | 'light' | 'dark';
 export type AccentKey = 'sage' | 'slate' | 'terracotta';
 export type GoogleSource = 'calendar' | 'tasks' | 'gmail';
 export type SourceKey = GoogleSource | 'carriers' | 'news' | 'inbox' | 'weather' | 'speedtest';
-export type ViewKey = 'home' | 'news' | 'inbox' | 'you' | 'server';
+export type ViewKey = 'home' | 'news' | 'inbox' | 'you' | 'money' | 'server';
 
 /** One place to search: "yt lofi" opens url with %s replaced by "lofi". The first engine is the default. */
 export interface SearchEngine {
@@ -265,6 +265,42 @@ export interface Mood {
   note: string;
 }
 
+/** One day of a money month. Amounts are dollars, null when the cell is empty. */
+export interface MoneyDay {
+  out: number | null;
+  in: number | null;
+  outNote: string;
+  inNote: string;
+}
+
+export interface MoneyMonth {
+  id: string;
+  name: string;
+  /** Days 1–31, always 31 of them. */
+  days: MoneyDay[];
+}
+
+export type WishPriority = '' | 'High' | 'Medium' | 'Low';
+export type WishStatus = '' | 'Wanted' | 'Saving up' | 'Purchased' | 'Dropped';
+
+export interface WishItem {
+  id: string;
+  name: string;
+  category: string;
+  priority: WishPriority;
+  status: WishStatus;
+  price: number | null;
+  notes: string;
+}
+
+/** The money tracker: what's typed in. Balances and totals are worked out from it (shared/money.ts). */
+export interface Money {
+  /** The first month's opening balance; every later month opens with the one before's closing. */
+  opening: number;
+  months: MoneyMonth[];
+  wishlist: WishItem[];
+}
+
 export interface SpeedTest {
   /** ISO date-time. */
   at: string;
@@ -347,6 +383,7 @@ export interface AppState {
   smokes: string[];
   /** Keyed by YYYY-MM-DD. */
   moods: Record<string, Mood>;
+  money: Money;
 }
 
 export interface Backup {
