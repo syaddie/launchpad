@@ -2,6 +2,7 @@ import type { AppState, BookmarkGroup, Countdown, Money, Mood, Note, Package, Ph
 
 const STATE_KEY = 'launchpad:state';
 const PREFS_KEY = 'launchpad:prefs';
+const SERVER_KEY = 'launchpad:server';
 
 // localStorage mirrors: paint instantly from cache, then refresh from the server.
 export function cachedState(): AppState | null {
@@ -19,6 +20,24 @@ export function cacheState(s: AppState): void {
     localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: s.prefs.theme, accent: s.prefs.accent }));
   } catch {
     // Storage full or blocked: the page still works, it just paints from the network.
+  }
+}
+
+/** The Server view's last reading, so it opens on that instead of a blank page. */
+export function cachedServer(): ServerStats | null {
+  try {
+    const raw = localStorage.getItem(SERVER_KEY);
+    return raw ? (JSON.parse(raw) as ServerStats) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function cacheServer(s: ServerStats): void {
+  try {
+    localStorage.setItem(SERVER_KEY, JSON.stringify(s));
+  } catch {
+    // ignore
   }
 }
 
