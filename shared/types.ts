@@ -359,6 +359,8 @@ export interface GoogleInfo {
   connected: boolean;
   email?: string;
   name?: string;
+  /** Set when Google stopped accepting the sign-in and Launchpad disconnected itself: why, and when. */
+  signedOut?: { reason: string; at: string };
 }
 
 export interface AppState {

@@ -324,10 +324,17 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
             </div>
           </>
         ) : g.configured ? (
-          <button className="btn btn-primary" style={{ alignSelf: 'flex-start' }} onClick={onConnect}>
-            <i className="ph-duotone ph-google-logo" />
-            Connect Google
-          </button>
+          <>
+            {g.signedOut && (
+              <p style={{ margin: 0, fontSize: 13, color: 'var(--wn)' }}>
+                Signed out {hm(new Date(g.signedOut.at))}. {g.signedOut.reason}
+              </p>
+            )}
+            <button className="btn btn-primary" style={{ alignSelf: 'flex-start' }} onClick={onConnect}>
+              <i className="ph-duotone ph-google-logo" />
+              {g.signedOut ? 'Reconnect Google' : 'Connect Google'}
+            </button>
+          </>
         ) : (
           <p style={{ margin: 0, fontSize: 13, color: 'var(--t2)' }}>
             Google isn’t set up on the server yet. Add <code>GOOGLE_CLIENT_ID</code> and <code>GOOGLE_CLIENT_SECRET</code> to <code>.env</code> (see docs/setup.md), then restart.

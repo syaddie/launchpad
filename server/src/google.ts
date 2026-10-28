@@ -36,8 +36,24 @@ export function authUrl(state: string): string {
   return 'https://accounts.google.com/o/oauth2/v2/auth?' + p;
 }
 
+/** fetch, with a network failure or timeout turned into a message that says where to look. */
+async function googleFetch(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, { signal: AbortSignal.timeout(20000), ...init });
+  } catch (e) {
+    const timeout = (e as Error).name === 'TimeoutError';
+    throw new GoogleError(
+      timeout ? 'Google took too long to answer. It tries again on the next sync.' : 'Couldn’t reach Google. Check the server’s internet connection; it tries again on the next sync.',
+    );
+  }
+}
+
+/** Shown when Google stops accepting the saved sign-in. */
+export const SIGNED_OUT =
+  'Google signed Launchpad out: access was removed in your Google account, your password changed, or the OAuth app is still in Testing (which ends sign-ins after 7 days). Reconnect Google in Settings. If it happens every week, publish the OAuth app (docs/setup.md step 3).';
+
 async function tokenRequest(body: Record<string, string>) {
-  const res = await fetch('https://oauth2.googleapis.com/token', {
+  const res = await googleFetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -48,22 +64,27 @@ async function tokenRequest(body: Record<string, string>) {
   });
   const json = (await res.json().catch(() => ({}))) as Record<string, any>;
   if (!res.ok) {
-    const expired = json.error === 'invalid_grant';
-    throw new GoogleError(
-      expired ? 'Google sign-in expired. Reconnect in Settings.' : `Google token error: ${json.error_description || json.error || res.status}`,
-      res.status,
-      expired,
-    );
+    if (json.error === 'invalid_grant') throw new GoogleError(SIGNED_OUT, res.status, true);
+    if (json.error === 'invalid_client' || json.error === 'unauthorized_client') {
+      throw new GoogleError(
+        'Google rejected the OAuth client. Check GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env against Google Cloud console → Credentials (the secret may have been reset or deleted), then restart Launchpad.',
+        res.status,
+      );
+    }
+    throw new GoogleError(`Google token error: ${json.error_description || json.error || res.status}`, res.status);
   }
   return json as { access_token: string; expires_in: number; refresh_token?: string };
 }
 
 export async function exchangeCode(code: string): Promise<void> {
-  const t = await tokenRequest({ code, grant_type: 'authorization_code', redirect_uri: redirectUri() });
+  const t = await tokenRequest({ code, grant_type: 'authorization_code', redirect_uri: redirectUri() }).catch((e) => {
+    // Here invalid_grant means this sign-in code was already used or has expired, not a lost sign-in.
+    throw e instanceof GoogleError && e.authExpired ? new GoogleError('That sign-in link was already used or has expired. Go back and press Connect Google again.') : e;
+  });
   const prev = store.google();
   const refreshToken = t.refresh_token || prev?.refreshToken;
   if (!refreshToken) throw new GoogleError('Google did not return a refresh token. Remove Launchpad from your Google account permissions and connect again.');
-  const profile = (await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
+  const profile = (await googleFetch('https://openidconnect.googleapis.com/v1/userinfo', {
     headers: { Authorization: `Bearer ${t.access_token}` },
   }).then((r) => r.json()).catch(() => ({}))) as { email?: string; name?: string };
   store.setGoogle({
@@ -75,28 +96,45 @@ export async function exchangeCode(code: string): Promise<void> {
   });
 }
 
-async function accessToken(): Promise<string> {
+async function accessToken(fresh = false): Promise<string> {
   const g = store.google();
   if (!g) throw new GoogleError('Google is not connected.');
-  if (g.accessToken && g.expiresAt && g.expiresAt > Date.now()) return g.accessToken;
+  if (!fresh && g.accessToken && g.expiresAt && g.expiresAt > Date.now()) return g.accessToken;
   const t = await tokenRequest({ refresh_token: g.refreshToken, grant_type: 'refresh_token' });
   store.setGoogle({ ...g, accessToken: t.access_token, expiresAt: Date.now() + (t.expires_in - 60) * 1000 });
   return t.access_token;
 }
 
+/** A failed Google API response → what went wrong and what to do about it. */
+export function googleApiError(status: number, error: { message?: string; status?: string; details?: { reason?: string }[]; errors?: { reason?: string }[] } = {}): GoogleError {
+  const msg = error.message || `status ${status}`;
+  const reasons = [...(error.details || []), ...(error.errors || [])].map((d) => d.reason || '');
+  if (status === 401) return new GoogleError(SIGNED_OUT, status, true);
+  if (status === 403 && (reasons.includes('ACCESS_TOKEN_SCOPE_INSUFFICIENT') || /insufficient (authentication )?scopes/i.test(msg))) {
+    return new GoogleError('Launchpad is missing a Google permission. Disconnect and reconnect Google in Settings, and leave every box ticked on Google’s permission screen.', status);
+  }
+  if (status === 403 && (reasons.includes('SERVICE_DISABLED') || reasons.includes('accessNotConfigured'))) {
+    return new GoogleError(`An API isn’t enabled in your Google Cloud project: ${msg}`, status);
+  }
+  if (status === 429 || reasons.includes('rateLimitExceeded') || reasons.includes('userRateLimitExceeded')) {
+    return new GoogleError('Hit Google’s rate limit. It tries again on the next sync.', status);
+  }
+  if (status >= 500) return new GoogleError(`Google is having trouble (${status} ${msg}). It tries again on the next sync.`, status);
+  return new GoogleError(`${status} ${msg}`, status);
+}
+
 async function gapi<T = any>(url: string, init: RequestInit = {}): Promise<T> {
-  const token = await accessToken();
-  const res = await fetch(url, {
-    ...init,
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...init.headers },
-    signal: AbortSignal.timeout(20000),
-  });
+  const call = async (token: string) =>
+    googleFetch(url, { ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...init.headers } });
+  let res = await call(await accessToken());
+  // A saved token Google has stopped accepting (revoked, or the clock drifted): get a new one once.
+  if (res.status === 401) {
+    await res.body?.cancel();
+    res = await call(await accessToken(true));
+  }
   if (res.status === 204) return undefined as T;
   const json = (await res.json().catch(() => ({}))) as any;
-  if (!res.ok) {
-    const msg = json?.error?.message || res.statusText;
-    throw new GoogleError(`${res.status} ${msg}`, res.status);
-  }
+  if (!res.ok) throw googleApiError(res.status, json?.error);
   return json as T;
 }
 

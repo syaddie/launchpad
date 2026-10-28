@@ -89,6 +89,12 @@ export const store = {
     delStmt.run('tasks');
     delStmt.run('inbox');
   },
+  /** Why Google disconnected itself, shown until it's reconnected. */
+  googleSignedOut: () => get<{ reason: string; at: string } | null>('googleSignedOut', null),
+  setGoogleSignedOut: (reason: string | null) => {
+    if (reason) set('googleSignedOut', { reason, at: new Date().toISOString() });
+    else delStmt.run('googleSignedOut');
+  },
 
   calendar: () => get<CalendarCache>('calendar', { calendars: [], events: [] }),
   setCalendar: (v: CalendarCache) => set('calendar', v),

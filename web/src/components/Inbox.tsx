@@ -55,9 +55,13 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings }:
       <main className="news" aria-label="Inbox">
         <div className="panel">
           <div className="empty">
-            <p>{google.connected ? 'Gmail is switched off in Settings, so the inbox digest is too.' : 'Connect Google to get a short digest of your email here, written by Claude.'}</p>
+            <p>
+              {google.connected
+                ? 'Gmail is switched off in Settings, so the inbox digest is too.'
+                : google.signedOut?.reason ?? 'Connect Google to get a short digest of your email here, written by Claude.'}
+            </p>
             <button className="btn btn-secondary" onClick={google.connected ? onOpenSettings : onConnect}>
-              {google.connected ? 'Open Settings' : 'Connect Google'}
+              {google.connected ? 'Open Settings' : google.signedOut ? 'Reconnect Google' : 'Connect Google'}
             </button>
           </div>
         </div>

@@ -69,8 +69,11 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 
 /* ---------- page layout ---------- */
 
-.lp-root { position: relative; width: 100%; height: 100vh; overflow: hidden; }
-.lp-root[data-layout='narrow'] { height: auto; min-height: 100vh; overflow: visible; }
+/* A long URL or word breaks rather than running past its panel. */
+.lp-root { position: relative; width: 100%; height: 100vh; overflow: hidden; overflow-wrap: break-word; }
+/* Phones scroll up and down only: anything too wide is cut off rather than letting the whole page pan sideways.
+   Panels that scroll sideways themselves (tables, charts) still do. */
+.lp-root[data-layout='narrow'] { height: auto; min-height: 100vh; overflow: visible; overflow-x: clip; }
 
 .lp-inner {
   height: 100%;
@@ -141,7 +144,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .rail-btn.on span { font-weight: 600; }
 .rail-sep { width: 32px; height: 1px; margin: 8px 0; background: var(--ln); }
 [data-layout='narrow'] .lp-shell { flex-direction: column; height: auto; }
-[data-layout='narrow'] .lp-shell > .lp-inner { padding-left: 15px; }
+[data-layout='narrow'] .lp-shell > .lp-inner { padding-left: 15px; margin: 0; }
 [data-layout='narrow'] .rail { width: auto; flex-direction: row; padding: 10px 10px 0; overflow-x: auto; scrollbar-width: none; }
 [data-layout='narrow'] .rail-btn { flex: none; width: 54px; height: 48px; }
 [data-layout='narrow'] .rail-sep { width: 1px; height: 28px; margin: 0 4px; }
@@ -177,7 +180,10 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .weather .chip { margin-left: 3px; }
 [data-layout='narrow'] .weather-text { display: none; }
 .weather-pop { position: absolute; top: calc(100% + 10px); right: -10px; width: 370px; max-width: calc(100vw - 30px); padding: 16px 18px 12px; display: flex; flex-direction: column; gap: 14px; text-align: left; }
-[data-layout='narrow'] .weather-pop { right: auto; left: -60px; }
+/* Phones: open under the whole clock row, so it never runs off either side. */
+[data-layout='narrow'] .clock-row { position: relative; z-index: 16; flex-wrap: wrap; row-gap: 4px; }
+[data-layout='narrow'] .weather-wrap { position: static; }
+[data-layout='narrow'] .weather-pop { left: 0; right: auto; width: min(370px, calc(100vw - 30px)); max-width: none; }
 .wp-head { display: flex; flex-direction: column; gap: 2px; }
 .wp-sec { display: flex; flex-direction: column; gap: 6px; }
 .wp-title { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 12px; font-weight: 600; color: var(--t2); }
@@ -216,7 +222,11 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
   transition: border-color 0.15s;
 }
 [data-layout='wide'] .search input { width: 300px; }
-[data-layout='narrow'] .search input { width: calc(100vw - 110px); }
+/* Phones: the search fills what the cigarette button and sync dot leave of the row. */
+[data-layout='narrow'] .top-right, [data-layout='narrow'] .top-tools { width: 100%; }
+[data-layout='narrow'] .top-tools .search { flex: 1; min-width: 0; }
+[data-layout='narrow'] .search input { width: 100%; }
+[data-layout='narrow'] .search-drop { left: 0; right: 0; width: auto; }
 .search input:focus { border-color: var(--ac); }
 .search .ph-magnifying-glass { position: absolute; left: 10px; top: 9px; font-size: 15px; color: var(--t3); pointer-events: none; }
 .search .slash { position: absolute; right: 10px; top: 8px; font-size: 11px; color: var(--t3); pointer-events: none; }
@@ -227,8 +237,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 
 .sync { position: relative; width: 30px; height: 34px; display: grid; place-items: center; z-index: 14; }
 .sync-dot { width: 7px; height: 7px; border-radius: 50%; transition: background 0.3s; }
-.sync-tip { position: absolute; top: 38px; right: -40px; width: 250px; padding: 10px 15px; display: flex; flex-direction: column; gap: 5px; }
+.sync-tip { position: absolute; top: 38px; right: -40px; width: 300px; padding: 10px 15px; display: flex; flex-direction: column; gap: 5px; }
 .sync-line { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; }
+[data-layout='narrow'] .sync-tip { right: 0; max-width: calc(100vw - 30px); }
 
 /* ---------- shared components ---------- */
 
@@ -594,6 +605,15 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 [data-layout='narrow'] .news-grid { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; gap: 15px; }
 .news-note { padding: 5px 10px; font-size: 13px; color: var(--t3); }
 
+/* Server unreachable: sits under the top bar until a refresh gets through. */
+.server-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; flex: none; padding: 10px 15px; border: 1px solid var(--wn); border-radius: 4px; font-size: 13px; line-height: 1.5; color: var(--t2); }
+.server-banner > i { font-size: 20px; color: var(--wn); flex: none; }
+/* The button drops below the text once it would squeeze it under ~260px (phones). */
+.server-banner > div { flex: 1 1 260px; min-width: 0; }
+.server-banner strong { color: var(--tx); font-weight: 600; }
+.server-banner .btn { flex: none; }
+.sync-err { font-size: 11px; line-height: 1.4; color: var(--t3); margin: -2px 0 3px; }
+
 .story { display: flex; flex-direction: column; gap: 4px; padding: 10px; border-radius: 4px; }
 .story + .story { border-top: 1px solid var(--ln); border-radius: 0; }
 .story-headline { font-size: 15px; font-weight: 600; line-height: 1.3; text-wrap: pretty; }
@@ -865,6 +885,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .month-nav { display: flex; align-items: center; gap: 4px; }
 .month-title { min-width: 170px; margin: 0; font-size: 24px; font-weight: 600; text-align: center; white-space: nowrap; }
 [data-layout='narrow'] .month-title { min-width: 0; font-size: 20px; }
+/* The List/Calendar switch drops to its own line on the narrowest phones. */
+[data-layout='narrow'] .month-nav { flex-wrap: wrap; row-gap: 8px; }
 .month-sums { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 22px; font-size: 13px; color: var(--t2); }
 .month-sums > span { display: inline-flex; align-items: center; gap: 6px; }
 .month-sums .cell.opening { width: 96px; height: 28px; font-weight: 600; background: var(--sf); }
