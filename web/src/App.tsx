@@ -4,7 +4,7 @@ import { ymd } from '../../shared/dates';
 import { starterMoney } from '../../shared/money';
 import { MOOD_WORDS, engineUrl, fmtDuration, parseSearch, smokesOn } from '../../shared/trackers';
 import type { AppState, BookmarkGroup, Countdown, Money, Mood, Note, Package, Photo, Prefs, Task, ViewKey } from '../../shared/types';
-import { api, cachedState, cacheState, localGet, localSet } from './api';
+import { api, cachedState, cacheState, localGet, localSet, ServerError } from './api';
 import { Bookmarks } from './components/Bookmarks';
 import { AddPackageDrawer, Drawer, PANEL_ROWS, PackageDrawer, SettingsDrawer } from './components/Drawers';
 import { Inbox, inboxBadge } from './components/Inbox';
@@ -16,6 +16,7 @@ import { Palette, type PaletteItem } from './components/Palette';
 import { PhotoPanel, shrinkImage, usePhotoSlots } from './components/Photos';
 import { Rail, VIEWS } from './components/Rail';
 import { Server } from './components/Server';
+import { ServerBanner, type ServerIssue } from './components/ServerBanner';
 import { Tasks } from './components/Tasks';
 import { Today, todayAgenda } from './components/Today';
 import { TopBar } from './components/TopBar';
@@ -143,6 +144,7 @@ export function App() {
   const [saved, setSaved] = useState(false);
   const [moneySaved, setMoneySaved] = useState(false);
   const [toast, setToast] = useState<{ msg: string; action?: { label: string; run: () => void } } | null>(null);
+  const [serverIssue, setServerIssue] = useState<ServerIssue | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const noteEditing = useRef(false);
@@ -199,7 +201,21 @@ export function App() {
     [update, bookmarkSaver, noteSaver, moneySaver],
   );
 
-  const refresh = useCallback(() => api.state().then(merge).catch((e) => console.warn('refresh failed', e)), [merge]);
+  const refresh = useCallback(
+    () =>
+      api
+        .state()
+        .then((s) => {
+          merge(s);
+          setServerIssue(null);
+        })
+        .catch((e) => {
+          console.warn('refresh failed', e);
+          // Keep the first time it failed, so the banner says how long it's been.
+          if (e instanceof ServerError) setServerIssue((prev) => (prev?.kind === e.kind ? prev : { kind: e.kind, status: e.status, since: new Date() }));
+        }),
+    [merge],
+  );
 
   useEffect(() => {
     refresh();
@@ -522,7 +538,7 @@ export function App() {
 
   // ---------- derived ----------
 
-  let subline = 'Connect Google to see what’s next';
+  let subline = data.google.signedOut ? 'Google signed out · reconnect in Settings' : 'Connect Google to see what’s next';
   if (data.google.connected) {
     const { cur, next } = todayAgenda(data, now);
     if (!data.prefs.sources.calendar) subline = '';
@@ -641,6 +657,7 @@ export function App() {
       <Rail view={view} hidden={data.prefs.hidden} badges={{ inbox: inboxCount }} onView={setView} onPalette={() => setPalette(true)} onSettings={() => setDrawer({ type: 'settings' })} />
       <div className="lp-inner">
         <TopBar data={data} now={now} subline={subline} search={search} onSearch={setSearch} searchRef={searchRef} smokesToday={smokesToday} onLogSmoke={logSmoke} />
+        {serverIssue && <ServerBanner issue={serverIssue} onRetry={refresh} />}
         {view === 'news' ? (
           <News data={data} now={now} busy={newsBusy} onRefresh={refreshNews} onTopics={setNewsTopics} />
         ) : view === 'inbox' ? (

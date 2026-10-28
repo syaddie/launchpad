@@ -35,6 +35,12 @@ const REDIGEST_AFTER: Record<InboxRange, number> = { '2d': 90 * MIN, '7d': 6 * 6
 
 const running = new Map<SourceKey, Promise<void>>();
 
+/** Google stopped accepting the sign-in: forget it, and remember why for the page. */
+export function signOutGoogle(reason: string): void {
+  store.clearGoogle();
+  store.setGoogleSignedOut(reason);
+}
+
 function enabled(key: SourceKey, force: boolean): boolean {
   if (key === 'carriers') return true;
   if (key === 'speedtest') {
@@ -191,7 +197,7 @@ export function runSource(key: SourceKey, force = false): Promise<void> {
       const err = e as Error;
       console.error(`[sync] ${key} failed:`, err.message);
       store.setSync(key, { ...prev, lastAttempt: at, lastError: err.message });
-      if (err instanceof GoogleError && err.authExpired) store.clearGoogle();
+      if (err instanceof GoogleError && err.authExpired) signOutGoogle(err.message);
     } finally {
       running.delete(key);
     }

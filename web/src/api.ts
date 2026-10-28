@@ -38,15 +38,31 @@ export function localSet(key: string, value: string): void {
   }
 }
 
+/** The Launchpad server itself can't be used: not reachable, not answering, or the Access sign-in lapsed. */
+export class ServerError extends Error {
+  constructor(readonly kind: 'unreachable' | 'down' | 'access', message: string, readonly status = 0) {
+    super(message);
+  }
+}
+
 async function req<T>(method: string, url: string, body?: unknown, keepalive = false): Promise<T> {
   const raw = body instanceof Blob;
-  const res = await fetch(url, {
-    method,
-    headers: body === undefined ? undefined : { 'Content-Type': raw ? body.type || 'application/octet-stream' : 'application/json' },
-    body: body === undefined ? undefined : raw ? body : JSON.stringify(body),
-    keepalive,
-  });
-  if (res.status === 403) throw new Error('Not signed in through Cloudflare Access.');
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: body === undefined ? undefined : { 'Content-Type': raw ? body.type || 'application/octet-stream' : 'application/json' },
+      body: body === undefined ? undefined : raw ? body : JSON.stringify(body),
+      keepalive,
+    });
+  } catch {
+    throw new ServerError('unreachable', 'Can’t reach the Launchpad server.');
+  }
+  if (res.status === 403) throw new ServerError('access', 'Not signed in through Cloudflare Access.', 403);
+  // The tunnel or a proxy answering for a server that's down (Cloudflare uses 52x and 530).
+  if ([502, 503, 504].includes(res.status) || (res.status >= 520 && res.status <= 530)) {
+    throw new ServerError('down', `The Launchpad server isn’t answering (${res.status}).`, res.status);
+  }
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((json as { error?: string }).error || `Request failed (${res.status})`);
   return json as T;

@@ -7,11 +7,11 @@ import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { config, googleConfigured } from './config';
-import { authUrl, completeTask, createTask, exchangeCode, revoke } from './google';
+import { authUrl, completeTask, createTask, exchangeCode, GoogleError, revoke } from './google';
 import { store, updatePackages } from './store';
 import { claudeEnabled } from './claude';
 import { MAX_PHOTOS, MAX_PHOTO_BYTES, readPhoto, removePhotoFile, sniffImage, writePhoto } from './photos';
-import { isRunning, newPackage, refreshPackage, refreshSummaries, refreshWeather, runAllGoogle, runIfStale, runSource, startScheduler } from './sync';
+import { isRunning, newPackage, refreshPackage, refreshSummaries, refreshWeather, runAllGoogle, runIfStale, runSource, signOutGoogle, startScheduler } from './sync';
 import { serverStats, startSampler } from './system';
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
 import { DEFAULT_ENGINES, HIDEABLE_KEYS } from '../../shared/defaults';
@@ -51,7 +51,7 @@ function state(): AppState {
     bookmarks: store.bookmarks(),
     notes: store.notes(),
     prefs,
-    google: { configured: googleConfigured(), connected: !!g, email: g?.email, name: g?.name },
+    google: { configured: googleConfigured(), connected: !!g, email: g?.email, name: g?.name, signedOut: g ? undefined : store.googleSignedOut() ?? undefined },
     calendars: cal.calendars,
     events: cal.events,
     taskLists: tasks.lists,
@@ -407,6 +407,7 @@ app.get('/api/auth/google/callback', async (c) => {
   } catch (e) {
     return c.text(`Couldn't connect Google: ${(e as Error).message}`, 500);
   }
+  store.setGoogleSignedOut(null);
   store.resetSync();
   await runAllGoogle();
   return c.redirect('/');
@@ -415,6 +416,7 @@ app.get('/api/auth/google/callback', async (c) => {
 app.post('/api/auth/google/disconnect', async (c) => {
   await revoke();
   store.clearGoogle();
+  store.setGoogleSignedOut(null);
   store.resetSync();
   return c.json(state());
 });
@@ -425,6 +427,7 @@ app.get('/api/carriers', (c) => c.json(CARRIERS));
 
 app.onError((err, c) => {
   console.error(`[api] ${c.req.method} ${c.req.path}:`, err.message);
+  if (err instanceof GoogleError && err.authExpired) signOutGoogle(err.message);
   return c.json({ error: err.message }, 500);
 });
 

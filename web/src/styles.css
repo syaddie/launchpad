@@ -227,7 +227,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 
 .sync { position: relative; width: 30px; height: 34px; display: grid; place-items: center; z-index: 14; }
 .sync-dot { width: 7px; height: 7px; border-radius: 50%; transition: background 0.3s; }
-.sync-tip { position: absolute; top: 38px; right: -40px; width: 250px; padding: 10px 15px; display: flex; flex-direction: column; gap: 5px; }
+.sync-tip { position: absolute; top: 38px; right: -40px; width: 300px; padding: 10px 15px; display: flex; flex-direction: column; gap: 5px; }
 .sync-line { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; }
 
 /* ---------- shared components ---------- */
@@ -593,6 +593,15 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 [data-layout='wide'] .news-grid { gap: 30px; }
 [data-layout='narrow'] .news-grid { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; gap: 15px; }
 .news-note { padding: 5px 10px; font-size: 13px; color: var(--t3); }
+
+/* Server unreachable: sits under the top bar until a refresh gets through. */
+.server-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; flex: none; padding: 10px 15px; border: 1px solid var(--wn); border-radius: 4px; font-size: 13px; line-height: 1.5; color: var(--t2); }
+.server-banner > i { font-size: 20px; color: var(--wn); flex: none; }
+/* The button drops below the text once it would squeeze it under ~260px (phones). */
+.server-banner > div { flex: 1 1 260px; min-width: 0; }
+.server-banner strong { color: var(--tx); font-weight: 600; }
+.server-banner .btn { flex: none; }
+.sync-err { font-size: 11px; line-height: 1.4; color: var(--t3); margin: -2px 0 3px; }
 
 .story { display: flex; flex-direction: column; gap: 4px; padding: 10px; border-radius: 4px; }
 .story + .story { border-top: 1px solid var(--ln); border-radius: 0; }

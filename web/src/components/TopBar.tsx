@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { DOW } from '../../../shared/dates';
 import { engineUrl, parseSearch } from '../../../shared/trackers';
 import type { AppState, Bookmark, SearchEngine, SourceKey, Weather } from '../../../shared/types';
@@ -301,10 +301,11 @@ export function TopBar({ data, now, subline, search, onSearch, searchRef, smokes
                 ? !data.prefs.speedTestHours
                 : needsGoogle(s.key) && !data.prefs.sources[s.key as 'calendar'];
       if (off) return { name: s.name, text: 'Off', warn: false };
-      if (failing(st)) return { name: s.name, text: `Couldn’t sync · last synced ${ago(st.lastSuccess, now)}`, warn: true };
+      if (failing(st)) return { name: s.name, text: `Couldn’t sync · last synced ${ago(st.lastSuccess, now)}`, warn: true, why: st.lastError };
       return { name: s.name, text: st.lastSuccess ? `${s.ok} ${ago(st.lastSuccess, now)}` : 'Waiting for first sync', warn: false };
     });
-  if (!connected) lines.unshift({ name: 'Google', text: 'Not connected', warn: false });
+  if (data.google.signedOut) lines.unshift({ name: 'Google', text: 'Signed out · reconnect in Settings', warn: true, why: data.google.signedOut.reason });
+  else if (!connected) lines.unshift({ name: 'Google', text: 'Not connected', warn: false });
   const anyFail = lines.some((l) => l.warn);
   const dot = anyFail ? 'var(--wn)' : connected ? 'var(--t3)' : 'var(--ln)';
 
@@ -404,10 +405,13 @@ export function TopBar({ data, now, subline, search, onSearch, searchRef, smokes
             {syncHover && (
               <div className="popover sync-tip">
                 {lines.map((l) => (
-                  <div key={l.name} className="sync-line">
-                    <span style={{ color: 'var(--t2)' }}>{l.name}</span>
-                    <span style={{ color: l.warn ? 'var(--wn)' : 'var(--t3)', textAlign: 'right' }}>{l.text}</span>
-                  </div>
+                  <Fragment key={l.name}>
+                    <div className="sync-line">
+                      <span style={{ color: 'var(--t2)' }}>{l.name}</span>
+                      <span style={{ color: l.warn ? 'var(--wn)' : 'var(--t3)', textAlign: 'right' }}>{l.text}</span>
+                    </div>
+                    {'why' in l && l.why && <div className="sync-err">{l.why}</div>}
+                  </Fragment>
                 ))}
               </div>
             )}
