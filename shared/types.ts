@@ -22,7 +22,7 @@ export type ThemeMode = 'system' | 'light' | 'dark';
 export type AccentKey = 'sage' | 'slate' | 'terracotta';
 export type GoogleSource = 'calendar' | 'tasks' | 'gmail';
 export type SourceKey = GoogleSource | 'carriers' | 'news' | 'inbox' | 'weather' | 'speedtest';
-export type ViewKey = 'home' | 'news' | 'inbox' | 'you' | 'server';
+export type ViewKey = 'home' | 'news' | 'inbox' | 'you' | 'money' | 'server';
 
 /** One place to search: "yt lofi" opens url with %s replaced by "lofi". The first engine is the default. */
 export interface SearchEngine {
@@ -265,6 +265,46 @@ export interface Mood {
   note: string;
 }
 
+export type MoneyCategory = 'Food' | 'Transport' | 'Shopping' | 'Bills' | 'Family' | 'Fun' | 'Travel' | 'Pay' | 'Other';
+
+/** One amount of money in or out on a day. Planned ones are the forecast; done ones actually happened. */
+export interface MoneyEntry {
+  id: string;
+  /** YYYY-MM-DD. */
+  date: string;
+  kind: 'in' | 'out';
+  amount: number;
+  note: string;
+  /** Optional; empty when not set. */
+  category: MoneyCategory | '';
+  planned: boolean;
+}
+
+export type WishPriority = '' | 'High' | 'Medium' | 'Low';
+export type WishStatus = '' | 'Wanted' | 'Saving up' | 'Purchased' | 'Dropped';
+
+export interface WishItem {
+  id: string;
+  name: string;
+  category: string;
+  priority: WishPriority;
+  status: WishStatus;
+  price: number | null;
+  /** YYYY-MM the item is wanted by; empty when there's no target. */
+  target: string;
+  notes: string;
+}
+
+/** The money tracker: what's typed in. Balances and totals are worked out from it (shared/money.ts). */
+export interface Money {
+  /** The first day tracked (YYYY-MM-DD) and the balance that morning. */
+  start: string;
+  opening: number;
+  /** Sorted by date, then in the order they were added. */
+  entries: MoneyEntry[];
+  wishlist: WishItem[];
+}
+
 export interface SpeedTest {
   /** ISO date-time. */
   at: string;
@@ -347,6 +387,7 @@ export interface AppState {
   smokes: string[];
   /** Keyed by YYYY-MM-DD. */
   moods: Record<string, Mood>;
+  money: Money;
 }
 
 export interface Backup {

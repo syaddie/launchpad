@@ -15,6 +15,7 @@ import { isRunning, newPackage, refreshPackage, refreshSummaries, refreshWeather
 import { serverStats, startSampler } from './system';
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
 import { DEFAULT_ENGINES, HIDEABLE_KEYS } from '../../shared/defaults';
+import { cleanMoney } from '../../shared/money';
 import type { AppState, BookmarkGroup, Countdown, Mood, NewsTopic, Note, Package, Photo, Prefs, SearchEngine, SourceKey } from '../../shared/types';
 
 const app = new Hono();
@@ -72,6 +73,7 @@ function state(): AppState {
     countdowns: store.countdowns(),
     smokes: recentSmokes(),
     moods: store.moods(),
+    money: store.money(),
   };
 }
 
@@ -289,6 +291,17 @@ app.put('/api/moods/:date', async (c) => {
   else moods[date] = { level, note: isStr(body.note) ? body.note.trim().slice(0, 280) : moods[date]?.note ?? '' };
   store.setMoods(moods);
   return c.json(moods);
+});
+
+// ---------- money ----------
+
+/** The whole tracker (starting balance, entries) and wishlist; the page works out the balances. */
+app.put('/api/money', bodyLimit({ maxSize: 1024 * 1024, onError: (c) => c.json({ error: 'That’s too much to save at once.' }, 413) }), async (c) => {
+  const body = await c.req.json();
+  if (!body || typeof body !== 'object' || !Array.isArray(body.entries)) return c.json({ error: 'Invalid money tracker' }, 400);
+  const money = cleanMoney(body);
+  store.setMoney(money);
+  return c.json(money);
 });
 
 // ---------- server health ----------
