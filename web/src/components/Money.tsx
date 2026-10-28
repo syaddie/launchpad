@@ -295,6 +295,17 @@ function MonthTab({ money, today, month, onMonth, onChange }: { money: Money; to
     setDraftMonth(month);
     setDraft(blank());
   }
+  const [layout, setLayoutState] = useState<'list' | 'calendar'>(() => (localGet('moneyLayout') === 'calendar' ? 'calendar' : 'list'));
+  const setLayout = (l: 'list' | 'calendar') => {
+    setLayoutState(l);
+    localSet('moneyLayout', l);
+  };
+  /** From the calendar: go to the list with the add row set to that day. */
+  const addOn = (date: string) => {
+    setDraft({ ...blank(), date });
+    setLayout('list');
+    requestAnimationFrame(() => document.querySelector<HTMLInputElement>('[aria-label="New entry note"]')?.focus());
+  };
 
   const setEntries = (list: MoneyEntry[]) => onChange({ ...money, entries: sortEntries(list) });
   const patch = (id: string, p: Partial<MoneyEntry>) => setEntries(money.entries.map((e) => (e.id === id ? { ...e, ...p } : e)));
@@ -331,6 +342,14 @@ function MonthTab({ money, today, month, onMonth, onChange }: { money: Money; to
               This month
             </button>
           )}
+          <div className="tabs layout-tabs" role="group" aria-label="Show as">
+            {(['list', 'calendar'] as const).map((l) => (
+              <button key={l} className={'tab' + (layout === l ? ' active' : '')} aria-pressed={layout === l} onClick={() => setLayout(l)}>
+                <i className={'ph-duotone ' + (l === 'list' ? 'ph-list-bullets' : 'ph-calendar-blank')} />
+                {l === 'list' ? 'List' : 'Calendar'}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="month-sums">
           <span>
@@ -368,155 +387,220 @@ function MonthTab({ money, today, month, onMonth, onChange }: { money: Money; to
         </div>
       )}
 
-      <section className="panel you-panel ledger" aria-label={`Entries for ${monthName(month)}`} data-grid>
-        <div className="sum-scroll">
-          <table className="sheet entries">
-            <colgroup>
-              <col style={{ width: 36 }} />
-              <col style={{ width: 132 }} />
-              <col />
-              <col style={{ width: 112 }} />
-              <col style={{ width: 104 }} />
-              <col style={{ width: 104 }} />
-              <col style={{ width: 108 }} />
-              <col style={{ width: 34 }} />
-            </colgroup>
-            <thead>
-              <tr>
-                <th aria-label="Done" />
-                <th>Date</th>
-                <th>Note</th>
-                <th>Category</th>
-                <th className="r">Out</th>
-                <th className="r">In</th>
-                <th className="r">Balance</th>
-                <th aria-label="Remove" />
-              </tr>
-              <tr
-                className="add-row"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'BUTTON') {
-                    e.preventDefault();
-                    add();
-                  }
-                }}
-              >
-                <td className="c">
-                  <i className="ph-duotone ph-plus add-plus" aria-hidden="true" />
-                </td>
-                <td>
-                  <input type="date" className="cell date tnum" aria-label="New entry date" value={draft.date} onChange={(e) => setDraft({ ...draft, date: e.target.value })} />
-                </td>
-                <td>
-                  <input className="cell" aria-label="New entry note" placeholder="Add money in or out…" maxLength={120} value={draft.note} onChange={(e) => setDraft({ ...draft, note: e.target.value })} />
-                </td>
-                <td>
-                  <CategoryCell value={draft.category} label="New entry category" onChange={(category) => setDraft({ ...draft, category })} />
-                </td>
-                <td>
-                  <NumCell value={draft.out} label="New entry money out" onChange={(v) => setDraft({ ...draft, out: v, in: v === null ? draft.in : null })} />
-                </td>
-                <td className="in">
-                  <NumCell value={draft.in} label="New entry money in" onChange={(v) => setDraft({ ...draft, in: v, out: v === null ? draft.out : null })} />
-                </td>
-                <td colSpan={2} className="r">
-                  <button className="btn btn-primary btn-small" disabled={!canAdd} onClick={add}>
-                    {repeats.length > 1 ? `Add ${repeats.length}` : 'Add'}
-                  </button>
-                </td>
-              </tr>
-              <tr className="add-opts">
-                <td />
-                <td colSpan={7}>
-                  <div className="add-opts-in">
-                    <select className="cell pick inline" aria-label="Repeat" value={draft.repeat} onChange={(e) => setDraft({ ...draft, repeat: e.target.value as Repeat })}>
-                      {REPEATS.map((r) => (
-                        <option key={r.key} value={r.key}>
-                          {r.name}
-                        </option>
-                      ))}
-                    </select>
-                    {draft.repeat !== 'once' && (
-                      <>
-                        <span className="meta">until the end of</span>
-                        <input className="cell inline tnum" type="month" aria-label="Repeat until" min={draft.date.slice(0, 7)} value={draft.until} onChange={(e) => e.target.value && setDraft({ ...draft, until: e.target.value })} />
-                      </>
-                    )}
-                    <span className="meta">
-                      {draft.date > today ? 'Goes in as planned: tick it once it’s happened' : 'Goes in as done'}
-                    </span>
-                  </div>
-                </td>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((e, r) => {
-                const late = e.planned && e.date < today;
-                return [
-                  r === todayAt && <TodayRow key="today" money={money} today={today} />,
-                  <tr key={e.id} className={(e.planned ? 'planned' : '') + (late ? ' late' : '') + (r > 0 && entries[r - 1].date !== e.date ? ' new-day' : r > 0 ? ' same-day' : '')}>
-                    <td className="c">
-                      <button
-                        className={'check' + (e.planned ? '' : ' on')}
-                        title={e.planned ? 'Planned. Tick it once it’s happened' : 'Done. Untick to make it planned again'}
-                        aria-label={e.planned ? 'Mark as done' : 'Mark as planned'}
-                        aria-pressed={!e.planned}
-                        onClick={() => patch(e.id, { planned: !e.planned })}
-                      >
-                        {!e.planned && <i className="ph-bold ph-check" />}
-                      </button>
-                    </td>
-                    <td>
-                      <DateCell value={e.date} label="Date" r={r} c={0} onChange={(date) => patch(e.id, { date })} />
-                    </td>
-                    <td>
-                      <TextCell value={e.note} label="Note" r={r} c={1} max={120} onChange={(note) => patch(e.id, { note })} />
-                    </td>
-                    <td>
-                      <CategoryCell value={e.category} label="Category" onChange={(category) => patch(e.id, { category })} />
-                    </td>
-                    <td>
-                      <NumCell
-                        value={e.kind === 'out' && e.amount ? e.amount : null}
-                        label="Money out"
-                        r={r}
-                        c={3}
-                        onChange={(v) => (v === null ? e.kind === 'out' && patch(e.id, { amount: 0 }) : patch(e.id, { kind: 'out', amount: Math.abs(v) }))}
-                      />
-                    </td>
-                    <td className={e.kind === 'in' ? 'in' : undefined}>
-                      <NumCell
-                        value={e.kind === 'in' && e.amount ? e.amount : null}
-                        label="Money in"
-                        r={r}
-                        c={4}
-                        onChange={(v) => (v === null ? e.kind === 'in' && patch(e.id, { amount: 0 }) : patch(e.id, { kind: 'in', amount: Math.abs(v) }))}
-                      />
-                    </td>
-                    <td className="r">
-                      {lastOfDay.has(e.id) && (
-                        <Calc v={calc.balances[Number(e.date.slice(8)) - 1]} title={`End of ${shortDate(e.date)}: the opening balance plus everything in and out up to then, planned or done`} />
+      {layout === 'calendar' ? (
+        <MonthCalendar month={month} entries={entries} calc={calc} today={today} onPick={addOn} />
+      ) : (
+        <section className="panel you-panel ledger" aria-label={`Entries for ${monthName(month)}`} data-grid>
+          <div className="sum-scroll">
+            <table className="sheet entries">
+              <colgroup>
+                <col style={{ width: 36 }} />
+                <col style={{ width: 132 }} />
+                <col />
+                <col style={{ width: 112 }} />
+                <col style={{ width: 104 }} />
+                <col style={{ width: 104 }} />
+                <col style={{ width: 108 }} />
+                <col style={{ width: 34 }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th aria-label="Done" />
+                  <th>Date</th>
+                  <th>Note</th>
+                  <th>Category</th>
+                  <th className="r">Out</th>
+                  <th className="r">In</th>
+                  <th className="r">Balance</th>
+                  <th aria-label="Remove" />
+                </tr>
+                <tr
+                  className="add-row"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'BUTTON') {
+                      e.preventDefault();
+                      add();
+                    }
+                  }}
+                >
+                  <td className="c">
+                    <i className="ph-duotone ph-plus add-plus" aria-hidden="true" />
+                  </td>
+                  <td>
+                    <input type="date" className="cell date tnum" aria-label="New entry date" value={draft.date} onChange={(e) => setDraft({ ...draft, date: e.target.value })} />
+                  </td>
+                  <td>
+                    <input className="cell" aria-label="New entry note" placeholder="Add money in or out…" maxLength={120} value={draft.note} onChange={(e) => setDraft({ ...draft, note: e.target.value })} />
+                  </td>
+                  <td>
+                    <CategoryCell value={draft.category} label="New entry category" onChange={(category) => setDraft({ ...draft, category })} />
+                  </td>
+                  <td>
+                    <NumCell value={draft.out} label="New entry money out" onChange={(v) => setDraft({ ...draft, out: v, in: v === null ? draft.in : null })} />
+                  </td>
+                  <td className="in">
+                    <NumCell value={draft.in} label="New entry money in" onChange={(v) => setDraft({ ...draft, in: v, out: v === null ? draft.out : null })} />
+                  </td>
+                  <td colSpan={2} className="r">
+                    <button className="btn btn-primary btn-small" disabled={!canAdd} onClick={add}>
+                      {repeats.length > 1 ? `Add ${repeats.length}` : 'Add'}
+                    </button>
+                  </td>
+                </tr>
+                <tr className="add-opts">
+                  <td />
+                  <td colSpan={7}>
+                    <div className="add-opts-in">
+                      <select className="cell pick inline" aria-label="Repeat" value={draft.repeat} onChange={(e) => setDraft({ ...draft, repeat: e.target.value as Repeat })}>
+                        {REPEATS.map((r) => (
+                          <option key={r.key} value={r.key}>
+                            {r.name}
+                          </option>
+                        ))}
+                      </select>
+                      {draft.repeat !== 'once' && (
+                        <>
+                          <span className="meta">until the end of</span>
+                          <input className="cell inline tnum" type="month" aria-label="Repeat until" min={draft.date.slice(0, 7)} value={draft.until} onChange={(e) => e.target.value && setDraft({ ...draft, until: e.target.value })} />
+                        </>
                       )}
-                    </td>
-                    <td className="c">
-                      <button className="icon-btn row-x" title="Delete" aria-label={`Delete ${e.note || 'entry'}`} onClick={() => setEntries(money.entries.filter((x) => x.id !== e.id))}>
-                        <i className="ph-duotone ph-x" />
-                      </button>
-                    </td>
-                  </tr>,
-                ];
-              })}
-              {todayAt === -1 && <TodayRow money={money} today={today} />}
-            </tbody>
-          </table>
-          {!entries.length && (
-            <p className="month-empty">
-              Nothing in {monthName(month)} yet. Plan what you expect to spend and earn, then tick, change or delete entries as the days go by.
-            </p>
-          )}
-        </div>
-      </section>
+                      <span className="meta">
+                        {draft.date > today ? 'Goes in as planned: tick it once it’s happened' : 'Goes in as done'}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((e, r) => {
+                  const late = e.planned && e.date < today;
+                  return [
+                    r === todayAt && <TodayRow key="today" money={money} today={today} />,
+                    <tr key={e.id} className={(e.planned ? 'planned' : '') + (late ? ' late' : '') + (r > 0 && entries[r - 1].date !== e.date ? ' new-day' : r > 0 ? ' same-day' : '')}>
+                      <td className="c">
+                        <button
+                          className={'check' + (e.planned ? '' : ' on')}
+                          title={e.planned ? 'Planned. Tick it once it’s happened' : 'Done. Untick to make it planned again'}
+                          aria-label={e.planned ? 'Mark as done' : 'Mark as planned'}
+                          aria-pressed={!e.planned}
+                          onClick={() => patch(e.id, { planned: !e.planned })}
+                        >
+                          {!e.planned && <i className="ph-bold ph-check" />}
+                        </button>
+                      </td>
+                      <td>
+                        <DateCell value={e.date} label="Date" r={r} c={0} onChange={(date) => patch(e.id, { date })} />
+                      </td>
+                      <td>
+                        <TextCell value={e.note} label="Note" r={r} c={1} max={120} onChange={(note) => patch(e.id, { note })} />
+                      </td>
+                      <td>
+                        <CategoryCell value={e.category} label="Category" onChange={(category) => patch(e.id, { category })} />
+                      </td>
+                      <td>
+                        <NumCell
+                          value={e.kind === 'out' && e.amount ? e.amount : null}
+                          label="Money out"
+                          r={r}
+                          c={3}
+                          onChange={(v) => (v === null ? e.kind === 'out' && patch(e.id, { amount: 0 }) : patch(e.id, { kind: 'out', amount: Math.abs(v) }))}
+                        />
+                      </td>
+                      <td className={e.kind === 'in' ? 'in' : undefined}>
+                        <NumCell
+                          value={e.kind === 'in' && e.amount ? e.amount : null}
+                          label="Money in"
+                          r={r}
+                          c={4}
+                          onChange={(v) => (v === null ? e.kind === 'in' && patch(e.id, { amount: 0 }) : patch(e.id, { kind: 'in', amount: Math.abs(v) }))}
+                        />
+                      </td>
+                      <td className="r">
+                        {lastOfDay.has(e.id) && (
+                          <Calc v={calc.balances[Number(e.date.slice(8)) - 1]} title={`End of ${shortDate(e.date)}: the opening balance plus everything in and out up to then, planned or done`} />
+                        )}
+                      </td>
+                      <td className="c">
+                        <button className="icon-btn row-x" title="Delete" aria-label={`Delete ${e.note || 'entry'}`} onClick={() => setEntries(money.entries.filter((x) => x.id !== e.id))}>
+                          <i className="ph-duotone ph-x" />
+                        </button>
+                      </td>
+                    </tr>,
+                  ];
+                })}
+                {todayAt === -1 && <TodayRow money={money} today={today} />}
+              </tbody>
+            </table>
+            {!entries.length && (
+              <p className="month-empty">
+                Nothing in {monthName(month)} yet. Plan what you expect to spend and earn, then tick, change or delete entries as the days go by.
+              </p>
+            )}
+          </div>
+        </section>
+      )}
     </div>
+  );
+}
+
+/** The month as a calendar: each day's money in, money out and end-of-day balance. Click a day to add to it. */
+function MonthCalendar({ month, entries, calc, today, onPick }: { month: string; entries: MoneyEntry[]; calc: MonthCalc; today: string; onPick: (date: string) => void }) {
+  const lead = (parseYmd(`${month}-01`).getDay() + 6) % 7;
+  const byDay = new Map<string, MoneyEntry[]>();
+  for (const e of entries) byDay.set(e.date, [...(byDay.get(e.date) ?? []), e]);
+  const lowest = calc.balances.indexOf(calc.lowest);
+
+  return (
+    <section className="panel you-panel cal" aria-label={`${monthName(month)} as a calendar`}>
+      <div className="cal-grid">
+        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
+          <span key={d} className="cal-dow">
+            {d}
+          </span>
+        ))}
+        {Array.from({ length: lead }, (_, i) => (
+          <span key={'l' + i} />
+        ))}
+        {calc.balances.map((bal, i) => {
+          const date = `${month}-${String(i + 1).padStart(2, '0')}`;
+          const list = byDay.get(date) ?? [];
+          const sum = (kind: 'in' | 'out') => list.reduce((a, e) => (e.kind === kind ? a + e.amount : a), 0);
+          const inn = sum('in');
+          const out = sum('out');
+          const late = list.some((e) => e.planned && e.date < today);
+          const title = [
+            `${shortDate(date)} · balance ${fmtMoney(bal)}${date > today ? ' (forecast)' : ''}`,
+            ...list.map((e) => `${e.kind === 'in' ? '+' : '−'}${fmtMoney(e.amount)}${e.note ? ` ${e.note}` : ''}${e.planned ? ' (planned)' : ''}`),
+            'Click to add to this day',
+          ].join('\n');
+          return (
+            <button
+              key={date}
+              className={'cal-day' + (date === today ? ' today' : '') + (date < today ? ' past' : '') + (list.length && list.every((e) => e.planned) ? ' planned' : '') + (list.length ? ' has' : '')}
+              title={title}
+              onClick={() => onPick(date)}
+            >
+              <span className="cal-num tnum">
+                {i + 1}
+                {late && <span className="cal-late" aria-label="Has planned entries that have passed" />}
+                {i === lowest && calc.lowest < calc.opening && <span className="cal-low">lowest</span>}
+              </span>
+              <span className="cal-amts tnum">
+                {inn > 0 && <span className="cal-in">+{fmtMoney(inn)}</span>}
+                {out > 0 && <span className="cal-out">−{fmtMoney(out)}</span>}
+              </span>
+              <span className={'cal-bal tnum' + (bal < 0 ? ' neg' : '')}>{fmtMoney(bal)}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="cal-foot meta">
+        <span>
+          <b className="cal-in">+In</b> · <b className="cal-out">−Out</b> · balance at the end of the day, counting what’s planned
+        </span>
+        <span>Days in italics are only planned so far · click a day to add to it</span>
+      </div>
+    </section>
   );
 }
 
