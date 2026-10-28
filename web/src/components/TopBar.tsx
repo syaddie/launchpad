@@ -318,9 +318,9 @@ export function TopBar({ data, now, subline, search, onSearch, searchRef, smokes
         </div>
         <div className="subline">{subline}</div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: '15px 30px', flexWrap: 'wrap' }}>
+      <div className="top-right" style={{ display: 'flex', alignItems: 'flex-end', gap: '15px 30px', flexWrap: 'wrap' }}>
         <Clock weather={data.prefs.weatherArea && !hidden.includes('top:weather') ? data.weather.now : null} showAir={!hidden.includes('top:air')} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+        <div className="top-tools" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <div className="search">
             <i className="ph-duotone ph-magnifying-glass" />
             <input
