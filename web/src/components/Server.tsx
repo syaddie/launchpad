@@ -2,16 +2,18 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { DOW, MON } from '../../../shared/dates';
 import { fmtDuration } from '../../../shared/trackers';
 import type { AppState, ServerStats, SourceKey, SpeedTest } from '../../../shared/types';
-import { api } from '../api';
+import { api, cachedServer, cacheServer } from '../api';
 import { ago, fmtBytes, hm } from '../util';
 
 const POLL = 5_000;
 
 /** The Server view: the machine's health, internet speed history, containers and syncs. */
 export function Server({ data, now, onOpenSettings }: { data: AppState; now: Date; onOpenSettings: () => void }) {
-  const [stats, setStats] = useState<ServerStats | null>(null);
+  // Open on the last reading while a fresh one loads; `stale` stays true until it arrives.
+  const [stats, setStats] = useState<ServerStats | null>(cachedServer);
+  const [stale, setStale] = useState(true);
   const [error, setError] = useState('');
-  const [iface, setIface] = useState<string | undefined>(undefined);
+  const [iface, setIface] = useState<string | undefined>(() => stats?.net?.iface || undefined);
   const ifaceRef = useRef(iface);
   ifaceRef.current = iface;
 
@@ -20,9 +22,14 @@ export function Server({ data, now, onOpenSettings }: { data: AppState; now: Dat
       .server(ifaceRef.current)
       .then((s) => {
         setStats(s);
+        setStale(false);
         setError('');
+        cacheServer(s);
       })
-      .catch((e) => setError(e.message));
+      .catch((e) => {
+        setStale(false);
+        setError(e.message);
+      });
   }, []);
 
   useEffect(() => {
@@ -34,6 +41,7 @@ export function Server({ data, now, onOpenSettings }: { data: AppState; now: Dat
   const pickIface = (v: string) => {
     setIface(v);
     ifaceRef.current = v;
+    setStale(true);
     load();
   };
 
@@ -64,7 +72,7 @@ export function Server({ data, now, onOpenSettings }: { data: AppState; now: Dat
         </div>
       )}
       <div className="server-row">
-        <SystemPanel s={stats} />
+        <SystemPanel s={stats} updating={stale} />
         <StoragePanel s={stats} />
         <NetworkPanel s={stats} onIface={pickIface} />
       </div>
@@ -116,13 +124,19 @@ function Gauge({ name, pct, detail }: { name: string; pct: number; detail: strin
   );
 }
 
-function SystemPanel({ s }: { s: ServerStats }) {
+function SystemPanel({ s, updating }: { s: ServerStats; updating: boolean }) {
   const memPct = s.mem.totalBytes ? (s.mem.usedBytes / s.mem.totalBytes) * 100 : 0;
   return (
     <section className="panel srv-panel" aria-label="System">
       <div className="panel-head">
         <h2 className="panel-title">System</h2>
-        <span className="meta tnum">
+        <span className="meta tnum" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          {updating && (
+            <span role="status" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <i className="ph-duotone ph-circle-notch spin" />
+              Updating ·
+            </span>
+          )}
           Up {fmtDuration(s.uptimeSec * 1000)} · load {s.load[0].toFixed(2)}
         </span>
       </div>
