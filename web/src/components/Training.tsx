@@ -1,9 +1,9 @@
-import { useMemo, useRef, useState } from 'react';
-import { DOW, MON, dayDiff, startOfDay, ymd } from '../../../shared/dates';
-import { fmtMoney } from '../../../shared/money';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { DOW, MON, addDays, dayDiff, parseYmd, startOfDay, ymd } from '../../../shared/dates';
+import { fmtMoney, monthName } from '../../../shared/money';
 import {
-  MIN_SPLIT_DAYS, MUSCLE_NAMES, SECONDARY_SHARE, exerciseHistory, fmtKg, fmtMinutes, fmtSet, gymCost, liftTrends, minutes, musclesOf, prsByWorkout, setsPerMuscle,
-  topSet, trainingVsRest, volumeKg, weekStreak, weekSummary, weeklyCounts, workingSets, workoutLabel, workoutsFromHevyCsv, type LiftMeasure, type Split,
+  MUSCLE_NAMES, SECONDARY_SHARE, cleanKg, exerciseHistory, fmtKg, fmtMinutes, fmtSet, gymPerSession, liftTrends, minutes, musclesOf, prsByWorkout, setsPerMuscle,
+  topSet, volumeKg, weekStreak, weekSummary, weeklyCounts, weightChange, weightSeries, workingSets, workoutLabel, workoutsFromHevyCsv, type LiftMeasure, type WeightPoint,
 } from '../../../shared/training';
 import type { AppState, ExerciseMuscles, Training, Workout } from '../../../shared/types';
 import { localGet, localSet } from '../api';
@@ -22,6 +22,10 @@ interface Props {
   onRefreshNote: () => void;
   onOpenExercise: (title: string) => void;
   onOpenSettings: () => void;
+  /** Log body weight for a day, or remove it with null. */
+  onWeight: (date: string, kg: number | null) => void;
+  /** Bumped by ⌘K › Log your weight to focus the weight box. */
+  weightSignal: number;
 }
 
 const kg = (n: number) => `${Math.round(n).toLocaleString('en-GB')} kg`;
@@ -30,7 +34,7 @@ const monthYear = (d: Date) => `${MON[d.getMonth()]} ${d.getFullYear()}`;
 const fmtSets = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 /** The Training view: workouts from Hevy's CSV export, by week, muscle and lift, beside the other logs. */
-export function TrainingView({ data, now, noteBusy, onImport, onRefreshNote, onOpenExercise, onOpenSettings }: Props) {
+export function TrainingView({ data, now, noteBusy, onImport, onRefreshNote, onOpenExercise, onOpenSettings, onWeight, weightSignal }: Props) {
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const today = startOfDay(now);
@@ -89,14 +93,14 @@ export function TrainingView({ data, now, noteBusy, onImport, onRefreshNote, onO
         <>
           {data.newsSummaries && <Note state={data.trainingNote} busy={noteBusy} now={now} onRefresh={onRefreshNote} />}
           <div className="you-row">
-            <ThisWeek workouts={ws} today={today} muscles={muscles} />
+            <ThisWeek workouts={ws} today={today} muscles={muscles} gymMonthly={data.prefs.gymMonthly} onOpenSettings={onOpenSettings} />
             <MusclePanel workouts={ws} today={today} muscles={muscles} goal={data.prefs.setsPerWeek} onOpenSettings={onOpenSettings} />
           </div>
           <div className="you-row">
             <Lifts workouts={ws} today={today} muscles={muscles} pinned={data.prefs.pinnedLifts} onOpen={onOpenExercise} />
-            <Recent workouts={ws} muscles={muscles} onOpen={onOpenExercise} />
+            <BodyWeight weights={data.weights} today={today} focusSignal={weightSignal} onSave={onWeight} />
           </div>
-          <Alongside data={data} today={today} />
+          <Recent workouts={ws} muscles={muscles} onOpen={onOpenExercise} />
         </>
       ) : (
         <section className="panel you-panel">
@@ -112,6 +116,11 @@ export function TrainingView({ data, now, noteBusy, onImport, onRefreshNote, onO
             </button>
           </div>
         </section>
+      )}
+      {!ws.length && (
+        <div className="you-row">
+          <BodyWeight weights={data.weights} today={today} focusSignal={weightSignal} onSave={onWeight} />
+        </div>
       )}
     </main>
   );
@@ -153,7 +162,7 @@ function Note({ state, busy, now, onRefresh }: { state: AppState['trainingNote']
 
 // ---------- this week ----------
 
-function ThisWeek({ workouts, today, muscles }: { workouts: Workout[]; today: Date; muscles: Muscles }) {
+function ThisWeek({ workouts, today, muscles, gymMonthly, onOpenSettings }: { workouts: Workout[]; today: Date; muscles: Muscles; gymMonthly: number; onOpenSettings: () => void }) {
   const week = useMemo(() => weekSummary(workouts, today), [workouts, today]);
   const weeks = useMemo(() => weeklyCounts(workouts, today, 12), [workouts, today]);
   const streak = useMemo(() => weekStreak(workouts, today), [workouts, today]);
@@ -219,7 +228,36 @@ function ThisWeek({ workouts, today, muscles }: { workouts: Workout[]; today: Da
           <span>This week</span>
         </div>
       </div>
+
+      <GymCost workouts={workouts} today={today} monthly={gymMonthly} onOpenSettings={onOpenSettings} />
     </section>
+  );
+}
+
+/** What each session this month cost, from the gym fee in Settings › Trackers. */
+function GymCost({ workouts, today, monthly, onOpenSettings }: { workouts: Workout[]; today: Date; monthly: number; onOpenSettings: () => void }) {
+  const month = ymd(today).slice(0, 7);
+  const { sessions, perSession } = gymPerSession(monthly, workouts, month);
+  return (
+    <div className="you-foot tr-gym">
+      {monthly > 0 ? (
+        <>
+          <span>
+            <b>{perSession !== null ? fmtMoney(perSession) : '–'}</b> a session in {monthName(month).split(' ')[0]}
+          </span>
+          <span>
+            {sessions} session{sessions === 1 ? '' : 's'} so far
+          </span>
+          <button className="btn-link" title="Change it in Settings › Trackers" onClick={onOpenSettings}>
+            Gym {fmtMoney(monthly)} a month
+          </button>
+        </>
+      ) : (
+        <button className="btn-link" onClick={onOpenSettings}>
+          Add what your gym costs a month in Settings to see what each session costs
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -410,71 +448,178 @@ function Recent({ workouts, muscles, onOpen }: { workouts: Workout[]; muscles: M
   );
 }
 
-// ---------- alongside the other logs ----------
+// ---------- body weight ----------
 
-function SplitTile({ name, split, fmt, unit, empty }: { name: string; split: Split | null; fmt: (n: number) => string; unit: string; empty: string }) {
-  const enough = split && split.trained.days >= MIN_SPLIT_DAYS && split.rest.days >= MIN_SPLIT_DAYS;
+const WEIGHT_RANGES = [
+  { days: 30, name: '30 days' },
+  { days: 90, name: '90 days' },
+  { days: 365, name: '1 year' },
+];
+
+function BodyWeight({ weights, today, focusSignal, onSave }: {
+  weights: Record<string, number>;
+  today: Date;
+  focusSignal: number;
+  onSave: (date: string, kg: number | null) => void;
+}) {
+  const [days, setDays] = useState(() => WEIGHT_RANGES.find((r) => String(r.days) === localGet('weightRange'))?.days ?? 90);
+  const [date, setDate] = useState(() => ymd(today));
+  const [text, setText] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (focusSignal) inputRef.current?.focus();
+  }, [focusSignal]);
+
+  const series = useMemo(() => weightSeries(weights), [weights]);
+  const from = ymd(addDays(today, -(days - 1)));
+  const shown = series.filter((p) => p.date >= from);
+  const last = series[series.length - 1];
+  const change = weightChange(series, days);
+  const kg = cleanKg(text);
+  const existing = weights[date];
+  const save = () => {
+    if (kg === null) return;
+    onSave(date, kg);
+    setText('');
+  };
+  const when = (d: string) => {
+    const n = dayDiff(parseYmd(d), today);
+    return n === 0 ? 'today' : n === 1 ? 'yesterday' : fmtDay(parseYmd(d));
+  };
+
   return (
-    <div className="tr-tile">
-      <span className="sec-label">{name}</span>
-      {enough ? (
-        <div className="tr-split">
-          {(['trained', 'rest'] as const).map((k) => (
-            <div key={k}>
-              <span className="meta">{k === 'trained' ? 'Days you trained' : 'Rest days'}</span>
-              <span className="serif tnum tr-split-v">
-                {fmt(split[k].avg!)} <small>{unit}</small>
-              </span>
-              <span className="meta tnum">{split[k].days} days</span>
-            </div>
+    <section className="panel you-panel tr-weight" aria-label="Body weight">
+      <div className="panel-head">
+        <h2 className="panel-title">Body weight</h2>
+        <div className="segmented" role="group" aria-label="Range">
+          {WEIGHT_RANGES.map((r) => (
+            <button key={r.days} className={days === r.days ? 'on' : ''} aria-pressed={days === r.days} onClick={() => (setDays(r.days), localSet('weightRange', String(r.days)))}>
+              {r.name}
+            </button>
           ))}
         </div>
+      </div>
+
+      <div className="tr-wt-top">
+        {last ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span className="serif tnum tr-wt-now">{fmtKg(last.kg)}</span>
+              <span style={{ fontSize: 13, color: 'var(--t2)' }}>kg {when(last.date)}</span>
+            </span>
+            <span className="meta tnum">
+              7-day average {fmtKg(last.avg)} kg
+              {change &&
+                ` · ${change.kg > 0 ? '+' : change.kg < 0 ? '−' : '±'}${fmtKg(Math.abs(change.kg))} kg ${change.full ? `in ${WEIGHT_RANGES.find((r) => r.days === days)!.name}` : `since ${fmtDay(parseYmd(change.since))}`}`}
+            </span>
+          </div>
+        ) : (
+          <p className="meta" style={{ margin: 0, maxWidth: 360 }}>
+            Log your weight here, or type “weight 72.4” in ⌘K. One a day is plenty; the line is the 7-day average, which evens out the day-to-day swings.
+          </p>
+        )}
+        <form
+          className="tr-wt-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            save();
+          }}
+        >
+          <input
+            id="weight-date"
+            className="input sm tnum"
+            type="date"
+            aria-label="Day"
+            value={date}
+            max={ymd(today)}
+            onChange={(e) => e.target.value && setDate(e.target.value)}
+          />
+          <input
+            id="weight-kg"
+            ref={inputRef}
+            className="input sm tnum"
+            inputMode="decimal"
+            aria-label="Weight in kg"
+            placeholder={existing ? `${fmtKg(existing)} kg` : 'kg'}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            style={{ width: 84 }}
+          />
+          <button className="btn btn-primary btn-small" type="submit" disabled={kg === null}>
+            {existing ? 'Update' : 'Log'}
+          </button>
+          {existing !== undefined && (
+            <button className="btn btn-ghost btn-small" type="button" title={`Remove ${fmtKg(existing)} kg on ${when(date)}`} onClick={() => onSave(date, null)}>
+              Remove
+            </button>
+          )}
+        </form>
+      </div>
+
+      {shown.length > 0 ? (
+        <WeightChart points={shown} from={from} to={ymd(today)} />
       ) : (
-        <p className="meta">
-          {split
-            ? `Shows once there are ${MIN_SPLIT_DAYS} days of each in the last 60; there are ${split.trained.days} training and ${split.rest.days} rest days so far.`
-            : empty}
-        </p>
+        series.length > 0 && <p className="meta">Nothing logged in the last {WEIGHT_RANGES.find((r) => r.days === days)!.name}.</p>
       )}
-    </div>
+    </section>
   );
 }
 
-function Alongside({ data, today }: { data: AppState; today: Date }) {
-  const ws = data.training.workouts;
-  const split = useMemo(() => trainingVsRest(ws, data.smokes, data.moods, today), [ws, data.smokes, data.moods, today]);
-  const month = ymd(today).slice(0, 7);
-  const cost = gymCost(data.money.entries, ws, month);
+/** Daily entries as dots and the 7-day average as a line, over the chosen range. */
+function WeightChart({ points, from, to }: { points: WeightPoint[]; from: string; to: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [W, setW] = useState(600);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => el.clientWidth && setW(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const H = W < 420 ? 140 : 170;
+  const L = 38;
+  const R = 10;
+  const T = 10;
+  const B = 22;
+  const vals = points.flatMap((p) => [p.kg, p.avg]);
+  const span = Math.max(1, Math.max(...vals) - Math.min(...vals));
+  const step = [0.5, 1, 2, 5, 10, 20].find((s) => span / s <= 4) ?? 50;
+  const lo = Math.floor((Math.min(...vals) - span * 0.1) / step) * step;
+  const hi = Math.ceil((Math.max(...vals) + span * 0.1) / step) * step;
+  const ticks: number[] = [];
+  for (let t = lo; t <= hi + 1e-9; t += step) ticks.push(Math.round(t * 10) / 10);
+  const total = Math.max(1, dayDiff(parseYmd(from), parseYmd(to)));
+  const x = (d: string) => L + (dayDiff(parseYmd(from), parseYmd(d)) / total) * (W - L - R);
+  const y = (v: number) => T + ((hi - v) / (hi - lo)) * (H - T - B);
+  const line = points.map((p) => `${x(p.date).toFixed(1)},${y(p.avg).toFixed(1)}`).join(' ');
+  const last = points[points.length - 1];
+  const mid = ymd(addDays(parseYmd(from), Math.round(total / 2)));
 
   return (
-    <section className="panel you-panel tr-along" aria-label="Alongside your other logs">
-      <div className="panel-head">
-        <h2 className="panel-title">Alongside your other logs</h2>
-        <span className="meta">Last 60 days, not counting today</span>
-      </div>
-      <div className="tr-tiles">
-        <SplitTile name="Cigarettes" split={split.smokes} fmt={(n) => n.toFixed(1)} unit="a day" empty="Log cigarettes in You (or press C) to compare them with training days." />
-        <SplitTile name="Mood" split={split.mood} fmt={(n) => n.toFixed(1)} unit="of 5" empty="Log a mood in You to compare it with training days." />
-        <div className="tr-tile">
-          <span className="sec-label">Gym cost this month</span>
-          {cost ? (
-            <div className="tr-split">
-              <div>
-                <span className="meta">In Money</span>
-                <span className="serif tnum tr-split-v">{fmtMoney(cost.cost)}</span>
-              </div>
-              <div>
-                <span className="meta">A session</span>
-                <span className="serif tnum tr-split-v">{cost.sessions ? fmtMoney(cost.cost / cost.sessions) : '–'}</span>
-                <span className="meta tnum">{cost.sessions} so far</span>
-              </div>
-            </div>
-          ) : (
-            <p className="meta">Add your gym membership in Money with “gym” in the note to see what each session costs.</p>
-          )}
-        </div>
-      </div>
-    </section>
+    <div ref={ref}>
+    <svg className="tr-wt-chart" width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Body weight from ${points[0].kg} to ${last.kg} kg`}>
+      {ticks.map((t) => (
+        <g key={t}>
+          <line x1={L} x2={W - R} y1={y(t)} y2={y(t)} stroke="var(--ln)" />
+          <text x={L - 6} y={y(t) + 3.5} textAnchor="end">
+            {fmtKg(t)}
+          </text>
+        </g>
+      ))}
+      {[from, mid, to].map((d, i) => (
+        <text key={d} x={x(d)} y={H - 5} textAnchor={i === 0 ? 'start' : i === 2 ? 'end' : 'middle'}>
+          {i === 2 ? 'Today' : `${parseYmd(d).getDate()} ${MON[parseYmd(d).getMonth()]}`}
+        </text>
+      ))}
+      {points.map((p) => (
+        <circle key={p.date} cx={x(p.date)} cy={y(p.kg)} r="2.4" fill="var(--t3)" opacity="0.6">
+          <title>{`${fmtDay(parseYmd(p.date))}: ${fmtKg(p.kg)} kg`}</title>
+        </circle>
+      ))}
+      {points.length > 1 && <polyline points={line} fill="none" stroke="var(--ac)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />}
+      <circle cx={x(last.date)} cy={y(last.avg)} r="3.4" fill="var(--acd)" />
+    </svg>
+    </div>
   );
 }
 

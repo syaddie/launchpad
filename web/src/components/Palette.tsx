@@ -13,6 +13,8 @@ export interface PaletteItem {
   words?: string;
   /** Only listed once something is typed (bookmarks would swamp the empty palette). */
   onlyWhenTyping?: boolean;
+  /** From what's typed, and listed above the matches, e.g. “Log 72.4 kg” for “weight 72.4”. */
+  first?: boolean;
   run: () => void;
 }
 
@@ -24,7 +26,7 @@ export function matchItem(it: PaletteItem, q: string): boolean {
 /** ⌘K: one box for actions, views, panels and bookmarks, with web searches at the end. */
 export function Palette({ items, searches, onClose }: {
   items: PaletteItem[];
-  /** Web searches for what's typed, listed after the matches. */
+  /** Items worked out from what's typed: web searches after the matches, and any marked `first` before them. */
   searches: (q: string) => PaletteItem[];
   onClose: () => void;
 }) {
@@ -35,7 +37,8 @@ export function Palette({ items, searches, onClose }: {
   const shown = useMemo(() => {
     const t = q.trim();
     const hits = items.filter((it) => (t ? matchItem(it, t) : !it.onlyWhenTyping));
-    return [...hits.slice(0, 40), ...(t ? searches(t) : [])];
+    const extra = t ? searches(t) : [];
+    return [...extra.filter((it) => it.first), ...hits.slice(0, 40), ...extra.filter((it) => !it.first)];
   }, [items, searches, q]);
   const cur = Math.min(sel, Math.max(0, shown.length - 1));
 

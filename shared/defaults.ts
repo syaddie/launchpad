@@ -36,6 +36,7 @@ export const DEFAULT_PREFS: Prefs = {
   speedPlanMbps: 0,
   setsPerWeek: 10,
   pinnedLifts: [],
+  gymMonthly: 0,
 };
 
 /** Everything Settings › Panels can switch off. */

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
 import { ymd } from '../../shared/dates';
 import { starterMoney } from '../../shared/money';
-import { EMPTY_TRAINING } from '../../shared/training';
+import { EMPTY_TRAINING, fmtKg, parseWeight } from '../../shared/training';
 import { MOOD_WORDS, engineUrl, fmtDuration, parseSearch, smokesOn } from '../../shared/trackers';
 import type { AppState, BookmarkGroup, Countdown, Money, Mood, Note, Package, Photo, Prefs, Task, Training, ViewKey } from '../../shared/types';
 import { api, cachedState, cacheState, localGet, localSet, ServerError } from './api';
@@ -59,12 +59,13 @@ const EMPTY: AppState = {
   training: EMPTY_TRAINING,
   exerciseMuscles: {},
   trainingNote: { note: null, error: null },
+  weights: {},
 };
 
 /** A cached copy from an older version can be missing newer fields. */
 function fromCache(c: AppState | null): AppState {
   if (!c) return EMPTY;
-  return { ...EMPTY, ...c, prefs: { ...DEFAULT_PREFS, ...c.prefs }, sync: { ...EMPTY.sync, ...c.sync }, inbox: c.inbox ?? EMPTY.inbox, money: Array.isArray(c.money?.entries) ? c.money : EMPTY.money, training: Array.isArray(c.training?.workouts) ? c.training : EMPTY.training, exerciseMuscles: c.exerciseMuscles ?? {}, trainingNote: c.trainingNote ?? EMPTY.trainingNote };
+  return { ...EMPTY, ...c, prefs: { ...DEFAULT_PREFS, ...c.prefs }, sync: { ...EMPTY.sync, ...c.sync }, inbox: c.inbox ?? EMPTY.inbox, money: Array.isArray(c.money?.entries) ? c.money : EMPTY.money, training: Array.isArray(c.training?.workouts) ? c.training : EMPTY.training, exerciseMuscles: c.exerciseMuscles ?? {}, trainingNote: c.trainingNote ?? EMPTY.trainingNote, weights: c.weights ?? {} };
 }
 
 type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings' } | { type: 'exercise'; title: string } | null;
@@ -138,6 +139,7 @@ export function App() {
   const [view, setView] = useState<ViewKey>('home');
   const [palette, setPalette] = useState(false);
   const [addCountdown, setAddCountdown] = useState(0);
+  const [weightSignal, setWeightSignal] = useState(0);
   const [newsBusy, setNewsBusy] = useState(false);
   const [noteBusy, setNoteBusy] = useState(false);
   const [inboxBusy, setInboxBusy] = useState(false);
@@ -428,6 +430,24 @@ export function App() {
     showToast(`Logged · ${count} today${limit ? ` of ${limit}` : ''}`, { label: 'Undo', run: () => undoSmoke(at) });
   };
 
+  /** Log body weight for a day (null removes it); `undo` offers to put back what was there. */
+  const setWeight = (date: string, kg: number | null, undo = false) => {
+    const before = data.weights[date];
+    update((d) => {
+      const weights = { ...d.weights };
+      if (kg === null) delete weights[date];
+      else weights[date] = kg;
+      return { ...d, weights };
+    });
+    api
+      .putWeight(date, kg)
+      .then((weights) => {
+        update((d) => ({ ...d, weights }));
+        if (undo && kg !== null) showToast(`Logged ${fmtKg(kg)} kg for today`, { label: 'Undo', run: () => setWeight(date, before ?? null) });
+      })
+      .catch(onSaveError);
+  };
+
   const setMood = (date: string, mood: Mood | null) => {
     update((d) => {
       const moods = { ...d.moods };
@@ -625,6 +645,11 @@ export function App() {
       sub: `${smokesToday} today${data.smokes.length ? ` · last one ${fmtDuration(now.getTime() - Date.parse(data.smokes[data.smokes.length - 1]))} ago` : ''}`,
       run: logSmoke,
     },
+    {
+      id: 'a:weight', group: 'Actions', label: 'Log your weight', icon: 'ph-scales', words: 'body weight kg scale',
+      sub: data.weights[ymd(now)] ? `Today: ${fmtKg(data.weights[ymd(now)])} kg` : 'Or type “weight 72.4”',
+      run: () => (setView('training'), setWeightSignal((n) => n + 1)),
+    },
     { id: 'a:mood', group: 'Actions', label: 'Log today’s mood', icon: 'ph-smiley', keys: ['M'], sub: todayMood ? `Today: ${MOOD_WORDS[todayMood.level - 1]}` : 'Not logged yet today', run: () => setView('you') },
     {
       id: 'a:countdown', group: 'Actions', label: 'Add a countdown', icon: 'ph-hourglass-medium',
@@ -674,16 +699,22 @@ export function App() {
   ];
 
   const paletteSearches = (q: string): PaletteItem[] => {
+    const kg = parseWeight(q);
+    const log: PaletteItem[] = kg === null ? [] : [{
+      id: 'a:weight-now', group: 'Actions', label: `Log ${fmtKg(kg)} kg for today`, icon: 'ph-scales', first: true,
+      sub: data.weights[ymd(now)] ? `Replaces ${fmtKg(data.weights[ymd(now)])} kg` : 'Body weight, in Training',
+      run: () => setWeight(ymd(now), kg, true),
+    }];
     const engines = data.prefs.searchEngines;
     const { engine, term } = parseSearch(q, engines);
-    return (engine ? [engine] : engines).map((e) => ({
+    return [...log, ...(engine ? [engine] : engines).map((e) => ({
       id: 's:' + e.prefix,
       group: 'Search the web',
       label: `Search ${e.name} for “${term}”`,
       icon: e.name[0].toUpperCase(),
       keys: [e.prefix],
       run: () => window.open(engineUrl(e, term), '_blank', 'noopener'),
-    }));
+    }))];
   };
   const drawerTitle =
     drawer?.type === 'settings' ? 'Settings' : drawer?.type === 'add' ? 'Add package' : drawer?.type === 'exercise' ? drawer.title : drawerPkg ? 'Package' : '';
@@ -710,6 +741,8 @@ export function App() {
             onRefreshNote={() => refreshTrainingNote(true)}
             onOpenExercise={(title) => setDrawer({ type: 'exercise', title })}
             onOpenSettings={() => setDrawer({ type: 'settings' })}
+            onWeight={setWeight}
+            weightSignal={weightSignal}
           />
         ) : view === 'money' ? (
           <MoneyView money={data.money} now={now} saved={moneySaved} onChange={setMoney} onImport={importMoney} notify={showToast} />

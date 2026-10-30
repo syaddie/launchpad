@@ -4,7 +4,7 @@
 // is worked out here: weekly totals, sets per muscle, lift trends and PRs.
 // Also cleaning for what the page sends.
 import { addDays, dayDiff, startOfDay, ymd } from './dates';
-import type { ExerciseMuscles, MoneyEntry, Mood, Muscle, SetType, Training, Workout, WorkoutExercise, WorkoutSet } from './types';
+import type { ExerciseMuscles, Muscle, SetType, Training, Workout, WorkoutExercise, WorkoutSet } from './types';
 
 export const MAX_WORKOUTS = 5000;
 const MAX_EXERCISES = 60;
@@ -534,7 +534,7 @@ export function prsByWorkout(workouts: Workout[], map?: MuscleMap): Map<string, 
   return out;
 }
 
-// ---------- alongside the other logs ----------
+// ---------- gym ----------
 
 /** The newest workout and how many days ago it was (0 is today). */
 export function lastTrained(workouts: Workout[], today: Date): { workout: Workout; days: number } | null {
@@ -542,58 +542,10 @@ export function lastTrained(workouts: Workout[], today: Date): { workout: Workou
   return w ? { workout: w, days: dayDiff(new Date(w.start), today) } : null;
 }
 
-export interface Split {
-  trained: { days: number; avg: number | null };
-  rest: { days: number; avg: number | null };
-}
-
-/** Days needed on each side before a comparison means anything. */
-export const MIN_SPLIT_DAYS = 5;
-
-/**
- * Cigarettes a day and mood on days with a workout against days without, over the last `days` complete days (today is left out
- * because it isn't over). Cigarette days start from the first one logged; mood days are the ones with a mood.
- */
-export function trainingVsRest(workouts: Workout[], smokes: string[], moods: Record<string, Mood>, today: Date, days = 60): { smokes: Split | null; mood: Split | null } {
-  const end = startOfDay(today);
-  const start = addDays(end, -days);
-  const trainedDays = new Set(workouts.map((w) => ymd(new Date(w.start))));
-  const perDay = new Map<string, number>();
-  let first = Infinity;
-  for (const s of smokes) {
-    const t = Date.parse(s);
-    first = Math.min(first, t);
-    perDay.set(ymd(new Date(t)), (perDay.get(ymd(new Date(t))) ?? 0) + 1);
-  }
-  const smokeSide = { trained: [] as number[], rest: [] as number[] };
-  const moodSide = { trained: [] as number[], rest: [] as number[] };
-  for (let d = start; d < end; d = addDays(d, 1)) {
-    const key = ymd(d);
-    const side = trainedDays.has(key) ? 'trained' : 'rest';
-    if (addDays(d, 1).getTime() > first) smokeSide[side].push(perDay.get(key) ?? 0);
-    if ((moods[key]?.level ?? 0) >= 1) moodSide[side].push(moods[key].level);
-  }
-  const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
-  const split = (x: { trained: number[]; rest: number[] }): Split => ({
-    trained: { days: x.trained.length, avg: avg(x.trained) },
-    rest: { days: x.rest.length, avg: avg(x.rest) },
-  });
-  return {
-    smokes: smokes.length ? split(smokeSide) : null,
-    mood: moodSide.trained.length + moodSide.rest.length ? split(moodSide) : null,
-  };
-}
-
-/** A Money entry counts as the gym when its note or category says so. */
-const GYM_MONEY = /\b(gym|fitness|membership|personal train)/i;
-
-/** What the gym cost in a month (YYYY-MM), planned or done, and the sessions that month. null when nothing in Money mentions the gym. */
-export function gymCost(entries: MoneyEntry[], workouts: Workout[], month: string): { cost: number; sessions: number } | null {
-  const cost = entries
-    .filter((e) => e.kind === 'out' && e.date.startsWith(month) && (GYM_MONEY.test(e.note) || GYM_MONEY.test(e.category)))
-    .reduce((n, e) => n + e.amount, 0);
-  if (!cost) return null;
-  return { cost: Math.round(cost * 100) / 100, sessions: workouts.filter((w) => ymd(new Date(w.start)).startsWith(month)).length };
+/** Sessions in a month (YYYY-MM) and what each cost, from the monthly gym fee. */
+export function gymPerSession(monthly: number, workouts: Workout[], month: string): { sessions: number; perSession: number | null } {
+  const sessions = workouts.filter((w) => ymd(new Date(w.start)).startsWith(month)).length;
+  return { sessions, perSession: monthly > 0 && sessions ? Math.round((monthly / sessions) * 100) / 100 : null };
 }
 
 /** Calendar events that look like a gym block. */
@@ -607,4 +559,53 @@ export function gymWorkout(event: { title: string; start: string; end: string },
   const s = Date.parse(event.start) - GYM_SLACK;
   const e = Date.parse(event.end) + GYM_SLACK;
   return workouts.find((w) => Date.parse(w.start) < e && Date.parse(w.end) > s) ?? null;
+}
+
+// ---------- body weight ----------
+
+export const MIN_KG = 20;
+export const MAX_KG = 400;
+
+/** Kilograms to two decimals, or null when it isn't a body weight. */
+export function cleanKg(v: unknown): number | null {
+  const n = typeof v === 'string' ? Number(v.replace(',', '.')) : v;
+  return typeof n === 'number' && Number.isFinite(n) && n >= MIN_KG && n <= MAX_KG ? Math.round(n * 100) / 100 : null;
+}
+
+/** ⌘K: "weight 72.4", "w 72,4 kg", "log weight 72.4" → 72.4. */
+export function parseWeight(q: string): number | null {
+  const m = q.trim().match(/^(?:log\s+)?(?:weight|weigh|w)\s+(\d{2,3}(?:[.,]\d{1,2})?)\s*(?:kg)?$/i);
+  return m ? cleanKg(m[1]) : null;
+}
+
+export interface WeightPoint {
+  /** YYYY-MM-DD. */
+  date: string;
+  kg: number;
+  /** Average of the entries in the 7 days up to and including this one, which smooths out water and food from day to day. */
+  avg: number;
+}
+
+/** Every entry, oldest first, with its 7-day average. */
+export function weightSeries(weights: Record<string, number>): WeightPoint[] {
+  const dates = Object.keys(weights).sort();
+  return dates.map((date, i) => {
+    const from = ymd(addDays(new Date(date + 'T00:00:00'), -6));
+    const week = dates.slice(0, i + 1).filter((d) => d >= from).map((d) => weights[d]);
+    return { date, kg: weights[date], avg: Math.round((week.reduce((a, b) => a + b, 0) / week.length) * 100) / 100 };
+  });
+}
+
+/**
+ * The latest 7-day average against the one `days` before it. Without an entry that far back, against the first entry in those
+ * days, so a log that's only weeks old still shows a change. `since` is the date compared with; null with fewer than two entries.
+ */
+export function weightChange(series: WeightPoint[], days: number): { kg: number; since: string; full: boolean } | null {
+  const last = series[series.length - 1];
+  if (!last) return null;
+  const cutoff = ymd(addDays(new Date(last.date + 'T00:00:00'), -days));
+  const before = [...series].reverse().find((p) => p.date <= cutoff);
+  const then = before ?? series.find((p) => p.date > cutoff);
+  if (!then || then === last) return null;
+  return { kg: Math.round((last.avg - then.avg) * 100) / 100, since: then.date, full: !!before };
 }

@@ -131,6 +131,10 @@ export const store = {
   moods: () => get<Record<string, Mood>>('moods', {}),
   setMoods: (v: Record<string, Mood>) => set('moods', v),
 
+  /** Body weight in kg by YYYY-MM-DD. */
+  weights: () => get<Record<string, number>>('weights', {}),
+  setWeights: (v: Record<string, number>) => set('weights', v),
+
   money: (): Money => cleanMoney(get<unknown>('money', null)),
   setMoney: (v: Money) => set('money', v),
 

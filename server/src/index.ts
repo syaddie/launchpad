@@ -16,7 +16,7 @@ import { serverStats, startSampler } from './system';
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
 import { DEFAULT_ENGINES, HIDEABLE_KEYS } from '../../shared/defaults';
 import { cleanMoney } from '../../shared/money';
-import { cleanTraining } from '../../shared/training';
+import { MAX_KG, MIN_KG, cleanKg, cleanTraining } from '../../shared/training';
 import { refreshTraining } from './training';
 import type { AppState, BookmarkGroup, Countdown, Mood, NewsTopic, Note, Package, Photo, Prefs, SearchEngine, SourceKey } from '../../shared/types';
 
@@ -79,6 +79,7 @@ function state(): AppState {
     training: store.training(),
     exerciseMuscles: claudeEnabled() ? store.exerciseMuscles() : {},
     trainingNote: claudeEnabled() ? store.trainingNote() : { note: null, error: null },
+    weights: store.weights(),
   };
 }
 
@@ -170,6 +171,7 @@ app.put('/api/prefs', async (c) => {
     speedTestHours: num(body.speedTestHours, 0, 24, prev.speedTestHours),
     speedPlanMbps: num(body.speedPlanMbps, 0, 100_000, prev.speedPlanMbps),
     setsPerWeek: num(body.setsPerWeek, 1, 40, prev.setsPerWeek),
+    gymMonthly: typeof body.gymMonthly === 'number' && Number.isFinite(body.gymMonthly) ? Math.min(10_000, Math.max(0, Math.round(body.gymMonthly * 100) / 100)) : prev.gymMonthly,
     pinnedLifts: Array.isArray(body.pinnedLifts) ? [...new Set(body.pinnedLifts.filter(isStr).map((t) => t.slice(0, 120)))].slice(0, 12) : prev.pinnedLifts,
   };
   if (!next.searchEngines.length) next.searchEngines = DEFAULT_ENGINES;
@@ -298,6 +300,22 @@ app.put('/api/moods/:date', async (c) => {
   else moods[date] = { level, note: isStr(body.note) ? body.note.trim().slice(0, 280) : moods[date]?.note ?? '' };
   store.setMoods(moods);
   return c.json(moods);
+});
+
+/** Log body weight for a day; `kg` of 0 or null removes it. Returns every entry. */
+app.put('/api/weights/:date', async (c) => {
+  const date = c.req.param('date');
+  if (!isYmd(date)) return c.json({ error: 'Expected a YYYY-MM-DD date' }, 400);
+  const body = (await c.req.json().catch(() => ({}))) as { kg?: unknown };
+  const weights = { ...store.weights() };
+  if (body.kg === 0 || body.kg === null) delete weights[date];
+  else {
+    const kg = cleanKg(body.kg);
+    if (kg === null) return c.json({ error: `Expected a weight between ${MIN_KG} and ${MAX_KG} kg` }, 400);
+    weights[date] = kg;
+  }
+  store.setWeights(weights);
+  return c.json(weights);
 });
 
 // ---------- money ----------

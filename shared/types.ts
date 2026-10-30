@@ -58,6 +58,8 @@ export interface Prefs {
   setsPerWeek: number;
   /** Exercise names always shown first in Training › Your lifts. */
   pinnedLifts: string[];
+  /** What the gym costs a month, in dollars, for the cost of each session; 0 hides it. */
+  gymMonthly: number;
 }
 
 export interface CalendarInfo {
@@ -452,6 +454,8 @@ export interface AppState {
   training: Training;
   /** What each exercise trains, by name, as Claude read it. Names missing here fall back to rules in shared/training.ts. */
   exerciseMuscles: Record<string, ExerciseMuscles>;
+  /** Body weight in kg, keyed by YYYY-MM-DD. */
+  weights: Record<string, number>;
   /** null before the first note, or without an Anthropic API key. `error` is the last failure, shown in Training. */
   trainingNote: { note: TrainingNote | null; error: string | null };
 }
