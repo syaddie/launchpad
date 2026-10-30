@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
 import { ymd } from '../../shared/dates';
+import { emptyLearn, fmtStudy, parseStudy, timerMinutes } from '../../shared/learn';
 import { starterMoney } from '../../shared/money';
 import { EMPTY_TRAINING, fmtKg, parseWeight } from '../../shared/training';
 import { MOOD_WORDS, engineUrl, fmtDuration, parseSearch, smokesOn } from '../../shared/trackers';
-import type { AppState, BookmarkGroup, Countdown, Money, Mood, Note, Package, Photo, Prefs, Task, Training, ViewKey } from '../../shared/types';
+import type { AppState, BookmarkGroup, Countdown, Learn, Money, Mood, Note, Package, Photo, Prefs, Task, Training, ViewKey } from '../../shared/types';
 import { api, cachedState, cacheState, localGet, localSet, ServerError } from './api';
 import { Bookmarks } from './components/Bookmarks';
 import { AddPackageDrawer, Drawer, PANEL_ROWS, PackageDrawer, SettingsDrawer } from './components/Drawers';
 import { Inbox, inboxBadge } from './components/Inbox';
+import { CourseDrawer, LearnView } from './components/Learn';
 import { MoneyView } from './components/Money';
 import { News } from './components/News';
 import { FocusView, Notes } from './components/Notes';
@@ -60,15 +62,17 @@ const EMPTY: AppState = {
   exerciseMuscles: {},
   trainingNote: { note: null, error: null },
   weights: {},
+  learn: emptyLearn(),
+  learnNote: { note: null, error: null },
 };
 
 /** A cached copy from an older version can be missing newer fields. */
 function fromCache(c: AppState | null): AppState {
   if (!c) return EMPTY;
-  return { ...EMPTY, ...c, prefs: { ...DEFAULT_PREFS, ...c.prefs }, sync: { ...EMPTY.sync, ...c.sync }, inbox: c.inbox ?? EMPTY.inbox, money: Array.isArray(c.money?.entries) ? c.money : EMPTY.money, training: Array.isArray(c.training?.workouts) ? c.training : EMPTY.training, exerciseMuscles: c.exerciseMuscles ?? {}, trainingNote: c.trainingNote ?? EMPTY.trainingNote, weights: c.weights ?? {} };
+  return { ...EMPTY, ...c, prefs: { ...DEFAULT_PREFS, ...c.prefs }, sync: { ...EMPTY.sync, ...c.sync }, inbox: c.inbox ?? EMPTY.inbox, money: Array.isArray(c.money?.entries) ? c.money : EMPTY.money, training: Array.isArray(c.training?.workouts) ? c.training : EMPTY.training, exerciseMuscles: c.exerciseMuscles ?? {}, trainingNote: c.trainingNote ?? EMPTY.trainingNote, weights: c.weights ?? {}, learn: Array.isArray(c.learn?.courses) ? c.learn : EMPTY.learn, learnNote: c.learnNote ?? EMPTY.learnNote };
 }
 
-type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings' } | { type: 'exercise'; title: string } | null;
+type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings' } | { type: 'exercise'; title: string } | { type: 'course'; id: string; item?: string } | null;
 
 /** Debounced saver for whole-document PUTs, flushed when the tab closes. */
 function useSaver<T>(save: (v: T, keepalive?: boolean) => Promise<unknown>, delay: number, onSaved?: () => void, onError?: (e: Error) => void) {
@@ -140,6 +144,8 @@ export function App() {
   const [palette, setPalette] = useState(false);
   const [addCountdown, setAddCountdown] = useState(0);
   const [weightSignal, setWeightSignal] = useState(0);
+  const [addWorkSignal, setAddWorkSignal] = useState(0);
+  const [learnNoteBusy, setLearnNoteBusy] = useState(false);
   const [newsBusy, setNewsBusy] = useState(false);
   const [noteBusy, setNoteBusy] = useState(false);
   const [inboxBusy, setInboxBusy] = useState(false);
@@ -185,6 +191,7 @@ export function App() {
   const bookmarkSaver = useSaver(api.putBookmarks, 400, undefined, onSaveError);
   const moneySaver = useSaver(api.putMoney, 500, flashMoneySaved, onSaveError);
   const noteSaver = useSaver(api.putNotes, 500, flashSaved, onSaveError);
+  const learnSaver = useSaver(api.putLearn, 400, undefined, onSaveError);
 
   // ---------- data ----------
 
@@ -204,9 +211,10 @@ export function App() {
         bookmarks: bookmarkSaver.busy() ? prev.bookmarks : s.bookmarks,
         notes: noteSaver.busy() || noteEditing.current ? prev.notes : s.notes,
         money: moneySaver.busy() ? prev.money : s.money,
+        learn: learnSaver.busy() ? prev.learn : s.learn,
       }));
     },
-    [update, bookmarkSaver, noteSaver, moneySaver],
+    [update, bookmarkSaver, noteSaver, moneySaver, learnSaver],
   );
 
   const refresh = useCallback(
@@ -508,6 +516,63 @@ export function App() {
     showToast(summary, { label: 'Undo', run: () => setTraining(before) });
   };
 
+  // ---------- learn ----------
+
+  const setLearn = (learn: Learn) => {
+    update((d) => ({ ...d, learn }));
+    learnSaver.schedule(learn);
+  };
+
+  const courseName = (id: string) => data.learn.courses.find((c) => c.id === id)?.name ?? 'general study';
+
+  /** Stop the timer and log what it ran as a session; returns the new state, or the same one when it wasn't running. */
+  const stoppedTimer = (learn: Learn): { learn: Learn; minutes: number } => {
+    if (!learn.timer) return { learn, minutes: 0 };
+    const minutes = Math.round(timerMinutes(learn.timer, new Date()));
+    const sessions = minutes >= 1 ? [...learn.sessions, { id: 'ss' + Date.now().toString(36), courseId: learn.timer.courseId, start: learn.timer.start, minutes }] : learn.sessions;
+    return { learn: { ...learn, sessions, timer: null }, minutes };
+  };
+
+  const startStudy = (courseId: string) => {
+    const { learn } = stoppedTimer(data.learn);
+    setLearn({ ...learn, timer: { courseId, start: new Date().toISOString() } });
+  };
+
+  const stopStudy = () => {
+    const before = data.learn;
+    const { learn, minutes } = stoppedTimer(before);
+    setLearn(learn);
+    showToast(minutes >= 1 ? `Logged ${fmtStudy(minutes)} of ${courseName(before.timer!.courseId)}` : 'Under a minute, so nothing was logged', { label: 'Undo', run: () => setLearn(before) });
+  };
+
+  const logStudy = (minutes: number, courseId: string) => {
+    const before = data.learn;
+    const start = new Date(Date.now() - minutes * 60000).toISOString();
+    setLearn({ ...before, sessions: [...before.sessions, { id: 'ss' + Date.now().toString(36), courseId, start, minutes }] });
+    showToast(`Logged ${fmtStudy(minutes)} of ${courseName(courseId)}`, { label: 'Undo', run: () => setLearn(before) });
+  };
+
+  /** Claude's note on the week ahead; without `force` it's only written when today's isn't there yet. */
+  const refreshLearnNote = useCallback(
+    (force: boolean) => {
+      setLearnNoteBusy(true);
+      api
+        .refreshLearn(force)
+        .then(merge)
+        .catch((e) => showToast(`Couldn’t write the note: ${e.message}`))
+        .finally(() => setLearnNoteBusy(false));
+    },
+    [merge, showToast],
+  );
+
+  const learnNoteDay = data.learnNote.note ? ymd(new Date(data.learnNote.note.writtenAt)) : '';
+  const hasCourses = data.learn.courses.some((c) => !c.archived);
+  useEffect(() => {
+    if (view === 'learn' && data.newsSummaries && hasCourses && learnNoteDay !== ymd(new Date())) refreshLearnNote(false);
+    // Once per visit to the view; the server skips it when today's note is already written.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, data.newsSummaries, hasCourses]);
+
   const toggleHidden = (key: string) => {
     const hidden = data.prefs.hidden.includes(key) ? data.prefs.hidden.filter((h) => h !== key) : [...data.prefs.hidden, key];
     setPrefs({ ...data.prefs, hidden });
@@ -658,6 +723,22 @@ export function App() {
         setAddCountdown((n) => n + 1);
       },
     },
+    ...(data.learn.timer
+      ? [{
+          id: 'a:study-stop', group: 'Actions', label: 'Stop studying', icon: 'ph-stop', words: 'timer learn log',
+          sub: `${courseName(data.learn.timer.courseId)} · ${fmtStudy(timerMinutes(data.learn.timer, now))} so far`,
+          run: stopStudy,
+        }]
+      : []),
+    ...data.learn.courses.filter((c) => !c.archived && c.id !== data.learn.timer?.courseId).map((c, i) => ({
+      id: 'a:study-' + c.id, group: 'Actions', label: `Start studying ${c.name}`, icon: 'ph-timer', words: `timer learn ${c.code}`,
+      sub: i === 0 ? 'Or type “study 45 ' + (c.code || c.name).toLowerCase().replace(/\s+/g, '') + '” to log time' : c.code || undefined,
+      onlyWhenTyping: i > 0,
+      run: () => (startStudy(c.id), setView('learn')),
+    })),
+    ...(hasCourses
+      ? [{ id: 'a:work', group: 'Actions', label: 'Add a deliverable', icon: 'ph-exam', words: 'assignment homework quiz exam due learn', run: () => (setView('learn'), setAddWorkSignal((n) => n + 1)) }]
+      : []),
     { id: 'a:speed', group: 'Actions', label: 'Run a speed test', icon: 'ph-gauge', words: 'internet', run: runSpeedTest },
     { id: 'a:package', group: 'Actions', label: 'Add a package', icon: 'ph-package', words: 'tracking', run: () => setDrawer({ type: 'add' }) },
     { id: 'a:news', group: 'Actions', label: 'Refresh the news', icon: 'ph-arrows-clockwise', run: () => (setView('news'), refreshNews()) },
@@ -705,6 +786,14 @@ export function App() {
       sub: data.weights[ymd(now)] ? `Replaces ${fmtKg(data.weights[ymd(now)])} kg` : 'Body weight, in Training',
       run: () => setWeight(ymd(now), kg, true),
     }];
+    const study = parseStudy(q, data.learn.courses);
+    if (study) {
+      log.push({
+        id: 'a:study-now', group: 'Actions', label: `Log ${fmtStudy(study.minutes)} of ${courseName(study.courseId)}`, icon: 'ph-timer', first: true,
+        sub: 'Study time, in Learn',
+        run: () => logStudy(study.minutes, study.courseId),
+      });
+    }
     const engines = data.prefs.searchEngines;
     const { engine, term } = parseSearch(q, engines);
     return [...log, ...(engine ? [engine] : engines).map((e) => ({
@@ -717,14 +806,14 @@ export function App() {
     }))];
   };
   const drawerTitle =
-    drawer?.type === 'settings' ? 'Settings' : drawer?.type === 'add' ? 'Add package' : drawer?.type === 'exercise' ? drawer.title : drawerPkg ? 'Package' : '';
+    drawer?.type === 'settings' ? 'Settings' : drawer?.type === 'add' ? 'Add package' : drawer?.type === 'exercise' ? drawer.title : drawer?.type === 'course' ? data.learn.courses.find((c) => c.id === drawer.id)?.name || 'Course' : drawerPkg ? 'Package' : '';
 
   return (
     <div ref={rootRef} className="lp-root" data-layout={layout}>
       <div className="lp-shell">
       <Rail view={view} hidden={data.prefs.hidden} badges={{ inbox: inboxCount }} onView={setView} onPalette={() => setPalette(true)} onSettings={() => setDrawer({ type: 'settings' })} />
       <div className="lp-inner">
-        <TopBar data={data} now={now} subline={subline} search={search} onSearch={setSearch} searchRef={searchRef} smokesToday={smokesToday} onLogSmoke={logSmoke} onOpenTraining={() => setView('training')} />
+        <TopBar data={data} now={now} subline={subline} search={search} onSearch={setSearch} searchRef={searchRef} smokesToday={smokesToday} onLogSmoke={logSmoke} onOpenTraining={() => setView('training')} onOpenLearn={() => setView('learn')} />
         {serverIssue && <ServerBanner issue={serverIssue} onRetry={refresh} />}
         {view === 'news' ? (
           <News data={data} now={now} busy={newsBusy} onRefresh={refreshNews} onTopics={setNewsTopics} />
@@ -743,6 +832,19 @@ export function App() {
             onOpenSettings={() => setDrawer({ type: 'settings' })}
             onWeight={setWeight}
             weightSignal={weightSignal}
+          />
+        ) : view === 'learn' ? (
+          <LearnView
+            data={data}
+            now={now}
+            noteBusy={learnNoteBusy}
+            addSignal={addWorkSignal}
+            onChange={setLearn}
+            onStart={startStudy}
+            onStop={stopStudy}
+            onOpenCourse={(id, item) => setDrawer({ type: 'course', id, item })}
+            onRefreshNote={() => refreshLearnNote(true)}
+            notify={showToast}
           />
         ) : view === 'money' ? (
           <MoneyView money={data.money} now={now} saved={moneySaved} onChange={setMoney} onImport={importMoney} notify={showToast} />
@@ -822,6 +924,9 @@ export function App() {
           {drawer.type === 'add' && <AddPackageDrawer onSubmit={addPackage} onCancel={() => setDrawer(null)} />}
           {drawer.type === 'exercise' && (
             <ExerciseDrawer key={drawer.title} title={drawer.title} data={data} pinned={data.prefs.pinnedLifts.includes(drawer.title)} onPin={() => togglePin(drawer.title)} />
+          )}
+          {drawer.type === 'course' && (
+            <CourseDrawer key={drawer.id} learn={data.learn} courseId={drawer.id} focusItem={drawer.item} now={now} onChange={setLearn} onClose={() => setDrawer(null)} notify={showToast} />
           )}
           {drawerPkg && <PackageDrawer key={drawerPkg.id} pkg={drawerPkg} now={now} onRename={(l) => renamePackage(drawerPkg.id, l)} onArchive={() => archivePackage(drawerPkg.id)} />}
         </Drawer>

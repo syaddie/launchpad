@@ -15,8 +15,10 @@ import { isRunning, newPackage, refreshPackage, refreshSummaries, refreshWeather
 import { serverStats, startSampler } from './system';
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
 import { DEFAULT_ENGINES, HIDEABLE_KEYS } from '../../shared/defaults';
+import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
 import { MAX_KG, MIN_KG, cleanKg, cleanTraining } from '../../shared/training';
+import { refreshLearnNote } from './learn';
 import { refreshTraining } from './training';
 import type { AppState, BookmarkGroup, Countdown, Mood, NewsTopic, Note, Package, Photo, Prefs, SearchEngine, SourceKey } from '../../shared/types';
 
@@ -80,6 +82,8 @@ function state(): AppState {
     exerciseMuscles: claudeEnabled() ? store.exerciseMuscles() : {},
     trainingNote: claudeEnabled() ? store.trainingNote() : { note: null, error: null },
     weights: store.weights(),
+    learn: store.learn(),
+    learnNote: claudeEnabled() ? store.learnNote() : { note: null, error: null },
   };
 }
 
@@ -345,6 +349,23 @@ app.put('/api/training', bodyLimit({ maxSize: 8 * 1024 * 1024, onError: (c) => c
 /** Wait for new exercises to be labelled and the note to be written (again, with ?force=1), then send the whole state. */
 app.post('/api/training/refresh', async (c) => {
   await refreshTraining(c.req.query('force') === '1');
+  return c.json(state());
+});
+
+// ---------- learn ----------
+
+/** Courses, their graded work, study sessions, learning on the side and the timer, all at once. */
+app.put('/api/learn', bodyLimit({ maxSize: 2 * 1024 * 1024, onError: (c) => c.json({ error: 'That’s too much to save at once.' }, 413) }), async (c) => {
+  const body = await c.req.json();
+  if (!body || typeof body !== 'object' || !Array.isArray(body.courses)) return c.json({ error: 'Invalid learn data' }, 400);
+  const learn = cleanLearn(body);
+  store.setLearn(learn);
+  return c.json(learn);
+});
+
+/** Write the note on the week ahead when today's isn't written yet (or again, with ?force=1), then send the whole state. */
+app.post('/api/learn/refresh', async (c) => {
+  await refreshLearnNote(c.req.query('force') === '1');
   return c.json(state());
 });
 

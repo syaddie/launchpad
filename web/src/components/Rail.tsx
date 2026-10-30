@@ -6,6 +6,7 @@ export const VIEWS: { key: ViewKey; name: string; icon: string; letter: string }
   { key: 'inbox', name: 'Inbox', icon: 'ph-envelope-simple', letter: 'I' },
   { key: 'you', name: 'You', icon: 'ph-heart', letter: 'Y' },
   { key: 'training', name: 'Training', icon: 'ph-barbell', letter: 'T' },
+  { key: 'learn', name: 'Learn', icon: 'ph-graduation-cap', letter: 'L' },
   { key: 'money', name: 'Money', icon: 'ph-wallet', letter: 'M' },
   { key: 'server', name: 'Server', icon: 'ph-hard-drives', letter: 'S' },
 ];
