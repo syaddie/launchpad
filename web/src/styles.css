@@ -818,6 +818,66 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .sync-row { padding: 4px 10px; font-size: 13px; }
 [data-layout='narrow'] .server-row > .services { max-height: none; }
 
+/* ---------- training ---------- */
+
+.tr-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 20px; min-height: 26px; }
+.tr-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.you-row > .tr-week { flex: 1.6 1 520px; min-width: 0; }
+.you-row > .tr-musc { flex: 1 1 320px; min-width: 0; }
+.you-row > .tr-lifts { flex: 1 1 400px; min-width: 0; }
+.you-row > .tr-recent { flex: 1.3 1 460px; min-width: 0; }
+
+.tr-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+[data-layout='narrow'] .tr-days { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.tr-day { display: flex; flex-direction: column; gap: 2px; min-width: 0; min-height: 78px; padding: 9px 8px; border-radius: 4px; background: var(--bg); }
+.tr-day.done { background: var(--act); }
+.tr-day.today { box-shadow: inset 0 0 0 1.5px var(--ac); }
+.tr-day.ahead { background: transparent; box-shadow: inset 0 0 0 1px var(--ln); }
+.tr-dn { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--t3); }
+.tr-day.today .tr-dn { color: var(--acd); }
+.tr-dt { font-size: 13px; font-weight: 600; line-height: 1.25; overflow-wrap: break-word; hyphens: auto; }
+[data-layout='narrow'] .tr-dt { font-size: 12px; }
+.tr-day.done .tr-dt { color: var(--acd); }
+.tr-dt.rest { font-weight: 400; color: var(--t3); }
+.tr-ds { font-size: 11.5px; color: var(--t2); }
+
+.tr-totals { display: flex; flex-wrap: wrap; gap: 10px 28px; font-size: 13px; color: var(--t2); }
+.tr-totals b { display: block; font-size: 24px; font-weight: 400; line-height: 1.15; color: var(--tx); }
+.tr-weeks-wrap { display: flex; flex-direction: column; gap: 6px; }
+.tr-weeks { height: 64px; display: flex; align-items: flex-end; gap: 6px; }
+.tr-wcol { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 3px; }
+.tr-wn { font-size: 11px; color: var(--t3); }
+.tr-wbar { width: 100%; max-width: 26px; min-height: 2px; border-radius: 3px 3px 0 0; background: var(--t3); opacity: 0.45; }
+.tr-wbar.now { background: var(--ac); opacity: 1; }
+
+.tr-bars { display: flex; flex-direction: column; gap: 7px; }
+.tr-bar { display: grid; grid-template-columns: 82px minmax(0, 1fr) 28px; align-items: center; gap: 10px; font-size: 13px; }
+.tr-bl { color: var(--t2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tr-track { position: relative; height: 10px; border-radius: 2px; background: var(--hv); }
+.tr-fill { position: absolute; inset: 0 auto 0 0; border-radius: 2px; background: var(--ac); }
+.tr-goal { position: absolute; top: -3px; bottom: -3px; border-left: 1.5px dashed var(--t3); }
+.tr-bn { text-align: right; font-weight: 600; }
+.tr-bar.zero .tr-bl, .tr-bar.zero .tr-bn { color: var(--t3); font-weight: 400; }
+
+.tr-list { display: flex; flex-direction: column; }
+.tr-list > * + * { border-top: 1px solid var(--ln); }
+.tr-lift { display: grid; grid-template-columns: minmax(0, 1fr) 96px 84px; align-items: center; gap: 12px; padding: 9px 0; }
+.tr-ln { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 500; min-width: 0; }
+.tr-spark { width: 96px; height: 28px; display: block; overflow: visible; }
+.tr-lv { display: flex; flex-direction: column; align-items: flex-end; font-size: 15px; font-weight: 600; }
+.tr-ld { font-size: 11.5px; font-weight: 600; color: var(--t3); }
+.tr-ld.up { color: var(--acd); }
+[data-layout='narrow'] .tr-lift { grid-template-columns: minmax(0, 1fr) 84px; }
+[data-layout='narrow'] .tr-spark { display: none; }
+
+.tr-ses { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto; gap: 12px; padding: 10px 0; align-items: baseline; }
+.tr-sd { font-size: 12px; color: var(--t3); line-height: 1.35; }
+.tr-st { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; }
+.tr-sx { font-size: 12.5px; color: var(--t2); }
+.tr-sm { font-size: 12px; color: var(--t3); text-align: right; line-height: 1.35; white-space: nowrap; }
+[data-layout='narrow'] .tr-ses { grid-template-columns: 64px minmax(0, 1fr); }
+[data-layout='narrow'] .tr-sm { grid-column: 2; text-align: left; }
+
 /* ---------- money ---------- */
 
 .money { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 15px; animation: lpFade 0.15s ease-out; }

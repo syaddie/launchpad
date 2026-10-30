@@ -22,7 +22,7 @@ export type ThemeMode = 'system' | 'light' | 'dark';
 export type AccentKey = 'sage' | 'slate' | 'terracotta';
 export type GoogleSource = 'calendar' | 'tasks' | 'gmail';
 export type SourceKey = GoogleSource | 'carriers' | 'news' | 'inbox' | 'weather' | 'speedtest';
-export type ViewKey = 'home' | 'news' | 'inbox' | 'you' | 'money' | 'server';
+export type ViewKey = 'home' | 'news' | 'inbox' | 'you' | 'training' | 'money' | 'server';
 
 /** One place to search: "yt lofi" opens url with %s replaced by "lofi". The first engine is the default. */
 export interface SearchEngine {
@@ -305,6 +305,41 @@ export interface Money {
   wishlist: WishItem[];
 }
 
+export type SetType = 'normal' | 'warmup' | 'dropset' | 'failure';
+
+/** One set as Hevy records it. A value that wasn't logged is null. */
+export interface WorkoutSet {
+  type: SetType;
+  kg: number | null;
+  reps: number | null;
+  km: number | null;
+  sec: number | null;
+  rpe: number | null;
+}
+
+export interface WorkoutExercise {
+  title: string;
+  notes: string;
+  sets: WorkoutSet[];
+}
+
+export interface Workout {
+  id: string;
+  title: string;
+  /** ISO date-times. */
+  start: string;
+  end: string;
+  exercises: WorkoutExercise[];
+}
+
+/** Workouts from Hevy, newest first, and where they came from (shared/training.ts). */
+export interface Training {
+  workouts: Workout[];
+  /** 'csv' for Hevy's export; empty before the first import. */
+  source: 'csv' | '';
+  importedAt: string | null;
+}
+
 export interface SpeedTest {
   /** ISO date-time. */
   at: string;
@@ -390,6 +425,7 @@ export interface AppState {
   /** Keyed by YYYY-MM-DD. */
   moods: Record<string, Mood>;
   money: Money;
+  training: Training;
 }
 
 export interface Backup {

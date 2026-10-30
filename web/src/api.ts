@@ -1,4 +1,4 @@
-import type { AppState, BookmarkGroup, Countdown, Money, Mood, Note, Package, Photo, Prefs, ServerStats, SourceKey, Task } from '../../shared/types';
+import type { AppState, BookmarkGroup, Countdown, Money, Mood, Note, Package, Photo, Prefs, ServerStats, SourceKey, Task, Training } from '../../shared/types';
 
 const STATE_KEY = 'launchpad:state';
 const PREFS_KEY = 'launchpad:prefs';
@@ -109,6 +109,7 @@ export const api = {
   addSmoke: () => req<string[]>('POST', '/api/smokes', {}),
   removeSmoke: (at?: string) => req<string[]>('DELETE', `/api/smokes${at ? `?at=${encodeURIComponent(at)}` : ''}`),
   putMoney: (v: Money, keepalive?: boolean) => req<Money>('PUT', '/api/money', v, keepalive),
+  putTraining: (v: Training) => req<Training>('PUT', '/api/training', v),
   putMood: (date: string, mood: Mood | { level: 0 }) => req<Record<string, Mood>>('PUT', `/api/moods/${date}`, mood),
   server: (iface?: string) => req<ServerStats>('GET', `/api/server${iface ? `?iface=${encodeURIComponent(iface)}` : ''}`),
   speedTest: () => req<ServerStats['speed']>('POST', '/api/speedtest', {}),

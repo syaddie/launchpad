@@ -16,6 +16,7 @@ import { serverStats, startSampler } from './system';
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
 import { DEFAULT_ENGINES, HIDEABLE_KEYS } from '../../shared/defaults';
 import { cleanMoney } from '../../shared/money';
+import { cleanTraining } from '../../shared/training';
 import type { AppState, BookmarkGroup, Countdown, Mood, NewsTopic, Note, Package, Photo, Prefs, SearchEngine, SourceKey } from '../../shared/types';
 
 const app = new Hono();
@@ -74,6 +75,7 @@ function state(): AppState {
     smokes: recentSmokes(),
     moods: store.moods(),
     money: store.money(),
+    training: store.training(),
   };
 }
 
@@ -302,6 +304,17 @@ app.put('/api/money', bodyLimit({ maxSize: 1024 * 1024, onError: (c) => c.json({
   const money = cleanMoney(body);
   store.setMoney(money);
   return c.json(money);
+});
+
+// ---------- training ----------
+
+/** Every workout, read from Hevy's export in the page. An import replaces what's here. */
+app.put('/api/training', bodyLimit({ maxSize: 8 * 1024 * 1024, onError: (c) => c.json({ error: 'That’s too many workouts to save at once.' }, 413) }), async (c) => {
+  const body = await c.req.json();
+  if (!body || typeof body !== 'object' || !Array.isArray(body.workouts)) return c.json({ error: 'Invalid workouts' }, 400);
+  const training = cleanTraining(body);
+  store.setTraining(training);
+  return c.json(training);
 });
 
 // ---------- server health ----------
