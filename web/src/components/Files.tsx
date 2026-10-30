@@ -79,9 +79,9 @@ export function FilesPanel({ publicKey, hidden, now, onOpenTerminal, onFailed }:
   }, []);
 
   useEffect(() => {
-    // Back to the last folder, or home if it's gone.
-    const last = localGet('filesPath') || undefined;
-    load(last).catch(() => (last ? load() : Promise.reject()).catch(() => onFailedRef.current()));
+    // Back to the last folder, or the root if it's gone.
+    const last = localGet('filesPath') || '/';
+    load(last).catch(() => (last !== '/' ? load('/') : Promise.reject()).catch(() => onFailedRef.current()));
   }, [load]);
 
   const dirty = !!file && file.text !== file.saved;
@@ -220,7 +220,7 @@ export function FilesPanel({ publicKey, hidden, now, onOpenTerminal, onFailed }:
           <p>{error ? `Couldn’t open the server’s files: ${error}` : 'Opening the server’s files…'}</p>
           {keyRefused(error) && <Copyable text={authorizeLine(publicKey)} />}
           {error && (
-            <button className="btn btn-secondary btn-small" onClick={() => load().catch(() => onFailedRef.current())}>
+            <button className="btn btn-secondary btn-small" onClick={() => load('/').catch(() => onFailedRef.current())}>
               Try again
             </button>
           )}
