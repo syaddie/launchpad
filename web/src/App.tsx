@@ -18,7 +18,7 @@ import { Packages } from './components/Packages';
 import { Palette, type PaletteItem } from './components/Palette';
 import { PhotoPanel, shrinkImage, usePhotoSlots } from './components/Photos';
 import { Rail, VIEWS } from './components/Rail';
-import { Server } from './components/Server';
+import { Server, type ServerTab } from './components/Server';
 import { ServerBanner, type ServerIssue } from './components/ServerBanner';
 import { Tasks } from './components/Tasks';
 import { Today, todayAgenda } from './components/Today';
@@ -145,6 +145,7 @@ export function App() {
   const [addCountdown, setAddCountdown] = useState(0);
   const [weightSignal, setWeightSignal] = useState(0);
   const [addWorkSignal, setAddWorkSignal] = useState(0);
+  const [serverTab, setServerTab] = useState<{ tab: ServerTab; n: number } | null>(null);
   const [learnNoteBusy, setLearnNoteBusy] = useState(false);
   const [newsBusy, setNewsBusy] = useState(false);
   const [noteBusy, setNoteBusy] = useState(false);
@@ -578,6 +579,13 @@ export function App() {
     setPrefs({ ...data.prefs, hidden });
   };
 
+  const openServerTab = (tab: ServerTab) => {
+    // Read when the view mounts; the signal switches it when it's already open.
+    localSet('serverTab', tab);
+    setView('server');
+    setServerTab((t) => ({ tab, n: (t?.n ?? 0) + 1 }));
+  };
+
   const runSpeedTest = () => {
     setView('server');
     api.speedTest().catch((e) => showToast(`Couldn’t start a speed test: ${e.message}`));
@@ -599,6 +607,8 @@ export function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Keys typed into the server terminal belong to the shell: Esc for vim, Ctrl K to cut a line.
+      if ((e.target as HTMLElement).closest?.('.xterm')) return;
       // ⌘K / Ctrl K works everywhere, even while typing.
       if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'k') {
         e.preventDefault();
@@ -740,6 +750,8 @@ export function App() {
       ? [{ id: 'a:work', group: 'Actions', label: 'Add a deliverable', icon: 'ph-exam', words: 'assignment homework quiz exam due learn', run: () => (setView('learn'), setAddWorkSignal((n) => n + 1)) }]
       : []),
     { id: 'a:speed', group: 'Actions', label: 'Run a speed test', icon: 'ph-gauge', words: 'internet', run: runSpeedTest },
+    { id: 'a:terminal', group: 'Actions', label: 'Open the server terminal', icon: 'ph-terminal-window', words: 'shell ssh console command line', run: () => openServerTab('terminal') },
+    { id: 'a:files', group: 'Actions', label: 'Browse the server’s files', icon: 'ph-folder-simple', words: 'file explorer sftp upload download folders', run: () => openServerTab('files') },
     { id: 'a:package', group: 'Actions', label: 'Add a package', icon: 'ph-package', words: 'tracking', run: () => setDrawer({ type: 'add' }) },
     { id: 'a:news', group: 'Actions', label: 'Refresh the news', icon: 'ph-arrows-clockwise', run: () => (setView('news'), refreshNews()) },
     {
@@ -849,7 +861,7 @@ export function App() {
         ) : view === 'money' ? (
           <MoneyView money={data.money} now={now} saved={moneySaved} onChange={setMoney} onImport={importMoney} notify={showToast} />
         ) : view === 'server' ? (
-          <Server data={data} now={now} onOpenSettings={() => setDrawer({ type: 'settings' })} />
+          <Server data={data} now={now} openTab={serverTab} onOpenSettings={() => setDrawer({ type: 'settings' })} />
         ) : (
           <main className="lp-grid" style={{ gridTemplateAreas: grid.areas, gridTemplateColumns: grid.columns, gridTemplateRows: grid.rows }}>
             {shown.has('today') && (

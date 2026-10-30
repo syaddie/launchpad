@@ -143,6 +143,33 @@ To leave either out, delete its lines from `docker-compose.yml` (the `/proc` vol
 
 **Speed tests** run from the server against Cloudflare's speed test (the one behind speed.cloudflare.com) every 3 hours by default. Each moves about 130 MB. Change the interval, turn them off or add your plan's speed in Settings › Trackers; the view's **Test now** runs one straight away.
 
+## 9. Optional: terminal and files
+
+The Server view's **Terminal** and **Files** tabs give you a shell on the server and a file explorer for it (browse, upload, download, rename, delete, edit text files, open the terminal in a folder). Launchpad runs in a container, so it reaches the machine over SSH and signs in as your own user. It can do whatever that user can, and nothing more.
+
+**Turn on Cloudflare Access (step 4) first.** Without it, anyone who can open Launchpad gets a shell; the tabs say so while it's off. Also keep port 8090 to your LAN (it is by default).
+
+1. Make sure the server runs an SSH server: `sudo apt install openssh-server` on Ubuntu or Debian.
+2. In `~/launchpad/.env`, set `SSH_USER` to your login on the server, and restart:
+   ```bash
+   cd ~/launchpad
+   git pull
+   docker compose up -d
+   ```
+   `docker-compose.yml` sets `SSH_HOST=host.docker.internal`, which reaches the host from inside the container. If sshd listens on a port other than 22, set `SSH_PORT` too.
+3. Open Server › Terminal. Launchpad makes its own SSH key the first time (kept in the data volume, never leaves the server) and shows a line to run on the server as that user. It adds the key to `~/.ssh/authorized_keys`:
+   ```bash
+   mkdir -p -m 700 ~/.ssh && echo 'ssh-ed25519 AAAA… launchpad' >> ~/.ssh/authorized_keys
+   ```
+4. Press **Try again**. The first connection records the server's host key; if it ever changes (after a reinstall, say), the view stops and shows the new fingerprint to check before you trust it.
+
+**If it can't connect:**
+
+- *Nothing is answering SSH*: sshd isn't running, or a firewall drops connections from Docker's network. With ufw: `sudo ufw allow from 172.16.0.0/12 to any port 22`.
+- *Didn't accept Launchpad's key*: the line from step 3 went into a different user's home, or `~/.ssh` has loose permissions (`chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys`).
+
+A shell keeps running for 15 minutes after you leave the tab or close the page, so coming back (or reloading) picks it up where it was. **Restart** ends it and starts a fresh one. In the terminal, `Ctrl Shift C` and `Ctrl Shift V` copy and paste; Esc and `Ctrl K` go to the shell, not to Launchpad. Text files up to 1 MB open in the editor (`Ctrl S` saves); anything else downloads. To turn the tabs off again, empty `SSH_USER` and remove Launchpad's line from `authorized_keys`.
+
 ## Backups
 
 Everything is in one SQLite file inside the `launchpad-data` volume. Two ways to keep a copy:

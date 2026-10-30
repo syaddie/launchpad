@@ -30,6 +30,12 @@ export const config = {
   hostProc: env.HOST_PROC || '',
   /** Optional: Docker API for the container list, e.g. tcp://docker-proxy:2375 or unix:///var/run/docker.sock. */
   dockerHost: env.DOCKER_HOST || '',
+  /** Optional: SSH login on the host for the Server view's terminal and file explorer. Both host and user must be set. */
+  ssh: {
+    host: env.SSH_HOST || '',
+    port: Number(env.SSH_PORT || 22),
+    user: env.SSH_USER || '',
+  },
   /** Optional: verify Cloudflare Access JWTs so only your Access login can reach the app. */
   access: {
     teamDomain: (env.CF_ACCESS_TEAM_DOMAIN || '').replace(/^https?:\/\//, '').replace(/\/+$/, ''),

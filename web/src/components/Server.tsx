@@ -1,14 +1,190 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { DOW, MON } from '../../../shared/dates';
 import { fmtDuration } from '../../../shared/trackers';
-import type { AppState, ServerStats, SourceKey, SpeedTest } from '../../../shared/types';
-import { api, cachedServer, cacheServer } from '../api';
+import type { AppState, ServerStats, ShellInfo, SourceKey, SpeedTest } from '../../../shared/types';
+import { api, cachedServer, cacheServer, localGet, localSet } from '../api';
 import { ago, fmtBytes, hm } from '../util';
+import { authorizeLine, Copyable } from './Copyable';
+import { FilesPanel } from './Files';
 
 const POLL = 5_000;
 
-/** The Server view: the machine's health, internet speed history, containers and syncs. */
-export function Server({ data, now, onOpenSettings }: { data: AppState; now: Date; onOpenSettings: () => void }) {
+// xterm is most of the terminal's weight, so it loads the first time the tab opens.
+const TerminalPanel = lazy(() => import('./Terminal').then((m) => ({ default: m.TerminalPanel })));
+
+export type ServerTab = 'overview' | 'terminal' | 'files';
+type Tab = ServerTab;
+const TABS: { key: Tab; name: string; icon: string }[] = [
+  { key: 'overview', name: 'Overview', icon: 'ph-gauge' },
+  { key: 'terminal', name: 'Terminal', icon: 'ph-terminal-window' },
+  { key: 'files', name: 'Files', icon: 'ph-folder-simple' },
+];
+
+/** The Server view: the machine's health at a glance, a shell on it, and its files. */
+export function Server({ data, now, openTab, onOpenSettings }: {
+  data: AppState;
+  now: Date;
+  /** A tab to switch to from ⌘K; `n` changes each time. */
+  openTab: { tab: Tab; n: number } | null;
+  onOpenSettings: () => void;
+}) {
+  const [tab, setTabState] = useState<Tab>(() => TABS.find((t) => t.key === localGet('serverTab'))?.key ?? 'overview');
+  // The terminal and files stay mounted once opened, so the screen and unsaved edits survive a switch of tab.
+  const [opened, setOpened] = useState<Set<Tab>>(() => new Set([tab]));
+  const [cd, setCd] = useState<{ path: string; n: number } | null>(null);
+  const [info, setInfo] = useState<ShellInfo | null>(null);
+  const [infoError, setInfoError] = useState('');
+
+  const setTab = (t: Tab) => {
+    setTabState(t);
+    setOpened((o) => (o.has(t) ? o : new Set(o).add(t)));
+    localSet('serverTab', t);
+  };
+
+  const loadInfo = useCallback(() => {
+    api
+      .shell()
+      .then((i) => {
+        setInfo(i);
+        setInfoError('');
+      })
+      .catch((e) => setInfoError(e.message));
+  }, []);
+
+  // Only a new ask from ⌘K; one from before this view mounted is already in the saved tab.
+  const askedAt = useRef(openTab?.n);
+  useEffect(() => {
+    if (!openTab || openTab.n === askedAt.current) return;
+    askedAt.current = openTab.n;
+    setTab(openTab.tab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openTab?.n]);
+
+  const needsShell = tab !== 'overview';
+  useEffect(() => {
+    if (needsShell && !info) loadInfo();
+  }, [needsShell, info, loadInfo]);
+
+  const ready = !!info?.configured && !info.newHostKey;
+
+  return (
+    <main className="server">
+      <div className="server-head">
+        <div className="tabs server-tabs" role="tablist" aria-label="Server">
+          {TABS.map((t) => (
+            <button key={t.key} role="tab" aria-selected={tab === t.key} className={'tab' + (tab === t.key ? ' active' : '')} onClick={() => setTab(t.key)}>
+              <i className={'ph-duotone ' + t.icon} />
+              {t.name}
+            </button>
+          ))}
+        </div>
+        {needsShell && info && !info.guarded && info.configured && (
+          <span className="meta" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }} title="Turn on Cloudflare Access (docs/setup.md, step 4) so only your login can reach it.">
+            <i className="ph-duotone ph-shield-warning" style={{ color: 'var(--wn)', fontSize: 15 }} />
+            Not behind Cloudflare Access: anyone who can open Launchpad can use this
+          </span>
+        )}
+      </div>
+      {tab === 'overview' && <Overview data={data} now={now} onOpenSettings={onOpenSettings} />}
+      {needsShell && !ready && <ShellSetup info={info} error={infoError} onRetry={loadInfo} onTrusted={setInfo} />}
+      {ready && opened.has('terminal') && (
+        <Suspense
+          fallback={
+            tab === 'terminal' && (
+              <section className="panel srv-panel term-panel">
+                <div className="empty">
+                  <p>Opening the terminal…</p>
+                </div>
+              </section>
+            )
+          }
+        >
+          <TerminalPanel target={info.target!} publicKey={info.publicKey} hidden={tab !== 'terminal'} cd={cd} onFailed={loadInfo} />
+        </Suspense>
+      )}
+      {ready && opened.has('files') && (
+        <FilesPanel
+          publicKey={info.publicKey}
+          hidden={tab !== 'files'}
+          now={now}
+          onFailed={loadInfo}
+          onOpenTerminal={(path) => {
+            setCd((c) => ({ path, n: (c?.n ?? 0) + 1 }));
+            setTab('terminal');
+          }}
+        />
+      )}
+    </main>
+  );
+}
+
+// ---------- terminal and files setup ----------
+
+/** What's needed before the terminal and files work: SSH settings, Launchpad's key on the server, or trusting a changed host key. */
+function ShellSetup({ info, error, onRetry, onTrusted }: { info: ShellInfo | null; error: string; onRetry: () => void; onTrusted: (i: ShellInfo) => void }) {
+  const [trustError, setTrustError] = useState('');
+  if (!info) {
+    return (
+      <section className="panel srv-panel">
+        <div className="empty">
+          <p>{error ? `Couldn’t reach the server: ${error}` : 'Checking the SSH setup…'}</p>
+          {error && (
+            <button className="btn btn-secondary btn-small" onClick={onRetry}>
+              Try again
+            </button>
+          )}
+        </div>
+      </section>
+    );
+  }
+  if (info.newHostKey) {
+    return (
+      <section className="panel srv-panel shell-setup" aria-label="Host key changed">
+        <div className="panel-head">
+          <h2 className="panel-title">The server’s host key changed</h2>
+        </div>
+        <p>
+          Launchpad stopped connecting to <span className="mono">{info.target}</span> because it now presents a different key from the one it had the first time. That’s expected after reinstalling the
+          server or its SSH keys; otherwise something else may be answering in its place.
+        </p>
+        <p>It now presents:</p>
+        <Copyable text={info.newHostKey} />
+        <p className="meta">
+          Check it on the server with <span className="mono">ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</span> before trusting it.
+        </p>
+        {trustError && <div className="status-line" style={{ margin: 0 }}>{trustError}</div>}
+        <div>
+          <button className="btn btn-primary btn-small" onClick={() => api.trustHostKey().then(onTrusted).catch((e) => setTrustError(e.message))}>
+            Trust the new key
+          </button>
+        </div>
+      </section>
+    );
+  }
+  return (
+    <section className="panel srv-panel shell-setup" aria-label="Set up the terminal">
+      <div className="panel-head">
+        <h2 className="panel-title">Connect to the server’s shell</h2>
+      </div>
+      <p>The terminal and files sign in to the server over SSH, as your own user. Two steps on the server, once:</p>
+      <ol>
+        <li>
+          In <span className="mono">~/launchpad/.env</span>, set <span className="mono">SSH_USER</span> to your login on the server, then restart Launchpad:
+          <Copyable text="docker compose up -d" />
+        </li>
+        <li>
+          Let Launchpad’s key in, as that user:
+          <Copyable text={authorizeLine(info.publicKey)} />
+        </li>
+      </ol>
+      <p className="meta">See docs/setup.md, step 9, for details.</p>
+    </section>
+  );
+}
+
+// ---------- overview ----------
+
+function Overview({ data, now, onOpenSettings }: { data: AppState; now: Date; onOpenSettings: () => void }) {
   // Open on the last reading while a fresh one loads; `stale` stays true until it arrives.
   const [stats, setStats] = useState<ServerStats | null>(cachedServer);
   const [stale, setStale] = useState(true);
@@ -54,18 +230,16 @@ export function Server({ data, now, onOpenSettings }: { data: AppState; now: Dat
 
   if (!stats) {
     return (
-      <main className="server">
-        <div className="panel">
-          <div className="empty">
-            <p>{error ? `Couldn’t reach the server: ${error}` : 'Reading the server’s health…'}</p>
-          </div>
+      <div className="panel">
+        <div className="empty">
+          <p>{error ? `Couldn’t reach the server: ${error}` : 'Reading the server’s health…'}</p>
         </div>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="server">
+    <>
       {error && (
         <div className="status-line" style={{ margin: 0 }}>
           <i className="ph-duotone ph-cloud-slash" /> Couldn’t refresh: {error}
@@ -80,7 +254,7 @@ export function Server({ data, now, onOpenSettings }: { data: AppState; now: Dat
         <SpeedPanel speed={stats.speed} plan={data.prefs.speedPlanMbps} every={data.prefs.speedTestHours} now={now} lastError={data.sync.speedtest.lastError} onTest={testNow} onOpenSettings={onOpenSettings} />
         <ServicesPanel s={stats} data={data} now={now} />
       </div>
-    </main>
+    </>
   );
 }
 
