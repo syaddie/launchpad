@@ -34,13 +34,15 @@ export const DEFAULT_PREFS: Prefs = {
   cigaretteLimit: 0,
   speedTestHours: 3,
   speedPlanMbps: 0,
+  setsPerWeek: 10,
+  pinnedLifts: [],
 };
 
 /** Everything Settings › Panels can switch off. */
 export const HIDEABLE = {
   panel: ['today', 'tasks', 'notes', 'packages', 'photos', 'bookmarks'],
-  top: ['weather', 'air', 'cig', 'countdown'],
-  view: ['news', 'inbox', 'you', 'money', 'server'],
+  top: ['weather', 'air', 'cig', 'training', 'countdown'],
+  view: ['news', 'inbox', 'you', 'training', 'money', 'server'],
 } as const;
 
 export const HIDEABLE_KEYS: string[] = Object.entries(HIDEABLE).flatMap(([k, v]) => v.map((x) => `${k}:${x}`));

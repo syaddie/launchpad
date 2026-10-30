@@ -20,7 +20,7 @@ describe('claudeErrorMessage', () => {
   });
 
   it('names the model when it isn’t found', () => {
-    expect(msg(apiError(404, 'not_found_error', 'model: claude-haiku-5-5'))).toMatch(/“claude-haiku-5-5”.*NEWS_MODEL and INBOX_MODEL/);
+    expect(msg(apiError(404, 'not_found_error', 'model: claude-haiku-5-5'))).toMatch(/“claude-haiku-5-5”.*NEWS_MODEL, INBOX_MODEL and TRAINING_MODEL/);
   });
 
   it('says overload and rate limits clear up by themselves', () => {

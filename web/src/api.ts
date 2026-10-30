@@ -110,6 +110,7 @@ export const api = {
   removeSmoke: (at?: string) => req<string[]>('DELETE', `/api/smokes${at ? `?at=${encodeURIComponent(at)}` : ''}`),
   putMoney: (v: Money, keepalive?: boolean) => req<Money>('PUT', '/api/money', v, keepalive),
   putTraining: (v: Training) => req<Training>('PUT', '/api/training', v),
+  refreshTraining: (force: boolean) => req<AppState>('POST', `/api/training/refresh${force ? '?force=1' : ''}`, {}),
   putMood: (date: string, mood: Mood | { level: 0 }) => req<Record<string, Mood>>('PUT', `/api/moods/${date}`, mood),
   server: (iface?: string) => req<ServerStats>('GET', `/api/server${iface ? `?iface=${encodeURIComponent(iface)}` : ''}`),
   speedTest: () => req<ServerStats['speed']>('POST', '/api/speedtest', {}),

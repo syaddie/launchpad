@@ -11,7 +11,7 @@ import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/de
 import { cleanMoney } from '../../shared/money';
 import { cleanTraining } from '../../shared/training';
 import type {
-  BookmarkGroup, CalEvent, CalendarInfo, Countdown, InboxDigest, InboxRange, Money, Mood, NewsTopic, Note, Package, Prefs, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, Weather,
+  BookmarkGroup, CalEvent, CalendarInfo, Countdown, ExerciseMuscles, InboxDigest, InboxRange, Money, Mood, NewsTopic, Note, Package, Prefs, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
 } from '../../shared/types';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
@@ -136,6 +136,11 @@ export const store = {
 
   training: (): Training => cleanTraining(get<unknown>('training', null)),
   setTraining: (v: Training) => set('training', v),
+  /** Claude's reading of each exercise name; kept across imports, since names don't change what they train. */
+  exerciseMuscles: () => get<Record<string, ExerciseMuscles>>('exerciseMuscles', {}),
+  setExerciseMuscles: (v: Record<string, ExerciseMuscles>) => set('exerciseMuscles', v),
+  trainingNote: () => get<{ note: TrainingNote | null; error: string | null }>('trainingNote', { note: null, error: null }),
+  setTrainingNote: (v: { note: TrainingNote | null; error: string | null }) => set('trainingNote', v),
 
   /** Oldest first, the last 30 days. */
   speedTests: () => get<SpeedTest[]>('speedTests', []),

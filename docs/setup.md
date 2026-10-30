@@ -107,7 +107,7 @@ SingPost status works out of the box. For Ninja Van, J&T, DHL, UPS, FedEx and Qx
 
 Without a key, those packages still appear (manually or from Gmail) with a "Track on …" link to the carrier's site.
 
-## 7. Optional: news and inbox summaries (Anthropic API)
+## 7. Optional: news, inbox and training summaries (Anthropic API)
 
 The News view (in the rail on the left, or press `N`) works without this and lists headlines for each topic, and the Inbox view (`G` then `I`) lists your last week of email. To get a short digest instead:
 
@@ -116,9 +116,11 @@ The News view (in the rail on the left, or press `N`) works without this and lis
    ```
    ANTHROPIC_API_KEY=sk-ant-...
    ```
-3. Optional: `NEWS_MODEL` and `INBOX_MODEL` pick the models. The default for both, `claude-haiku-5-5`, costs a few cents a month for news and at most a dollar or two for the inbox; `claude-opus-5-5` writes richer summaries at about 40 times the price.
+3. Optional: `NEWS_MODEL`, `INBOX_MODEL` and `TRAINING_MODEL` pick the models. The default for all three, `claude-haiku-5-5`, costs a few cents a month for news and for training and at most a dollar or two for the inbox; `claude-opus-5-5` writes richer summaries at about 40 times the price.
 
 News summaries are written from headlines only, at most every 3 hours per topic and only when new headlines have appeared.
+
+The same key turns on two things in the Training view (`G` then `T`). Claude reads what each exercise in your Hevy export trains, once per new exercise name, and writes a short note on your training after each import that brings in a newer workout, or when you press refresh.
 
 The inbox digest is written from each email's sender, subject and the first 1,000 characters of its text (quoted replies and links removed); promotions and social notifications send only Gmail's one-line snippet. That text goes to the Anthropic API. Gmail is checked every 15 minutes, and a digest is rewritten only when new mail has arrived in its range: the two-day one at most every 90 minutes, the week's at most every 6 hours. The refresh button in the Inbox view skips the wait. To stop it, switch Gmail off in Settings or hide the Inbox view in Settings › Panels.
 

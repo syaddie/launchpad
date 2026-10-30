@@ -490,6 +490,7 @@ export const PANEL_ROWS: { section: string; hint?: string; rows: { key: string; 
       { key: 'top:weather', name: 'Weather', meta: 'Beside the clock; pick the area in General' },
       { key: 'top:air', name: 'Air quality, UV and rain', meta: 'The PSI chip and the extras in the weather details' },
       { key: 'top:cig', name: 'Cigarette button', meta: 'Today’s count; C logs one from anywhere' },
+      { key: 'top:training', name: 'Days since training', meta: 'Beside the cigarette button; opens Training' },
       { key: 'top:countdown', name: 'Nearest countdown', meta: 'In the line under the greeting' },
     ],
   },
@@ -622,6 +623,11 @@ function TrackerSettings({ prefs, onPrefs }: { prefs: Prefs; onPrefs: (p: Prefs)
         <div className="drawer-label">Cigarettes</div>
         <NumberField label="Daily limit" value={prefs.cigaretteLimit} min={0} max={99} suffix="a day at most" onSave={(n) => onPrefs({ ...prefs, cigaretteLimit: n })} />
         <div className="meta">Drawn as a line on the chart in You. Leave it empty for no limit.</div>
+      </div>
+      <div className="drawer-section">
+        <div className="drawer-label">Training</div>
+        <NumberField label="Sets a week" value={prefs.setsPerWeek} min={1} max={40} suffix="working sets a week per muscle" onSave={(n) => onPrefs({ ...prefs, setsPerWeek: n || 10 })} />
+        <div className="meta">The target line in Training › Sets per muscle. 10 is a common starting point for growing a muscle.</div>
       </div>
       <div className="drawer-section">
         <div className="drawer-label">Internet speed test</div>

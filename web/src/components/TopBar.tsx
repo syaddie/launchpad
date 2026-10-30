@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { DOW } from '../../../shared/dates';
+import { DOW, startOfDay } from '../../../shared/dates';
 import { engineUrl, parseSearch } from '../../../shared/trackers';
 import type { AppState, Bookmark, SearchEngine, SourceKey, Weather } from '../../../shared/types';
+import { fmtMinutes, lastTrained, minutes, workoutLabel } from '../../../shared/training';
 import { ago, favicon, fmtDay, hm, host, psiBand, uvBand, weatherIcon, weatherLabel } from '../util';
 
 interface Props {
@@ -14,7 +15,12 @@ interface Props {
   /** Cigarettes logged today, for the quick-log button. */
   smokesToday: number;
   onLogSmoke: () => void;
+  onOpenTraining: () => void;
 }
+
+/** Days without training before the button turns orange. */
+const TRAINING_NUDGE_DAYS = 4;
+const trainedWhen = (days: number) => (days === 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`);
 
 export function matchBookmark(b: Bookmark, q: string): boolean {
   return !q || b.name.toLowerCase().includes(q) || b.url.toLowerCase().includes(q);
@@ -237,7 +243,7 @@ export function searchRows(q: string, bookmarks: Bookmark[], engines: SearchEngi
   ];
 }
 
-export function TopBar({ data, now, subline, search, onSearch, searchRef, smokesToday, onLogSmoke }: Props) {
+export function TopBar({ data, now, subline, search, onSearch, searchRef, smokesToday, onLogSmoke, onOpenTraining }: Props) {
   const [focused, setFocused] = useState(false);
   const [sel, setSel] = useState(0);
   const [syncHover, setSyncHover] = useState(false);
@@ -247,6 +253,7 @@ export function TopBar({ data, now, subline, search, onSearch, searchRef, smokes
   const greeting = hr < 5 ? 'Good evening' : hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening';
 
   const hidden = data.prefs.hidden;
+  const trained = lastTrained(data.training.workouts, startOfDay(now));
   const engines = data.prefs.searchEngines;
   const rows = searchRows(search, data.bookmarks.flatMap((g) => g.items), engines);
   const prefixed = rows.length === 1 && !!rows[0].engine && parseSearch(search, engines).engine !== null;
@@ -398,6 +405,17 @@ export function TopBar({ data, now, subline, search, onSearch, searchRef, smokes
             <button className="cig-btn tnum" title="Log a cigarette (C)" aria-label={`Log a cigarette. ${smokesToday} today.`} onClick={onLogSmoke}>
               <i className="ph-duotone ph-cigarette" aria-hidden="true" />
               <span>{smokesToday}</span>
+            </button>
+          )}
+          {trained && !hidden.includes('top:training') && !hidden.includes('view:training') && (
+            <button
+              className={'cig-btn tnum' + (trained.days >= TRAINING_NUDGE_DAYS ? ' warn' : '')}
+              title={`Last trained ${trainedWhen(trained.days)}: ${workoutLabel(trained.workout, data.exerciseMuscles)}, ${fmtMinutes(minutes(trained.workout))}. Open Training (G then T).`}
+              aria-label={`Last trained ${trainedWhen(trained.days)}. Open Training.`}
+              onClick={onOpenTraining}
+            >
+              <i className="ph-duotone ph-barbell" aria-hidden="true" />
+              <span>{trained.days === 0 ? 'Today' : `${trained.days}d`}</span>
             </button>
           )}
           <div className="sync" onMouseEnter={() => setSyncHover(true)} onMouseLeave={() => setSyncHover(false)}>
