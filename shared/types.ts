@@ -54,6 +54,10 @@ export interface Prefs {
   speedTestHours: number;
   /** The internet plan's download speed, drawn on the speed chart; 0 hides the line. */
   speedPlanMbps: number;
+  /** Working sets a week to aim for per muscle, drawn in Training › Sets per muscle. */
+  setsPerWeek: number;
+  /** Exercise names always shown first in Training › Your lifts. */
+  pinnedLifts: string[];
 }
 
 export interface CalendarInfo {
@@ -332,6 +336,26 @@ export interface Workout {
   exercises: WorkoutExercise[];
 }
 
+/** Hevy's muscle groups, as its API names them. */
+export type Muscle =
+  | 'chest' | 'lats' | 'upper_back' | 'shoulders' | 'biceps' | 'triceps' | 'forearms' | 'traps' | 'lower_back'
+  | 'quadriceps' | 'hamstrings' | 'glutes' | 'calves' | 'abductors' | 'adductors' | 'abdominals' | 'neck' | 'full_body' | 'cardio' | 'other';
+
+/** What an exercise trains: the main muscle and the ones it works less. */
+export interface ExerciseMuscles {
+  primary: Muscle;
+  secondary: Muscle[];
+}
+
+/** Claude's short note on the training, written after an import. */
+export interface TrainingNote {
+  headline: string;
+  points: string[];
+  writtenAt: string;
+  /** The start of the newest workout it was written from, so a newer import writes a new one. */
+  latest: string;
+}
+
 /** Workouts from Hevy, newest first, and where they came from (shared/training.ts). */
 export interface Training {
   workouts: Workout[];
@@ -426,6 +450,10 @@ export interface AppState {
   moods: Record<string, Mood>;
   money: Money;
   training: Training;
+  /** What each exercise trains, by name, as Claude read it. Names missing here fall back to rules in shared/training.ts. */
+  exerciseMuscles: Record<string, ExerciseMuscles>;
+  /** null before the first note, or without an Anthropic API key. `error` is the last failure, shown in Training. */
+  trainingNote: { note: TrainingNote | null; error: string | null };
 }
 
 export interface Backup {

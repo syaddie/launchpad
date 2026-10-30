@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  cleanTraining, e1rm, fmtSet, liftTrends, muscleOf, parseCsv, parseHevyTime, prsByWorkout, setsPerMuscle, volumeKg, weekStreak, weekSummary, weeklyCounts,
-  workingSets, workoutLabel, workoutsFromHevyCsv,
+  cleanMuscleMap, cleanTraining, e1rm, exerciseHistory, fmtSet, gymCost, gymWorkout, lastTrained, liftTrends, muscleOf, musclesOf, parseCsv, parseHevyTime, prsByWorkout,
+  setsPerMuscle, trainingVsRest, volumeKg, weekStreak, weekSummary, weeklyCounts, workingSets, workoutLabel, workoutsFromHevyCsv,
 } from '../shared/training';
 
 const HEAD = '"title","start_time","end_time","description","exercise_title","superset_id","exercise_notes","set_index","set_type","weight_kg","reps","distance_km","duration_seconds","rpe"';
@@ -119,12 +119,32 @@ describe('training numbers', () => {
     expect(weekStreak(ws.slice(2), new Date(2026, 9, 20))).toBe(1);
     expect(weekStreak(ws.slice(2), new Date(2026, 9, 30))).toBe(0);
   });
-  it('counts working sets per main muscle, listing the main ones even at zero', () => {
+  it('counts working sets per muscle, half for secondary ones, listing the main ones even at zero', () => {
     const week = setsPerMuscle(ws, today, 7);
-    expect(week.slice(0, 4)).toEqual([{ muscle: 'lats', sets: 3 }, { muscle: 'chest', sets: 1 }, { muscle: 'biceps', sets: 1 }, { muscle: 'upper_back', sets: 0 }]);
+    // Pulldown 2 sets and pull-up 1 → lats 3; biceps 1 from the curl, plus half of the pulldown and pull-up sets.
+    expect(week.slice(0, 7)).toEqual([
+      { muscle: 'lats', sets: 3 }, { muscle: 'biceps', sets: 2.5 }, { muscle: 'upper_back', sets: 1.5 }, { muscle: 'chest', sets: 1 },
+      { muscle: 'shoulders', sets: 0.5 }, { muscle: 'triceps', sets: 0.5 }, { muscle: 'forearms', sets: 0.5 },
+    ]);
     expect(week.find((m) => m.muscle === 'calves')).toEqual({ muscle: 'calves', sets: 0 });
     expect(week.some((m) => m.muscle === 'cardio')).toBe(false);
     expect(setsPerMuscle(ws, today, 28).find((m) => m.muscle === 'lats')).toEqual({ muscle: 'lats', sets: 4 });
+  });
+  it('uses Claude’s reading of an exercise over the name rules', () => {
+    const map = { 'Lat Pulldown - Close Grip (Cable)': { primary: 'upper_back' as const, secondary: [] } };
+    expect(musclesOf('Lat Pulldown - Close Grip (Cable)', map)).toEqual({ primary: 'upper_back', secondary: [] });
+    expect(musclesOf('Bicep Curl (Dumbbell)', map)).toEqual({ primary: 'biceps', secondary: ['forearms'] });
+    expect(workoutLabel(ws[0], map)).toBe('Upper back · Biceps');
+    expect(setsPerMuscle(ws, today, 7, map).find((m) => m.muscle === 'upper_back')).toEqual({ muscle: 'upper_back', sets: 2.5 });
+  });
+  it('keeps only known muscles, for the exercises asked about', () => {
+    expect(cleanMuscleMap([
+      { name: 'Row', primary: 'upper_back', secondary: ['lats', 'upper_back', 'lats', 'wings', 'other'] },
+      { name: 'Fly', primary: 'pecs', secondary: [] },
+      { name: 'Unasked', primary: 'chest', secondary: [] },
+      null,
+    ], ['Row', 'Fly'])).toEqual({ Row: { primary: 'upper_back', secondary: ['lats'] } });
+    expect(cleanMuscleMap('nope', ['Row'])).toEqual({});
   });
   it('follows the lifts done in at least two sessions, and spots a new best', () => {
     const lifts = liftTrends(ws, today);
@@ -137,5 +157,57 @@ describe('training numbers', () => {
     // 30 × 6 (36 kg) is below 30 × 8 (38 kg) two weeks earlier.
     expect(lifts[1].pr).toBe(false);
     expect(prsByWorkout(ws)).toEqual(new Map([[ws[0].id, ['Lat Pulldown - Close Grip (Cable)']]]));
+  });
+  it('puts pinned lifts first, even ones done once, and fills up with the most done', () => {
+    const lifts = liftTrends(ws, today, { pinned: ['Bicep Curl (Dumbbell)', 'Never Done'], n: 2 });
+    expect(lifts.map((l) => [l.title, l.pinned])).toEqual([['Bicep Curl (Dumbbell)', true], ['Lat Pulldown - Close Grip (Cable)', false]]);
+    expect(lifts[0]).toMatchObject({ sessions: 1, pr: false });
+    expect(lifts[0].latest).toBeCloseTo(16.67, 1);
+  });
+  it('lists every session of one exercise, newest first, with its bests', () => {
+    const h = exerciseHistory(ws, 'Lat Pulldown - Close Grip (Cable)');
+    expect(h.measure).toBe('e1rm');
+    expect(h.sessions.map((s) => [s.sets.length, Math.round(s.best! * 10) / 10, s.pr])).toEqual([[2, 105, true], [1, 93.3, false]]);
+    expect(h.best).toEqual({ value: 105, at: ws[0].start });
+    expect(exerciseHistory(ws, 'Pull Up').measure).toBe('reps');
+    expect(exerciseHistory(ws, 'Nothing').sessions).toEqual([]);
+  });
+  it('says when you last trained', () => {
+    expect(lastTrained(ws, today)).toEqual({ workout: ws[0], days: 1 });
+    expect(lastTrained([], today)).toBeNull();
+  });
+});
+
+describe('training alongside the other logs', () => {
+  const ws = workoutsFromHevyCsv(CSV);
+  const at = (d: number, h: number) => new Date(2026, 9, d, h).toISOString();
+
+  it('compares cigarettes and mood on training days with rest days, from the first cigarette and leaving out today', () => {
+    // The week before Fri 30 Oct; trained on Mon 26 and Thu 29.
+    const smokes = [at(25, 9), at(25, 12), at(25, 20), at(26, 9), at(27, 8), at(27, 9), at(27, 10), at(27, 11), at(29, 9), at(29, 15), at(30, 9)];
+    const moods = { '2026-10-26': { level: 4, note: '' }, '2026-10-28': { level: 2, note: '' }, '2026-10-30': { level: 5, note: '' }, '2026-10-27': { level: 0, note: '' } };
+    const r = trainingVsRest(ws, smokes, moods, today, 7);
+    // Cigarette days start on Sun 25: trained 26 (1), 29 (2); rest 25 (3), 27 (4), 28 (0).
+    expect(r.smokes!.trained).toEqual({ days: 2, avg: 1.5 });
+    expect(r.smokes!.rest.days).toBe(3);
+    expect(r.smokes!.rest.avg).toBeCloseTo(7 / 3);
+    expect(r.mood).toEqual({ trained: { days: 1, avg: 4 }, rest: { days: 1, avg: 2 } });
+    expect(trainingVsRest(ws, [], {}, today)).toEqual({ smokes: null, mood: null });
+  });
+  it('works out what each gym session cost from Money', () => {
+    const entries = [
+      { id: 'a', date: '2026-10-01', kind: 'out' as const, amount: 129, note: 'Gym membership', category: '' as const, planned: true },
+      { id: 'b', date: '2026-10-02', kind: 'out' as const, amount: 12, note: 'Lunch', category: 'Food' as const, planned: false },
+      { id: 'c', date: '2026-10-05', kind: 'in' as const, amount: 50, note: 'gym refund', category: '' as const, planned: false },
+    ];
+    expect(gymCost(entries, ws, '2026-10')).toEqual({ cost: 129, sessions: 3 });
+    expect(gymCost(entries, ws, '2026-09')).toBeNull();
+  });
+  it('finds the workout logged for a gym block in the calendar', () => {
+    const ev = (title: string, d: number, h: number) => ({ title, start: at(d, h), end: at(d, h + 1) });
+    expect(gymWorkout(ev('Gym', 29, 9), ws)).toBe(ws[0]);
+    expect(gymWorkout(ev('Leg day', 26, 7), ws)).toBe(ws[1]);
+    expect(gymWorkout(ev('Standup', 29, 10), ws)).toBeNull();
+    expect(gymWorkout(ev('Gym', 27, 9), ws)).toBeNull();
   });
 });

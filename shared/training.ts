@@ -3,8 +3,8 @@
 // sync can fill the same document later. Everything shown in the Training view
 // is worked out here: weekly totals, sets per muscle, lift trends and PRs.
 // Also cleaning for what the page sends.
-import { addDays, dayDiff, startOfDay } from './dates';
-import type { SetType, Training, Workout, WorkoutExercise, WorkoutSet } from './types';
+import { addDays, dayDiff, startOfDay, ymd } from './dates';
+import type { ExerciseMuscles, MoneyEntry, Mood, Muscle, SetType, Training, Workout, WorkoutExercise, WorkoutSet } from './types';
 
 export const MAX_WORKOUTS = 5000;
 const MAX_EXERCISES = 60;
@@ -160,44 +160,84 @@ export function cleanTraining(v: unknown): Training {
 
 // ---------- muscles ----------
 
-/** Hevy's muscle groups, as its API names them. */
-export type Muscle =
-  | 'chest' | 'lats' | 'upper_back' | 'shoulders' | 'biceps' | 'triceps' | 'forearms' | 'traps' | 'lower_back'
-  | 'quadriceps' | 'hamstrings' | 'glutes' | 'calves' | 'adductors' | 'abdominals' | 'cardio' | 'other';
+export type { Muscle };
+
+export const MUSCLES: Muscle[] = [
+  'chest', 'lats', 'upper_back', 'shoulders', 'biceps', 'triceps', 'forearms', 'traps', 'lower_back',
+  'quadriceps', 'hamstrings', 'glutes', 'calves', 'abductors', 'adductors', 'abdominals', 'neck', 'full_body', 'cardio', 'other',
+];
 
 export const MUSCLE_NAMES: Record<Muscle, string> = {
   chest: 'Chest', lats: 'Lats', upper_back: 'Upper back', shoulders: 'Shoulders', biceps: 'Biceps', triceps: 'Triceps',
   forearms: 'Forearms', traps: 'Traps', lower_back: 'Lower back', quadriceps: 'Quads', hamstrings: 'Hamstrings',
-  glutes: 'Glutes', calves: 'Calves', adductors: 'Adductors', abdominals: 'Abs', cardio: 'Cardio', other: 'Other',
+  glutes: 'Glutes', calves: 'Calves', abductors: 'Abductors', adductors: 'Adductors', abdominals: 'Abs', neck: 'Neck',
+  full_body: 'Full body', cardio: 'Cardio', other: 'Other',
 };
 
 /** Always listed in Sets per muscle, so one that's skipped shows as zero. */
 export const MAIN_MUSCLES: Muscle[] = ['chest', 'lats', 'upper_back', 'shoulders', 'biceps', 'triceps', 'quadriceps', 'hamstrings', 'glutes', 'calves', 'abdominals'];
 
-// The export only has exercise names, so the main muscle is read from the name.
+/** A set counts in full for the main muscle and this much for each secondary one. */
+export const SECONDARY_SHARE = 0.5;
+
+// The export only has exercise names. Claude reads what each one trains when
+// there's an API key (server/src/training.ts); these rules cover the rest.
 // Checked in order: "Leg Curl" is hamstrings before "curl" is biceps, "Triceps Kickback" before "kickback" is glutes.
-const MUSCLE_RULES: [RegExp, Muscle][] = [
-  [/treadmill|running|\brun\b|cycling|bike|elliptical|stair|rowing machine|rower|jump rope|walking|swimming|hiit/, 'cardio'],
-  [/tricep|push ?down|skull ?crusher|\bdips?\b|close grip bench|jm press/, 'triceps'],
-  [/leg curl|hamstring|romanian|\brdl\b|stiff leg|good morning|nordic/, 'hamstrings'],
-  [/leg extension|leg press|squat|lunge|step up|sissy/, 'quadriceps'],
-  [/hip thrust|glute|kickback|abduct|bridge/, 'glutes'],
-  [/adduct/, 'adductors'],
-  [/\bcalf|calves/, 'calves'],
-  [/crunch|sit ?up|leg raise|knee raise|plank|ab wheel|russian twist|hollow|v ?up|dead bug|wood ?chop|pallof/, 'abdominals'],
-  [/back extension|hyperextension|deadlift|superman/, 'lower_back'],
-  [/shrug/, 'traps'],
-  [/pull ?down|pull ?up|chin ?up|pullover|straight arm/, 'lats'],
-  [/face pull|rear delt|reverse fly|reverse pec|lateral raise|front raise|shoulder press|overhead press|military|arnold|upright row|y raise/, 'shoulders'],
-  [/wrist|forearm|farmer|reverse curl/, 'forearms'],
-  [/curl|bicep/, 'biceps'],
-  [/\brow/, 'upper_back'],
-  [/bench press|chest|\bfly|flye|crossover|push ?up|pec deck|incline|decline/, 'chest'],
+const MUSCLE_RULES: [RegExp, Muscle, Muscle[]][] = [
+  [/treadmill|running|\brun\b|cycling|bike|elliptical|stair|rowing machine|rower|jump rope|walking|swimming|hiit/, 'cardio', []],
+  [/tricep|push ?down|skull ?crusher|\bdips?\b|close grip bench|jm press/, 'triceps', []],
+  [/leg curl|hamstring|nordic/, 'hamstrings', []],
+  [/romanian|\brdl\b|stiff leg|good morning/, 'hamstrings', ['glutes', 'lower_back']],
+  [/leg extension|sissy/, 'quadriceps', []],
+  [/leg press|squat|lunge|step up/, 'quadriceps', ['glutes']],
+  [/hip thrust|glute bridge|\bbridge/, 'glutes', ['hamstrings']],
+  [/glute|kickback/, 'glutes', []],
+  [/abduct/, 'abductors', []],
+  [/adduct/, 'adductors', []],
+  [/\bcalf|calves/, 'calves', []],
+  [/crunch|sit ?up|leg raise|knee raise|plank|ab wheel|russian twist|hollow|v ?up|dead bug|wood ?chop|pallof/, 'abdominals', []],
+  [/deadlift/, 'lower_back', ['glutes', 'hamstrings']],
+  [/back extension|hyperextension|superman/, 'lower_back', ['glutes']],
+  [/shrug/, 'traps', []],
+  [/pull ?down|pull ?up|chin ?up/, 'lats', ['biceps', 'upper_back']],
+  [/pullover|straight arm/, 'lats', []],
+  [/face pull|rear delt|reverse fly|reverse pec/, 'shoulders', ['upper_back']],
+  [/shoulder press|overhead press|military|arnold/, 'shoulders', ['triceps']],
+  [/lateral raise|front raise|y raise/, 'shoulders', []],
+  [/upright row/, 'shoulders', ['traps']],
+  [/wrist|forearm|farmer|reverse curl/, 'forearms', []],
+  [/curl|bicep/, 'biceps', ['forearms']],
+  [/\brow/, 'upper_back', ['lats', 'biceps']],
+  [/bench press|chest press|push ?up|incline press|decline press/, 'chest', ['triceps', 'shoulders']],
+  [/chest|\bfly|flye|crossover|pec deck|incline|decline/, 'chest', ['shoulders']],
 ];
 
-export function muscleOf(exercise: string): Muscle {
+function ruleFor(exercise: string): ExerciseMuscles {
   const t = exercise.toLowerCase();
-  return MUSCLE_RULES.find(([re]) => re.test(t))?.[1] ?? 'other';
+  const rule = MUSCLE_RULES.find(([re]) => re.test(t));
+  return rule ? { primary: rule[1], secondary: rule[2] } : { primary: 'other', secondary: [] };
+}
+
+/** The main muscle an exercise trains, from its name alone. */
+export const muscleOf = (exercise: string): Muscle => ruleFor(exercise).primary;
+
+/** What an exercise trains: Claude's reading when there is one, else the name rules. */
+export const musclesOf = (exercise: string, map?: Record<string, ExerciseMuscles>): ExerciseMuscles => map?.[exercise] ?? ruleFor(exercise);
+
+/** Every exercise name in the workouts, once. */
+export const exerciseNames = (workouts: Workout[]) => [...new Set(workouts.flatMap((w) => w.exercises.map((e) => e.title)))];
+
+/** Keeps what Claude sent back to known muscle names, and only for exercises that were asked about. */
+export function cleanMuscleMap(list: unknown, asked: string[]): Record<string, ExerciseMuscles> {
+  const out: Record<string, ExerciseMuscles> = {};
+  const wanted = new Set(asked);
+  for (const x of Array.isArray(list) ? list : []) {
+    const { name, primary, secondary } = (x ?? {}) as { name?: unknown; primary?: unknown; secondary?: unknown };
+    if (typeof name !== 'string' || !wanted.has(name) || !MUSCLES.includes(primary as Muscle)) continue;
+    const sec = (Array.isArray(secondary) ? secondary : []).filter((m): m is Muscle => MUSCLES.includes(m as Muscle) && m !== primary && m !== 'other');
+    out[name] = { primary: primary as Muscle, secondary: [...new Set(sec)].slice(0, 4) };
+  }
+  return out;
 }
 
 // ---------- sets and sessions ----------
@@ -281,20 +321,22 @@ export function fmtMinutes(m: number): string {
 /** Hevy names a workout after the time of day unless it's renamed. */
 const AUTO_TITLE = /^(early |late )?(morning|afternoon|evening|night|midnight|lunch(time)?) workout\b|^workout$/i;
 
+type MuscleMap = Record<string, ExerciseMuscles>;
+
 /** The main muscles of a workout by working sets, most first: ["chest", "triceps"]. */
-export function workoutMuscles(w: Workout, n = 2): Muscle[] {
+export function workoutMuscles(w: Workout, n = 2, map?: MuscleMap): Muscle[] {
   const counts = new Map<Muscle, number>();
   for (const e of w.exercises) {
-    const m = muscleOf(e.title);
+    const m = musclesOf(e.title, map).primary;
     if (m !== 'other') counts.set(m, (counts.get(m) ?? 0) + Math.max(1, e.sets.filter(working).length));
   }
   return [...counts].sort((a, b) => b[1] - a[1]).slice(0, n).map(([m]) => m);
 }
 
 /** The workout's own name, or what it trained when Hevy named it after the time of day: "Chest · Shoulders". */
-export function workoutLabel(w: Workout): string {
+export function workoutLabel(w: Workout, map?: MuscleMap): string {
   if (!AUTO_TITLE.test(w.title.trim())) return w.title;
-  const muscles = workoutMuscles(w);
+  const muscles = workoutMuscles(w, 2, map);
   return muscles.length ? muscles.map((m) => MUSCLE_NAMES[m]).join(' · ') : w.title;
 }
 
@@ -359,85 +401,210 @@ export function weekStreak(workouts: Workout[], today: Date): number {
 
 // ---------- muscles over a window ----------
 
-/** Working sets per main muscle over the last `days` days, ending today. Main muscles are listed even at zero; cardio isn't counted. */
-export function setsPerMuscle(workouts: Workout[], today: Date, days: number): { muscle: Muscle; sets: number }[] {
+/** Working sets per muscle over the last `days` days, ending today: a full set for the main muscle, half for each secondary one.
+ *  Main muscles are listed even at zero; cardio isn't counted. */
+export function setsPerMuscle(workouts: Workout[], today: Date, days: number, map?: MuscleMap): { muscle: Muscle; sets: number }[] {
   const from = addDays(startOfDay(today), -(days - 1));
   const to = addDays(startOfDay(today), 1);
   const counts = new Map<Muscle, number>(MAIN_MUSCLES.map((m) => [m, 0]));
+  const add = (m: Muscle, n: number) => m !== 'cardio' && m !== 'other' && m !== 'full_body' && counts.set(m, (counts.get(m) ?? 0) + n);
   for (const w of workouts.filter((x) => inRange(x, from, to))) {
     for (const e of w.exercises) {
-      const m = muscleOf(e.title);
-      if (m === 'cardio') continue;
-      counts.set(m, (counts.get(m) ?? 0) + e.sets.filter(working).length);
+      const { primary, secondary } = musclesOf(e.title, map);
+      if (primary === 'cardio') continue;
+      const n = e.sets.filter(working).length;
+      if (primary === 'other' || primary === 'full_body') counts.set(primary, (counts.get(primary) ?? 0) + n);
+      else add(primary, n);
+      for (const m of secondary) add(m, n * SECONDARY_SHARE);
     }
   }
   return [...counts]
     .filter(([m, n]) => n > 0 || MAIN_MUSCLES.includes(m))
     .map(([muscle, sets]) => ({ muscle, sets }))
-    .sort((a, b) => b.sets - a.sets || MAIN_MUSCLES.indexOf(a.muscle) - MAIN_MUSCLES.indexOf(b.muscle));
+    .sort((a, b) => b.sets - a.sets || rank(a.muscle) - rank(b.muscle));
 }
 
+/** Main muscles in their usual order, then the rest. */
+const rank = (m: Muscle) => (MAIN_MUSCLES.includes(m) ? MAIN_MUSCLES.indexOf(m) : MAIN_MUSCLES.length + MUSCLES.indexOf(m));
+
 // ---------- lifts ----------
+
+type Session = { workoutId: string; at: string; sets: WorkoutSet[] };
+
+/** Every exercise's sessions, oldest first. The same exercise twice in one workout is one session. Cardio is left out. */
+function sessionsByExercise(workouts: Workout[], map?: MuscleMap): Map<string, Session[]> {
+  const out = new Map<string, Session[]>();
+  for (const w of [...workouts].reverse()) {
+    for (const e of w.exercises) {
+      if (musclesOf(e.title, map).primary === 'cardio' || !e.sets.some(working)) continue;
+      const list = out.get(e.title) ?? [];
+      const last = list[list.length - 1];
+      if (last?.workoutId === w.id) last.sets.push(...e.sets);
+      else list.push({ workoutId: w.id, at: w.start, sets: [...e.sets] });
+      out.set(e.title, list);
+    }
+  }
+  return out;
+}
 
 export interface LiftTrend {
   title: string;
   measure: LiftMeasure;
   /** One point per session in the window, oldest first. */
   points: { at: string; value: number }[];
-  /** The latest session's top set. */
+  /** The latest session's best and top set, which may be before the window. */
+  latest: number | null;
   top: WorkoutSet | null;
+  /** Sessions in all history. */
+  sessions: number;
   /** The latest session beat every earlier one, across all history. */
   pr: boolean;
+  pinned: boolean;
 }
 
-/** The exercises done in the most sessions over the last `weeks` weeks (at least two each), with their bests per session. */
-export function liftTrends(workouts: Workout[], today: Date, weeks = 12, n = 5): LiftTrend[] {
+/** Pinned lifts first, then the exercises done in the most sessions over the last `weeks` weeks (at least two each), up to `n` in all. */
+export function liftTrends(workouts: Workout[], today: Date, opts: { weeks?: number; n?: number; pinned?: string[]; muscles?: MuscleMap } = {}): LiftTrend[] {
+  const { weeks = 12, n = 5, pinned = [], muscles } = opts;
   const from = addDays(startOfDay(today), -7 * weeks + 1).getTime();
-  const sessions = new Map<string, { at: string; sets: WorkoutSet[] }[]>();
-  for (const w of [...workouts].reverse()) {
-    for (const e of w.exercises) {
-      if (muscleOf(e.title) === 'cardio' || !e.sets.some(working)) continue;
-      const list = sessions.get(e.title) ?? [];
-      // The same exercise twice in one workout is one session.
-      const last = list[list.length - 1];
-      if (last?.at === w.start) last.sets.push(...e.sets);
-      else list.push({ at: w.start, sets: [...e.sets] });
-      sessions.set(e.title, list);
-    }
-  }
-  return [...sessions]
-    .map(([title, all]) => ({ title, all, recent: all.filter((s) => Date.parse(s.at) >= from) }))
-    .filter((x) => x.recent.length >= 2)
-    .sort((a, b) => b.recent.length - a.recent.length || Date.parse(b.recent[b.recent.length - 1].at) - Date.parse(a.recent[a.recent.length - 1].at))
-    .slice(0, n)
-    .map(({ title, all, recent }): LiftTrend => {
-      const measure = measureOf(all.flatMap((s) => s.sets));
-      const points = recent.flatMap((s) => {
-        const value = bestOf(s.sets, measure);
-        return value === null ? [] : [{ at: s.at, value }];
-      });
-      const latest = all[all.length - 1];
-      const latestBest = bestOf(latest.sets, measure);
-      const before = all.slice(0, -1).map((s) => bestOf(s.sets, measure) ?? 0);
-      return { title, measure, points, top: topSet(latest.sets), pr: latestBest !== null && before.length > 0 && latestBest > Math.max(...before) };
+  const sessions = sessionsByExercise(workouts, muscles);
+  const recent = (title: string) => (sessions.get(title) ?? []).filter((s) => Date.parse(s.at) >= from);
+  const pins = pinned.filter((t) => sessions.has(t));
+  const most = [...sessions.keys()]
+    .filter((t) => !pins.includes(t) && recent(t).length >= 2)
+    .sort((a, b) => recent(b).length - recent(a).length || Date.parse(recent(b).at(-1)!.at) - Date.parse(recent(a).at(-1)!.at));
+  return [...pins, ...most.slice(0, Math.max(0, n - pins.length))].map((title): LiftTrend => {
+    const all = sessions.get(title)!;
+    const measure = measureOf(all.flatMap((s) => s.sets));
+    const points = recent(title).flatMap((s) => {
+      const value = bestOf(s.sets, measure);
+      return value === null ? [] : [{ at: s.at, value }];
     });
+    const latest = all[all.length - 1];
+    const latestBest = bestOf(latest.sets, measure);
+    const before = all.slice(0, -1).map((s) => bestOf(s.sets, measure) ?? 0);
+    return {
+      title,
+      measure,
+      points,
+      latest: latestBest,
+      top: topSet(latest.sets),
+      sessions: all.length,
+      pr: latestBest !== null && before.length > 0 && latestBest > Math.max(...before),
+      pinned: pins.includes(title),
+    };
+  });
+}
+
+export interface ExerciseHistory {
+  title: string;
+  measure: LiftMeasure;
+  /** Newest first, with every set and the session's best. */
+  sessions: { workoutId: string; at: string; sets: WorkoutSet[]; best: number | null; pr: boolean }[];
+  best: { value: number; at: string } | null;
+}
+
+/** Every session of one exercise, for its history drawer. */
+export function exerciseHistory(workouts: Workout[], title: string): ExerciseHistory {
+  const all = sessionsByExercise(workouts).get(title) ?? [];
+  const measure = measureOf(all.flatMap((s) => s.sets));
+  let top: { value: number; at: string } | null = null;
+  const rows = all.map((s) => {
+    const best = bestOf(s.sets, measure);
+    const pr = best !== null && top !== null && best > top.value;
+    if (best !== null && (!top || best > top.value)) top = { value: best, at: s.at };
+    return { workoutId: s.workoutId, at: s.at, sets: s.sets, best, pr };
+  });
+  return { title, measure, sessions: rows.reverse(), best: top };
 }
 
 /** Exercises in each workout that beat every earlier session of that exercise, keyed by workout id. */
-export function prsByWorkout(workouts: Workout[]): Map<string, string[]> {
+export function prsByWorkout(workouts: Workout[], map?: MuscleMap): Map<string, string[]> {
   const best = new Map<string, number>();
   const out = new Map<string, string[]>();
-  for (const w of [...workouts].reverse()) {
-    for (const e of w.exercises) {
-      if (muscleOf(e.title) === 'cardio') continue;
-      const measure = measureOf(e.sets);
-      const key = `${e.title}\u0000${measure}`;
-      const v = bestOf(e.sets, measure);
+  for (const [title, list] of sessionsByExercise(workouts, map)) {
+    const measure = measureOf(list.flatMap((s) => s.sets));
+    for (const s of list) {
+      const v = bestOf(s.sets, measure);
       if (v === null) continue;
-      const prev = best.get(key);
-      if (prev !== undefined && v > prev) out.set(w.id, [...(out.get(w.id) ?? []), e.title]);
-      if (prev === undefined || v > prev) best.set(key, v);
+      const prev = best.get(title);
+      if (prev !== undefined && v > prev) out.set(s.workoutId, [...(out.get(s.workoutId) ?? []), title]);
+      if (prev === undefined || v > prev) best.set(title, v);
     }
   }
   return out;
+}
+
+// ---------- alongside the other logs ----------
+
+/** The newest workout and how many days ago it was (0 is today). */
+export function lastTrained(workouts: Workout[], today: Date): { workout: Workout; days: number } | null {
+  const w = workouts[0];
+  return w ? { workout: w, days: dayDiff(new Date(w.start), today) } : null;
+}
+
+export interface Split {
+  trained: { days: number; avg: number | null };
+  rest: { days: number; avg: number | null };
+}
+
+/** Days needed on each side before a comparison means anything. */
+export const MIN_SPLIT_DAYS = 5;
+
+/**
+ * Cigarettes a day and mood on days with a workout against days without, over the last `days` complete days (today is left out
+ * because it isn't over). Cigarette days start from the first one logged; mood days are the ones with a mood.
+ */
+export function trainingVsRest(workouts: Workout[], smokes: string[], moods: Record<string, Mood>, today: Date, days = 60): { smokes: Split | null; mood: Split | null } {
+  const end = startOfDay(today);
+  const start = addDays(end, -days);
+  const trainedDays = new Set(workouts.map((w) => ymd(new Date(w.start))));
+  const perDay = new Map<string, number>();
+  let first = Infinity;
+  for (const s of smokes) {
+    const t = Date.parse(s);
+    first = Math.min(first, t);
+    perDay.set(ymd(new Date(t)), (perDay.get(ymd(new Date(t))) ?? 0) + 1);
+  }
+  const smokeSide = { trained: [] as number[], rest: [] as number[] };
+  const moodSide = { trained: [] as number[], rest: [] as number[] };
+  for (let d = start; d < end; d = addDays(d, 1)) {
+    const key = ymd(d);
+    const side = trainedDays.has(key) ? 'trained' : 'rest';
+    if (addDays(d, 1).getTime() > first) smokeSide[side].push(perDay.get(key) ?? 0);
+    if ((moods[key]?.level ?? 0) >= 1) moodSide[side].push(moods[key].level);
+  }
+  const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+  const split = (x: { trained: number[]; rest: number[] }): Split => ({
+    trained: { days: x.trained.length, avg: avg(x.trained) },
+    rest: { days: x.rest.length, avg: avg(x.rest) },
+  });
+  return {
+    smokes: smokes.length ? split(smokeSide) : null,
+    mood: moodSide.trained.length + moodSide.rest.length ? split(moodSide) : null,
+  };
+}
+
+/** A Money entry counts as the gym when its note or category says so. */
+const GYM_MONEY = /\b(gym|fitness|membership|personal train)/i;
+
+/** What the gym cost in a month (YYYY-MM), planned or done, and the sessions that month. null when nothing in Money mentions the gym. */
+export function gymCost(entries: MoneyEntry[], workouts: Workout[], month: string): { cost: number; sessions: number } | null {
+  const cost = entries
+    .filter((e) => e.kind === 'out' && e.date.startsWith(month) && (GYM_MONEY.test(e.note) || GYM_MONEY.test(e.category)))
+    .reduce((n, e) => n + e.amount, 0);
+  if (!cost) return null;
+  return { cost: Math.round(cost * 100) / 100, sessions: workouts.filter((w) => ymd(new Date(w.start)).startsWith(month)).length };
+}
+
+/** Calendar events that look like a gym block. */
+const GYM_EVENT = /\b(gym|work ?out|training|lifting|weights|leg day|push day|pull day)\b/i;
+/** How far a logged workout can start before or end after the block and still count as it. */
+const GYM_SLACK = 90 * 60_000;
+
+/** The workout logged for a gym block in the calendar, if there is one. */
+export function gymWorkout(event: { title: string; start: string; end: string }, workouts: Workout[]): Workout | null {
+  if (!GYM_EVENT.test(event.title)) return null;
+  const s = Date.parse(event.start) - GYM_SLACK;
+  const e = Date.parse(event.end) + GYM_SLACK;
+  return workouts.find((w) => Date.parse(w.start) < e && Date.parse(w.end) > s) ?? null;
 }

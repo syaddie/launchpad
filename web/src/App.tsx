@@ -21,7 +21,7 @@ import { ServerBanner, type ServerIssue } from './components/ServerBanner';
 import { Tasks } from './components/Tasks';
 import { Today, todayAgenda } from './components/Today';
 import { TopBar } from './components/TopBar';
-import { TrainingView } from './components/Training';
+import { ExerciseDrawer, TrainingView } from './components/Training';
 import { You, nearestCountdown } from './components/You';
 import { gridLayout, type Area, type Layout } from './layout';
 import { dayDiff, hm, host, inMinutes, parseYmd } from './util';
@@ -57,15 +57,17 @@ const EMPTY: AppState = {
   moods: {},
   money: starterMoney(new Date()),
   training: EMPTY_TRAINING,
+  exerciseMuscles: {},
+  trainingNote: { note: null, error: null },
 };
 
 /** A cached copy from an older version can be missing newer fields. */
 function fromCache(c: AppState | null): AppState {
   if (!c) return EMPTY;
-  return { ...EMPTY, ...c, prefs: { ...DEFAULT_PREFS, ...c.prefs }, sync: { ...EMPTY.sync, ...c.sync }, inbox: c.inbox ?? EMPTY.inbox, money: Array.isArray(c.money?.entries) ? c.money : EMPTY.money, training: Array.isArray(c.training?.workouts) ? c.training : EMPTY.training };
+  return { ...EMPTY, ...c, prefs: { ...DEFAULT_PREFS, ...c.prefs }, sync: { ...EMPTY.sync, ...c.sync }, inbox: c.inbox ?? EMPTY.inbox, money: Array.isArray(c.money?.entries) ? c.money : EMPTY.money, training: Array.isArray(c.training?.workouts) ? c.training : EMPTY.training, exerciseMuscles: c.exerciseMuscles ?? {}, trainingNote: c.trainingNote ?? EMPTY.trainingNote };
 }
 
-type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings' } | null;
+type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings' } | { type: 'exercise'; title: string } | null;
 
 /** Debounced saver for whole-document PUTs, flushed when the tab closes. */
 function useSaver<T>(save: (v: T, keepalive?: boolean) => Promise<unknown>, delay: number, onSaved?: () => void, onError?: (e: Error) => void) {
@@ -137,6 +139,7 @@ export function App() {
   const [palette, setPalette] = useState(false);
   const [addCountdown, setAddCountdown] = useState(0);
   const [newsBusy, setNewsBusy] = useState(false);
+  const [noteBusy, setNoteBusy] = useState(false);
   const [inboxBusy, setInboxBusy] = useState(false);
   const [layout, setLayout] = useState<Layout>('desktop');
   const [search, setSearch] = useState('');
@@ -455,9 +458,28 @@ export function App() {
     showToast(summary, { label: 'Undo', run: () => setMoney(before) });
   };
 
+  /** Claude labels new exercises and writes the note; `force` writes a new note even when nothing changed. */
+  const refreshTrainingNote = (force: boolean) => {
+    if (!data.newsSummaries) return;
+    setNoteBusy(true);
+    api
+      .refreshTraining(force)
+      .then(merge)
+      .catch((e) => showToast(`Couldn’t write the training note: ${e.message}`))
+      .finally(() => setNoteBusy(false));
+  };
+
   const setTraining = (training: Training) => {
     update((d) => ({ ...d, training }));
-    api.putTraining(training).catch(onSaveError);
+    api
+      .putTraining(training)
+      .then(() => refreshTrainingNote(false))
+      .catch(onSaveError);
+  };
+
+  const togglePin = (title: string) => {
+    const pins = data.prefs.pinnedLifts;
+    setPrefs({ ...data.prefs, pinnedLifts: pins.includes(title) ? pins.filter((t) => t !== title) : [...pins, title] });
   };
 
   const importTraining = (training: Training, summary: string) => {
@@ -663,14 +685,15 @@ export function App() {
       run: () => window.open(engineUrl(e, term), '_blank', 'noopener'),
     }));
   };
-  const drawerTitle = drawer?.type === 'settings' ? 'Settings' : drawer?.type === 'add' ? 'Add package' : drawerPkg ? 'Package' : '';
+  const drawerTitle =
+    drawer?.type === 'settings' ? 'Settings' : drawer?.type === 'add' ? 'Add package' : drawer?.type === 'exercise' ? drawer.title : drawerPkg ? 'Package' : '';
 
   return (
     <div ref={rootRef} className="lp-root" data-layout={layout}>
       <div className="lp-shell">
       <Rail view={view} hidden={data.prefs.hidden} badges={{ inbox: inboxCount }} onView={setView} onPalette={() => setPalette(true)} onSettings={() => setDrawer({ type: 'settings' })} />
       <div className="lp-inner">
-        <TopBar data={data} now={now} subline={subline} search={search} onSearch={setSearch} searchRef={searchRef} smokesToday={smokesToday} onLogSmoke={logSmoke} />
+        <TopBar data={data} now={now} subline={subline} search={search} onSearch={setSearch} searchRef={searchRef} smokesToday={smokesToday} onLogSmoke={logSmoke} onOpenTraining={() => setView('training')} />
         {serverIssue && <ServerBanner issue={serverIssue} onRetry={refresh} />}
         {view === 'news' ? (
           <News data={data} now={now} busy={newsBusy} onRefresh={refreshNews} onTopics={setNewsTopics} />
@@ -679,7 +702,15 @@ export function App() {
         ) : view === 'you' ? (
           <You data={data} now={now} addSignal={addCountdown} onCountdowns={setCountdowns} onLogSmoke={logSmoke} onUndoSmoke={undoSmoke} onMood={setMood} />
         ) : view === 'training' ? (
-          <TrainingView training={data.training} now={now} onImport={importTraining} />
+          <TrainingView
+            data={data}
+            now={now}
+            noteBusy={noteBusy}
+            onImport={importTraining}
+            onRefreshNote={() => refreshTrainingNote(true)}
+            onOpenExercise={(title) => setDrawer({ type: 'exercise', title })}
+            onOpenSettings={() => setDrawer({ type: 'settings' })}
+          />
         ) : view === 'money' ? (
           <MoneyView money={data.money} now={now} saved={moneySaved} onChange={setMoney} onImport={importMoney} notify={showToast} />
         ) : view === 'server' ? (
@@ -756,6 +787,9 @@ export function App() {
             />
           )}
           {drawer.type === 'add' && <AddPackageDrawer onSubmit={addPackage} onCancel={() => setDrawer(null)} />}
+          {drawer.type === 'exercise' && (
+            <ExerciseDrawer key={drawer.title} title={drawer.title} data={data} pinned={data.prefs.pinnedLifts.includes(drawer.title)} onPin={() => togglePin(drawer.title)} />
+          )}
           {drawerPkg && <PackageDrawer key={drawerPkg.id} pkg={drawerPkg} now={now} onRename={(l) => renamePackage(drawerPkg.id, l)} onArchive={() => archivePackage(drawerPkg.id)} />}
         </Drawer>
       )}

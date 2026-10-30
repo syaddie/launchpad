@@ -17,6 +17,7 @@ import { CARRIERS, detectCarrier } from '../../shared/carriers';
 import { DEFAULT_ENGINES, HIDEABLE_KEYS } from '../../shared/defaults';
 import { cleanMoney } from '../../shared/money';
 import { cleanTraining } from '../../shared/training';
+import { refreshTraining } from './training';
 import type { AppState, BookmarkGroup, Countdown, Mood, NewsTopic, Note, Package, Photo, Prefs, SearchEngine, SourceKey } from '../../shared/types';
 
 const app = new Hono();
@@ -76,6 +77,8 @@ function state(): AppState {
     moods: store.moods(),
     money: store.money(),
     training: store.training(),
+    exerciseMuscles: claudeEnabled() ? store.exerciseMuscles() : {},
+    trainingNote: claudeEnabled() ? store.trainingNote() : { note: null, error: null },
   };
 }
 
@@ -166,6 +169,8 @@ app.put('/api/prefs', async (c) => {
     cigaretteLimit: num(body.cigaretteLimit, 0, 99, prev.cigaretteLimit),
     speedTestHours: num(body.speedTestHours, 0, 24, prev.speedTestHours),
     speedPlanMbps: num(body.speedPlanMbps, 0, 100_000, prev.speedPlanMbps),
+    setsPerWeek: num(body.setsPerWeek, 1, 40, prev.setsPerWeek),
+    pinnedLifts: Array.isArray(body.pinnedLifts) ? [...new Set(body.pinnedLifts.filter(isStr).map((t) => t.slice(0, 120)))].slice(0, 12) : prev.pinnedLifts,
   };
   if (!next.searchEngines.length) next.searchEngines = DEFAULT_ENGINES;
   store.setPrefs(next);
@@ -314,7 +319,15 @@ app.put('/api/training', bodyLimit({ maxSize: 8 * 1024 * 1024, onError: (c) => c
   if (!body || typeof body !== 'object' || !Array.isArray(body.workouts)) return c.json({ error: 'Invalid workouts' }, 400);
   const training = cleanTraining(body);
   store.setTraining(training);
+  // Claude labels new exercises and writes a note in the background; the page asks for them with the route below.
+  refreshTraining();
   return c.json(training);
+});
+
+/** Wait for new exercises to be labelled and the note to be written (again, with ?force=1), then send the whole state. */
+app.post('/api/training/refresh', async (c) => {
+  await refreshTraining(c.req.query('force') === '1');
+  return c.json(state());
 });
 
 // ---------- server health ----------

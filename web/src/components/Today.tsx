@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { DOW, addDays, dayDiff, parseYmd, startOfDay } from '../../../shared/dates';
+import { fmtMinutes, gymWorkout, minutes, workingSets, workoutLabel } from '../../../shared/training';
 import type { AppState, CalEvent } from '../../../shared/types';
 import { ago, fmtDay, hm, inMinutes } from '../util';
 
@@ -71,11 +72,12 @@ export function Today({ data, now, wide, compact, onConnect, onRetry }: Props) {
     const isFocus = !!focus && kind === 'today' && e.id === focus.id;
     const isCur = !!cur && e.id === cur.id;
     const meta = [cal?.name, e.location, e.conferenceType].filter(Boolean).join(' · ');
+    const gym = kind !== 'week' && data.training.workouts.length ? gymWorkout(e, data.training.workouts) : null;
     const label = isFocus ? (isCur ? `now · ends ${hm(e.e)}` : inMinutes(Math.max(1, Math.round((e.s.getTime() - now.getTime()) / 60000)))) : '';
     const open = expanded === e.id;
     const startsBefore = kind === 'today' && e.s < today;
     return (
-      <div key={e.id} className={'event' + (isFocus ? ' focus' : '')} style={{ opacity: past ? 0.5 : 1 }}>
+      <div key={e.id} className={'event' + (isFocus ? ' focus' : '')} style={{ opacity: past && !gym ? 0.5 : 1 }}>
         <div className="event-row" onClick={() => setExpanded(open ? null : e.id)}>
           <div className="event-time">
             {kind === 'week' ? DOW[e.s.getDay()] : startsBefore ? '…' : hm(e.s)}
@@ -88,6 +90,12 @@ export function Today({ data, now, wide, compact, onConnect, onRetry }: Props) {
               {e.title}
             </div>
             {meta && <div className="event-meta">{meta}</div>}
+            {gym && (
+              <div className="event-gym">
+                <i className="ph-duotone ph-check-circle" aria-hidden="true" />
+                Logged in Hevy · {workoutLabel(gym, data.exerciseMuscles)} · {fmtMinutes(minutes(gym))} · {workingSets(gym)} sets
+              </div>
+            )}
           </div>
           <div className="event-side">
             {label && <span className="event-label">{label}</span>}
