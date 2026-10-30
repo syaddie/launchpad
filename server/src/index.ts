@@ -1,17 +1,20 @@
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
+import type http from 'node:http';
 import path from 'node:path';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { WebSocketServer } from 'ws';
 import { config, googleConfigured } from './config';
 import { authUrl, completeTask, createTask, exchangeCode, GoogleError, revoke } from './google';
 import { store, updatePackages } from './store';
 import { claudeEnabled } from './claude';
 import { MAX_PHOTOS, MAX_PHOTO_BYTES, readPhoto, removePhotoFile, sniffImage, writePhoto } from './photos';
 import { isRunning, newPackage, refreshPackage, refreshSummaries, refreshWeather, runAllGoogle, runIfStale, runSource, signOutGoogle, startScheduler } from './sync';
+import { attachTerminal, FileError, listDir, makeDir, MAX_TEXT, readFileStream, readText, remove, rename, shellInfo, trustHostKey, upload, writeText } from './shell';
 import { serverStats, startSampler } from './system';
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
 import { DEFAULT_ENGINES, HIDEABLE_KEYS } from '../../shared/defaults';
@@ -26,18 +29,26 @@ const app = new Hono();
 
 // ---------- Cloudflare Access (optional) ----------
 
-if (config.access.teamDomain && config.access.aud) {
-  const jwks = createRemoteJWKSet(new URL(`https://${config.access.teamDomain}/cdn-cgi/access/certs`));
+const accessOn = !!(config.access.teamDomain && config.access.aud);
+const jwks = accessOn ? createRemoteJWKSet(new URL(`https://${config.access.teamDomain}/cdn-cgi/access/certs`)) : null;
+
+/** Why a request without a valid Access token is refused, or null when it may pass. */
+async function accessDenied(token: string | undefined): Promise<string | null> {
+  if (!jwks) return null;
+  if (!token) return 'Forbidden: open Launchpad through its Cloudflare Access URL.';
+  try {
+    await jwtVerify(token, jwks, { issuer: `https://${config.access.teamDomain}`, audience: config.access.aud });
+    return null;
+  } catch {
+    return 'Forbidden: invalid Cloudflare Access token.';
+  }
+}
+
+if (accessOn) {
   app.use('*', async (c, next) => {
     if (c.req.path === '/healthz') return next();
-    const token = c.req.header('cf-access-jwt-assertion');
-    if (!token) return c.text('Forbidden: open Launchpad through its Cloudflare Access URL.', 403);
-    try {
-      await jwtVerify(token, jwks, { issuer: `https://${config.access.teamDomain}`, audience: config.access.aud });
-    } catch {
-      return c.text('Forbidden: invalid Cloudflare Access token.', 403);
-    }
-    return next();
+    const denied = await accessDenied(c.req.header('cf-access-jwt-assertion'));
+    return denied ? c.text(denied, 403) : next();
   });
 }
 
@@ -381,6 +392,73 @@ app.post('/api/speedtest', (c) => {
   return c.json(speedInfo());
 });
 
+// ---------- terminal and files ----------
+
+/** Browsers send Origin with WebSockets and writes. One from another site is refused, so a page elsewhere can't drive the shell or change files. */
+function foreignOrigin(origin: string | undefined, host: string | undefined): boolean {
+  if (!origin) return false;
+  try {
+    return new URL(origin).host !== host;
+  } catch {
+    return true;
+  }
+}
+
+for (const p of ['/api/shell/*', '/api/files/*']) {
+  app.use(p, async (c, next) => (foreignOrigin(c.req.header('origin'), c.req.header('host')) ? c.json({ error: 'Cross-site request refused' }, 403) : next()));
+}
+
+app.get('/api/shell', (c) => c.json(shellInfo(accessOn)));
+
+app.post('/api/shell/trust', (c) => {
+  trustHostKey();
+  return c.json(shellInfo(accessOn));
+});
+
+app.get('/api/files/list', async (c) => c.json(await listDir(c.req.query('path'))));
+
+app.get('/api/files/download', async (c) => {
+  const f = await readFileStream(c.req.query('path'));
+  return c.body(f.body, 200, {
+    'Content-Type': 'application/octet-stream',
+    'Content-Length': String(f.size),
+    'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(f.name)}`,
+    'X-Content-Type-Options': 'nosniff',
+  });
+});
+
+app.get('/api/files/text', async (c) => c.json(await readText(c.req.query('path'))));
+
+app.put('/api/files/text', bodyLimit({ maxSize: MAX_TEXT * 2, onError: (c) => c.json({ error: 'That’s over 1 MB.' }, 413) }), async (c) => {
+  const body = await c.req.json();
+  await writeText(body?.path, body?.text);
+  return c.json({ ok: true });
+});
+
+/** The file's bytes are the body, streamed straight to the server. */
+app.post('/api/files/upload', async (c) => {
+  await upload(c.req.query('dir'), c.req.query('name'), c.req.raw.body, c.req.query('overwrite') === '1');
+  return c.json({ ok: true });
+});
+
+app.post('/api/files/mkdir', async (c) => {
+  const body = await c.req.json();
+  await makeDir(body?.path);
+  return c.json({ ok: true });
+});
+
+app.post('/api/files/rename', async (c) => {
+  const body = await c.req.json();
+  await rename(body?.from, body?.to);
+  return c.json({ ok: true });
+});
+
+app.post('/api/files/delete', async (c) => {
+  const body = await c.req.json();
+  await remove(body?.path);
+  return c.json({ ok: true });
+});
+
 // ---------- photos ----------
 
 app.post(
@@ -491,6 +569,7 @@ app.get('/api/carriers', (c) => c.json(CARRIERS));
 // ---------- errors ----------
 
 app.onError((err, c) => {
+  if (err instanceof FileError) return c.json({ error: err.message }, err.status);
   console.error(`[api] ${c.req.method} ${c.req.path}:`, err.message);
   if (err instanceof GoogleError && err.authExpired) signOutGoogle(err.message);
   return c.json({ error: err.message }, 500);
@@ -511,9 +590,25 @@ if (fs.existsSync(config.webDir)) {
   app.get('*', (c) => c.html(index));
 }
 
-serve({ fetch: app.fetch, port: config.port }, (info) => {
+const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
   console.log(`Launchpad listening on :${info.port} (data in ${config.dataDir})`);
   if (!googleConfigured()) console.log('Google is not configured: set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to enable Calendar, Tasks and Gmail.');
+}) as http.Server;
+
+// The terminal's WebSocket. Upgrades skip Hono, so the Access and origin checks happen here too.
+const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 });
+server.on('upgrade', async (req, socket, head) => {
+  const url = new URL(req.url || '/', 'http://launchpad');
+  const refuse = (status: string) => socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\n\r\n`);
+  if (url.pathname !== '/api/terminal') return refuse('404 Not Found');
+  const token = req.headers['cf-access-jwt-assertion'];
+  if (foreignOrigin(req.headers.origin, req.headers.host) || (await accessDenied(Array.isArray(token) ? token[0] : token))) return refuse('403 Forbidden');
+  wss.handleUpgrade(req, socket, head, (ws) => {
+    attachTerminal(ws, url.searchParams.get('session'), Number(url.searchParams.get('cols')), Number(url.searchParams.get('rows'))).catch((e) => {
+      console.error('[terminal]', e.message);
+      ws.close(1011);
+    });
+  });
 });
 
 startScheduler();

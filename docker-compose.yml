@@ -16,6 +16,12 @@ services:
       # docker-proxy below. Both are optional; see docs/setup.md step 8.
       - HOST_PROC=/host/proc
       - DOCKER_HOST=tcp://docker-proxy:2375
+      # Server view's terminal and files: SSH to the machine itself, as SSH_USER
+      # from .env. Leave SSH_USER empty to keep them off; see docs/setup.md step 9.
+      - SSH_HOST=host.docker.internal
+    extra_hosts:
+      # Lets the container reach the host's own sshd.
+      - "host.docker.internal:host-gateway"
     volumes:
       # Bookmarks, notes, packages and the Google sign-in all live here.
       - launchpad-data:/data

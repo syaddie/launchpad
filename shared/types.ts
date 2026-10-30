@@ -454,6 +454,37 @@ export interface SpeedTest {
   jitterMs: number;
 }
 
+/** The Server view's terminal and file explorer, which reach the host over SSH. */
+export interface ShellInfo {
+  /** SSH_HOST and SSH_USER are set. */
+  configured: boolean;
+  /** user@host, or user@host:port off the usual port. */
+  target: string | null;
+  /** Launchpad's own key, to add to the user's ~/.ssh/authorized_keys. */
+  publicKey: string;
+  /** The fingerprint the host offers now, when it no longer matches the one trusted on the first connection. */
+  newHostKey: string | null;
+  /** Cloudflare Access is on, so only your Access login can open the terminal. */
+  guarded: boolean;
+}
+
+export interface FileEntry {
+  name: string;
+  /** For a symlink, what it points at; `other` for sockets, devices and broken links. */
+  kind: 'dir' | 'file' | 'other';
+  link: boolean;
+  size: number;
+  mtime: string;
+  /** Permission bits, e.g. 0o644. */
+  mode: number;
+}
+
+export interface DirListing {
+  /** Absolute, with symlinks resolved. */
+  path: string;
+  entries: FileEntry[];
+}
+
 export interface ContainerInfo {
   name: string;
   image: string;

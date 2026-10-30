@@ -1,4 +1,4 @@
-import type { AppState, BookmarkGroup, Countdown, Learn, Money, Mood, Note, Package, Photo, Prefs, ServerStats, SourceKey, Task, Training } from '../../shared/types';
+import type { AppState, BookmarkGroup, Countdown, DirListing, Learn, Money, Mood, Note, Package, Photo, Prefs, ServerStats, ShellInfo, SourceKey, Task, Training } from '../../shared/types';
 
 const STATE_KEY = 'launchpad:state';
 const PREFS_KEY = 'launchpad:prefs';
@@ -117,6 +117,45 @@ export const api = {
   putMood: (date: string, mood: Mood | { level: 0 }) => req<Record<string, Mood>>('PUT', `/api/moods/${date}`, mood),
   server: (iface?: string) => req<ServerStats>('GET', `/api/server${iface ? `?iface=${encodeURIComponent(iface)}` : ''}`),
   speedTest: () => req<ServerStats['speed']>('POST', '/api/speedtest', {}),
+  shell: () => req<ShellInfo>('GET', '/api/shell'),
+  trustHostKey: () => req<ShellInfo>('POST', '/api/shell/trust', {}),
+  listDir: (path?: string) => req<DirListing>('GET', `/api/files/list${path ? `?path=${encodeURIComponent(path)}` : ''}`),
+  readText: (path: string) => req<{ path: string; text: string }>('GET', `/api/files/text?path=${encodeURIComponent(path)}`),
+  writeText: (path: string, text: string) => req('PUT', '/api/files/text', { path, text }),
+  makeDir: (path: string) => req('POST', '/api/files/mkdir', { path }),
+  renamePath: (from: string, to: string) => req('POST', '/api/files/rename', { from, to }),
+  deletePath: (path: string) => req('POST', '/api/files/delete', { path }),
 };
+
+export const downloadUrl = (path: string) => `/api/files/download?path=${encodeURIComponent(path)}`;
+
+/** An upload that failed, with the status so a clash (409) can be offered as a replace. */
+export class UploadError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
+
+/** Upload a file into `dir` on the server, reporting progress from 0 to 1. XHR, since fetch can't report upload progress. */
+export function uploadFile(dir: string, file: File, overwrite: boolean, onProgress: (p: number) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `/api/files/upload?dir=${encodeURIComponent(dir)}&name=${encodeURIComponent(file.name)}${overwrite ? '&overwrite=1' : ''}`);
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) return resolve();
+      let message = `Upload failed (${xhr.status})`;
+      try {
+        message = JSON.parse(xhr.responseText).error || message;
+      } catch {
+        // Not JSON: a proxy's error page.
+      }
+      reject(new UploadError(message, xhr.status));
+    };
+    xhr.onerror = () => reject(new UploadError('Can’t reach the Launchpad server.', 0));
+    xhr.send(file);
+  });
+}
 
 export const photoUrl = (id: string) => `/api/photos/${encodeURIComponent(id)}`;
