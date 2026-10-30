@@ -7,7 +7,7 @@ import { config } from './config';
 import { store } from './store';
 import { DOW, MON, addDays, startOfDay } from '../../shared/dates';
 import {
-  MUSCLES, MUSCLE_NAMES, cleanMuscleMap, exerciseNames, fmtSet, liftTrends, minutes, musclesOf, setsPerMuscle, weekSummary, weeklyCounts, workingSets,
+  MUSCLES, MUSCLE_NAMES, cleanMuscleMap, exerciseNames, fmtSet, liftTrends, minutes, musclesOf, setsPerMuscle, weekSummary, weeklyCounts, weightChange, weightSeries, workingSets,
 } from '../../shared/training';
 import type { ExerciseMuscles, Training, TrainingNote } from '../../shared/types';
 
@@ -89,7 +89,7 @@ const NOTE_SCHEMA = {
 const day = (d: Date) => `${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}`;
 
 /** The log as Claude reads it: totals, sets per muscle, lift trends and the last four weeks of workouts. */
-export function noteInput(training: Training, muscles: Record<string, ExerciseMuscles>, setsPerWeek: number, now: Date): string {
+export function noteInput(training: Training, muscles: Record<string, ExerciseMuscles>, setsPerWeek: number, now: Date, weights: Record<string, number> = {}): string {
   const today = startOfDay(now);
   const ws = training.workouts;
   const week = weekSummary(ws, today);
@@ -99,6 +99,7 @@ export function noteInput(training: Training, muscles: Record<string, ExerciseMu
     `This week so far: ${week.sessions} sessions, ${week.minutes} min, ${week.sets} working sets, ${Math.round(week.volume)} kg lifted.`,
     `Sessions a week, last 12 weeks, oldest first: ${weeklyCounts(ws, today, 12).map((w) => w.count).join(', ')}.`,
     `Working sets per muscle in the last 4 weeks (secondary muscles count half): ${setsPerMuscle(ws, today, 28, muscles).map((m) => `${MUSCLE_NAMES[m.muscle]} ${m.sets}`).join(', ')}.`,
+    weightLine(weights),
     '',
     'Most-done exercises over 12 weeks, best per session oldest first:',
     ...liftTrends(ws, today, { muscles }).map((l) => {
@@ -119,6 +120,18 @@ export function noteInput(training: Training, muscles: Record<string, ExerciseMu
     }
   }
   return lines.join('\n');
+}
+
+/** Body weight for the note: the latest 7-day average and how it moved, or nothing when none is logged. */
+function weightLine(weights: Record<string, number>): string {
+  const series = weightSeries(weights);
+  const last = series[series.length - 1];
+  if (!last) return 'Body weight: not logged.';
+  const changes = [30, 90].flatMap((d) => {
+    const c = weightChange(series, d);
+    return c === null || !c.full ? [] : [`${c.kg > 0 ? '+' : ''}${c.kg} kg over ${d} days`];
+  });
+  return `Body weight (7-day average): ${last.avg} kg as of ${last.date}${changes.length ? `, ${changes.join(', ')}` : ''}; ${series.length} entries logged.`;
 }
 
 let writing: Promise<void> | null = null;
@@ -142,7 +155,7 @@ export function refreshTraining(force = false): Promise<void> {
       const res = await askJson<{ headline: string; points: string[] }>({
         model: config.trainingModel,
         system: NOTE_SYSTEM,
-        user: noteInput(training, muscles, store.prefs().setsPerWeek, new Date()),
+        user: noteInput(training, muscles, store.prefs().setsPerWeek, new Date(), store.weights()),
         schema: NOTE_SCHEMA,
         effort: 'low',
         task: 'write a note on this training',

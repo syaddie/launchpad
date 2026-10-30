@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  cleanMuscleMap, cleanTraining, e1rm, exerciseHistory, fmtSet, gymCost, gymWorkout, lastTrained, liftTrends, muscleOf, musclesOf, parseCsv, parseHevyTime, prsByWorkout,
-  setsPerMuscle, trainingVsRest, volumeKg, weekStreak, weekSummary, weeklyCounts, workingSets, workoutLabel, workoutsFromHevyCsv,
+  cleanKg, cleanMuscleMap, cleanTraining, e1rm, exerciseHistory, fmtSet, gymPerSession, gymWorkout, lastTrained, liftTrends, muscleOf, musclesOf, parseCsv, parseHevyTime,
+  parseWeight, prsByWorkout, setsPerMuscle, volumeKg, weekStreak, weekSummary, weeklyCounts, weightChange, weightSeries, workingSets, workoutLabel, workoutsFromHevyCsv,
 } from '../shared/training';
 
 const HEAD = '"title","start_time","end_time","description","exercise_title","superset_id","exercise_notes","set_index","set_type","weight_kg","reps","distance_km","duration_seconds","rpe"';
@@ -178,30 +178,15 @@ describe('training numbers', () => {
   });
 });
 
-describe('training alongside the other logs', () => {
+describe('training and the rest of the day', () => {
   const ws = workoutsFromHevyCsv(CSV);
   const at = (d: number, h: number) => new Date(2026, 9, d, h).toISOString();
 
-  it('compares cigarettes and mood on training days with rest days, from the first cigarette and leaving out today', () => {
-    // The week before Fri 30 Oct; trained on Mon 26 and Thu 29.
-    const smokes = [at(25, 9), at(25, 12), at(25, 20), at(26, 9), at(27, 8), at(27, 9), at(27, 10), at(27, 11), at(29, 9), at(29, 15), at(30, 9)];
-    const moods = { '2026-10-26': { level: 4, note: '' }, '2026-10-28': { level: 2, note: '' }, '2026-10-30': { level: 5, note: '' }, '2026-10-27': { level: 0, note: '' } };
-    const r = trainingVsRest(ws, smokes, moods, today, 7);
-    // Cigarette days start on Sun 25: trained 26 (1), 29 (2); rest 25 (3), 27 (4), 28 (0).
-    expect(r.smokes!.trained).toEqual({ days: 2, avg: 1.5 });
-    expect(r.smokes!.rest.days).toBe(3);
-    expect(r.smokes!.rest.avg).toBeCloseTo(7 / 3);
-    expect(r.mood).toEqual({ trained: { days: 1, avg: 4 }, rest: { days: 1, avg: 2 } });
-    expect(trainingVsRest(ws, [], {}, today)).toEqual({ smokes: null, mood: null });
-  });
-  it('works out what each gym session cost from Money', () => {
-    const entries = [
-      { id: 'a', date: '2026-10-01', kind: 'out' as const, amount: 129, note: 'Gym membership', category: '' as const, planned: true },
-      { id: 'b', date: '2026-10-02', kind: 'out' as const, amount: 12, note: 'Lunch', category: 'Food' as const, planned: false },
-      { id: 'c', date: '2026-10-05', kind: 'in' as const, amount: 50, note: 'gym refund', category: '' as const, planned: false },
-    ];
-    expect(gymCost(entries, ws, '2026-10')).toEqual({ cost: 129, sessions: 3 });
-    expect(gymCost(entries, ws, '2026-09')).toBeNull();
+  it('works out what each gym session cost this month from the monthly fee', () => {
+    expect(gymPerSession(129, ws, '2026-10')).toEqual({ sessions: 3, perSession: 43 });
+    expect(gymPerSession(100, ws, '2026-10').perSession).toBe(33.33);
+    expect(gymPerSession(129, ws, '2026-09')).toEqual({ sessions: 0, perSession: null });
+    expect(gymPerSession(0, ws, '2026-10')).toEqual({ sessions: 3, perSession: null });
   });
   it('finds the workout logged for a gym block in the calendar', () => {
     const ev = (title: string, d: number, h: number) => ({ title, start: at(d, h), end: at(d, h + 1) });
@@ -209,5 +194,37 @@ describe('training alongside the other logs', () => {
     expect(gymWorkout(ev('Leg day', 26, 7), ws)).toBe(ws[1]);
     expect(gymWorkout(ev('Standup', 29, 10), ws)).toBeNull();
     expect(gymWorkout(ev('Gym', 27, 9), ws)).toBeNull();
+  });
+});
+
+describe('body weight', () => {
+  it('reads a weight typed in ⌘K', () => {
+    expect(parseWeight('weight 72.4')).toBe(72.4);
+    expect(parseWeight('W 72,45 kg')).toBe(72.45);
+    expect(parseWeight('log weight 101')).toBe(101);
+    expect(parseWeight('weight 7')).toBeNull();
+    expect(parseWeight('weight 999')).toBeNull();
+    expect(parseWeight('weightlifting 72')).toBeNull();
+    expect(parseWeight('72.4')).toBeNull();
+  });
+  it('keeps only body weights, to two decimals', () => {
+    expect(cleanKg(72.456)).toBe(72.46);
+    expect(cleanKg('70,5')).toBe(70.5);
+    expect(cleanKg(5)).toBeNull();
+    expect(cleanKg('heavy')).toBeNull();
+  });
+  it('averages the entries in the 7 days up to each one, and compares the latest with one a period back', () => {
+    const series = weightSeries({ '2026-10-01': 74, '2026-10-05': 73, '2026-10-08': 72, '2026-10-20': 71, '2026-10-30': 70.5 });
+    expect(series.map((p) => [p.date, p.avg])).toEqual([
+      ['2026-10-01', 74], ['2026-10-05', 73.5], ['2026-10-08', 72.5], ['2026-10-20', 71], ['2026-10-30', 70.5],
+    ]);
+    // 25 days before 30 Oct is 5 Oct.
+    expect(weightChange(series, 25)).toEqual({ kg: -3, since: '2026-10-05', full: true });
+    // Nothing 90 days back, so it's since the first entry.
+    expect(weightChange(series, 90)).toEqual({ kg: -3.5, since: '2026-10-01', full: false });
+    // Only the latest entry in the last 5 days: nothing to compare.
+    expect(weightChange(series, 5)).toEqual({ kg: -0.5, since: '2026-10-20', full: true });
+    expect(weightChange(series.slice(0, 1), 30)).toBeNull();
+    expect(weightChange([], 30)).toBeNull();
   });
 });

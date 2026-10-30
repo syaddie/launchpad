@@ -588,10 +588,20 @@ function SearchSettings({ prefs, onPrefs }: { prefs: Prefs; onPrefs: (p: Prefs) 
   );
 }
 
-function NumberField({ label, value, min, max, suffix, onSave }: { label: string; value: number; min: number; max: number; suffix?: string; onSave: (v: number) => void }) {
+function NumberField({ label, value, min, max, suffix, decimals = 0, onSave }: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  suffix?: string;
+  /** Places kept after the point, e.g. 2 for dollars and cents. */
+  decimals?: number;
+  onSave: (v: number) => void;
+}) {
   const [v, setV] = useState(String(value || ''));
   const commit = () => {
-    const n = Math.min(max, Math.max(min, Math.round(Number(v) || 0)));
+    const f = 10 ** decimals;
+    const n = Math.min(max, Math.max(min, Math.round((Number(v.replace(',', '.')) || 0) * f) / f));
     setV(n ? String(n) : '');
     if (n !== value) onSave(n);
   };
@@ -600,7 +610,8 @@ function NumberField({ label, value, min, max, suffix, onSave }: { label: string
       <input
         className="input sm tnum"
         type="number"
-        inputMode="numeric"
+        inputMode={decimals ? 'decimal' : 'numeric'}
+        step={decimals ? 1 / 10 ** decimals : 1}
         min={min}
         max={max}
         aria-label={label}
@@ -628,6 +639,8 @@ function TrackerSettings({ prefs, onPrefs }: { prefs: Prefs; onPrefs: (p: Prefs)
         <div className="drawer-label">Training</div>
         <NumberField label="Sets a week" value={prefs.setsPerWeek} min={1} max={40} suffix="working sets a week per muscle" onSave={(n) => onPrefs({ ...prefs, setsPerWeek: n || 10 })} />
         <div className="meta">The target line in Training › Sets per muscle. 10 is a common starting point for growing a muscle.</div>
+        <NumberField label="Gym fee" value={prefs.gymMonthly} min={0} max={10000} decimals={2} suffix="dollars a month for the gym" onSave={(n) => onPrefs({ ...prefs, gymMonthly: n })} />
+        <div className="meta">Training › This week shows what each session cost this month. Leave it empty to hide it.</div>
       </div>
       <div className="drawer-section">
         <div className="drawer-label">Internet speed test</div>
