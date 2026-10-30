@@ -8,10 +8,11 @@ import { config } from './config';
 import type { StoredEmail } from './gmail-parse';
 import type { StoredPhoto } from './photos';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
+import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
 import { cleanTraining } from '../../shared/training';
 import type {
-  BookmarkGroup, CalEvent, CalendarInfo, Countdown, ExerciseMuscles, InboxDigest, InboxRange, Money, Mood, NewsTopic, Note, Package, Prefs, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
+  BookmarkGroup, CalEvent, CalendarInfo, Countdown, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsTopic, Note, Package, Prefs, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
 } from '../../shared/types';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
@@ -145,6 +146,11 @@ export const store = {
   setExerciseMuscles: (v: Record<string, ExerciseMuscles>) => set('exerciseMuscles', v),
   trainingNote: () => get<{ note: TrainingNote | null; error: string | null }>('trainingNote', { note: null, error: null }),
   setTrainingNote: (v: { note: TrainingNote | null; error: string | null }) => set('trainingNote', v),
+
+  learn: (): Learn => cleanLearn(get<unknown>('learn', null)),
+  setLearn: (v: Learn) => set('learn', v),
+  learnNote: () => get<{ note: LearnNote | null; error: string | null }>('learnNote', { note: null, error: null }),
+  setLearnNote: (v: { note: LearnNote | null; error: string | null }) => set('learnNote', v),
 
   /** Oldest first, the last 30 days. */
   speedTests: () => get<SpeedTest[]>('speedTests', []),

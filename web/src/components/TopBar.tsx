@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { DOW, startOfDay } from '../../../shared/dates';
+import { fmtStudy, timerMinutes } from '../../../shared/learn';
 import { engineUrl, parseSearch } from '../../../shared/trackers';
 import type { AppState, Bookmark, SearchEngine, SourceKey, Weather } from '../../../shared/types';
 import { fmtMinutes, lastTrained, minutes, workoutLabel } from '../../../shared/training';
@@ -16,6 +17,7 @@ interface Props {
   smokesToday: number;
   onLogSmoke: () => void;
   onOpenTraining: () => void;
+  onOpenLearn: () => void;
 }
 
 /** Days without training before the button turns orange. */
@@ -243,7 +245,7 @@ export function searchRows(q: string, bookmarks: Bookmark[], engines: SearchEngi
   ];
 }
 
-export function TopBar({ data, now, subline, search, onSearch, searchRef, smokesToday, onLogSmoke, onOpenTraining }: Props) {
+export function TopBar({ data, now, subline, search, onSearch, searchRef, smokesToday, onLogSmoke, onOpenTraining, onOpenLearn }: Props) {
   const [focused, setFocused] = useState(false);
   const [sel, setSel] = useState(0);
   const [syncHover, setSyncHover] = useState(false);
@@ -401,6 +403,17 @@ export function TopBar({ data, now, subline, search, onSearch, searchRef, smokes
               </div>
             )}
           </div>
+          {data.learn.timer && !hidden.includes('view:learn') && (
+            <button
+              className="cig-btn tnum on"
+              title={`Studying ${data.learn.courses.find((c) => c.id === data.learn.timer!.courseId)?.name ?? 'general'} since ${hm(new Date(data.learn.timer.start))}. Open Learn (G then L).`}
+              aria-label="Studying. Open Learn."
+              onClick={onOpenLearn}
+            >
+              <i className="ph-duotone ph-timer" aria-hidden="true" />
+              <span>{fmtStudy(timerMinutes(data.learn.timer, now))}</span>
+            </button>
+          )}
           {!hidden.includes('top:cig') && (
             <button className="cig-btn tnum" title="Log a cigarette (C)" aria-label={`Log a cigarette. ${smokesToday} today.`} onClick={onLogSmoke}>
               <i className="ph-duotone ph-cigarette" aria-hidden="true" />

@@ -22,7 +22,7 @@ export type ThemeMode = 'system' | 'light' | 'dark';
 export type AccentKey = 'sage' | 'slate' | 'terracotta';
 export type GoogleSource = 'calendar' | 'tasks' | 'gmail';
 export type SourceKey = GoogleSource | 'carriers' | 'news' | 'inbox' | 'weather' | 'speedtest';
-export type ViewKey = 'home' | 'news' | 'inbox' | 'you' | 'training' | 'money' | 'server';
+export type ViewKey = 'home' | 'news' | 'inbox' | 'you' | 'training' | 'learn' | 'money' | 'server';
 
 /** One place to search: "yt lofi" opens url with %s replaced by "lofi". The first engine is the default. */
 export interface SearchEngine {
@@ -366,6 +366,85 @@ export interface Training {
   importedAt: string | null;
 }
 
+export type AssessmentKind = 'Assignment' | 'Problem set' | 'Lab' | 'Quiz' | 'Test' | 'Exam' | 'Essay' | 'Project' | 'Presentation' | 'Reading' | 'Other';
+/** Not started, in progress, or handed in (marked once it has a score). */
+export type AssessmentStatus = 'todo' | 'doing' | 'done';
+
+/** Something graded or due in a course: an assignment, a quiz, an exam. */
+export interface Assessment {
+  id: string;
+  courseId: string;
+  title: string;
+  kind: AssessmentKind;
+  /** Percent of the course grade; 0 when it doesn't count. */
+  weight: number;
+  /** YYYY-MM-DD, or empty when there's no date. */
+  due: string;
+  /** HH:MM, or empty for the whole day. */
+  time: string;
+  status: AssessmentStatus;
+  /** Percent scored, once marked. */
+  score: number | null;
+}
+
+export interface Course {
+  id: string;
+  /** Short code, e.g. "CS 210"; may be empty. Also used to spot classes in the calendar. */
+  code: string;
+  name: string;
+  /** A hex colour from COURSE_COLORS. */
+  color: string;
+  /** The grade aimed for, in percent; 0 means no target. */
+  target: number;
+  /** Study minutes a week to aim for; 0 means no goal. */
+  goalMin: number;
+  links: { name: string; url: string }[];
+  /** Topics to revise, with how sure they feel: 1 not yet, 2 getting there, 3 solid. */
+  topics: { name: string; conf: 1 | 2 | 3 }[];
+  archived: boolean;
+}
+
+export interface StudySession {
+  id: string;
+  /** Empty for study that isn't for one course. */
+  courseId: string;
+  /** ISO date-time it started. */
+  start: string;
+  minutes: number;
+}
+
+/** Learning outside class: a book, an online course, a language. */
+export interface SideLearning {
+  id: string;
+  title: string;
+  /** Plural, e.g. "lessons", "chapters". */
+  unit: string;
+  done: number;
+  total: number;
+  /** ISO date-time of the last +1; null before the first. */
+  lastAt: string | null;
+}
+
+/** The Learn view: courses, what's due in them, study time and learning on the side (shared/learn.ts). */
+export interface Learn {
+  courses: Course[];
+  assessments: Assessment[];
+  /** Oldest first. */
+  sessions: StudySession[];
+  side: SideLearning[];
+  /** The study timer, kept on the server so it carries across tabs. */
+  timer: { courseId: string; start: string } | null;
+  /** Google calendar whose events are classes; empty matches events by course code or name instead. */
+  calendarId: string;
+}
+
+/** Claude's short note on the week ahead in Learn. */
+export interface LearnNote {
+  headline: string;
+  points: string[];
+  writtenAt: string;
+}
+
 export interface SpeedTest {
   /** ISO date-time. */
   at: string;
@@ -458,6 +537,9 @@ export interface AppState {
   weights: Record<string, number>;
   /** null before the first note, or without an Anthropic API key. `error` is the last failure, shown in Training. */
   trainingNote: { note: TrainingNote | null; error: string | null };
+  learn: Learn;
+  /** null before the first note, or without an Anthropic API key. */
+  learnNote: { note: LearnNote | null; error: string | null };
 }
 
 export interface Backup {

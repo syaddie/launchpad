@@ -1,4 +1,4 @@
-import type { AppState, BookmarkGroup, Countdown, Money, Mood, Note, Package, Photo, Prefs, ServerStats, SourceKey, Task, Training } from '../../shared/types';
+import type { AppState, BookmarkGroup, Countdown, Learn, Money, Mood, Note, Package, Photo, Prefs, ServerStats, SourceKey, Task, Training } from '../../shared/types';
 
 const STATE_KEY = 'launchpad:state';
 const PREFS_KEY = 'launchpad:prefs';
@@ -111,6 +111,8 @@ export const api = {
   putMoney: (v: Money, keepalive?: boolean) => req<Money>('PUT', '/api/money', v, keepalive),
   putTraining: (v: Training) => req<Training>('PUT', '/api/training', v),
   refreshTraining: (force: boolean) => req<AppState>('POST', `/api/training/refresh${force ? '?force=1' : ''}`, {}),
+  putLearn: (v: Learn, keepalive?: boolean) => req<Learn>('PUT', '/api/learn', v, keepalive),
+  refreshLearn: (force: boolean) => req<AppState>('POST', `/api/learn/refresh${force ? '?force=1' : ''}`, {}),
   putWeight: (date: string, kg: number | null) => req<Record<string, number>>('PUT', `/api/weights/${date}`, { kg }),
   putMood: (date: string, mood: Mood | { level: 0 }) => req<Record<string, Mood>>('PUT', `/api/moods/${date}`, mood),
   server: (iface?: string) => req<ServerStats>('GET', `/api/server${iface ? `?iface=${encodeURIComponent(iface)}` : ''}`),
