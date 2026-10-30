@@ -314,10 +314,15 @@ export const moodColor = (level: number) => `color-mix(in srgb, var(--ac) ${[18,
 
 function MoodPanel({ moods, now, onMood }: { moods: Record<string, Mood>; now: Date; onMood: (date: string, mood: Mood | null) => void }) {
   const todayKey = ymd(now);
-  const mine = moods[todayKey];
+  // The day being edited: today unless an earlier day in the calendar was picked.
+  const [picked, setPicked] = useState<string | null>(null);
+  const selKey = picked && picked < todayKey ? picked : todayKey;
+  const isToday = selKey === todayKey;
+  const selDay = new Date(`${selKey}T00:00:00`);
+  const mine = moods[selKey];
   const [note, setNote] = useState(mine?.note ?? '');
   const [offset, setOffset] = useState(0);
-  useEffect(() => setNote(moods[todayKey]?.note ?? ''), [moods, todayKey]);
+  useEffect(() => setNote(moods[selKey]?.note ?? ''), [moods, selKey]);
 
   const month = new Date(now.getFullYear(), now.getMonth() + offset, 1);
   const y = month.getFullYear();
@@ -327,8 +332,12 @@ function MoodPanel({ moods, now, onMood }: { moods: Record<string, Mood>; now: D
   const { avg, logged } = moodMonth(moods, y, m);
   const elapsed = offset === 0 ? now.getDate() : daysIn;
 
-  const pick = (level: number) => onMood(todayKey, mine?.level === level ? null : { level, note });
-  const saveNote = () => mine && note.trim() !== mine.note && onMood(todayKey, { level: mine.level, note: note.trim() });
+  const pick = (level: number) => onMood(selKey, mine?.level === level ? null : { level, note });
+  const saveNote = () => mine && note.trim() !== mine.note && onMood(selKey, { level: mine.level, note: note.trim() });
+  const backToToday = () => {
+    setPicked(null);
+    setOffset(0);
+  };
 
   return (
     <section className="panel you-panel mood" aria-label="Mood">
@@ -348,7 +357,14 @@ function MoodPanel({ moods, now, onMood }: { moods: Record<string, Mood>; now: D
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <span style={{ fontSize: 13, color: 'var(--t2)' }}>How’s today going?</span>
+        <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 13, color: 'var(--t2)' }}>
+          {isToday ? 'How’s today going?' : `How was ${DOW[selDay.getDay()]} ${selDay.getDate()} ${MON[selDay.getMonth()]}?`}
+          {!isToday && (
+            <button className="btn-link" onClick={backToToday}>
+              Back to today
+            </button>
+          )}
+        </span>
         <div className="mood-pick">
           {MOOD_WORDS.map((w, i) => {
             const level = i + 1;
@@ -369,7 +385,7 @@ function MoodPanel({ moods, now, onMood }: { moods: Record<string, Mood>; now: D
         </div>
         <input
           className="input sm"
-          aria-label="Note for today"
+          aria-label={isToday ? 'Note for today' : `Note for ${selKey}`}
           placeholder={mine ? 'Add a note, if you like' : 'Pick a mood first, then add a note'}
           disabled={!mine}
           value={note}
@@ -395,15 +411,18 @@ function MoodPanel({ moods, now, onMood }: { moods: Record<string, Mood>; now: D
           const v = moods[key];
           const diff = dayDiff(now, day);
           const title = `${DOW[day.getDay()]} ${i + 1} ${MON[m]}${v ? ` · ${MOOD_WORDS[v.level - 1]}${v.note ? ` · ${v.note}` : ''}` : ''}`;
-          return (
-            <span
-              key={key}
-              title={title}
-              className={'mood-cell tnum' + (diff === 0 ? ' today' : '') + (diff > 0 ? ' future' : '') + (!v && diff < 0 ? ' missed' : '')}
-              style={v ? { background: moodColor(v.level), color: v.level >= 4 ? 'var(--on)' : 'var(--tx)' } : undefined}
-            >
+          const cls =
+            'mood-cell tnum' + (diff === 0 ? ' today' : '') + (diff > 0 ? ' future' : '') + (!v && diff < 0 ? ' missed' : '') + (key === selKey && !isToday ? ' sel' : '');
+          const style = v ? { background: moodColor(v.level), color: v.level >= 4 ? 'var(--on)' : 'var(--tx)' } : undefined;
+          // Today and earlier days can be picked to log or change their mood; future days can't.
+          return diff > 0 ? (
+            <span key={key} title={title} className={cls} style={style}>
               {i + 1}
             </span>
+          ) : (
+            <button key={key} title={title} aria-label={title} aria-pressed={key === selKey} className={cls} style={style} onClick={() => setPicked(diff === 0 ? null : key)}>
+              {i + 1}
+            </button>
           );
         })}
       </div>
