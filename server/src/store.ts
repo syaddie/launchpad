@@ -9,8 +9,9 @@ import type { StoredEmail } from './gmail-parse';
 import type { StoredPhoto } from './photos';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
 import { cleanMoney } from '../../shared/money';
+import { cleanTraining } from '../../shared/training';
 import type {
-  BookmarkGroup, CalEvent, CalendarInfo, Countdown, InboxDigest, InboxRange, Money, Mood, NewsTopic, Note, Package, Prefs, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Weather,
+  BookmarkGroup, CalEvent, CalendarInfo, Countdown, InboxDigest, InboxRange, Money, Mood, NewsTopic, Note, Package, Prefs, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, Weather,
 } from '../../shared/types';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
@@ -132,6 +133,9 @@ export const store = {
 
   money: (): Money => cleanMoney(get<unknown>('money', null)),
   setMoney: (v: Money) => set('money', v),
+
+  training: (): Training => cleanTraining(get<unknown>('training', null)),
+  setTraining: (v: Training) => set('training', v),
 
   /** Oldest first, the last 30 days. */
   speedTests: () => get<SpeedTest[]>('speedTests', []),

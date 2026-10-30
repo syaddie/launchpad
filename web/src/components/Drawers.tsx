@@ -500,6 +500,7 @@ export const PANEL_ROWS: { section: string; hint?: string; rows: { key: string; 
       { key: 'view:news', name: 'News' },
       { key: 'view:inbox', name: 'Inbox', meta: 'Claude’s digest of your Gmail' },
       { key: 'view:you', name: 'You', meta: 'Countdowns, cigarettes, mood' },
+      { key: 'view:training', name: 'Training', meta: 'Workouts from your Hevy export' },
       { key: 'view:money', name: 'Money', meta: 'Money in and out, month by month, and a wishlist' },
       { key: 'view:server', name: 'Server', meta: 'Health, internet speed, services' },
     ],

@@ -2,8 +2,9 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
 import { ymd } from '../../shared/dates';
 import { starterMoney } from '../../shared/money';
+import { EMPTY_TRAINING } from '../../shared/training';
 import { MOOD_WORDS, engineUrl, fmtDuration, parseSearch, smokesOn } from '../../shared/trackers';
-import type { AppState, BookmarkGroup, Countdown, Money, Mood, Note, Package, Photo, Prefs, Task, ViewKey } from '../../shared/types';
+import type { AppState, BookmarkGroup, Countdown, Money, Mood, Note, Package, Photo, Prefs, Task, Training, ViewKey } from '../../shared/types';
 import { api, cachedState, cacheState, localGet, localSet, ServerError } from './api';
 import { Bookmarks } from './components/Bookmarks';
 import { AddPackageDrawer, Drawer, PANEL_ROWS, PackageDrawer, SettingsDrawer } from './components/Drawers';
@@ -20,6 +21,7 @@ import { ServerBanner, type ServerIssue } from './components/ServerBanner';
 import { Tasks } from './components/Tasks';
 import { Today, todayAgenda } from './components/Today';
 import { TopBar } from './components/TopBar';
+import { TrainingView } from './components/Training';
 import { You, nearestCountdown } from './components/You';
 import { gridLayout, type Area, type Layout } from './layout';
 import { dayDiff, hm, host, inMinutes, parseYmd } from './util';
@@ -54,12 +56,13 @@ const EMPTY: AppState = {
   smokes: [],
   moods: {},
   money: starterMoney(new Date()),
+  training: EMPTY_TRAINING,
 };
 
 /** A cached copy from an older version can be missing newer fields. */
 function fromCache(c: AppState | null): AppState {
   if (!c) return EMPTY;
-  return { ...EMPTY, ...c, prefs: { ...DEFAULT_PREFS, ...c.prefs }, sync: { ...EMPTY.sync, ...c.sync }, inbox: c.inbox ?? EMPTY.inbox, money: Array.isArray(c.money?.entries) ? c.money : EMPTY.money };
+  return { ...EMPTY, ...c, prefs: { ...DEFAULT_PREFS, ...c.prefs }, sync: { ...EMPTY.sync, ...c.sync }, inbox: c.inbox ?? EMPTY.inbox, money: Array.isArray(c.money?.entries) ? c.money : EMPTY.money, training: Array.isArray(c.training?.workouts) ? c.training : EMPTY.training };
 }
 
 type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings' } | null;
@@ -452,6 +455,17 @@ export function App() {
     showToast(summary, { label: 'Undo', run: () => setMoney(before) });
   };
 
+  const setTraining = (training: Training) => {
+    update((d) => ({ ...d, training }));
+    api.putTraining(training).catch(onSaveError);
+  };
+
+  const importTraining = (training: Training, summary: string) => {
+    const before = data.training;
+    setTraining(training);
+    showToast(summary, { label: 'Undo', run: () => setTraining(before) });
+  };
+
   const toggleHidden = (key: string) => {
     const hidden = data.prefs.hidden.includes(key) ? data.prefs.hidden.filter((h) => h !== key) : [...data.prefs.hidden, key];
     setPrefs({ ...data.prefs, hidden });
@@ -664,6 +678,8 @@ export function App() {
           <Inbox data={data} now={now} busy={inboxBusy} onRefresh={refreshInbox} onConnect={connect} onOpenSettings={() => setDrawer({ type: 'settings' })} />
         ) : view === 'you' ? (
           <You data={data} now={now} addSignal={addCountdown} onCountdowns={setCountdowns} onLogSmoke={logSmoke} onUndoSmoke={undoSmoke} onMood={setMood} />
+        ) : view === 'training' ? (
+          <TrainingView training={data.training} now={now} onImport={importTraining} />
         ) : view === 'money' ? (
           <MoneyView money={data.money} now={now} saved={moneySaved} onChange={setMoney} onImport={importMoney} notify={showToast} />
         ) : view === 'server' ? (
