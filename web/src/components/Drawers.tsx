@@ -425,6 +425,19 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
       </div>
 
       <div className="drawer-section">
+        <div className="drawer-label">About you (for summaries)</div>
+        <textarea
+          className="input sm"
+          style={{ width: '100%', minHeight: 90 }}
+          aria-label="About you"
+          maxLength={1000}
+          defaultValue={p.aboutMe}
+          onBlur={(e) => e.target.value.trim() !== p.aboutMe && onPrefs({ ...p, aboutMe: e.target.value })}
+        />
+        <div style={{ fontSize: 12, color: 'var(--t3)' }}>Claude reads this when it writes the inbox summary, e.g. what certain payments usually are. Takes effect on the next summary.</div>
+      </div>
+
+      <div className="drawer-section">
         <div className="drawer-label">Package tracking</div>
         <div style={{ fontSize: 13, color: 'var(--t2)' }}>
           {data.tracking.allCarriers

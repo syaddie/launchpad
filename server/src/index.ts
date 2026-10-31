@@ -180,6 +180,7 @@ app.put('/api/prefs', async (c) => {
     sources: { ...prev.sources, ...body.sources },
     newsTopics: Array.isArray(body.newsTopics) ? cleanTopics(body.newsTopics) : prev.newsTopics,
     weatherArea: isStr(body.weatherArea) ? body.weatherArea.trim().slice(0, 60) : prev.weatherArea,
+    aboutMe: isStr(body.aboutMe) ? body.aboutMe.trim().slice(0, 1000) : prev.aboutMe,
     hidden: Array.isArray(body.hidden) ? [...new Set(body.hidden.filter((h) => isStr(h) && HIDEABLE_KEYS.includes(h)))] : prev.hidden,
     searchEngines: Array.isArray(body.searchEngines) ? cleanEngines(body.searchEngines) : prev.searchEngines,
     cigaretteLimit: num(body.cigaretteLimit, 0, 99, prev.cigaretteLimit),
