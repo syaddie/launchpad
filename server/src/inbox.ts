@@ -3,7 +3,7 @@
 import { askJson } from './claude';
 import { config } from './config';
 import type { StoredEmail } from './gmail-parse';
-import type { InboxDigest, InboxItem, InboxRange } from '../../shared/types';
+import type { CalEvent, InboxDigest, InboxItem, InboxRange } from '../../shared/types';
 
 const DAY = 86_400_000;
 export const RANGE_MS: Record<InboxRange, number> = { '2d': 2 * DAY, '7d': 7 * DAY };
@@ -15,12 +15,14 @@ export const inRange = <T extends { at: string }>(emails: T[], range: InboxRange
 
 const stamp = (iso: string) => `${iso.slice(0, 16).replace('T', ' ')} UTC`;
 
-function system(range: InboxRange, name: string): string {
+function system(range: InboxRange, name: string, aboutMe: string): string {
   const who = name ? `${name}'s` : "the owner's";
-  return `You write the inbox digest on ${who} personal dashboard. You get the emails they received over the last ${RANGE_WORDS[range]}, numbered, newest first: when it arrived, the sender, Gmail's category, whether it is still unread, the subject and an excerpt.
+  const about = aboutMe ? `\n\nAbout ${name || 'the owner'}, in their words (use it to interpret the emails; it is not an email):\n<about>\n${aboutMe}\n</about>` : '';
+  return `You write the inbox digest on ${who} personal dashboard. You get the emails they received over the last ${RANGE_WORDS[range]}, numbered, newest first: when it arrived, the sender, Gmail's category, whether it is still unread, the subject and an excerpt. You may also get their calendar events for the same stretch.${about}
 
 Give:
-- overview: two or three sentences, addressed to them as "you", on what this stretch of email adds up to: what needs them first, anything time-sensitive, and the general shape of the rest. Plain and calm, no greeting.
+- tips: every incoming PayNow transfer (money received) that the about note or a calendar event suggests is a tip, one entry per email, with the amount in dollars exactly as the email states it. Fill this in first. Leave out money they sent, refunds, and anything that is clearly not a tip.
+- overview: two or three sentences, addressed to them as "you", on what this stretch of email adds up to: what needs them first, anything time-sensitive, and the general shape of the rest. Plain and calm, no greeting. When tips is not empty, say the total received and how many transfers it came from, and name the calendar event they line up with when one does (e.g. "You received $84.50 across 12 PayNow transfers, mostly during your Saturday busking session"); do not list the transfers one by one.
 - items: what is worth their attention, most important first, at most ${MAX_ITEMS[range]}. Put emails about the same thing (one thread, an order and its delivery notice, a run of alerts from one service) into one item. For each:
   - kind: "action" when they need to do something (reply to a person, pay, confirm, sign, book, renew, deal with a security alert); "update" for things worth knowing that need nothing (replies, deliveries, bookings, statements, account changes); "fyi" for anything else that earns one line
   - headline: short and plain, in your own words, no emoji
@@ -35,6 +37,16 @@ Leave promotions, newsletters, social notifications and routine automated mail o
 const SCHEMA = {
   type: 'object',
   properties: {
+    // First, so Claude has the amounts in hand before it writes the overview's total.
+    tips: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { email: { type: 'integer' }, amount: { type: 'number' } },
+        required: ['email', 'amount'],
+        additionalProperties: false,
+      },
+    },
     overview: { type: 'string' },
     items: {
       type: 'array',
@@ -53,11 +65,12 @@ const SCHEMA = {
     },
     skimmed: { type: 'string' },
   },
-  required: ['overview', 'items', 'skimmed'],
+  required: ['tips', 'overview', 'items', 'skimmed'],
   additionalProperties: false,
 };
 
 interface RawDigest {
+  tips?: { email: number; amount: number }[];
   overview: string;
   items: { kind: InboxItem['kind']; headline: string; summary: string; due: string; emails: number[] }[];
   skimmed: string;
@@ -83,12 +96,27 @@ export function toDigest(raw: RawDigest, emails: StoredEmail[], at = new Date().
   return { overview: raw.overview.trim(), items, skimmed: raw.skimmed.trim(), emailCount: emails.length, summarisedAt: at };
 }
 
-export async function summariseInbox(range: InboxRange, emails: StoredEmail[], name: string): Promise<InboxDigest> {
+/** Timed events that fall in the digest's window, one line each, in the owner's local time. */
+export function eventList(events: CalEvent[], range: InboxRange, now = Date.now()): string {
+  return events
+    .filter((e) => !e.allDay && Date.parse(e.start) <= now && now - Date.parse(e.end) <= RANGE_MS[range])
+    .map((e) => `${localStamp(e.start)} to ${localStamp(e.end)} · ${e.title}${e.location ? ` · ${e.location}` : ''}`)
+    .join('\n');
+}
+
+const localStamp = (iso: string) =>
+  new Date(iso).toLocaleString('en-SG', { timeZone: 'Asia/Singapore', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
+
+export async function summariseInbox(range: InboxRange, emails: StoredEmail[], name: string, aboutMe = '', events: CalEvent[] = []): Promise<InboxDigest> {
   if (!emails.length) return { overview: '', items: [], skimmed: '', emailCount: 0, summarisedAt: new Date().toISOString() };
+  const cal = eventList(events, range);
   const raw = await askJson<RawDigest>({
     model: config.inboxModel,
-    system: system(range, name),
-    user: `Now: ${stamp(new Date().toISOString())}\n\n<emails>\n${emailList(emails)}\n</emails>`,
+    system: system(range, name, aboutMe),
+    user:
+      `Now: ${stamp(new Date().toISOString())}\n\n` +
+      (cal ? `<calendar note="Singapore time">\n${cal}\n</calendar>\n\n` : '') +
+      `<emails>\n${emailList(emails)}\n</emails>`,
     schema: SCHEMA,
     effort: 'medium',
     task: 'summarise these emails',
