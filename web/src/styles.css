@@ -798,7 +798,7 @@ button.mood-cell:hover { box-shadow: inset 0 0 0 1px var(--t3); }
 .gauge { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .gauge-dial { position: relative; width: 124px; height: 112px; }
 .gauge-dial svg { position: absolute; inset: 0; }
-.gauge-text { position: absolute; inset: 0 0 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: var(--t2); }
+.gauge-text { position: absolute; top: 0; left: 0; right: 0; height: 124px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: var(--t2); }
 .gauge-text .serif { font-size: 28px; line-height: 1; font-weight: 400; color: var(--tx); font-variant-numeric: tabular-nums lining-nums; }
 .gauge-text small { font-size: 14px; color: var(--t2); }
 .srv-body { display: flex; flex-direction: column; gap: 14px; }
