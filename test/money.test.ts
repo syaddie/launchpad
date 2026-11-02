@@ -107,7 +107,7 @@ describe('amounts', () => {
       new Date(2026, 9, 28),
     );
     expect(m.start).toBe('2026-10-01');
-    expect(m.accounts.map((a) => [a.id, a.opening, a.spendable])).toEqual([['cash', 0, true], ['posb', 0, true], ['trust', 0, true], ['syfe', 0, false]]);
+    expect(m.accounts.map((a) => [a.id, a.opening, a.spendable])).toEqual([['posb', 0, true], ['cash', 0, true], ['trust', 0, true], ['syfe', 0, false]]);
     expect(m.entries).toEqual([
       { id: 'a', date: '2026-10-02', kind: 'out', amount: 10, note: '', category: '', planned: false, account: 'posb', to: '' },
       { id: 'b', date: '2026-10-05', kind: 'in', amount: 20, note: '', category: '', planned: true, account: 'posb', to: '' },

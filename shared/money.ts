@@ -27,10 +27,13 @@ export const spendableKind = (k: AccountKind) => k === 'bank' || k === 'cash';
 
 export const newAccount = (id: string, name: string, kind: AccountKind, opening = 0): MoneyAccount => ({ id, name, kind, spendable: spendableKind(kind), opening, goal: null, goalBy: '', archived: false });
 
-/** Where a fresh tracker keeps its money. A balance from before there were accounts goes into POSB. */
+/**
+ * Where a fresh tracker keeps its money. POSB comes first so it's the main account: a
+ * balance and entries from before there were accounts go into it.
+ */
 export const starterAccounts = (opening = 0): MoneyAccount[] => [
-  newAccount('cash', 'Cash', 'cash'),
   newAccount('posb', 'POSB', 'bank', opening),
+  newAccount('cash', 'Cash', 'cash'),
   newAccount('trust', 'Trust Bank', 'bank'),
   newAccount('syfe', 'Syfe stocks', 'invest'),
 ];
