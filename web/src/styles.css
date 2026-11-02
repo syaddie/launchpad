@@ -1141,6 +1141,37 @@ button.mood-cell:hover { box-shadow: inset 0 0 0 1px var(--t3); }
 .ent-acct { padding: 0 7px; border-radius: 9px; background: var(--hv); color: var(--t2); font-size: 11.5px; font-weight: 500; }
 .ent-move { margin-right: 6px; color: var(--t3); font-size: 13px; vertical-align: -1px; }
 .ent.move .ent-amt { color: var(--t2); font-weight: 500; }
+/* An invoice's money: tagged, with what follows the invoice shown locked. */
+.ent-inv { display: inline-flex; align-items: center; gap: 4px; padding: 0 7px; border-radius: 9px; background: var(--act); color: var(--acd); font-size: 11.5px; font-weight: 600; }
+.ent-lock { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 8px; color: var(--t2); font-size: 13px; white-space: nowrap; }
+.ent-lock.ent-field-note { flex: 1 1 180px; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--tx); font-weight: 500; }
+.ent-lock.in { color: var(--acd); font-weight: 600; }
+.ent-linked { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 2px 8px 0; font-size: 12px; color: var(--t2); }
+.ent-linked .btn-link { font-size: 12px; color: var(--acd); font-weight: 600; }
+
+/* Owed: what people owe you, each also planned money in until it's paid. */
+.tab-chip { margin-left: 6px; vertical-align: 1px; }
+.m-stat.late { background: var(--wnt); }
+.m-stat.late .serif, .m-stat.late .meta { color: var(--wn); }
+.owed .composer .cell.owed-num { display: inline-block; width: 112px; height: 34px; font-size: 15px; background: var(--bg); }
+.owed-hint { display: inline-flex; align-items: center; gap: 6px; color: var(--acd); }
+.sheet.owed-sheet { min-width: 940px; }
+.sheet.owed-sheet .ent-check { margin: 0 auto; }
+.sheet.owed-sheet tr.late td:first-child { box-shadow: inset 3px 0 0 var(--wn); }
+.sheet.owed-sheet td.amt .cell { color: var(--acd); font-weight: 600; }
+.sheet.owed-sheet .owed-num-cell { font-weight: 600; }
+.sheet.owed-sheet td.days, .sheet.owed-sheet td.txt { padding: 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sheet.owed-sheet .owed-paid td { height: 40px; color: var(--t3); }
+.sheet.owed-sheet .owed-paid .ent-tick { width: 18px; height: 18px; font-size: 11px; }
+.sheet.owed-sheet tr.owed-split td { height: 44px; padding: 12px 8px 0; border-top: none; vertical-align: bottom; }
+.owed-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 4px 0; border: none; background: none; color: var(--t2); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.owed-acts { display: flex; justify-content: flex-end; gap: 2px; padding-right: 4px; }
+.owed-acts .row-x { margin: 0; }
+.days-left { display: inline-flex; align-items: baseline; gap: 4px; padding: 1px 10px; border-radius: 12px; background: var(--hv); color: var(--t2); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.days-left b { font-size: 14px; font-weight: 700; }
+.days-left.soon { background: var(--act); color: var(--acd); }
+.days-left.far { background: none; padding-left: 0; color: var(--t3); }
+.days-left.late { background: var(--wnt); color: var(--wn); font-weight: 600; }
 
 /* Overview: the accounts and where the money sits. */
 .accts-head { align-items: flex-start; flex-wrap: wrap; }

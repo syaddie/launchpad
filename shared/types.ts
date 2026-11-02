@@ -293,6 +293,23 @@ export interface MoneyEntry {
   account: string;
   /** For a move, the account it goes to; empty otherwise. */
   to: string;
+  /** The invoice this is the money for (Owed); absent for everything else. */
+  invoice?: string;
+}
+
+/**
+ * A gig someone owes you for. Its money is the entry linked to it: planned money in on
+ * the due date until it's paid, then done on the day it came in.
+ */
+export interface Invoice {
+  id: string;
+  /** The invoice number, like "INV-036". */
+  num: string;
+  /** The gig it's for. */
+  event: string;
+  amount: number;
+  /** YYYY-MM-DD: when it should be paid by. */
+  due: string;
 }
 
 export type AccountKind = 'bank' | 'cash' | 'invest' | 'pot';
@@ -340,6 +357,8 @@ export interface Money {
   /** Sorted by date, then in the order they were added. */
   entries: MoneyEntry[];
   wishlist: WishItem[];
+  /** What people owe you, each with its money as an entry. */
+  invoices: Invoice[];
 }
 
 export type SetType = 'normal' | 'warmup' | 'dropset' | 'failure';

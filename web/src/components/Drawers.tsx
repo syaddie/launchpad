@@ -516,7 +516,7 @@ export const PANEL_ROWS: { section: string; hint?: string; rows: { key: string; 
       { key: 'view:you', name: 'You', meta: 'Countdowns, cigarettes, mood' },
       { key: 'view:training', name: 'Training', meta: 'Workouts from your Hevy export' },
       { key: 'view:learn', name: 'Learn', meta: 'Courses, what’s due, grades and study time' },
-      { key: 'view:money', name: 'Money', meta: 'Money in and out, month by month, and a wishlist' },
+      { key: 'view:money', name: 'Money', meta: 'Money in and out, month by month, a wishlist and what you’re owed' },
       { key: 'view:server', name: 'Server', meta: 'Health, internet speed, services' },
     ],
   },
