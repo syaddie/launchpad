@@ -29,6 +29,8 @@ export const DEFAULT_PREFS: Prefs = {
   sources: { calendar: true, tasks: true, gmail: true },
   newsTopics: ['K-pop', 'Video games'],
   weatherArea: 'City',
+  aboutMe:
+    'I busk. Small incoming PayNow transfers from friends or strangers are usually tips from my busking sessions, especially when several arrive close together or during/just after a busking event in my calendar.',
   hidden: [],
   searchEngines: DEFAULT_ENGINES,
   cigaretteLimit: 0,

@@ -44,6 +44,8 @@ export interface Prefs {
   newsTopics: string[];
   /** 2-hour forecast area for the weather beside the clock (e.g. "Bishan"); empty hides it. */
   weatherArea: string;
+  /** Free text about the owner that Claude reads when it writes the inbox digest, e.g. what incoming PayNow transfers usually are. */
+  aboutMe: string;
   /** Things switched off in Settings › Panels, e.g. "panel:notes", "top:cig", "view:server" (see HIDEABLE). */
   hidden: string[];
   /** Where the search box and ⌘K search the web. */

@@ -142,7 +142,8 @@ async function runInbox(force: boolean) {
   const next = { ...prev, emails, digests: { ...prev.digests }, fetchedAt: new Date().toISOString(), error: null as string | null };
   if (!claudeEnabled()) next.digests = { '2d': null, '7d': null };
   else {
-    const name = store.prefs().name;
+    const { name, aboutMe } = store.prefs();
+    const events = store.calendar().events;
     await Promise.all(
       (['2d', '7d'] as const).map(async (range) => {
         const old = prev.digests[range];
@@ -152,7 +153,7 @@ async function runInbox(force: boolean) {
         const due = force || !old || Date.now() - Date.parse(old.summarisedAt) > REDIGEST_AFTER[range];
         if (old && !(fresh && due)) return;
         try {
-          next.digests[range] = { ...(await summariseInbox(range, mail, name)), emailIds: mail.map((e) => e.id) };
+          next.digests[range] = { ...(await summariseInbox(range, mail, name, aboutMe, events)), emailIds: mail.map((e) => e.id) };
         } catch (e) {
           next.error = (e as Error).message;
         }
