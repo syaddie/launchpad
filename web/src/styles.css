@@ -485,7 +485,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .pkg-label { font-size: 14px; font-weight: 500; min-width: 0; }
 .pkg-status { font-size: 13px; color: var(--t2); }
 .segs { display: flex; gap: 3px; }
-.seg { flex: 1; height: 3px; border-radius: 2px; }
+.pkg-seg { flex: 1; height: 3px; border-radius: 2px; }
 .pkg-meta { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--t3); min-width: 0; }
 .pkg-num { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .src-tag { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border: 1px solid var(--ln); border-radius: 3px; font-size: 11px; white-space: nowrap; }

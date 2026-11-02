@@ -41,7 +41,7 @@ export function Packages({ packages, now, onOpen, onAdd, onKeep, onDismiss }: Pr
               </div>
               <div className="segs">
                 {[0, 1, 2, 3].map((i) => (
-                  <span key={i} className="seg" style={{ background: segColor(p, i) }} />
+                  <span key={i} className="pkg-seg" style={{ background: segColor(p, i) }} />
                 ))}
               </div>
               <div className="pkg-meta">
