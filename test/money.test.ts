@@ -1,16 +1,20 @@
 import { deflateRawSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import {
-  affordableFrom, balanceOn, byCategory, calcMonths, calcTotals, cleanMoney, fmtMoney, lowestAhead, monthKeys, moneyFromWorkbook, parseMoney, repeatDates, toReview, wishStats,
+  accountBalance, affordableFrom, balanceOn, byCategory, calcMonths, calcTotals, cleanMoney, fmtMoney, goalPerMonth, lowestAhead, monthKeys, moneyFromWorkbook, newAccount, parseMoney,
+  repeatDates, starterAccounts, toReview, wishStats,
 } from '../shared/money';
 import type { Money, MoneyEntry } from '../shared/types';
 import { readXlsx } from '../shared/xlsx';
 
 let seq = 0;
-const e = (date: string, kind: 'in' | 'out', amount: number, planned = false, category: MoneyEntry['category'] = ''): MoneyEntry => ({ id: `e${seq++}`, date, kind, amount, note: '', category, planned });
+const e = (date: string, kind: 'in' | 'out', amount: number, planned = false, category: MoneyEntry['category'] = '', account = 'posb'): MoneyEntry => ({
+  id: `e${seq++}`, date, kind, amount, note: '', category, planned, account, to: '',
+});
+const move = (date: string, account: string, to: string, amount: number, planned = false): MoneyEntry => ({ id: `e${seq++}`, date, kind: 'move', amount, note: '', category: '', planned, account, to });
 const money = (): Money => ({
   start: '2026-10-01',
-  opening: 100,
+  accounts: starterAccounts(100),
   entries: [e('2026-10-01', 'out', 150, false, 'Food'), e('2026-10-10', 'in', 200), e('2026-10-27', 'out', 30, true), e('2026-11-05', 'out', 0.1, true), e('2026-11-05', 'in', 0.2, true)],
   wishlist: [],
 });
@@ -51,6 +55,24 @@ describe('money formulas', () => {
   it('totals spending by category', () => {
     expect(byCategory(money().entries)).toEqual([{ category: 'Food', amount: 150 }, { category: 'Not set', amount: 30.1 }]);
   });
+  it('follows the day-to-day accounts, counting moves to and from set-aside money', () => {
+    // Syfe is investments: money moved there leaves the day-to-day balance; moving to Cash doesn't.
+    const m = { ...money(), entries: [...money().entries, move('2026-10-12', 'posb', 'syfe', 50), move('2026-10-13', 'posb', 'cash', 20), e('2026-10-14', 'in', 7, false, '', 'syfe')] };
+    const [oct] = calcMonths(m, ['2026-10']);
+    expect(oct).toMatchObject({ opening: 100, totalIn: 200, totalOut: 230, closing: 70 });
+    expect(balanceOn(m, '2026-10-28', true)).toBe(100);
+    expect(byCategory(m.entries)).toEqual(byCategory(money().entries));
+    expect(accountBalance(m, 'posb', '2026-10-28', true)).toBe(80);
+    expect(accountBalance(m, 'cash', '2026-10-28')).toBe(20);
+    expect(accountBalance(m, 'syfe', '2026-10-28')).toBe(57);
+    expect(accountBalance(m, 'posb', '2026-10-28')).toBe(50);
+  });
+  it('spreads what a goal still needs over the months up to it', () => {
+    expect(goalPerMonth(0, 3000, '2027-05', '2026-11-12')).toBe(500);
+    expect(goalPerMonth(600, 3000, '2027-05', '2026-11-12')).toBe(400);
+    expect(goalPerMonth(100, 300, '2026-11', '2026-11-12')).toBe(200);
+    expect(goalPerMonth(400, 300, '2027-05', '2026-11-12')).toBe(0);
+  });
   it('leaves bought and dropped things out of still to buy', () => {
     const w = (status: string, price: number) => ({ id: status, name: status, category: '', priority: '' as const, status: status as never, price, target: '', notes: '' });
     expect(wishStats([w('Wanted', 100), w('Purchased', 40), w('Dropped', 10)])).toEqual({ items: 3, total: 150, purchased: 40, stillToBuy: 100 });
@@ -85,12 +107,41 @@ describe('amounts', () => {
       new Date(2026, 9, 28),
     );
     expect(m.start).toBe('2026-10-01');
-    expect(m.opening).toBe(0);
+    expect(m.accounts.map((a) => [a.id, a.opening, a.spendable])).toEqual([['cash', 0, true], ['posb', 0, true], ['trust', 0, true], ['syfe', 0, false]]);
     expect(m.entries).toEqual([
-      { id: 'a', date: '2026-10-02', kind: 'out', amount: 10, note: '', category: '', planned: false },
-      { id: 'b', date: '2026-10-05', kind: 'in', amount: 20, note: '', category: '', planned: true },
+      { id: 'a', date: '2026-10-02', kind: 'out', amount: 10, note: '', category: '', planned: false, account: 'posb', to: '' },
+      { id: 'b', date: '2026-10-05', kind: 'in', amount: 20, note: '', category: '', planned: true, account: 'posb', to: '' },
     ]);
     expect(m.wishlist[0]).toMatchObject({ priority: '', status: 'Wanted', price: 9, target: '' });
+  });
+  it('puts a tracker from before accounts into POSB', () => {
+    const m = cleanMoney({ start: '2026-10-01', opening: 250, entries: [{ id: 'a', date: '2026-10-02', kind: 'out', amount: 10 }] });
+    expect(m.accounts.find((a) => a.id === 'posb')?.opening).toBe(250);
+    expect(m.entries[0].account).toBe('posb');
+    expect(balanceOn(m, '2026-10-02')).toBe(240);
+  });
+  it('cleans accounts, and moves that go nowhere', () => {
+    const m = cleanMoney({
+      start: '2026-10-01',
+      accounts: [
+        { id: 'pot', name: '  Japan trip ', kind: 'pot', opening: 40, goal: 3000, goalBy: '2027-05' },
+        { id: 'dbs', name: '', kind: 'nope', goal: -5, goalBy: '2027-05', archived: 'yes' },
+      ],
+      entries: [
+        { id: 'a', date: '2026-10-02', kind: 'move', amount: 10, account: 'pot', to: 'dbs', category: 'Food' },
+        { id: 'b', date: '2026-10-03', kind: 'move', amount: 10, account: 'dbs', to: 'dbs' },
+        { id: 'c', date: '2026-10-04', kind: 'in', amount: 5, account: 'gone' },
+      ],
+    });
+    expect(m.accounts).toEqual([
+      { id: 'pot', name: 'Japan trip', kind: 'pot', spendable: false, opening: 40, goal: 3000, goalBy: '2027-05', archived: false },
+      { id: 'dbs', name: 'Account', kind: 'bank', spendable: true, opening: 0, goal: null, goalBy: '', archived: false },
+    ]);
+    expect(m.entries.map(({ kind, category, account, to }) => ({ kind, category, account, to }))).toEqual([
+      { kind: 'move', category: '', account: 'pot', to: 'dbs' },
+      { kind: 'out', category: '', account: 'dbs', to: '' },
+      { kind: 'in', category: '', account: 'dbs', to: '' },
+    ]);
   });
 });
 
@@ -155,12 +206,17 @@ describe('importing the workbook', () => {
       ),
     });
     const m = moneyFromWorkbook(await readXlsx(xlsx), '2026-10', '2026-10-02');
-    expect(m).toMatchObject({ start: '2026-10-01', opening: 250 });
+    expect(m.start).toBe('2026-10-01');
+    expect(m.accounts.find((a) => a.id === 'posb')?.opening).toBe(250);
     expect(m.entries.map(({ date, kind, amount, note, planned }) => ({ date, kind, amount, note, planned }))).toEqual([
       { date: '2026-10-01', kind: 'out', amount: 60, note: 'weekly', planned: false },
       { date: '2026-10-02', kind: 'in', amount: 1200, note: '', planned: true },
     ]);
     expect(m.wishlist).toEqual([{ id: 'w1', name: 'Korea & Japan', category: '', priority: '', status: 'Saving up', price: 3000, target: '2026-12', notes: '' }]);
+    // Importing over a tracker keeps its accounts, the balance going into the main one.
+    const kept = moneyFromWorkbook(await readXlsx(xlsx), '2026-10', '2026-10-02', [newAccount('pot', 'Trip', 'pot', 40), newAccount('dbs', 'DBS', 'bank', 5)]);
+    expect(kept.accounts.map((a) => [a.id, a.opening])).toEqual([['pot', 40], ['dbs', 250]]);
+    expect(kept.entries.map((x) => x.account)).toEqual(['dbs', 'dbs']);
   });
   it('says so when the file isn’t a workbook', async () => {
     await expect(readXlsx(new TextEncoder().encode('hello').buffer as ArrayBuffer)).rejects.toThrow(/isn’t an Excel/);

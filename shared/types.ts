@@ -273,17 +273,45 @@ export interface Mood {
 
 export type MoneyCategory = 'Food' | 'Transport' | 'Shopping' | 'Bills' | 'Family' | 'Fun' | 'Travel' | 'Pay' | 'Other';
 
-/** One amount of money in or out on a day. Planned ones are the forecast; done ones actually happened. */
+/**
+ * One amount of money in or out of an account on a day, or moved from one account to
+ * another. Planned ones are the forecast; done ones actually happened.
+ */
 export interface MoneyEntry {
   id: string;
   /** YYYY-MM-DD. */
   date: string;
-  kind: 'in' | 'out';
+  kind: 'in' | 'out' | 'move';
   amount: number;
   note: string;
-  /** Optional; empty when not set. */
+  /** Optional; empty when not set, and always for a move. */
   category: MoneyCategory | '';
   planned: boolean;
+  /** The account it goes into or comes out of; for a move, the one it leaves. */
+  account: string;
+  /** For a move, the account it goes to; empty otherwise. */
+  to: string;
+}
+
+export type AccountKind = 'bank' | 'cash' | 'invest' | 'pot';
+
+/** Somewhere money is kept: a bank, a wallet, investments, or a pot set aside for something. */
+export interface MoneyAccount {
+  id: string;
+  name: string;
+  kind: AccountKind;
+  /**
+   * Money for day to day. Only these count towards "in the bank", the month's
+   * balances and the forecasts; money moved out of them counts as money out.
+   */
+  spendable: boolean;
+  /** The balance on the first day tracked. */
+  opening: number;
+  /** A savings goal and the month (YYYY-MM) to reach it by; null and empty when there's none. */
+  goal: number | null;
+  goalBy: string;
+  /** Kept for its history but no longer offered for new entries. */
+  archived: boolean;
 }
 
 export type WishPriority = '' | 'High' | 'Medium' | 'Low';
@@ -303,9 +331,10 @@ export interface WishItem {
 
 /** The money tracker: what's typed in. Balances and totals are worked out from it (shared/money.ts). */
 export interface Money {
-  /** The first day tracked (YYYY-MM-DD) and the balance that morning. */
+  /** The first day tracked (YYYY-MM-DD). Each account has its balance that morning. */
   start: string;
-  opening: number;
+  /** At least one; the first spendable one is where entries without an account go. */
+  accounts: MoneyAccount[];
   /** Sorted by date, then in the order they were added. */
   entries: MoneyEntry[];
   wishlist: WishItem[];

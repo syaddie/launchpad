@@ -1,24 +1,92 @@
-// The money tracker. What's stored is a starting balance and a list of dated
-// entries, each money in or out and either planned (the forecast) or done (it
-// happened). Everything else is worked out here: day-by-day balances, the
-// monthly summary, what still needs checking and when a wishlist item fits.
+// The money tracker. What's stored is the accounts with their starting balances and
+// a list of dated entries, each money in, out or moved between accounts, and either
+// planned (the forecast) or done (it happened). Everything else is worked out here:
+// day-by-day balances, the monthly summary, each account's balance, what still needs
+// checking and when a wishlist item fits.
 // Also cleaning for what the page sends, and reading the old workbook on import.
 import { MON, addDays, pad2, parseYmd, ymd } from './dates';
-import type { Money, MoneyCategory, MoneyEntry, WishItem, WishPriority, WishStatus } from './types';
+import type { AccountKind, Money, MoneyAccount, MoneyCategory, MoneyEntry, WishItem, WishPriority, WishStatus } from './types';
 import type { XCell, XSheet } from './xlsx';
 
 export const MAX_ENTRIES = 5000;
 export const MAX_WISHES = 200;
+export const MAX_ACCOUNTS = 30;
 export const CATEGORIES: MoneyCategory[] = ['Food', 'Transport', 'Shopping', 'Bills', 'Family', 'Fun', 'Travel', 'Pay', 'Other'];
 export const PRIORITIES: Exclude<WishPriority, ''>[] = ['High', 'Medium', 'Low'];
 export const STATUSES: Exclude<WishStatus, ''>[] = ['Wanted', 'Saving up', 'Purchased', 'Dropped'];
 
-/** A fresh tracker starts on the 1st of this month with $0. */
-export const starterMoney = (today: Date): Money => ({ start: ymd(new Date(today.getFullYear(), today.getMonth(), 1)), opening: 0, entries: [], wishlist: [] });
+export const ACCOUNT_KINDS: { key: AccountKind; name: string; note: string; icon: string }[] = [
+  { key: 'bank', name: 'Bank account', note: 'Day-to-day money', icon: 'ph-bank' },
+  { key: 'cash', name: 'Cash', note: 'In your wallet', icon: 'ph-money' },
+  { key: 'invest', name: 'Investments', note: 'Value goes up and down', icon: 'ph-trend-up' },
+  { key: 'pot', name: 'Savings pot', note: 'Money set aside for something', icon: 'ph-target' },
+];
+
+/** Bank accounts and cash are for day to day; investments and pots are set aside. */
+export const spendableKind = (k: AccountKind) => k === 'bank' || k === 'cash';
+
+export const newAccount = (id: string, name: string, kind: AccountKind, opening = 0): MoneyAccount => ({ id, name, kind, spendable: spendableKind(kind), opening, goal: null, goalBy: '', archived: false });
+
+/** Where a fresh tracker keeps its money. A balance from before there were accounts goes into POSB. */
+export const starterAccounts = (opening = 0): MoneyAccount[] => [
+  newAccount('cash', 'Cash', 'cash'),
+  newAccount('posb', 'POSB', 'bank', opening),
+  newAccount('trust', 'Trust Bank', 'bank'),
+  newAccount('syfe', 'Syfe stocks', 'invest'),
+];
+
+/** Where entries go when nothing else is picked: the first spendable account still in use. */
+export const mainAccount = (accounts: MoneyAccount[]): string => (accounts.find((a) => a.spendable && !a.archived) ?? accounts.find((a) => !a.archived) ?? accounts[0]).id;
+
+/** A fresh tracker starts on the 1st of this month with $0 everywhere. */
+export const starterMoney = (today: Date): Money => ({ start: ymd(new Date(today.getFullYear(), today.getMonth(), 1)), accounts: starterAccounts(), entries: [], wishlist: [] });
 
 /** Cents, so 0.1 + 0.2 shows as $0.30 and not a long tail. */
 const cents = (n: number) => Math.round(n * 100) / 100;
-const signed = (e: MoneyEntry) => (e.kind === 'in' ? e.amount : -e.amount);
+const signed = (e: { kind: MoneyEntry['kind']; amount: number }) => (e.kind === 'in' ? e.amount : e.kind === 'out' ? -e.amount : 0);
+
+// ---------- accounts ----------
+
+type Flow = { date: string; kind: 'in' | 'out'; amount: number; planned: boolean };
+
+/**
+ * Money in and out of the spendable accounts, which is what the month's balances and
+ * forecasts follow. A move only counts when it crosses between spendable and set-aside money.
+ */
+function flow(money: Money): { opening: number; entries: Flow[] } {
+  const spend = new Set(money.accounts.filter((a) => a.spendable).map((a) => a.id));
+  const opening = cents(money.accounts.reduce((s, a) => (spend.has(a.id) ? s + a.opening : s), 0));
+  const entries = money.entries.flatMap((e): Flow[] => {
+    const from = spend.has(e.account);
+    if (e.kind !== 'move') return from ? [{ date: e.date, kind: e.kind, amount: e.amount, planned: e.planned }] : [];
+    return from === spend.has(e.to) ? [] : [{ date: e.date, kind: from ? 'out' : 'in', amount: e.amount, planned: e.planned }];
+  });
+  return { opening, entries };
+}
+
+/** The spendable accounts' balance on the first day tracked. */
+export const spendableOpening = (money: Money) => flow(money).opening;
+
+/** What an entry adds to an account: money in, money out, or a move into or out of it. */
+export function effectOn(e: MoneyEntry, id: string): number {
+  if (e.kind === 'move') return e.to === id ? e.amount : e.account === id ? -e.amount : 0;
+  return e.account === id ? signed(e) : 0;
+}
+
+/** An account's balance at the end of a day: with `doneOnly`, counting only what actually happened. */
+export function accountBalance(money: Money, id: string, date: string, doneOnly = false): number {
+  const opening = money.accounts.find((a) => a.id === id)?.opening ?? 0;
+  return cents(money.entries.reduce((s, e) => (e.date <= date && !(doneOnly && e.planned) ? s + effectOn(e, id) : s), opening));
+}
+
+/** How much a month a goal needs from here, spread over the months after this one up to the goal's (YYYY-MM). */
+export function goalPerMonth(balance: number, goal: number, by: string, today: string): number {
+  const left = Math.max(0, goal - balance);
+  const [y, m] = today.split('-').map(Number);
+  const [gy, gm] = by.split('-').map(Number);
+  const months = (gy - y) * 12 + (gm - m);
+  return cents(months > 0 ? left / months : left);
+}
 
 // ---------- months ----------
 
@@ -72,9 +140,10 @@ export interface MonthCalc {
 
 /** Each month's numbers. A month opens with the previous month's closing balance. */
 export function calcMonths(money: Money, keys: string[]): MonthCalc[] {
-  const byDay = new Map<string, MoneyEntry[]>();
-  for (const e of money.entries) byDay.set(e.date, [...(byDay.get(e.date) ?? []), e]);
-  let bal = money.opening;
+  const f = flow(money);
+  const byDay = new Map<string, Flow[]>();
+  for (const e of f.entries) byDay.set(e.date, [...(byDay.get(e.date) ?? []), e]);
+  let bal = f.opening;
   return keys.map((key) => {
     const opening = bal;
     let totalIn = 0, totalOut = 0, plannedIn = 0, plannedOut = 0;
@@ -113,22 +182,24 @@ export function calcTotals(money: Money, months: MonthCalc[]): Omit<MonthCalc, '
   const sum = (f: (m: MonthCalc) => number) => cents(months.reduce((a, m) => a + f(m), 0));
   const totalIn = sum((m) => m.totalIn);
   const totalOut = sum((m) => m.totalOut);
+  const opening = spendableOpening(money);
   return {
-    opening: money.opening,
+    opening,
     totalIn,
     totalOut,
     net: cents(totalIn - totalOut),
-    closing: months.length ? months[months.length - 1].closing : money.opening,
-    lowest: months.length ? Math.min(...months.map((m) => m.lowest)) : money.opening,
+    closing: months.length ? months[months.length - 1].closing : opening,
+    lowest: months.length ? Math.min(...months.map((m) => m.lowest)) : opening,
     daysBelow: months.reduce((a, m) => a + m.daysBelow, 0),
     plannedIn: sum((m) => m.plannedIn),
     plannedOut: sum((m) => m.plannedOut),
   };
 }
 
-/** The balance at the end of a day: with `doneOnly`, counting only what actually happened. */
+/** The spendable balance at the end of a day: with `doneOnly`, counting only what actually happened. */
 export function balanceOn(money: Money, date: string, doneOnly = false): number {
-  return cents(money.entries.reduce((a, e) => (e.date <= date && !(doneOnly && e.planned) ? a + signed(e) : a), money.opening));
+  const f = flow(money);
+  return cents(f.entries.reduce((a, e) => (e.date <= date && !(doneOnly && e.planned) ? a + signed(e) : a), f.opening));
 }
 
 /** Planned entries whose day has passed: they either happened (tick them) or didn't (delete or change them). */
@@ -233,24 +304,53 @@ function ids<T extends { id: string }>(list: T[], prefix: string): T[] {
   });
 }
 
-/** Coerces anything into a valid Money: real dates, positive amounts, known categories, sane lengths. */
+const isMonth = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(v);
+const KINDS = ACCOUNT_KINDS.map((k) => k.key);
+
+/**
+ * Coerces anything into a valid Money: real dates, positive amounts, known categories,
+ * sane lengths, and entries that point at real accounts. A tracker from before accounts
+ * gets the starter ones, with its opening balance and entries going into POSB.
+ */
 export function cleanMoney(v: unknown, today = new Date()): Money {
-  const m = (v && typeof v === 'object' ? v : {}) as Partial<Money>;
+  const m = (v && typeof v === 'object' ? v : {}) as Partial<Money> & { opening?: unknown };
+  const given = (Array.isArray(m.accounts) ? m.accounts : []).slice(0, MAX_ACCOUNTS).map((x: Partial<MoneyAccount>): MoneyAccount => {
+    const kind = KINDS.includes(x?.kind as AccountKind) ? x!.kind! : 'bank';
+    const goal = amount(x?.goal);
+    return {
+      id: str(x?.id, 40),
+      name: str(x?.name, 40).trim() || 'Account',
+      kind,
+      spendable: typeof x?.spendable === 'boolean' ? x.spendable : spendableKind(kind),
+      opening: amount(x?.opening) ?? 0,
+      goal: goal && goal > 0 ? goal : null,
+      goalBy: goal && goal > 0 && isMonth(x?.goalBy) ? x!.goalBy! : '',
+      archived: x?.archived === true,
+    };
+  });
+  const accounts = given.length ? ids(given, 'a') : starterAccounts(amount(m.opening) ?? 0);
+  const known = new Set(accounts.map((a) => a.id));
+  const main = mainAccount(accounts);
   const entries = (Array.isArray(m.entries) ? m.entries : [])
     .slice(0, MAX_ENTRIES)
     .flatMap((x: Partial<MoneyEntry>): MoneyEntry[] => {
       const a = amount(x?.amount);
       if (!x || !isDate(x.date) || a === null) return [];
+      const account = known.has(x.account as string) ? x.account! : main;
+      // A move needs somewhere else to go; without one, it's money out.
+      const to = x.kind === 'move' && known.has(x.to as string) && x.to !== account ? x.to! : '';
       // A negative amount is the other direction.
-      const kind = (x.kind === 'in') !== a < 0 ? 'in' : 'out';
+      const kind = to ? 'move' : (x.kind === 'in') !== a < 0 ? 'in' : 'out';
       return [{
         id: str(x.id, 40),
         date: x.date,
         kind,
         amount: Math.abs(a),
         note: str(x.note, 120),
-        category: CATEGORIES.includes(x.category as MoneyCategory) ? (x.category as MoneyCategory) : '',
+        category: kind !== 'move' && CATEGORIES.includes(x.category as MoneyCategory) ? (x.category as MoneyCategory) : '',
         planned: x.planned !== false,
+        account,
+        to,
       }];
     });
   const wishlist = (Array.isArray(m.wishlist) ? m.wishlist : []).slice(0, MAX_WISHES).map((x: Partial<WishItem>): WishItem => ({
@@ -260,12 +360,12 @@ export function cleanMoney(v: unknown, today = new Date()): Money {
     priority: PRIORITIES.includes(x?.priority as never) ? x!.priority! : '',
     status: STATUSES.includes(x?.status as never) ? x!.status! : '',
     price: amount(x?.price),
-    target: typeof x?.target === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(x.target) ? x.target : '',
+    target: isMonth(x?.target) ? x!.target! : '',
     notes: str(x?.notes, 200),
   }));
   return {
     start: isDate(m.start) ? m.start : starterMoney(today).start,
-    opening: amount(m.opening) ?? 0,
+    accounts,
     entries: sortEntries(ids(entries, 'e')),
     wishlist: ids(wishlist, 'w'),
   };
@@ -316,7 +416,8 @@ function findMonthBlocks(sheets: XSheet[]): { sheet: XSheet; row: number; col: n
  * ones as planned. Day 31 of a shorter month lands on its last day. The Wishlist
  * sheet's columns are found by their header names.
  */
-export function moneyFromWorkbook(sheets: XSheet[], firstMonth: string, today: string): Money {
+/** The workbook's balance goes into the main one of `accounts`, or of the starter accounts when there are none. */
+export function moneyFromWorkbook(sheets: XSheet[], firstMonth: string, today: string, accounts: MoneyAccount[] = []): Money {
   const entries: MoneyEntry[] = [];
   let opening = 0;
   findMonthBlocks(sheets).forEach(({ sheet, row, col }, i) => {
@@ -337,7 +438,7 @@ export function moneyFromWorkbook(sheets: XSheet[], firstMonth: string, today: s
       if (!day || typeof day.v !== 'number' || day.v < 1 || day.v > 31) continue;
       const date = `${key}-${pad2(Math.min(Math.round(day.v), daysIn(key)))}`;
       const add = (kind: 'in' | 'out', a: number | null, note: string) => {
-        if (a) entries.push({ id: `e${entries.length + 1}`, date, kind, amount: Math.abs(a), note, category: '', planned: date >= today });
+        if (a) entries.push({ id: `e${entries.length + 1}`, date, kind, amount: Math.abs(a), note, category: '', planned: date >= today, account: '', to: '' });
       };
       add('out', cellNum(at(sheet, r, col + 1)), cellText(at(sheet, r, col + 3)));
       add('in', cellNum(at(sheet, r, col + 2)), cellText(at(sheet, r, col + 4)));
@@ -376,5 +477,7 @@ export function moneyFromWorkbook(sheets: XSheet[], firstMonth: string, today: s
     break;
   }
 
-  return cleanMoney({ start: `${firstMonth}-01`, opening, entries, wishlist });
+  if (!accounts.length) return cleanMoney({ start: `${firstMonth}-01`, opening, entries, wishlist });
+  const main = mainAccount(accounts);
+  return cleanMoney({ start: `${firstMonth}-01`, accounts: accounts.map((a) => (a.id === main ? { ...a, opening } : a)), entries, wishlist });
 }

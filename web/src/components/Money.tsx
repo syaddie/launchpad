@@ -1,13 +1,15 @@
-import { useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { ymd } from '../../../shared/dates';
 import {
-  CATEGORIES, MAX_ENTRIES, MAX_WISHES, PRIORITIES, STATUSES, addMonths, affordableFrom, balanceOn, byCategory, calcMonths, calcTotals, fmtMoney, isDone,
-  lowestAhead, monthKeys, monthName, moneyFromWorkbook, parseMoney, repeatDates, sortEntries, toReview, wishStats, type MonthCalc, type Repeat,
+  ACCOUNT_KINDS, CATEGORIES, MAX_ACCOUNTS, MAX_ENTRIES, MAX_WISHES, PRIORITIES, STATUSES, accountBalance, addMonths, affordableFrom, balanceOn, byCategory,
+  calcMonths, calcTotals, daysIn, effectOn, fmtMoney, goalPerMonth, isDone, lowestAhead, mainAccount, monthKeys, monthName, moneyFromWorkbook, newAccount,
+  parseMoney, repeatDates, sortEntries, spendableKind, toReview, wishStats, type MonthCalc, type Repeat,
 } from '../../../shared/money';
-import type { Money, MoneyCategory, MoneyEntry, WishItem } from '../../../shared/types';
+import type { Money, MoneyAccount, MoneyCategory, MoneyEntry, WishItem } from '../../../shared/types';
 import { readXlsx } from '../../../shared/xlsx';
 import { localGet, localSet } from '../api';
 import { fmtDay, newId, parseYmd } from '../util';
+import { Drawer } from './Drawers';
 import { niceMax } from './Server';
 
 type Tab = 'overview' | 'month' | 'wishlist';
@@ -58,7 +60,7 @@ export function MoneyView({ money, now, saved, onChange, onImport, notify }: Pro
   const importFile = async (f: File) => {
     setImportError('');
     try {
-      const m = moneyFromWorkbook(await readXlsx(await f.arrayBuffer()), importMonth, today);
+      const m = moneyFromWorkbook(await readXlsx(await f.arrayBuffer()), importMonth, today, money.accounts);
       if (!m.entries.length && !m.wishlist.length) throw new Error('no Tracker or Wishlist sheet found');
       const planned = m.entries.filter((e) => e.planned).length;
       onImport(m, `Imported ${m.entries.length} entries from ${monthName(importMonth)} on (${planned} still planned) and ${m.wishlist.length} wishlist item${m.wishlist.length === 1 ? '' : 's'}`);
@@ -116,7 +118,7 @@ export function MoneyView({ money, now, saved, onChange, onImport, notify }: Pro
           />
         </div>
       </div>
-      {tab === 'overview' && <Overview money={money} today={today} onOpenMonth={openMonth} />}
+      {tab === 'overview' && <Overview money={money} today={today} onOpenMonth={openMonth} onChange={onChange} />}
       {tab === 'month' && <MonthTab money={money} today={today} month={month} onMonth={setMonth} onChange={onChange} />}
       {tab === 'wishlist' && (
         <Wishlist
@@ -129,7 +131,7 @@ export function MoneyView({ money, now, saved, onChange, onImport, notify }: Pro
               label: `Add ${fmtMoney(w.price)} as money out today`,
               run: () => {
                 const m = latest.current;
-                const entry: MoneyEntry = { id: newId('e'), date: today, kind: 'out', amount: w.price!, note: w.name, category: 'Shopping', planned: false };
+                const entry: MoneyEntry = { id: newId('e'), date: today, kind: 'out', amount: w.price!, note: w.name, category: 'Shopping', planned: false, account: lastAccount(m), to: '' };
                 onChange({ ...m, entries: sortEntries([...m.entries, entry]) });
               },
             });
@@ -223,7 +225,7 @@ function TextCell({ value, onChange, label, r, c, max, placeholder, className = 
 }
 
 /** A date that only commits when you leave the cell, so a row doesn't re-sort while you type. */
-function DateCell({ value, onChange, label, r, c }: { value: string; onChange: (v: string) => void; label: string; r: number; c: number }) {
+function DateCell({ value, onChange, label, r, c }: { value: string; onChange: (v: string) => void; label: string; r?: number; c?: number }) {
   const [draft, setDraft] = useState<string | null>(null);
   const commit = () => {
     if (draft && draft !== value) onChange(draft);
@@ -247,10 +249,17 @@ function DateCell({ value, onChange, label, r, c }: { value: string; onChange: (
   );
 }
 
-function CategoryCell({ value, onChange, label }: { value: MoneyCategory | ''; onChange: (v: MoneyCategory | '') => void; label: string }) {
+function CategoryCell({ value, onChange, label, className = '', empty = '–' }: {
+  value: MoneyCategory | '';
+  onChange: (v: MoneyCategory | '') => void;
+  label: string;
+  className?: string;
+  /** What "no category" shows as. */
+  empty?: string;
+}) {
   return (
-    <select className={'cell pick' + (value ? ' tone-neutral' : '')} aria-label={label} value={value} onChange={(e) => onChange(e.target.value as MoneyCategory | '')} onKeyDown={cellKeys}>
-      <option value="">–</option>
+    <select className={'cell pick ' + className + (value ? ' tone-neutral' : '')} aria-label={label} value={value} onChange={(e) => onChange(e.target.value as MoneyCategory | '')} onKeyDown={cellKeys}>
+      <option value="">{empty}</option>
       {CATEGORIES.map((x) => (
         <option key={x}>{x}</option>
       ))}
@@ -278,23 +287,52 @@ const REPEATS: { key: Repeat; name: string }[] = [
   { key: 'month', name: 'Every month' },
 ];
 
-type Draft = { date: string; note: string; category: MoneyCategory | ''; out: number | null; in: number | null; repeat: Repeat; until: string };
+type Kind = MoneyEntry['kind'];
+type Draft = { date: string; note: string; category: MoneyCategory | ''; kind: Kind; amount: number | null; account: string; to: string; repeat: Repeat; until: string };
+
+const signed = (e: MoneyEntry) => (e.kind === 'in' ? e.amount : e.kind === 'out' ? -e.amount : 0);
+
+/** Account names by id. */
+const namesOf = (money: Money) => new Map(money.accounts.map((a) => [a.id, a.name]));
+
+/** What an entry is called in a list: its note, or for a move where it went. */
+const entryTitle = (e: MoneyEntry, names: Map<string, string>) => (e.kind === 'move' ? `${names.get(e.account) ?? '?'} → ${names.get(e.to) ?? '?'}` : e.note || 'No note');
+
+/** The account the last entry went into, if it's still in use. */
+function lastAccount(money: Money): string {
+  const id = localGet('moneyAccount');
+  return money.accounts.some((a) => a.id === id && !a.archived) ? id! : mainAccount(money.accounts);
+}
+
+/** Another account in use, for the other end of a move. */
+const otherAccount = (money: Money, id: string) => (money.accounts.find((a) => a.id !== id && !a.archived) ?? money.accounts.find((a) => a.id !== id))?.id ?? '';
 
 function MonthTab({ money, today, month, onMonth, onChange }: { money: Money; today: string; month: string; onMonth: (k: string) => void; onChange: (m: Money) => void }) {
   // Include the month on screen, even one before the first or past the last.
   const keys = monthKeys({ ...money, start: `${month}-01` < money.start ? `${month}-01` : money.start }, month > today.slice(0, 7) ? `${month}-01` : today);
   const months = calcMonths(money, keys);
   const calc = months[keys.indexOf(month)] ?? months[0];
-  const entries = money.entries.filter((e) => e.date.slice(0, 7) === month);
-  const review = toReview(money, today).filter((e) => e.date.slice(0, 7) === month);
-  const isFirst = month <= keys[0];
-  const blank = (): Draft => ({ date: today.slice(0, 7) === month ? today : `${month}-01`, note: '', category: '', out: null, in: null, repeat: 'once', until: month });
+  const names = namesOf(money);
+  const isNow = today.slice(0, 7) === month;
+  const blank = (): Draft => {
+    const account = lastAccount(money);
+    return { date: isNow ? today : `${month}-01`, note: '', category: '', kind: 'out', amount: null, account, to: otherAccount(money, account), repeat: 'once', until: month };
+  };
   const [draft, setDraft] = useState<Draft>(blank);
   const [draftMonth, setDraftMonth] = useState(month);
   if (draftMonth !== month) {
     setDraftMonth(month);
     setDraft(blank());
   }
+  /** The entry open for changing, if any. */
+  const [editing, setEditing] = useState<string | null>(null);
+  /** Only the entries of one account, or all of them. */
+  const [only, setOnlyState] = useState(() => localGet('moneyOnly') ?? '');
+  const setOnly = (id: string) => {
+    setOnlyState(id);
+    localSet('moneyOnly', id);
+  };
+  const shown = money.accounts.find((a) => a.id === only);
   const [layout, setLayoutState] = useState<'list' | 'calendar'>(() => (localGet('moneyLayout') === 'calendar' ? 'calendar' : 'list'));
   const setLayout = (l: 'list' | 'calendar') => {
     setLayoutState(l);
@@ -307,24 +345,51 @@ function MonthTab({ money, today, month, onMonth, onChange }: { money: Money; to
     requestAnimationFrame(() => document.querySelector<HTMLInputElement>('[aria-label="New entry note"]')?.focus());
   };
 
+  const inMonth = money.entries.filter((e) => e.date.slice(0, 7) === month);
+  const entries = shown ? inMonth.filter((e) => e.account === shown.id || e.to === shown.id) : inMonth;
+  const review = toReview(money, today).filter((e) => e.date.slice(0, 7) === month);
+  // Accounts to filter by: those in use, and any old one this month's entries still mention.
+  const filters = money.accounts.filter((a) => !a.archived || a.id === only || inMonth.some((e) => e.account === a.id || e.to === a.id));
+
   const setEntries = (list: MoneyEntry[]) => onChange({ ...money, entries: sortEntries(list) });
   const patch = (id: string, p: Partial<MoneyEntry>) => setEntries(money.entries.map((e) => (e.id === id ? { ...e, ...p } : e)));
+  const remove = (id: string) => setEntries(money.entries.filter((x) => x.id !== id));
 
-  const amount = draft.in ?? draft.out;
   const repeats = repeatDates(draft.date || today, draft.repeat, draft.until);
-  const canAdd = !!draft.date && amount !== null && money.entries.length < MAX_ENTRIES;
+  const move = draft.kind === 'move';
+  const canAdd = !!draft.date && draft.amount !== null && money.entries.length < MAX_ENTRIES && (!move || (!!draft.to && draft.to !== draft.account));
   const add = () => {
     if (!canAdd) return;
-    const kind = draft.in !== null ? 'in' : 'out';
     setEntries([
       ...money.entries,
-      ...repeats.slice(0, MAX_ENTRIES - money.entries.length).map((date): MoneyEntry => ({ id: newId('e'), date, kind, amount: Math.abs(amount!), note: draft.note.trim(), category: draft.category, planned: date > today })),
+      ...repeats.slice(0, MAX_ENTRIES - money.entries.length).map((date): MoneyEntry => ({
+        id: newId('e'),
+        date,
+        kind: draft.kind,
+        amount: Math.abs(draft.amount!),
+        note: draft.note.trim(),
+        category: move ? '' : draft.category,
+        planned: date > today,
+        account: draft.account,
+        to: move ? draft.to : '',
+      })),
     ]);
-    setDraft({ ...blank(), date: draft.date });
+    localSet('moneyAccount', draft.account);
+    setDraft({ ...blank(), date: draft.date, kind: draft.kind, account: draft.account, to: draft.to });
   };
 
-  const lastOfDay = new Set(entries.filter((e, i) => entries[i + 1]?.date !== e.date).map((e) => e.id));
-  const todayAt = today.slice(0, 7) === month ? entries.findIndex((e) => e.date > today) : -2;
+  // The entries a day at a time, each day ending on its balance.
+  const days: { date: string; list: MoneyEntry[] }[] = [];
+  for (const e of entries) {
+    const last = days[days.length - 1];
+    if (last?.date === e.date) last.list.push(e);
+    else days.push({ date: e.date, list: [e] });
+  }
+  const todayAt = isNow ? days.findIndex((d) => d.date > today) : -2;
+  const lowIndex = calc.balances.indexOf(calc.lowest);
+  const lowDate = `${month}-${String(lowIndex + 1).padStart(2, '0')}`;
+  const balanceAt = (date: string) => (shown ? accountBalance(money, shown.id, date) : calc.balances[Number(date.slice(8)) - 1]);
+  const pickAccount = (account: string) => setDraft({ ...draft, account, to: draft.to === account ? otherAccount(money, account) : draft.to });
 
   return (
     <div className="money-body month-tab">
@@ -337,218 +402,377 @@ function MonthTab({ money, today, month, onMonth, onChange }: { money: Money; to
           <button className="icon-btn md" aria-label="Next month" disabled={month >= addMonths(today.slice(0, 7), 24)} onClick={() => onMonth(addMonths(month, 1))}>
             <i className="ph-duotone ph-caret-right" />
           </button>
-          {month !== today.slice(0, 7) && (
+          {!isNow && (
             <button className="btn btn-ghost btn-small" onClick={() => onMonth(today.slice(0, 7))}>
               This month
             </button>
           )}
-          <div className="tabs layout-tabs" role="group" aria-label="Show as">
-            {(['list', 'calendar'] as const).map((l) => (
-              <button key={l} className={'tab' + (layout === l ? ' active' : '')} aria-pressed={layout === l} onClick={() => setLayout(l)}>
-                <i className={'ph-duotone ' + (l === 'list' ? 'ph-list-bullets' : 'ph-calendar-blank')} />
-                {l === 'list' ? 'List' : 'Calendar'}
-              </button>
-            ))}
-          </div>
         </div>
-        <div className="month-sums">
-          <span>
-            Opening{' '}
-            {isFirst ? (
-              <NumCell value={money.opening} label="Opening balance" className="opening" onChange={(v) => onChange({ ...money, opening: v ?? 0, start: `${keys[0]}-01` })} />
-            ) : (
-              <Calc v={calc.opening} title="Last month’s closing balance" strong />
-            )}
-          </span>
-          <span>
-            In <Calc v={calc.totalIn} title={calc.plannedIn ? `${fmtMoney(calc.plannedIn)} of it still planned` : 'All of it done'} strong />
-          </span>
-          <span>
-            Out <Calc v={calc.totalOut} title={calc.plannedOut ? `${fmtMoney(calc.plannedOut)} of it still planned` : 'All of it done'} strong />
-          </span>
-          <span>
-            Closing <Calc v={calc.closing} title="The balance after the last day, counting everything planned" strong />
-          </span>
-          <span>
-            Lowest <Calc v={calc.lowest} title="The lowest end-of-day balance this month" strong />
-          </span>
+        <div className="tabs layout-tabs" role="group" aria-label="Show as">
+          {(['list', 'calendar'] as const).map((l) => (
+            <button key={l} className={'tab' + (layout === l ? ' active' : '')} aria-pressed={layout === l} onClick={() => setLayout(l)}>
+              <i className={'ph-duotone ' + (l === 'list' ? 'ph-list-bullets' : 'ph-calendar-blank')} />
+              {l === 'list' ? 'List' : 'Calendar'}
+            </button>
+          ))}
         </div>
       </div>
 
+      <section className="month-sum" aria-label={`${monthName(month)} in numbers`}>
+        <div className="m-stats">
+          {isNow ? (
+            <MonthStat label="In the bank now" value={balanceOn(money, today, true)} note="day-to-day accounts, from what’s done" hero />
+          ) : (
+            <MonthStat label="Started with" value={calc.opening} note={month <= keys[0] ? 'what your day-to-day accounts opened with' : 'last month’s closing balance'} hero />
+          )}
+          <MonthStat label={`End of ${monthName(month, true)}`} value={calc.closing} note={calc.plannedIn || calc.plannedOut ? 'if the plan holds' : 'all of it done'} />
+          <MonthStat label="Money in" value={calc.totalIn} sign tone="in" note={calc.plannedIn ? `${fmtMoney(calc.plannedIn)} still to come` : 'all of it done'} />
+          <MonthStat label="Money out" value={-calc.totalOut} sign note={calc.plannedOut ? `${fmtMoney(calc.plannedOut)} still to come` : 'all of it done'} />
+        </div>
+        <p className="month-foot">
+          {isNow && (
+            <span>
+              Started the month with <Calc v={calc.opening} title="What your day-to-day accounts had at the start of the month" strong />
+            </span>
+          )}
+          {calc.lowest < calc.opening && (
+            <span>
+              <i className="ph-duotone ph-trend-down" aria-hidden="true" />
+              Lowest point <Calc v={calc.lowest} title="The lowest end-of-day balance this month" strong /> on {shortDate(lowDate)}
+            </span>
+          )}
+        </p>
+      </section>
+
       {review.length > 0 && (
         <div className="review-bar">
-          <i className="ph-duotone ph-clock-countdown" />
-          <span>
-            {review.length} planned {review.length === 1 ? 'entry has' : 'entries have'} passed. Tick what happened, and change or delete the rest.
-          </span>
-          <button className="btn btn-secondary btn-small" onClick={() => setEntries(money.entries.map((e) => (review.includes(e) ? { ...e, planned: false } : e)))}>
-            Mark all as done
-          </button>
+          <div className="review-head">
+            <i className="ph-duotone ph-clock-countdown" />
+            <b>Did {review.length === 1 ? 'this' : 'these'} happen?</b>
+            <span>Planned for a day that’s passed.</span>
+            {review.length > 1 && (
+              <button className="btn btn-secondary btn-small" onClick={() => setEntries(money.entries.map((e) => (review.includes(e) ? { ...e, planned: false } : e)))}>
+                Mark all {review.length} as done
+              </button>
+            )}
+          </div>
+          {review.slice(0, 5).map((e) => (
+            <div key={e.id} className="review-item">
+              <span className="review-what">
+                {entryTitle(e, names)} <span className="meta">· {shortDate(e.date)}</span>
+              </span>
+              <b className="tnum">{fmtMoney(e.kind === 'move' ? e.amount : signed(e), e.kind !== 'move')}</b>
+              <button className="btn btn-small review-yes" onClick={() => patch(e.id, { planned: false })}>
+                Yes, it’s done
+              </button>
+              <button className="btn btn-ghost btn-small" onClick={() => (setLayout('list'), setOnly(''), setEditing(e.id))}>
+                Change it
+              </button>
+            </div>
+          ))}
+          {review.length > 5 && <span className="review-more">and {review.length - 5} more, marked Overdue in the list</span>}
         </div>
       )}
 
       {layout === 'calendar' ? (
-        <MonthCalendar month={month} entries={entries} calc={calc} today={today} onPick={addOn} />
+        <MonthCalendar month={month} money={money} entries={inMonth} calc={calc} today={today} onPick={addOn} />
       ) : (
-        <section className="panel you-panel ledger" aria-label={`Entries for ${monthName(month)}`} data-grid>
-          <div className="sum-scroll">
-            <table className="sheet entries">
-              <colgroup>
-                <col style={{ width: 36 }} />
-                <col style={{ width: 132 }} />
-                <col />
-                <col style={{ width: 112 }} />
-                <col style={{ width: 104 }} />
-                <col style={{ width: 104 }} />
-                <col style={{ width: 108 }} />
-                <col style={{ width: 34 }} />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th aria-label="Done" />
-                  <th>Date</th>
-                  <th>Note</th>
-                  <th>Category</th>
-                  <th className="r">Out</th>
-                  <th className="r">In</th>
-                  <th className="r">Balance</th>
-                  <th aria-label="Remove" />
-                </tr>
-                <tr
-                  className="add-row"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'BUTTON') {
-                      e.preventDefault();
-                      add();
-                    }
-                  }}
-                >
-                  <td className="c">
-                    <i className="ph-duotone ph-plus add-plus" aria-hidden="true" />
-                  </td>
-                  <td>
-                    <input type="date" className="cell date tnum" aria-label="New entry date" value={draft.date} onChange={(e) => setDraft({ ...draft, date: e.target.value })} />
-                  </td>
-                  <td>
-                    <input className="cell" aria-label="New entry note" placeholder="Add money in or out…" maxLength={120} value={draft.note} onChange={(e) => setDraft({ ...draft, note: e.target.value })} />
-                  </td>
-                  <td>
-                    <CategoryCell value={draft.category} label="New entry category" onChange={(category) => setDraft({ ...draft, category })} />
-                  </td>
-                  <td>
-                    <NumCell value={draft.out} label="New entry money out" onChange={(v) => setDraft({ ...draft, out: v, in: v === null ? draft.in : null })} />
-                  </td>
-                  <td className="in">
-                    <NumCell value={draft.in} label="New entry money in" onChange={(v) => setDraft({ ...draft, in: v, out: v === null ? draft.out : null })} />
-                  </td>
-                  <td colSpan={2} className="r">
-                    <button className="btn btn-primary btn-small" disabled={!canAdd} onClick={add}>
-                      {repeats.length > 1 ? `Add ${repeats.length}` : 'Add'}
-                    </button>
-                  </td>
-                </tr>
-                <tr className="add-opts">
-                  <td />
-                  <td colSpan={7}>
-                    <div className="add-opts-in">
-                      <select className="cell pick inline" aria-label="Repeat" value={draft.repeat} onChange={(e) => setDraft({ ...draft, repeat: e.target.value as Repeat })}>
-                        {REPEATS.map((r) => (
-                          <option key={r.key} value={r.key}>
-                            {r.name}
-                          </option>
-                        ))}
-                      </select>
-                      {draft.repeat !== 'once' && (
-                        <>
-                          <span className="meta">until the end of</span>
-                          <input className="cell inline tnum" type="month" aria-label="Repeat until" min={draft.date.slice(0, 7)} value={draft.until} onChange={(e) => e.target.value && setDraft({ ...draft, until: e.target.value })} />
-                        </>
-                      )}
-                      <span className="meta">
-                        {draft.date > today ? 'Goes in as planned: tick it once it’s happened' : 'Goes in as done'}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              </thead>
-              <tbody>
-                {entries.map((e, r) => {
-                  const late = e.planned && e.date < today;
-                  return [
-                    r === todayAt && <TodayRow key="today" money={money} today={today} />,
-                    <tr key={e.id} className={(e.planned ? 'planned' : '') + (late ? ' late' : '') + (r > 0 && entries[r - 1].date !== e.date ? ' new-day' : r > 0 ? ' same-day' : '')}>
-                      <td className="c">
-                        <button
-                          className={'check' + (e.planned ? '' : ' on')}
-                          title={e.planned ? 'Planned. Tick it once it’s happened' : 'Done. Untick to make it planned again'}
-                          aria-label={e.planned ? 'Mark as done' : 'Mark as planned'}
-                          aria-pressed={!e.planned}
-                          onClick={() => patch(e.id, { planned: !e.planned })}
-                        >
-                          {!e.planned && <i className="ph-bold ph-check" />}
+        <>
+          <div
+            className="composer"
+            role="group"
+            aria-label="Add an entry"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'BUTTON') {
+                e.preventDefault();
+                add();
+              }
+            }}
+          >
+            <div className="composer-main">
+              <KindSwitch kind={draft.kind} label="New entry is" onChange={(kind) => setDraft({ ...draft, kind })} />
+              <input
+                className="composer-note"
+                aria-label="New entry note"
+                placeholder={move ? 'What’s it for? (optional)' : 'What’s it for?'}
+                maxLength={120}
+                value={draft.note}
+                onChange={(e) => setDraft({ ...draft, note: e.target.value })}
+              />
+              <NumCell value={draft.amount} label="New entry amount" className="composer-amt" onChange={(v) => setDraft({ ...draft, amount: v === null ? null : Math.abs(v) })} />
+              <button className="btn btn-primary composer-add" disabled={!canAdd} onClick={add}>
+                {repeats.length > 1 ? `Add ${repeats.length}` : 'Add'}
+              </button>
+            </div>
+            <div className="composer-acct">
+              {move ? (
+                <>
+                  <span className="meta">From</span>
+                  <AccountSelect money={money} value={draft.account} label="Move from" className="composer-field" onChange={pickAccount} />
+                  <span className="meta">to</span>
+                  <AccountSelect money={money} value={draft.to} label="Move to" className="composer-field" onChange={(to) => setDraft({ ...draft, to })} />
+                </>
+              ) : (
+                <>
+                  <span className="meta">{draft.kind === 'in' ? 'Paid into' : 'Paid from'}</span>
+                  <div className="acct-chips" role="radiogroup" aria-label={draft.kind === 'in' ? 'Paid into' : 'Paid from'}>
+                    {money.accounts
+                      .filter((a) => !a.archived || a.id === draft.account)
+                      .map((a) => (
+                        <button key={a.id} type="button" role="radio" aria-checked={draft.account === a.id} className={'acct-chip' + (draft.account === a.id ? ' on' : '')} onClick={() => pickAccount(a.id)}>
+                          {a.name}
                         </button>
-                      </td>
-                      <td>
-                        <DateCell value={e.date} label="Date" r={r} c={0} onChange={(date) => patch(e.id, { date })} />
-                      </td>
-                      <td>
-                        <TextCell value={e.note} label="Note" r={r} c={1} max={120} onChange={(note) => patch(e.id, { note })} />
-                      </td>
-                      <td>
-                        <CategoryCell value={e.category} label="Category" onChange={(category) => patch(e.id, { category })} />
-                      </td>
-                      <td>
-                        <NumCell
-                          value={e.kind === 'out' && e.amount ? e.amount : null}
-                          label="Money out"
-                          r={r}
-                          c={3}
-                          onChange={(v) => (v === null ? e.kind === 'out' && patch(e.id, { amount: 0 }) : patch(e.id, { kind: 'out', amount: Math.abs(v) }))}
-                        />
-                      </td>
-                      <td className={e.kind === 'in' ? 'in' : undefined}>
-                        <NumCell
-                          value={e.kind === 'in' && e.amount ? e.amount : null}
-                          label="Money in"
-                          r={r}
-                          c={4}
-                          onChange={(v) => (v === null ? e.kind === 'in' && patch(e.id, { amount: 0 }) : patch(e.id, { kind: 'in', amount: Math.abs(v) }))}
-                        />
-                      </td>
-                      <td className="r">
-                        {lastOfDay.has(e.id) && (
-                          <Calc v={calc.balances[Number(e.date.slice(8)) - 1]} title={`End of ${shortDate(e.date)}: the opening balance plus everything in and out up to then, planned or done`} />
-                        )}
-                      </td>
-                      <td className="c">
-                        <button className="icon-btn row-x" title="Delete" aria-label={`Delete ${e.note || 'entry'}`} onClick={() => setEntries(money.entries.filter((x) => x.id !== e.id))}>
-                          <i className="ph-duotone ph-x" />
-                        </button>
-                      </td>
-                    </tr>,
-                  ];
-                })}
-                {todayAt === -1 && <TodayRow money={money} today={today} />}
-              </tbody>
-            </table>
+                      ))}
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="composer-opts">
+              <input type="date" className="cell composer-field tnum" aria-label="New entry date" value={draft.date} onChange={(e) => setDraft({ ...draft, date: e.target.value })} />
+              {!move && <CategoryCell value={draft.category} label="New entry category" className="composer-field" empty="Category" onChange={(category) => setDraft({ ...draft, category })} />}
+              <select className="cell pick composer-field" aria-label="Repeat" value={draft.repeat} onChange={(e) => setDraft({ ...draft, repeat: e.target.value as Repeat })}>
+                {REPEATS.map((r) => (
+                  <option key={r.key} value={r.key}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+              {draft.repeat !== 'once' && (
+                <>
+                  <span className="meta">until the end of</span>
+                  <input className="cell composer-field tnum" type="month" aria-label="Repeat until" min={draft.date.slice(0, 7)} value={draft.until} onChange={(e) => e.target.value && setDraft({ ...draft, until: e.target.value })} />
+                </>
+              )}
+              <span className="meta composer-hint">{draft.date > today ? 'Goes in as planned: tick it once it’s happened' : 'Goes in as done'}</span>
+            </div>
+          </div>
+
+          {money.accounts.length > 1 && (
+            <div className="acct-filter" role="group" aria-label="Show entries for">
+              <span className="meta">Show</span>
+              <button className={'acct-chip' + (!shown ? ' on' : '')} aria-pressed={!shown} onClick={() => setOnly('')}>
+                All accounts
+              </button>
+              {filters.map((a) => (
+                <button key={a.id} className={'acct-chip' + (shown?.id === a.id ? ' on' : '')} aria-pressed={shown?.id === a.id} onClick={() => setOnly(a.id)}>
+                  {a.name}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <section className="panel days" aria-label={`Entries for ${monthName(month)}`}>
+            {days.length > 0 && (
+              <div className="days-key meta">
+                <span>
+                  <span className="ent-tick on" aria-hidden="true" />
+                  Done
+                </span>
+                <span>
+                  <span className="ent-tick" aria-hidden="true" />
+                  Planned
+                </span>
+                <span>{shown ? `Each day ends on what’s in ${shown.name}` : 'Each day ends on your day-to-day balance, planned and done together'}</span>
+              </div>
+            )}
+            {days.map((d, i) => (
+              <Fragment key={d.date}>
+                {i === todayAt && <TodayLine money={money} today={today} account={shown} />}
+                <div className="day">
+                  <div className="day-head">
+                    <h3>{shortDate(d.date)}</h3>
+                    <span className="day-bal">
+                      {!shown && d.date === lowDate && calc.lowest < calc.opening && <span className="chip chip-warn">Lowest</span>}
+                      <Calc v={balanceAt(d.date)} title={`End of ${shortDate(d.date)}: ${shown ? `what’s in ${shown.name}` : 'your day-to-day accounts'}, counting everything up to then, planned or done`} />
+                    </span>
+                  </div>
+                  {d.list.map((e) => (
+                    <EntryRow
+                      key={e.id}
+                      e={e}
+                      money={money}
+                      today={today}
+                      open={editing === e.id}
+                      onOpen={() => setEditing(e.id)}
+                      onClose={() => setEditing(null)}
+                      onPatch={(p) => patch(e.id, p)}
+                      onDelete={() => remove(e.id)}
+                    />
+                  ))}
+                </div>
+              </Fragment>
+            ))}
+            {todayAt === -1 && <TodayLine money={money} today={today} account={shown} />}
             {!entries.length && (
               <p className="month-empty">
-                Nothing in {monthName(month)} yet. Plan what you expect to spend and earn, then tick, change or delete entries as the days go by.
+                {shown
+                  ? `Nothing in or out of ${shown.name} in ${monthName(month)}.`
+                  : `Nothing in ${monthName(month)} yet. Plan what you expect to spend and earn, then tick, change or delete entries as the days go by.`}
               </p>
             )}
-          </div>
-        </section>
+          </section>
+        </>
       )}
     </div>
   );
 }
 
-/** The month as a calendar: each day's money in, money out and end-of-day balance. Click a day to add to it. */
-function MonthCalendar({ month, entries, calc, today, onPick }: { month: string; entries: MoneyEntry[]; calc: MonthCalc; today: string; onPick: (date: string) => void }) {
+function MonthStat({ label, value, note, sign, tone, hero }: { label: string; value: number; note: string; sign?: boolean; tone?: 'in'; hero?: boolean }) {
+  return (
+    <div className={'m-stat' + (hero ? ' hero' : '')}>
+      <span className="meta">{label}</span>
+      <span className={'serif tnum' + (tone === 'in' ? ' m-in' : '')} style={value < 0 && !sign ? { color: 'var(--wn)' } : undefined}>
+        {fmtMoney(value, sign)}
+      </span>
+      <span className="meta">{note}</span>
+    </div>
+  );
+}
+
+function KindSwitch({ kind, label, onChange }: { kind: Kind; label: string; onChange: (k: Kind) => void }) {
+  return (
+    <div className="seg" role="group" aria-label={label}>
+      {(['out', 'in', 'move'] as const).map((k) => (
+        <button key={k} type="button" className={kind === k ? 'on' : undefined} aria-pressed={kind === k} title={k === 'move' ? 'Move money from one account to another' : undefined} onClick={() => onChange(k)}>
+          {k === 'out' ? 'Out' : k === 'in' ? 'In' : 'Move'}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Picks one of the accounts in use (or the one already picked, if it's archived). `bare` drops the cell look, for forms. */
+function AccountSelect({ money, value, label, id, bare, className = '', onChange }: {
+  money: Money;
+  value: string;
+  label: string;
+  id?: string;
+  bare?: boolean;
+  className?: string;
+  onChange: (id: string) => void;
+}) {
+  return (
+    <select id={id} className={(bare ? '' : 'cell pick tone-neutral ') + className} aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} onKeyDown={bare ? undefined : cellKeys}>
+      {money.accounts
+        .filter((a) => !a.archived || a.id === value)
+        .map((a) => (
+          <option key={a.id} value={a.id}>
+            {a.name}
+          </option>
+        ))}
+    </select>
+  );
+}
+
+/** One entry: a tick, what it was, its account and the amount. Click it to change it. */
+function EntryRow({ e, money, today, open, onOpen, onClose, onPatch, onDelete }: {
+  e: MoneyEntry;
+  money: Money;
+  today: string;
+  open: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+  onPatch: (p: Partial<MoneyEntry>) => void;
+  onDelete: () => void;
+}) {
+  const late = e.planned && e.date < today;
+  const names = namesOf(money);
+  const title = entryTitle(e, names);
+  const tick = (
+    <button
+      className="ent-check"
+      title={e.planned ? 'Planned. Tick it once it’s happened' : 'Done. Untick to make it planned again'}
+      aria-label={e.planned ? `Mark ${title} as done` : `Mark ${title} as planned`}
+      aria-pressed={!e.planned}
+      onClick={() => onPatch({ planned: !e.planned })}
+    >
+      <span className={'ent-tick' + (e.planned ? '' : ' on') + (late ? ' late' : '')}>{!e.planned && <i className="ph-bold ph-check" />}</span>
+    </button>
+  );
+  const del = (
+    <button className="icon-btn ent-x" title="Delete" aria-label={`Delete ${title}`} onClick={onDelete}>
+      <i className="ph-duotone ph-x" />
+    </button>
+  );
+
+  if (open) {
+    const setKind = (kind: Kind) => onPatch(kind === 'move' ? { kind, category: '', to: e.to && e.to !== e.account ? e.to : otherAccount(money, e.account) } : { kind, to: '' });
+    return (
+      <div
+        className="ent editing"
+        onKeyDown={(k) => {
+          if (k.key === 'Escape' || (k.key === 'Enter' && (k.target as HTMLElement).tagName !== 'BUTTON')) {
+            k.preventDefault();
+            onClose();
+          }
+        }}
+      >
+        {tick}
+        <div className="ent-form">
+          <TextCell value={e.note} label="Note" max={120} placeholder="Note" className="ent-field ent-field-note" onChange={(note) => onPatch({ note })} />
+          <DateCell value={e.date} label="Date" onChange={(date) => onPatch({ date })} />
+          <KindSwitch kind={e.kind} label="Entry is" onChange={setKind} />
+          <NumCell value={e.amount} label="Amount" className="ent-field ent-field-amt" onChange={(v) => onPatch({ amount: Math.abs(v ?? 0) })} />
+          <AccountSelect
+            money={money}
+            value={e.account}
+            label={e.kind === 'move' ? 'From' : e.kind === 'in' ? 'Into' : 'From'}
+            onChange={(account) => onPatch(account === e.to ? { account, to: e.account } : { account })}
+          />
+          {e.kind === 'move' ? (
+            <>
+              <span className="meta">to</span>
+              <AccountSelect money={money} value={e.to} label="To" onChange={(to) => onPatch(to === e.account ? { to, account: e.to } : { to })} />
+            </>
+          ) : (
+            <CategoryCell value={e.category} label="Category" className="ent-field" empty="Category" onChange={(category) => onPatch({ category })} />
+          )}
+          <button className="btn btn-primary btn-small" onClick={onClose}>
+            Done
+          </button>
+          {del}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={'ent' + (e.planned ? ' planned' : '') + (late ? ' late' : '') + (e.kind === 'move' ? ' move' : '')}>
+      {tick}
+      <button className="ent-main" title="Change this entry" onClick={onOpen}>
+        <span className="ent-note">
+          {e.kind === 'move' && <i className="ph-bold ph-arrows-left-right ent-move" aria-hidden="true" />}
+          {e.kind !== 'move' && !e.note ? <span className="ent-none">No note</span> : title}
+        </span>
+        <span className="ent-meta">
+          {e.kind === 'move' ? e.note || 'Moved between accounts' : e.category || 'No category'}
+          {e.kind !== 'move' && money.accounts.length > 1 && <span className="ent-acct">{names.get(e.account)}</span>}
+          {late && <span className="chip chip-warn">Overdue</span>}
+        </span>
+      </button>
+      <span className="ent-acts">
+        <button className="icon-btn ent-x" title="Change" aria-label={`Change ${title}`} onClick={onOpen}>
+          <i className="ph-duotone ph-pencil-simple" />
+        </button>
+        {del}
+      </span>
+      <span className={'ent-amt tnum' + (e.kind === 'in' ? ' in' : '')}>{e.kind === 'move' ? fmtMoney(e.amount) : fmtMoney(signed(e), true)}</span>
+    </div>
+  );
+}
+
+/**
+ * The month as a calendar: each day's money in, money out and end-of-day balance, for the
+ * day-to-day accounts (a move to or from set-aside money counts as out or in). Click a day to add to it.
+ */
+function MonthCalendar({ month, money, entries, calc, today, onPick }: { month: string; money: Money; entries: MoneyEntry[]; calc: MonthCalc; today: string; onPick: (date: string) => void }) {
   const lead = (parseYmd(`${month}-01`).getDay() + 6) % 7;
   const byDay = new Map<string, MoneyEntry[]>();
   for (const e of entries) byDay.set(e.date, [...(byDay.get(e.date) ?? []), e]);
   const lowest = calc.balances.indexOf(calc.lowest);
+  const names = namesOf(money);
+  const spendable = money.accounts.filter((a) => a.spendable).map((a) => a.id);
+  const effect = (e: MoneyEntry) => spendable.reduce((a, id) => a + effectOn(e, id), 0);
 
   return (
     <section className="panel you-panel cal" aria-label={`${monthName(month)} as a calendar`}>
@@ -564,13 +788,12 @@ function MonthCalendar({ month, entries, calc, today, onPick }: { month: string;
         {calc.balances.map((bal, i) => {
           const date = `${month}-${String(i + 1).padStart(2, '0')}`;
           const list = byDay.get(date) ?? [];
-          const sum = (kind: 'in' | 'out') => list.reduce((a, e) => (e.kind === kind ? a + e.amount : a), 0);
-          const inn = sum('in');
-          const out = sum('out');
+          const inn = list.reduce((a, e) => a + Math.max(0, effect(e)), 0);
+          const out = list.reduce((a, e) => a - Math.min(0, effect(e)), 0);
           const late = list.some((e) => e.planned && e.date < today);
           const title = [
             `${shortDate(date)} · balance ${fmtMoney(bal)}${date > today ? ' (forecast)' : ''}`,
-            ...list.map((e) => `${e.kind === 'in' ? '+' : '−'}${fmtMoney(e.amount)}${e.note ? ` ${e.note}` : ''}${e.planned ? ' (planned)' : ''}`),
+            ...list.map((e) => `${e.kind === 'move' ? `${fmtMoney(e.amount)} ${entryTitle(e, names)}` : `${fmtMoney(signed(e), true)}${e.note ? ` ${e.note}` : ''}`}${e.planned ? ' (planned)' : ''}`),
             'Click to add to this day',
           ].join('\n');
           return (
@@ -596,7 +819,7 @@ function MonthCalendar({ month, entries, calc, today, onPick }: { month: string;
       </div>
       <div className="cal-foot meta">
         <span>
-          <b className="cal-in">+In</b> · <b className="cal-out">−Out</b> · balance at the end of the day, counting what’s planned
+          <b className="cal-in">+In</b> · <b className="cal-out">−Out</b> · your day-to-day balance at the end of the day, counting what’s planned
         </span>
         <span>Days in italics are only planned so far · click a day to add to it</span>
       </div>
@@ -604,22 +827,23 @@ function MonthCalendar({ month, entries, calc, today, onPick }: { month: string;
   );
 }
 
-function TodayRow({ money, today }: { money: Money; today: string }) {
-  const actual = balanceOn(money, today, true);
-  const forecast = balanceOn(money, today);
+function TodayLine({ money, today, account }: { money: Money; today: string; account?: MoneyAccount }) {
+  const actual = account ? accountBalance(money, account.id, today, true) : balanceOn(money, today, true);
+  const forecast = account ? accountBalance(money, account.id, today) : balanceOn(money, today);
   return (
-    <tr className="today-row">
-      <td colSpan={8}>
-        Today · <b className={'tnum' + (actual < 0 ? ' neg' : '')}>{fmtMoney(actual)}</b> from what’s done
+    <div className="today-line">
+      <b>Today · {shortDate(today)}</b>
+      <span>
+        <b className={'tnum' + (actual < 0 ? ' neg' : '')}>{fmtMoney(actual)}</b> {account ? `in ${account.name}` : 'in the bank'} from what’s done
         {forecast !== actual && <span className="meta"> · the plan had {fmtMoney(forecast)} by today</span>}
-      </td>
-    </tr>
+      </span>
+    </div>
   );
 }
 
 // ---------- overview ----------
 
-function Overview({ money, today, onOpenMonth }: { money: Money; today: string; onOpenMonth: (k: string) => void }) {
+function Overview({ money, today, onOpenMonth, onChange }: { money: Money; today: string; onOpenMonth: (k: string) => void; onChange: (m: Money) => void }) {
   const keys = monthKeys(money, today);
   const months = calcMonths(money, keys);
   const all = calcTotals(money, months);
@@ -638,7 +862,7 @@ function Overview({ money, today, onOpenMonth }: { money: Money; today: string; 
           <span className="serif tnum" style={actual < 0 ? { color: 'var(--wn)' } : undefined}>
             {fmtMoney(actual)}
           </span>
-          <span className="meta">from what’s done</span>
+          <span className="meta">day-to-day accounts, from what’s done</span>
         </div>
         <div className="m-stat">
           <span className="meta">End of {monthName(thisMonth.key, true)}</span>
@@ -660,6 +884,8 @@ function Overview({ money, today, onOpenMonth }: { money: Money; today: string; 
           <span className="meta">{review.length ? 'planned entries that have passed ›' : 'all caught up'}</span>
         </button>
       </div>
+
+      <AccountsPanel money={money} today={today} onChange={onChange} />
 
       <section className="panel you-panel" aria-label="Month by month">
         <div className="panel-head">
@@ -707,6 +933,519 @@ function Overview({ money, today, onOpenMonth }: { money: Money; today: string; 
         {showCats && <CategoryPanel cats={cats} month={thisMonth.key} />}
       </div>
     </div>
+  );
+}
+
+// ---------- accounts ----------
+
+/** Colours for each account's share of the total, in account order. */
+const SHARE = ['var(--acd)', '#c9a77a', 'var(--ac)', '#6f8fae', '#a7869e', '#b9b2a8'];
+
+type AccountRow = { a: MoneyAccount; now: number; end: number; change: number; color: string };
+
+const lastDay = (key: string) => `${key}-${String(daysIn(key)).padStart(2, '0')}`;
+const monthYear = (key: string) => `${monthName(key, true)} ${key.slice(0, 4)}`;
+const isZero = (n: number) => Math.abs(n) < 0.005;
+
+/** Where the money is today: each account, the total and how it splits, and the latest moves between them. */
+function AccountsPanel({ money, today, onChange }: { money: Money; today: string; onChange: (m: Money) => void }) {
+  const [open, setOpen] = useState<{ kind: 'account'; id: string | null } | { kind: 'move' } | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const month = today.slice(0, 7);
+  const prevEnd = lastDay(addMonths(month, -1));
+  const names = namesOf(money);
+
+  // Esc closes the drawer. Caught first, so the page's own Esc (back to Home) doesn't also run.
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setOpen(null);
+    };
+    window.addEventListener('keydown', close, true);
+    return () => window.removeEventListener('keydown', close, true);
+  }, [open]);
+
+  const rows: AccountRow[] = money.accounts.map((a, i) => {
+    const now = accountBalance(money, a.id, today, true);
+    return { a, now, end: accountBalance(money, a.id, lastDay(month)), change: now - accountBalance(money, a.id, prevEnd, true), color: SHARE[i % SHARE.length] };
+  });
+  const archived = rows.filter((r) => r.a.archived);
+  const sum = (list: AccountRow[]) => list.reduce((s, r) => s + r.now, 0);
+  const groups = [
+    { name: 'Day to day', amount: sum(rows.filter((r) => r.a.spendable)) },
+    { name: 'Set aside', amount: sum(rows.filter((r) => !r.a.spendable && r.a.kind !== 'invest')) },
+    { name: 'Invested', amount: sum(rows.filter((r) => !r.a.spendable && r.a.kind === 'invest')) },
+  ].filter((g) => !isZero(g.amount));
+  const share = rows.filter((r) => r.now > 0);
+  const positive = sum(share);
+  const pct = (r: AccountRow) => Math.round((r.now / positive) * 100);
+  const moves = money.entries.filter((e) => e.kind === 'move' && e.date <= today).slice(-4).reverse();
+
+  return (
+    <section className="panel you-panel accts" aria-label="Accounts">
+      <div className="panel-head accts-head">
+        <div>
+          <h2 className="panel-title">Accounts</h2>
+          <span className="meta">Where your money is today, from what’s done · click one to change it</span>
+        </div>
+        {money.accounts.length > 1 && (
+          <button className="btn btn-primary btn-small" onClick={() => setOpen({ kind: 'move' })}>
+            <i className="ph-bold ph-arrows-left-right" />
+            Move money
+          </button>
+        )}
+      </div>
+
+      <div className="acct-grid">
+        {rows
+          .filter((r) => showArchived || !r.a.archived)
+          .map((r) => (
+            <AccountCard key={r.a.id} row={r} today={today} onOpen={() => setOpen({ kind: 'account', id: r.a.id })} />
+          ))}
+        {money.accounts.length < MAX_ACCOUNTS && (
+          <button className="acct-card acct-add" onClick={() => setOpen({ kind: 'account', id: null })}>
+            <span className="acct-icon">
+              <i className="ph-bold ph-plus" aria-hidden="true" />
+            </span>
+            <b>Add account</b>
+            <span className="meta">A bank, cash, investments, or a pot for something you’re saving for</span>
+          </button>
+        )}
+      </div>
+
+      <div className="acct-total">
+        <div className="acct-total-head">
+          <span>
+            Total <span className={'serif tnum acct-total-v' + (sum(rows) < 0 ? ' neg' : '')}>{fmtMoney(sum(rows))}</span>
+          </span>
+          {groups.length > 1 && (
+            <span className="acct-groups">
+              {groups.map((g) => (
+                <span key={g.name}>
+                  {g.name} <b className="tnum">{fmtMoney(g.amount)}</b>
+                </span>
+              ))}
+            </span>
+          )}
+        </div>
+        {share.length > 1 && (
+          <>
+            <div className="acct-share" role="img" aria-label={`Share of the total: ${share.map((r) => `${r.a.name} ${pct(r)}%`).join(', ')}`}>
+              {share.map((r) => (
+                <span key={r.a.id} style={{ flexGrow: r.now, background: r.color }} />
+              ))}
+            </div>
+            <div className="acct-legend">
+              {share.map((r) => (
+                <span key={r.a.id}>
+                  <span className="acct-swatch" style={{ background: r.color }} />
+                  {r.a.name} {pct(r)}%
+                </span>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {moves.length > 0 && (
+        <div className="acct-moves">
+          <h3 className="drawer-label">Latest moves</h3>
+          {moves.map((e) => (
+            <div key={e.id} className="acct-move">
+              <span className="meta tnum">{shortDate(e.date)}</span>
+              <span className="acct-move-what">
+                {entryTitle(e, names)}
+                {e.note && <span className="meta"> · {e.note}</span>}
+                {e.planned && <span className="chip chip-muted">Planned</span>}
+              </span>
+              <span className="tnum">{fmtMoney(e.amount)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {archived.length > 0 && (
+        <button className="btn-link meta acct-archived" onClick={() => setShowArchived(!showArchived)}>
+          {showArchived ? 'Hide archived accounts' : `Show ${archived.length} archived account${archived.length === 1 ? '' : 's'}`}
+        </button>
+      )}
+
+      {open?.kind === 'account' && <AccountDrawer money={money} today={today} id={open.id} onChange={onChange} onClose={() => setOpen(null)} />}
+      {open?.kind === 'move' && <MoveDrawer money={money} today={today} onChange={onChange} onClose={() => setOpen(null)} />}
+    </section>
+  );
+}
+
+function AccountCard({ row: { a, now, end, change }, today, onOpen }: { row: AccountRow; today: string; onOpen: () => void }) {
+  const kind = ACCOUNT_KINDS.find((k) => k.key === a.kind) ?? ACCOUNT_KINDS[0];
+  const month = today.slice(0, 7);
+  return (
+    <button className={'acct-card' + (a.archived ? ' archived' : '')} title={`Change ${a.name}`} onClick={onOpen}>
+      <span className="acct-name">
+        <span className="acct-icon">
+          <i className={'ph-duotone ' + kind.icon} aria-hidden="true" />
+        </span>
+        <span className="acct-name-in">
+          <b>{a.name}</b>
+          <span className="meta">{a.archived ? 'Archived' : a.spendable ? 'Day to day' : kind.name}</span>
+        </span>
+      </span>
+      <span className={'serif tnum acct-bal' + (now < 0 ? ' neg' : '')}>{fmtMoney(now)}</span>
+      {a.goal !== null ? (
+        <span className="acct-lines">
+          <span className="acct-bar" role="img" aria-label={`${Math.round((Math.max(0, now) / a.goal) * 100)}% of the goal`}>
+            <span style={{ width: `${Math.min(100, Math.max(0, (now / a.goal) * 100))}%` }} />
+          </span>
+          <span className="meta">
+            {fmtMoney(now)} of {fmtMoney(a.goal)}
+            {a.goalBy && ` · by ${monthYear(a.goalBy)}`}
+          </span>
+          <span className={'meta' + (now >= a.goal ? ' acct-up' : '')}>
+            {now >= a.goal
+              ? 'Goal reached'
+              : a.goalBy > month
+                ? `About ${fmtMoney(goalPerMonth(now, a.goal, a.goalBy, today))} a month to get there`
+                : `${fmtMoney(a.goal - now)} to go`}
+          </span>
+        </span>
+      ) : (
+        <span className="acct-lines meta">
+          <span className={change > 0 && !isZero(change) ? 'acct-up' : undefined}>{isZero(change) ? 'No change this month' : `${fmtMoney(change, true)} this month`}</span>
+          {!isZero(end - now) && (
+            <span>
+              End of {monthName(month, true)} {fmtMoney(end)}
+            </span>
+          )}
+        </span>
+      )}
+    </button>
+  );
+}
+
+/** An amount in a form field: shows "$1,200" and edits as "1200". */
+function AmountInput({ id, value, onChange }: { id: string; value: number | null; onChange: (v: number | null) => void }) {
+  const [text, setText] = useState<string | null>(null);
+  const bad = text !== null && parseMoney(text) === undefined;
+  return (
+    <input
+      id={id}
+      className={'input tnum' + (bad ? ' bad' : '')}
+      inputMode="decimal"
+      autoComplete="off"
+      placeholder="$0"
+      aria-invalid={bad || undefined}
+      value={text ?? (value === null ? '' : fmtMoney(value))}
+      onFocus={() => setText(value === null ? '' : String(value))}
+      onChange={(e) => {
+        setText(e.target.value);
+        const v = parseMoney(e.target.value);
+        if (v !== undefined) onChange(v);
+      }}
+      onBlur={() => setText(null)}
+    />
+  );
+}
+
+/** Adds an account, or changes one: its name, kind, starting balance and goal; correcting what's in it; archiving it. */
+function AccountDrawer({ money, today, id, onChange, onClose }: { money: Money; today: string; id: string | null; onChange: (m: Money) => void; onClose: () => void }) {
+  const existing = money.accounts.find((a) => a.id === id);
+  const [draft, setDraft] = useState<MoneyAccount>(() => existing ?? newAccount(newId('a'), '', 'pot'));
+  // Picking a kind sets whether it's day-to-day money, until that's set by hand.
+  const [spendSet, setSpendSet] = useState(!!existing);
+  const [plan, setPlan] = useState(true);
+  const [from, setFrom] = useState(() => mainAccount(money.accounts));
+  const [actual, setActual] = useState<number | null>(null);
+  const month = today.slice(0, 7);
+  const balance = existing ? accountBalance(money, existing.id, today, true) : draft.opening;
+  const perMonth = draft.goal && draft.goalBy > month ? goalPerMonth(balance, draft.goal, draft.goalBy, today) : 0;
+  const used = money.entries.some((e) => e.account === id || e.to === id);
+  const name = draft.name.trim();
+  const planning = !existing && plan && perMonth > 0 && money.accounts.length > 0;
+
+  const save = () => {
+    if (!name) return;
+    const account: MoneyAccount = { ...draft, name, goalBy: draft.goal ? draft.goalBy : '' };
+    let entries = money.entries;
+    if (planning) {
+      // A planned monthly move from the next month on, on today's day (or the 28th, so every month has it).
+      const first = `${addMonths(month, 1)}-${String(Math.min(Number(today.slice(8)), 28)).padStart(2, '0')}`;
+      const moves = repeatDates(first, 'month', account.goalBy).map(
+        (date): MoneyEntry => ({ id: newId('e'), date, kind: 'move', amount: perMonth, note: `Saving for ${name}`, category: '', planned: true, account: from, to: account.id }),
+      );
+      entries = sortEntries([...entries, ...moves.slice(0, MAX_ENTRIES - entries.length)]);
+    }
+    onChange({ ...money, accounts: existing ? money.accounts.map((a) => (a.id === id ? account : a)) : [...money.accounts, account], entries });
+    onClose();
+  };
+  /** Records the difference between what the app has and what the account really has today, as done money in or out. */
+  const correct = () => {
+    if (!existing || actual === null || isZero(actual - balance)) return;
+    const diff = actual - balance;
+    const entry: MoneyEntry = { id: newId('e'), date: today, kind: diff > 0 ? 'in' : 'out', amount: Math.abs(Math.round(diff * 100) / 100), note: 'Balance correction', category: '', planned: false, account: existing.id, to: '' };
+    onChange({ ...money, entries: sortEntries([...money.entries, entry]) });
+    setActual(null);
+  };
+  const setArchived = (archived: boolean) => {
+    onChange({ ...money, accounts: money.accounts.map((a) => (a.id === id ? { ...a, archived } : a)) });
+    onClose();
+  };
+
+  return (
+    <Drawer title={existing ? existing.name : 'Add an account'} onClose={onClose}>
+      <form
+        className="acct-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          save();
+        }}
+      >
+        <label className="field">
+          Name
+          <input className="input" maxLength={40} placeholder="Like Japan trip" autoFocus={!existing} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+        </label>
+
+        <fieldset className="acct-kinds" role="radiogroup" aria-label="What kind?">
+          <legend className="field">What kind?</legend>
+          {ACCOUNT_KINDS.map((k) => (
+            <button
+              key={k.key}
+              type="button"
+              role="radio"
+              aria-checked={draft.kind === k.key}
+              className={'acct-kind' + (draft.kind === k.key ? ' on' : '')}
+              onClick={() => setDraft({ ...draft, kind: k.key, spendable: spendSet ? draft.spendable : spendableKind(k.key) })}
+            >
+              <i className={'ph-duotone ' + k.icon} aria-hidden="true" />
+              <span>
+                <b>{k.name}</b>
+                <span className="meta">{k.note}</span>
+              </span>
+            </button>
+          ))}
+        </fieldset>
+
+        <div className="field">
+          <label htmlFor="acct-opening">{existing ? `What it had on ${shortDate(money.start)}, when tracking started` : 'Money in it now'}</label>
+          <AmountInput id="acct-opening" value={draft.opening} onChange={(v) => setDraft({ ...draft, opening: v ?? 0 })} />
+        </div>
+
+        <div className="acct-goal-box">
+          <b>
+            Goal <span className="meta">(optional)</span>
+          </b>
+          <div className="acct-row">
+            <div className="field">
+              <label htmlFor="acct-goal">Save up</label>
+              <AmountInput id="acct-goal" value={draft.goal} onChange={(v) => setDraft({ ...draft, goal: v && v > 0 ? v : null, goalBy: draft.goalBy || addMonths(month, 6) })} />
+            </div>
+            <label className="field">
+              By
+              <input className="input tnum" type="month" min={month} disabled={!draft.goal} value={draft.goalBy} onChange={(e) => setDraft({ ...draft, goalBy: e.target.value })} />
+            </label>
+          </div>
+          {perMonth > 0 && (
+            <span className="meta">
+              That’s about <b>{fmtMoney(perMonth)} a month</b> from {monthYear(addMonths(month, 1))}.
+            </span>
+          )}
+          {!existing && perMonth > 0 && money.accounts.length > 0 && (
+            <label className="acct-check">
+              <input type="checkbox" checked={plan} onChange={(e) => setPlan(e.target.checked)} />
+              <span>
+                Plan a monthly move of {fmtMoney(perMonth)} from{' '}
+                <AccountSelect bare money={money} value={from} label="Move from" className="input sm acct-inline" onChange={setFrom} />
+              </span>
+            </label>
+          )}
+        </div>
+
+        <label className="acct-check">
+          <input
+            type="checkbox"
+            checked={draft.spendable}
+            onChange={(e) => {
+              setSpendSet(true);
+              setDraft({ ...draft, spendable: e.target.checked });
+            }}
+          />
+          <span>
+            Count it as day-to-day money
+            <span className="meta">“In the bank now”, the month’s balances and the forecasts only count day-to-day accounts. Leave it off for pots and investments.</span>
+          </span>
+        </label>
+
+        <div className="acct-actions">
+          <button type="submit" className="btn btn-primary" disabled={!name}>
+            {existing ? 'Save' : name ? `Add ${name}` : 'Add account'}
+          </button>
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            Cancel
+          </button>
+        </div>
+      </form>
+
+      {existing && (
+        <div className="drawer-section">
+          <h3 className="drawer-label">Correct the balance</h3>
+          <span className="meta">
+            The app has {fmtMoney(balance)} in {existing.name} today. If the real balance is different (say investments went up or down), type it here and the difference goes in as done money in or out.
+          </span>
+          <div className="acct-row">
+            <div className="field">
+              <label htmlFor="acct-actual">What it really has today</label>
+              <AmountInput id="acct-actual" value={actual} onChange={setActual} />
+            </div>
+            <button type="button" className="btn btn-secondary acct-row-btn" disabled={actual === null || isZero(actual - balance)} onClick={correct}>
+              {actual === null || isZero(actual - balance) ? 'Correct it' : `Add ${fmtMoney(actual - balance, true)}`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {existing && (
+        <div className="drawer-section">
+          <h3 className="drawer-label">{existing.archived ? 'Archived' : 'Done with it?'}</h3>
+          <span className="meta">
+            {existing.archived
+              ? 'It keeps its history but isn’t offered for new entries.'
+              : 'Archiving keeps its history and balance but stops offering it for new entries.'}
+          </span>
+          <div className="acct-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setArchived(!existing.archived)}>
+              {existing.archived ? 'Bring it back' : 'Archive'}
+            </button>
+            {!used && money.accounts.length > 1 && (
+              <button
+                type="button"
+                className="btn btn-ghost acct-delete"
+                onClick={() => {
+                  onChange({ ...money, accounts: money.accounts.filter((a) => a.id !== id) });
+                  onClose();
+                }}
+              >
+                Delete it
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </Drawer>
+  );
+}
+
+/** Moves money from one account to another, once or on repeat. The total stays the same. */
+function MoveDrawer({ money, today, onChange, onClose }: { money: Money; today: string; onChange: (m: Money) => void; onClose: () => void }) {
+  const [from, setFrom] = useState(() => lastAccount(money));
+  const [to, setTo] = useState(() => otherAccount(money, lastAccount(money)));
+  const [amount, setAmount] = useState<number | null>(null);
+  const [date, setDate] = useState(today);
+  const [repeat, setRepeat] = useState<Repeat>('once');
+  const [until, setUntil] = useState(today.slice(0, 7));
+  const [note, setNote] = useState('');
+  const dates = repeatDates(date || today, repeat, until);
+  const ok = !!date && !!amount && !!to && from !== to && money.entries.length + dates.length <= MAX_ENTRIES;
+  const spend = (id: string) => money.accounts.find((a) => a.id === id)?.spendable ?? false;
+  const after = (id: string, sign: number) => accountBalance(money, id, today, true) + (date <= today && amount ? sign * amount : 0);
+
+  const add = () => {
+    if (!ok) return;
+    const moves = dates.map((d): MoneyEntry => ({ id: newId('e'), date: d, kind: 'move', amount: Math.abs(amount!), note: note.trim(), category: '', planned: d > today, account: from, to }));
+    onChange({ ...money, entries: sortEntries([...money.entries, ...moves]) });
+    localSet('moneyAccount', from);
+    onClose();
+  };
+
+  return (
+    <Drawer title="Move money" onClose={onClose}>
+      <form
+        className="acct-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          add();
+        }}
+      >
+        <div className="acct-row move-ends">
+          <div className="field">
+            <label htmlFor="move-from">From</label>
+            <AccountSelect id="move-from" bare money={money} value={from} label="From" className="input" onChange={(id) => (setFrom(id), id === to && setTo(from))} />
+            <span className="meta tnum">
+              {fmtMoney(accountBalance(money, from, today, true))}
+              {date <= today && amount ? ` → ${fmtMoney(after(from, -1))}` : ''}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="icon-btn md move-swap"
+            title="Swap"
+            aria-label="Swap from and to"
+            onClick={() => {
+              setFrom(to);
+              setTo(from);
+            }}
+          >
+            <i className="ph-bold ph-arrows-left-right" />
+          </button>
+          <div className="field">
+            <label htmlFor="move-to">To</label>
+            <AccountSelect id="move-to" bare money={money} value={to} label="To" className="input" onChange={(id) => (setTo(id), id === from && setFrom(to))} />
+            <span className="meta tnum">
+              {fmtMoney(accountBalance(money, to, today, true))}
+              {date <= today && amount ? ` → ${fmtMoney(after(to, 1))}` : ''}
+            </span>
+          </div>
+        </div>
+        <div className="field">
+          <label htmlFor="move-amount">Amount</label>
+          <AmountInput id="move-amount" value={amount} onChange={(v) => setAmount(v === null ? null : Math.abs(v))} />
+        </div>
+        <div className="acct-row">
+          <label className="field">
+            Date
+            <input className="input tnum" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </label>
+          <label className="field">
+            Repeat
+            <select className="input" value={repeat} onChange={(e) => setRepeat(e.target.value as Repeat)}>
+              {REPEATS.map((r) => (
+                <option key={r.key} value={r.key}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {repeat !== 'once' && (
+            <label className="field">
+              Until the end of
+              <input className="input tnum" type="month" min={date.slice(0, 7)} value={until} onChange={(e) => e.target.value && setUntil(e.target.value)} />
+            </label>
+          )}
+        </div>
+        <label className="field">
+          Note (optional)
+          <input className="input" maxLength={120} placeholder="Like Monthly invest" value={note} onChange={(e) => setNote(e.target.value)} />
+        </label>
+        <p className="acct-note">
+          {dates.length > 1 ? `${dates.length} moves, the first ` : 'It goes in '}
+          {date > today ? 'as planned: tick it in Month once it’s happened.' : 'as done.'}{' '}
+          {spend(from) === spend(to)
+            ? 'Your total and day-to-day balance stay the same; only where the money sits changes.'
+            : spend(from)
+              ? `Your total stays the same, but it leaves your day-to-day money, so it counts as money out in Month.`
+              : `Your total stays the same, but it comes into your day-to-day money, so it counts as money in in Month.`}
+        </p>
+        <div className="acct-actions">
+          <button type="submit" className="btn btn-primary" disabled={!ok}>
+            {amount ? `Move ${fmtMoney(amount)}${dates.length > 1 ? ` × ${dates.length}` : ''}` : 'Move'}
+          </button>
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            Cancel
+          </button>
+        </div>
+        {from === to && <span className="meta">Pick two different accounts.</span>}
+      </form>
+    </Drawer>
   );
 }
 
