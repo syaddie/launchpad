@@ -1,10 +1,10 @@
 import { deflateRawSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import {
-  accountBalance, affordableFrom, balanceOn, byCategory, calcMonths, calcTotals, cleanMoney, fmtMoney, goalPerMonth, lowestAhead, monthKeys, moneyFromWorkbook, newAccount, parseMoney,
-  repeatDates, starterAccounts, toReview, wishStats,
+  accountBalance, affordableFrom, balanceOn, byCategory, calcMonths, calcTotals, cleanMoney, fmtMoney, goalPerMonth, invoiceEntry, invoiceRows, lowestAhead, monthKeys,
+  moneyFromWorkbook, newAccount, nextInvoiceNum, parseMoney, repeatDates, starterAccounts, syncInvoices, toReview, wishStats,
 } from '../shared/money';
-import type { Money, MoneyEntry } from '../shared/types';
+import type { Invoice, Money, MoneyEntry } from '../shared/types';
 import { readXlsx } from '../shared/xlsx';
 
 let seq = 0;
@@ -17,6 +17,7 @@ const money = (): Money => ({
   accounts: starterAccounts(100),
   entries: [e('2026-10-01', 'out', 150, false, 'Food'), e('2026-10-10', 'in', 200), e('2026-10-27', 'out', 30, true), e('2026-11-05', 'out', 0.1, true), e('2026-11-05', 'in', 0.2, true)],
   wishlist: [],
+  invoices: [],
 });
 
 describe('money formulas', () => {
@@ -142,6 +143,58 @@ describe('amounts', () => {
       { kind: 'out', category: '', account: 'dbs', to: '' },
       { kind: 'in', category: '', account: 'dbs', to: '' },
     ]);
+  });
+});
+
+describe('invoices', () => {
+  const gig: Invoice = { id: 'i1', num: 'INV-031', event: 'Wedding', amount: 450, due: '2026-11-09' };
+  const owed = (): Money => ({ ...money(), invoices: [gig] });
+
+  it('gives an invoice without an entry planned money in on its due date, in the main account', () => {
+    const m = syncInvoices(owed());
+    expect(m.entries.filter((x) => x.invoice)).toEqual([
+      { id: 'e-i1', date: '2026-11-09', kind: 'in', amount: 450, note: 'Wedding', category: 'Pay', planned: true, account: 'posb', to: '', invoice: 'i1' },
+    ]);
+    expect(calcMonths(m, ['2026-10', '2026-11'])[1].plannedIn).toBe(450.2);
+    expect(syncInvoices(m)).toBe(m);
+  });
+  it('keeps the entry following the invoice: amount, event, and the due date while it’s planned', () => {
+    const m = syncInvoices({ ...owed(), entries: [...money().entries, invoiceEntry(gig, 'trust', 'x')] });
+    const moved = syncInvoices({ ...m, invoices: [{ ...gig, amount: 500, due: '2026-11-20', event: '' }] });
+    expect(moved.entries.find((x) => x.invoice)).toMatchObject({ id: 'x', date: '2026-11-20', amount: 500, note: 'INV-031', account: 'trust', planned: true });
+    // Paid: it stays on the day it came in, and goes back to the due date if unticked.
+    const paid = syncInvoices({ ...m, entries: m.entries.map((x) => (x.invoice ? { ...x, planned: false, date: '2026-11-12' } : x)) });
+    expect(paid.entries.find((x) => x.invoice)).toMatchObject({ date: '2026-11-12', planned: false });
+    const unpaid = syncInvoices({ ...paid, entries: paid.entries.map((x) => (x.invoice ? { ...x, planned: true } : x)) });
+    expect(unpaid.entries.find((x) => x.invoice)?.date).toBe('2026-11-09');
+  });
+  it('unlinks entries whose invoice is gone or already has one', () => {
+    const m = syncInvoices({ ...owed(), entries: [invoiceEntry(gig, 'posb', 'a'), invoiceEntry(gig, 'posb', 'b'), { ...e('2026-11-01', 'in', 5), invoice: 'gone' }] });
+    expect(m.entries.map((x) => [x.id, x.invoice])).toEqual([['e' + (seq - 1), undefined], ['a', 'i1'], ['b', undefined]]);
+  });
+  it('tells what’s paid and how many days are left', () => {
+    const late: Invoice = { ...gig, id: 'i2', due: '2026-10-28' };
+    const m = syncInvoices({ ...owed(), invoices: [gig, late] });
+    const paid = { ...m, entries: m.entries.map((x) => (x.invoice === 'i2' ? { ...x, planned: false, date: '2026-11-01' } : x)) };
+    expect(invoiceRows(m, '2026-11-02').map((r) => [r.inv.id, r.paidOn, r.daysLeft])).toEqual([['i1', '', 7], ['i2', '', -5]]);
+    expect(invoiceRows(paid, '2026-11-02')[1].paidOn).toBe('2026-11-01');
+  });
+  it('cleans invoices and keeps their links', () => {
+    const m = cleanMoney({
+      start: '2026-10-01',
+      entries: [{ id: 'a', date: '2026-11-01', kind: 'in', amount: 1, invoice: 'i1', planned: false }],
+      invoices: [
+        { id: 'i1', num: 'INV-031', event: 'Wedding', amount: -450, due: '2026-11-09' },
+        { id: 'i2', num: 'INV-032', amount: 100, due: '2026-02-30' },
+      ],
+    });
+    expect(m.invoices).toEqual([{ id: 'i1', num: 'INV-031', event: 'Wedding', amount: 450, due: '2026-11-09' }]);
+    expect(m.entries).toEqual([{ id: 'a', date: '2026-11-01', kind: 'in', amount: 450, note: 'Wedding', category: '', planned: false, account: 'posb', to: '', invoice: 'i1' }]);
+  });
+  it('suggests the next invoice number', () => {
+    expect(nextInvoiceNum([])).toBe('INV-001');
+    expect(nextInvoiceNum([gig, { ...gig, num: 'INV-009' }])).toBe('INV-032');
+    expect(nextInvoiceNum([{ ...gig, num: '2026/7' }])).toBe('2026/8');
   });
 });
 

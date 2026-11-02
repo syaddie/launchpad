@@ -2,15 +2,17 @@
 // a list of dated entries, each money in, out or moved between accounts, and either
 // planned (the forecast) or done (it happened). Everything else is worked out here:
 // day-by-day balances, the monthly summary, each account's balance, what still needs
-// checking and when a wishlist item fits.
+// checking and when a wishlist item fits. Invoices (what people owe you) each keep
+// their money as a linked entry, kept in step here.
 // Also cleaning for what the page sends, and reading the old workbook on import.
-import { MON, addDays, pad2, parseYmd, ymd } from './dates';
-import type { AccountKind, Money, MoneyAccount, MoneyCategory, MoneyEntry, WishItem, WishPriority, WishStatus } from './types';
+import { MON, addDays, dayDiff, pad2, parseYmd, ymd } from './dates';
+import type { AccountKind, Invoice, Money, MoneyAccount, MoneyCategory, MoneyEntry, WishItem, WishPriority, WishStatus } from './types';
 import type { XCell, XSheet } from './xlsx';
 
 export const MAX_ENTRIES = 5000;
 export const MAX_WISHES = 200;
 export const MAX_ACCOUNTS = 30;
+export const MAX_INVOICES = 500;
 export const CATEGORIES: MoneyCategory[] = ['Food', 'Transport', 'Shopping', 'Bills', 'Family', 'Fun', 'Travel', 'Pay', 'Other'];
 export const PRIORITIES: Exclude<WishPriority, ''>[] = ['High', 'Medium', 'Low'];
 export const STATUSES: Exclude<WishStatus, ''>[] = ['Wanted', 'Saving up', 'Purchased', 'Dropped'];
@@ -42,7 +44,7 @@ export const starterAccounts = (opening = 0): MoneyAccount[] => [
 export const mainAccount = (accounts: MoneyAccount[]): string => (accounts.find((a) => a.spendable && !a.archived) ?? accounts.find((a) => !a.archived) ?? accounts[0]).id;
 
 /** A fresh tracker starts on the 1st of this month with $0 everywhere. */
-export const starterMoney = (today: Date): Money => ({ start: ymd(new Date(today.getFullYear(), today.getMonth(), 1)), accounts: starterAccounts(), entries: [], wishlist: [] });
+export const starterMoney = (today: Date): Money => ({ start: ymd(new Date(today.getFullYear(), today.getMonth(), 1)), accounts: starterAccounts(), entries: [], wishlist: [], invoices: [] });
 
 /** Cents, so 0.1 + 0.2 shows as $0.30 and not a long tail. */
 const cents = (n: number) => Math.round(n * 100) / 100;
@@ -253,6 +255,73 @@ export function byCategory(entries: MoneyEntry[]): { category: string; amount: n
   return [...totals].map(([category, amount]) => ({ category, amount: cents(amount) })).sort((a, b) => b.amount - a.amount);
 }
 
+// ---------- invoices ----------
+
+/** The entry holding an invoice's money: planned money in, on the due date, as pay. */
+export const invoiceEntry = (inv: Invoice, account: string, id = `e-${inv.id}`): MoneyEntry => ({
+  id, date: inv.due, kind: 'in', amount: inv.amount, note: inv.event || inv.num, category: 'Pay', planned: true, account, to: '', invoice: inv.id,
+});
+
+/**
+ * Keeps each invoice and its entry in step: one money-in entry per invoice, with its
+ * amount and event, on the due date while it's planned and on the day it came in once
+ * it's done. An entry whose invoice is gone keeps its money but loses the link; an
+ * invoice without an entry gets a planned one in the main account.
+ */
+export function syncInvoices(money: Money): Money {
+  const byId = new Map(money.invoices.map((i) => [i.id, i]));
+  const linked = new Set<string>();
+  let changed = false;
+  const entries = money.entries.map((e): MoneyEntry => {
+    if (!e.invoice) return e;
+    const inv = byId.get(e.invoice);
+    if (!inv || linked.has(inv.id)) {
+      changed = true;
+      const unlinked = { ...e };
+      delete unlinked.invoice;
+      return unlinked;
+    }
+    linked.add(inv.id);
+    const note = inv.event || inv.num;
+    const date = e.planned ? inv.due : e.date;
+    if (e.kind === 'in' && !e.to && e.amount === inv.amount && e.note === note && e.date === date) return e;
+    changed = true;
+    return { ...e, kind: 'in', to: '', amount: inv.amount, note, date };
+  });
+  const missing = money.invoices.filter((i) => !linked.has(i.id));
+  if (!changed && !missing.length) return money;
+  const main = mainAccount(money.accounts);
+  return { ...money, entries: sortEntries([...entries, ...missing.map((i) => invoiceEntry(i, main))]) };
+}
+
+export interface InvoiceRow {
+  inv: Invoice;
+  entry: MoneyEntry;
+  /** The day it was paid, or empty while it's still owed. */
+  paidOn: string;
+  /** Days from today to the due date: negative once it's late. */
+  daysLeft: number;
+}
+
+/** Each invoice with its entry (run through syncInvoices first, so every one has one). Paid means its entry is done. */
+export function invoiceRows(money: Money, today: string): InvoiceRow[] {
+  const byInvoice = new Map(money.entries.filter((e) => e.invoice).map((e) => [e.invoice!, e]));
+  return money.invoices.flatMap((inv) => {
+    const entry = byInvoice.get(inv.id);
+    return entry ? [{ inv, entry, paidOn: entry.planned ? '' : entry.date, daysLeft: dayDiff(parseYmd(today), parseYmd(inv.due)) }] : [];
+  });
+}
+
+/** The next invoice number after the highest one so far: "INV-035" → "INV-036". */
+export function nextInvoiceNum(invoices: Invoice[]): string {
+  let best: { prefix: string; n: number; width: number } | null = null;
+  for (const i of invoices) {
+    const m = /^(.*?)(\d+)$/.exec(i.num.trim());
+    if (m && (!best || Number(m[2]) >= best.n)) best = { prefix: m[1], n: Number(m[2]), width: m[2].length };
+  }
+  return best ? best.prefix + String(best.n + 1).padStart(best.width, '0') : 'INV-001';
+}
+
 export type Repeat = 'once' | 'week' | 'fortnight' | 'month';
 
 /** The dates a repeating entry lands on, from `date` to the end of the month `until` (YYYY-MM). Monthly ones keep their day, or the month's last. */
@@ -344,6 +413,7 @@ export function cleanMoney(v: unknown, today = new Date()): Money {
       const to = x.kind === 'move' && known.has(x.to as string) && x.to !== account ? x.to! : '';
       // A negative amount is the other direction.
       const kind = to ? 'move' : (x.kind === 'in') !== a < 0 ? 'in' : 'out';
+      const invoice = str(x.invoice, 40);
       return [{
         id: str(x.id, 40),
         date: x.date,
@@ -354,8 +424,14 @@ export function cleanMoney(v: unknown, today = new Date()): Money {
         planned: x.planned !== false,
         account,
         to,
+        ...(invoice ? { invoice } : {}),
       }];
     });
+  const invoices = (Array.isArray(m.invoices) ? m.invoices : []).slice(0, MAX_INVOICES).flatMap((x: Partial<Invoice>): Invoice[] => {
+    const a = amount(x?.amount);
+    if (!x || !isDate(x.due) || a === null) return [];
+    return [{ id: str(x.id, 40), num: str(x.num, 24), event: str(x.event, 120), amount: Math.abs(a), due: x.due }];
+  });
   const wishlist = (Array.isArray(m.wishlist) ? m.wishlist : []).slice(0, MAX_WISHES).map((x: Partial<WishItem>): WishItem => ({
     id: str(x?.id, 40),
     name: str(x?.name, 80),
@@ -366,12 +442,13 @@ export function cleanMoney(v: unknown, today = new Date()): Money {
     target: isMonth(x?.target) ? x!.target! : '',
     notes: str(x?.notes, 200),
   }));
-  return {
+  return syncInvoices({
     start: isDate(m.start) ? m.start : starterMoney(today).start,
     accounts,
     entries: sortEntries(ids(entries, 'e')),
     wishlist: ids(wishlist, 'w'),
-  };
+    invoices: ids(invoices, 'i'),
+  });
 }
 
 // ---------- importing the old workbook ----------
