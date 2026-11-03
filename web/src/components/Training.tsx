@@ -3,7 +3,7 @@ import { DOW, MON, addDays, dayDiff, parseYmd, startOfDay, ymd } from '../../../
 import { fmtMoney, monthName } from '../../../shared/money';
 import {
   MUSCLE_NAMES, SECONDARY_SHARE, cleanKg, exerciseHistory, fmtKg, fmtMinutes, fmtSet, gymPerSession, liftTrends, minutes, musclesOf, prsByWorkout, setsPerMuscle,
-  topSet, volumeKg, weekStreak, weekSummary, weeklyCounts, weightChange, weightSeries, workingSets, workoutLabel, workoutsFromHevyCsv, type LiftMeasure, type WeightPoint,
+  topSet, volumeKg, weekStart, weekStreak, weekSummary, weeklyCounts, weightChange, weightSeries, workingSets, workoutLabel, workoutsFromHevyCsv, type LiftMeasure, type WeightPoint,
 } from '../../../shared/training';
 import type { AppState, ExerciseMuscles, Training, Workout } from '../../../shared/types';
 import { localGet, localSet } from '../api';
@@ -160,21 +160,37 @@ function Note({ state, busy, now, onRefresh }: { state: AppState['trainingNote']
   );
 }
 
-// ---------- this week ----------
+// ---------- week ----------
+
+const weekName = (offset: number) => (offset === 0 ? 'This week' : offset === -1 ? 'Last week' : `${-offset} weeks ago`);
 
 function ThisWeek({ workouts, today, muscles, gymMonthly, onOpenSettings }: { workouts: Workout[]; today: Date; muscles: Muscles; gymMonthly: number; onOpenSettings: () => void }) {
-  const week = useMemo(() => weekSummary(workouts, today), [workouts, today]);
+  /** Weeks back from this one: 0 is this week, -1 last week. */
+  const [offset, setOffset] = useState(0);
+  const week = useMemo(() => weekSummary(workouts, addDays(today, 7 * offset)), [workouts, today, offset]);
   const weeks = useMemo(() => weeklyCounts(workouts, today, 12), [workouts, today]);
   const streak = useMemo(() => weekStreak(workouts, today), [workouts, today]);
+  const mon = week.days[0].date;
   const sun = week.days[6].date;
   const top = Math.max(3, ...weeks.map((w) => w.count));
+  // Back as far as the week of the first workout.
+  const oldest = -dayDiff(weekStart(new Date(workouts[workouts.length - 1].start)), weekStart(today)) / 7;
 
   return (
-    <section className="panel you-panel tr-week" aria-label="This week">
+    <section className="panel you-panel tr-week" aria-label={weekName(offset)}>
       <div className="panel-head">
-        <h2 className="panel-title">This week</h2>
-        <span className="meta">
-          {week.days[0].date.getDate()} {MON[week.days[0].date.getMonth()]} – {sun.getDate()} {MON[sun.getMonth()]}
+        <h2 className="panel-title">{weekName(offset)}</h2>
+        <span className="mood-month">
+          <button className="icon-btn" aria-label="Previous week" disabled={offset <= oldest} onClick={() => setOffset(offset - 1)}>
+            <i className="ph-duotone ph-caret-left" />
+          </button>
+          <span className="meta" style={{ minWidth: 108, textAlign: 'center' }}>
+            {mon.getDate()} {MON[mon.getMonth()]} – {sun.getDate()} {MON[sun.getMonth()]}
+            {sun.getFullYear() !== today.getFullYear() && ` ${sun.getFullYear()}`}
+          </span>
+          <button className="icon-btn" aria-label="Next week" disabled={offset >= 0} onClick={() => setOffset(offset + 1)}>
+            <i className="ph-duotone ph-caret-right" />
+          </button>
         </span>
       </div>
 
@@ -215,13 +231,24 @@ function ThisWeek({ workouts, today, muscles, gymMonthly, onOpenSettings }: { wo
           <span className="sec-label">Sessions a week</span>
           <span className="meta">{streak > 1 ? `${streak} weeks in a row` : streak === 1 ? 'Trained last week or this' : 'Last 12 weeks'}</span>
         </div>
-        <div className="tr-weeks" role="img" aria-label={`Sessions a week, oldest first: ${weeks.map((w) => w.count).join(', ')}`}>
-          {weeks.map((w, i) => (
-            <div key={w.start.getTime()} className="tr-wcol" title={`Week of ${fmtDay(w.start)}: ${w.count}`}>
-              <span className="tr-wn tnum">{w.count || ''}</span>
-              <span className={'tr-wbar' + (i === weeks.length - 1 ? ' now' : '')} style={{ height: `${(w.count / top) * 100}%` }} />
-            </div>
-          ))}
+        <div className="tr-weeks" role="group" aria-label={`Sessions a week, oldest first: ${weeks.map((w) => w.count).join(', ')}`}>
+          {weeks.map((w, i) => {
+            const o = i - (weeks.length - 1);
+            return (
+              <button
+                key={w.start.getTime()}
+                className="tr-wcol"
+                title={`Week of ${fmtDay(w.start)}: ${w.count}`}
+                aria-label={`${weekName(o)}: ${w.count} session${w.count === 1 ? '' : 's'}`}
+                aria-pressed={o === offset}
+                disabled={o < oldest}
+                onClick={() => setOffset(o)}
+              >
+                <span className="tr-wn tnum">{w.count || ''}</span>
+                <span className={'tr-wbar' + (o === offset ? ' now' : '')} style={{ height: `${(w.count / top) * 100}%` }} />
+              </button>
+            );
+          })}
         </div>
         <div className="axis tnum">
           <span>{fmtDay(weeks[0].start).slice(4)}</span>
