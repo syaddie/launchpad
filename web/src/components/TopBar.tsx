@@ -36,7 +36,7 @@ function Clock({ weather, showAir }: { weather: Weather | null; showAir: boolean
   }, []);
   return (
     <div className="clock-row">
-      <span className="serif clock">{hm(now)}</span>
+      <a className="serif clock clock-link" href="https://time.is/" target="_blank" rel="noopener" title="Check the time on time.is">{hm(now)}</a>
       <span className="tnum" style={{ fontSize: 13, color: 'var(--t2)', whiteSpace: 'nowrap' }}>
         {fmtDay(now)} · {tzLabel()}
       </span>

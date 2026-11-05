@@ -17,7 +17,7 @@ export function HeroPanel({ data, now, extras }: { data: AppState; now: Date; /*
   return (
     <section className="panel hero-panel" style={{ gridArea: 'hero' }} aria-label="Clock and what's next">
       <div className="hero-date">{fmtDay(tick)}</div>
-      <div className="hero-clock tnum">{hm(tick)}</div>
+      <a className="hero-clock tnum clock-link" href="https://time.is/" target="_blank" rel="noopener" title="Check the time on time.is">{hm(tick)}</a>
       {ev ? (
         <div className="hero-next">
           <div className="hero-label">{label}</div>
