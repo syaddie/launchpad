@@ -14,7 +14,7 @@ import { store, updatePackages } from './store';
 import { claudeEnabled } from './claude';
 import { MAX_PHOTOS, MAX_PHOTO_BYTES, readPhoto, removePhotoFile, sniffImage, writePhoto } from './photos';
 import { isRunning, newPackage, refreshPackage, refreshSummaries, refreshWeather, runAllGoogle, runIfStale, runSource, signOutGoogle, startScheduler } from './sync';
-import { attachTerminal, FileError, listDir, makeDir, MAX_TEXT, readFileStream, readText, remove, rename, shellInfo, trustHostKey, upload, writeText } from './shell';
+import { attachTerminal, FileError, listDir, makeDir, MAX_TEXT, readFileStream, readText, remove, rename, shellInfo, trustHostKey, abandonUpload, uploadPiece, UPLOAD_CHUNK, writeText } from './shell';
 import { serverStats, startSampler } from './system';
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
 import { DEFAULT_ENGINES, HIDEABLE_KEYS } from '../../shared/defaults';
@@ -441,9 +441,20 @@ app.put('/api/files/text', bodyLimit({ maxSize: MAX_TEXT * 2, onError: (c) => c.
   return c.json({ ok: true });
 });
 
-/** The file's bytes are the body, streamed straight to the server. */
-app.post('/api/files/upload', async (c) => {
-  await upload(c.req.query('dir'), c.req.query('name'), c.req.raw.body, c.req.query('overwrite') === '1');
+/** One piece of a file, its bytes as the body; see UPLOAD_CHUNK. */
+app.post(
+  '/api/files/upload',
+  bodyLimit({ maxSize: UPLOAD_CHUNK, onError: (c) => c.json({ error: 'That piece of the upload is too big.' }, 413) }),
+  async (c) => {
+    const q = c.req.query();
+    const r = await uploadPiece({ dir: q.dir, name: q.name, id: q.id, offset: q.offset, total: q.total, overwrite: q.overwrite === '1', body: c.req.raw.body });
+    return c.json({ ok: true, ...r });
+  },
+);
+
+app.post('/api/files/upload/abandon', async (c) => {
+  const body = await c.req.json();
+  await abandonUpload(body?.dir, body?.id);
   return c.json({ ok: true });
 });
 
