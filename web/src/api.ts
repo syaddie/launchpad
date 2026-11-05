@@ -136,13 +136,26 @@ export class UploadError extends Error {
   }
 }
 
-/** Upload a file into `dir` on the server, reporting progress from 0 to 1. XHR, since fetch can't report upload progress. */
-export function uploadFile(dir: string, file: File, overwrite: boolean, onProgress: (p: number) => void): Promise<void> {
+/**
+ * Pieces of an upload, each its own request. Cloudflare refuses a request body over
+ * 100 MB, so a big file sent whole never arrives; the server's UPLOAD_CHUNK matches.
+ */
+export const UPLOAD_CHUNK = 32 * 1024 * 1024;
+
+/** Where each piece of a file of `size` bytes starts and ends. An empty file is still one (empty) piece. */
+export function uploadPieces(size: number, chunk = UPLOAD_CHUNK): [number, number][] {
+  const pieces: [number, number][] = [];
+  for (let start = 0; start < size || !pieces.length; start += chunk) pieces.push([start, Math.min(start + chunk, size)]);
+  return pieces;
+}
+
+/** Send one piece; `onProgress` gets the bytes of it sent so far. */
+function sendPiece(url: string, body: Blob, onProgress: (sent: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `/api/files/upload?dir=${encodeURIComponent(dir)}&name=${encodeURIComponent(file.name)}${overwrite ? '&overwrite=1' : ''}`);
+    xhr.open('POST', url);
     xhr.setRequestHeader('Content-Type', 'application/octet-stream');
-    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
+    xhr.upload.onprogress = (e) => onProgress(e.loaded);
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) return resolve();
       let message = `Upload failed (${xhr.status})`;
@@ -150,12 +163,41 @@ export function uploadFile(dir: string, file: File, overwrite: boolean, onProgre
         message = JSON.parse(xhr.responseText).error || message;
       } catch {
         // Not JSON: a proxy's error page.
+        if (xhr.status === 413) message = 'The server or Cloudflare refused it as too big.';
       }
       reject(new UploadError(message, xhr.status));
     };
     xhr.onerror = () => reject(new UploadError('Can’t reach the Launchpad server.', 0));
-    xhr.send(file);
+    xhr.send(body);
   });
+}
+
+/** Worth another go: the connection dropped, or Cloudflare couldn't reach the server for a moment. */
+const transient = (e: unknown) => e instanceof UploadError && [0, 502, 503, 504, 520, 521, 522, 523, 524].includes(e.status);
+
+/** Upload a file into `dir` on the server, piece by piece, reporting progress from 0 to 1. XHR, since fetch can't report upload progress. */
+export async function uploadFile(dir: string, file: File, overwrite: boolean, onProgress: (p: number) => void): Promise<void> {
+  // Not randomUUID: that needs HTTPS, and the LAN address is plain HTTP.
+  const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
+  const base = `/api/files/upload?dir=${encodeURIComponent(dir)}&name=${encodeURIComponent(file.name)}&id=${id}&total=${file.size}${overwrite ? '&overwrite=1' : ''}`;
+  try {
+    for (const [start, end] of uploadPieces(file.size)) {
+      for (let attempt = 1; ; attempt++) {
+        try {
+          await sendPiece(`${base}&offset=${start}`, file.slice(start, end), (sent) => file.size && onProgress((start + sent) / file.size));
+          break;
+        } catch (e) {
+          if (attempt >= 4 || !transient(e)) throw e;
+          await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+        }
+      }
+    }
+    onProgress(1);
+  } catch (e) {
+    // Leave nothing half-written behind; a clash (409 on the first piece) never wrote anything.
+    req('POST', '/api/files/upload/abandon', { dir, id }).catch(() => {});
+    throw e;
+  }
 }
 
 export const photoUrl = (id: string) => `/api/photos/${encodeURIComponent(id)}`;

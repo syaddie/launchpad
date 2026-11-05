@@ -336,19 +336,113 @@ export async function writeText(p: unknown, text: unknown): Promise<void> {
   await call<void>(abs, (cb) => sftp.writeFile(abs, text, { mode: 0o644 }, cb));
 }
 
-/** Stream an upload into `dir`. An existing file is only replaced when `overwrite` is set. */
-export async function upload(dirPath: unknown, name: unknown, body: ReadableStream<Uint8Array> | null, overwrite: boolean): Promise<void> {
-  const dest = path.posix.join(cleanPath(dirPath), cleanName(name));
+/**
+ * Uploads come in pieces, since Cloudflare refuses any request body over 100 MB
+ * (on the Free and Pro plans). Each piece is well under that, and quick enough to
+ * stay inside Node's request timeout on a slow uplink. The pieces go into a hidden
+ * file next to the destination, which takes the real name once the last one lands.
+ */
+export const UPLOAD_CHUNK = 32 * 1024 * 1024;
+
+/** The id the page gives an upload, so its pieces find the same part file. */
+export function cleanUploadId(id: unknown): string {
+  if (typeof id !== 'string' || !/^[A-Za-z0-9-]{8,64}$/.test(id)) throw new FileError('That isn’t a valid upload.');
+  return id;
+}
+
+/** A byte count from the query string. */
+export function cleanSize(n: unknown, what: string): number {
+  const v = typeof n === 'string' && /^\d{1,16}$/.test(n) ? Number(n) : NaN;
+  if (!Number.isSafeInteger(v)) throw new FileError(`Expected the ${what} in bytes.`);
+  return v;
+}
+
+const partPath = (dir: string, id: string) => path.posix.join(dir, `.launchpad-upload-${id}.part`);
+
+export interface UploadPiece {
+  dir: unknown;
+  name: unknown;
+  id: unknown;
+  /** Where this piece starts in the file. */
+  offset: unknown;
+  /** The whole file's size. */
+  total: unknown;
+  overwrite: boolean;
+  body: ReadableStream<Uint8Array> | null;
+}
+
+/** Write one piece of an upload. The piece that reaches `total` moves the file into place. */
+export async function uploadPiece(u: UploadPiece): Promise<{ done: boolean }> {
+  const dir = cleanPath(u.dir);
+  const dest = path.posix.join(dir, cleanName(u.name));
+  const id = cleanUploadId(u.id);
+  const offset = cleanSize(u.offset, 'offset');
+  const total = cleanSize(u.total, 'file size');
+  if (offset > total) throw new FileError('That piece starts past the end of the file.');
+  const part = partPath(dir, id);
   const { sftp } = await sftpSession();
-  const existing = await stat(sftp, dest).catch(() => null);
-  if (existing && !overwrite) throw new FileError(`${path.posix.basename(dest)} is already there.`, 409);
-  if (existing && kindOf(existing.mode) === 'dir') throw new FileError(`${dest} is a folder.`, 409);
-  if (!body) throw new FileError('The upload was empty.');
-  try {
-    await pipeline(Readable.fromWeb(body as import('node:stream/web').ReadableStream), sftp.createWriteStream(dest, { mode: 0o644 }));
-  } catch (e) {
-    throw sftpError(e as Error, dest);
+
+  if (offset === 0) {
+    const existing = await stat(sftp, dest).catch(() => null);
+    if (existing && !overwrite(u, existing)) throw new FileError(`${path.posix.basename(dest)} is already there.`, 409);
+  } else {
+    // A retried piece may find some of itself already written; anything short of its start means one went missing.
+    const sofar = await stat(sftp, part).catch(() => null);
+    if (!sofar || (sofar.size ?? 0) < offset) throw new FileError('The upload lost its place. Try it again.', 409);
   }
+
+  let written = 0;
+  const count = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, ctl) {
+      written += chunk.byteLength;
+      if (offset + written > total) ctl.error(new FileError('That’s more than the file’s size.'));
+      else ctl.enqueue(chunk);
+    },
+  });
+  const source = (u.body ?? new Blob([]).stream()).pipeThrough(count);
+  try {
+    await pipeline(
+      Readable.fromWeb(source as import('node:stream/web').ReadableStream),
+      sftp.createWriteStream(part, offset === 0 ? { flags: 'w', mode: 0o644 } : { flags: 'r+', start: offset }),
+    );
+  } catch (e) {
+    throw e instanceof FileError ? e : sftpError(e as Error, dest);
+  }
+  if (offset + written < total) return { done: false };
+
+  const size = (await stat(sftp, part)).size ?? 0;
+  if (size !== total) throw new FileError('The upload came out the wrong size. Try it again.', 500);
+  const existing = await stat(sftp, dest).catch(() => null);
+  if (existing && !overwrite(u, existing)) throw new FileError(`${path.posix.basename(dest)} is already there.`, 409);
+  await moveInto(sftp, part, dest, !!existing);
+  return { done: true };
+}
+
+/** An existing file may be replaced when asked; a folder never is. */
+function overwrite(u: UploadPiece, existing: Stats): boolean {
+  if (kindOf(existing.mode) === 'dir') throw new FileError(`${String(u.name)} is a folder.`, 409);
+  return u.overwrite;
+}
+
+async function moveInto(sftp: SFTPWrapper, from: string, to: string, replace: boolean): Promise<void> {
+  if (replace) {
+    // OpenSSH's posix-rename replaces in one step; plain SFTP rename refuses an existing target.
+    try {
+      await call<void>(to, (cb) => sftp.ext_openssh_rename(from, to, cb));
+      return;
+    } catch (e) {
+      if (!(e instanceof Error && /does not support/i.test(e.message))) throw e;
+    }
+    await call<void>(to, (cb) => sftp.unlink(to, cb));
+  }
+  await call<void>(to, (cb) => sftp.rename(from, to, cb));
+}
+
+/** Clear away the part file of an upload that failed or was given up on. */
+export async function abandonUpload(dirPath: unknown, id: unknown): Promise<void> {
+  const part = partPath(cleanPath(dirPath), cleanUploadId(id));
+  const { sftp } = await sftpSession();
+  await call<void>(part, (cb) => sftp.unlink(part, cb)).catch(() => {});
 }
 
 export async function makeDir(p: unknown): Promise<void> {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { cleanName, cleanPath, kindOf, shellQuote } from '../server/src/shell';
+import { cleanName, cleanPath, cleanSize, cleanUploadId, kindOf, shellQuote, UPLOAD_CHUNK } from '../server/src/shell';
+import { UPLOAD_CHUNK as PAGE_CHUNK, uploadPieces } from '../web/src/api';
 import { permString } from '../web/src/components/Files';
 
 describe('server files', () => {
@@ -37,5 +38,25 @@ describe('server files', () => {
     expect(permString({ kind: 'file', link: false, mode: 0o640 })).toBe('-rw-r-----');
     expect(permString({ kind: 'file', link: true, mode: 0o600 })).toBe('-rw-------');
     expect(permString({ kind: 'other', link: true, mode: 0o777 })).toBe('lrwxrwxrwx');
+  });
+
+  it('splits uploads into pieces Cloudflare will take', () => {
+    expect(PAGE_CHUNK).toBe(UPLOAD_CHUNK);
+    expect(UPLOAD_CHUNK).toBeLessThan(100 * 1000 * 1000);
+    expect(uploadPieces(0)).toEqual([[0, 0]]);
+    expect(uploadPieces(5, 10)).toEqual([[0, 5]]);
+    expect(uploadPieces(10, 10)).toEqual([[0, 10]]);
+    expect(uploadPieces(25, 10)).toEqual([[0, 10], [10, 20], [20, 25]]);
+    const big = uploadPieces(5 * 1024 ** 3);
+    expect(big.length).toBe(160);
+    expect(big.at(-1)![1]).toBe(5 * 1024 ** 3);
+  });
+
+  it('checks the upload id and sizes', () => {
+    expect(cleanUploadId('0123456789abcdef0123456789abcdef')).toBe('0123456789abcdef0123456789abcdef');
+    for (const bad of ['', 'short', '../../etc/passwd', 'a b c d e f g h', 42]) expect(() => cleanUploadId(bad)).toThrow();
+    expect(cleanSize('0', 'offset')).toBe(0);
+    expect(cleanSize('33554432', 'offset')).toBe(33554432);
+    for (const bad of [undefined, '', '-1', '1.5', '1e9', 'x', '99999999999999999']) expect(() => cleanSize(bad, 'offset')).toThrow();
   });
 });
