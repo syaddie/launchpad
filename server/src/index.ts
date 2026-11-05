@@ -230,6 +230,10 @@ app.post('/api/packages', async (c) => {
   const carrier = isStr(body.carrier) && body.carrier ? body.carrier : detectCarrier(number);
   if (!number || !carrier) return c.json({ error: 'A tracking number and carrier are required' }, 400);
   const existing = store.packages().find((p) => p.number === number);
+  // Two items can ship under one number, so say so rather than quietly relabelling the one that's there.
+  if (existing && !existing.archived && !existing.isNew) {
+    return c.json({ error: `Already added as “${existing.label}”. Items shipped together share a tracking number.` }, 409);
+  }
   let id: string;
   if (existing) {
     id = existing.id;
