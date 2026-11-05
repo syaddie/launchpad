@@ -20,6 +20,8 @@ export interface Note {
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 export type AccentKey = 'sage' | 'slate' | 'terracotta';
+/** The whole-page design picked in Settings › Layout. Every design shows every view; only the arrangement and look change. */
+export type DesignKey = 'broadsheet' | 'console' | 'bento' | 'horizon';
 export type GoogleSource = 'calendar' | 'tasks' | 'gmail';
 export type SourceKey = GoogleSource | 'carriers' | 'news' | 'inbox' | 'weather' | 'speedtest';
 export type ViewKey = 'home' | 'news' | 'inbox' | 'you' | 'training' | 'learn' | 'money' | 'server';
@@ -36,6 +38,8 @@ export interface Prefs {
   name: string;
   theme: ThemeMode;
   accent: AccentKey;
+  /** Layout for the whole dashboard (Settings › Layout). */
+  design: DesignKey;
   /** Google calendar ids the user unticked in Settings. */
   hiddenCalendars: string[];
   /** Per-source on/off switches from Settings. */

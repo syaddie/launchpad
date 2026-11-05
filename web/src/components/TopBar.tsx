@@ -89,6 +89,30 @@ function WeatherNow({ w, now, showAir }: { w: Weather; now: Date; showAir: boole
   );
 }
 
+/** The weather details as a home panel, for the designs that keep everything in sight. */
+export function WeatherPanel({ data, now }: { data: AppState; now: Date }) {
+  const w = data.weather.now;
+  const showAir = !data.prefs.hidden.includes('top:air');
+  const ok = !!w && fresh(w.issuedAt, now);
+  const air = ok && showAir && w.air && fresh(w.air.at, now) ? w.air : null;
+  const uv = ok && showAir && w.uv && new Date(w.uv.at).toDateString() === now.toDateString() ? w.uv : null;
+  return (
+    <section className="panel wx-panel" style={{ gridArea: 'wx' }} aria-label="Weather and air">
+      <div className="panel-head">
+        <h2 className="panel-title">Weather · air</h2>
+        {ok && w.tempC !== null && <span className="meta tnum">{Math.round(w.tempC)}° now</span>}
+      </div>
+      <div className="scroll" style={{ padding: '0 10px' }}>
+        {ok ? (
+          <WeatherDetails w={w} label={weatherLabel(w.forecast)} air={air} uv={uv} now={now} showAir={showAir} inline />
+        ) : (
+          <p className="meta" style={{ margin: 0 }}>No fresh reading for {data.prefs.weatherArea || 'your area'} right now.</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function Scale({ widths, active, color, pos }: { widths: number[]; active: number; color: string; pos: number }) {
   return (
     <div className="scale" aria-hidden="true">
@@ -100,13 +124,15 @@ function Scale({ widths, active, color, pos }: { widths: number[]; active: numbe
   );
 }
 
-function WeatherDetails({ w, label, air, uv, now, showAir }: {
+function WeatherDetails({ w, label, air, uv, now, showAir, inline }: {
   w: Weather;
   label: string;
   air: Weather['air'];
   uv: Weather['uv'];
   now: Date;
   showAir: boolean;
+  /** Printed in a home panel (Console, Bento) instead of a hover popover. */
+  inline?: boolean;
 }) {
   const until = w.validUntil ? ` until ${hm(new Date(w.validUntil))}` : '';
   const band = air ? psiBand(air.psi) : null;
@@ -116,7 +142,7 @@ function WeatherDetails({ w, label, air, uv, now, showAir }: {
   const outlook = (w.outlook ?? []).slice(0, 4);
   const peakPast = uv && Date.parse(uv.peakAt) < Date.parse(uv.at);
   return (
-    <div className="popover weather-pop" role="dialog" aria-label={`Weather in ${w.area}`}>
+    <div className={inline ? 'weather-inline' : 'popover weather-pop'} role={inline ? undefined : 'dialog'} aria-label={inline ? undefined : `Weather in ${w.area}`}>
       <div className="wp-head">
         <span style={{ fontWeight: 600 }}>
           {label} in {w.area}

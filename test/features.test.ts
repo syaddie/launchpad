@@ -102,6 +102,21 @@ describe('home grid', () => {
   });
   it('stacks shown panels on a phone in the usual order', () => {
     expect(gridLayout('narrow', new Set<Area>(['bm', 'notes', 'today', 'photo'])).areas).toBe("'today' 'photo' 'notes' 'bm'");
+    expect(gridLayout('narrow', new Set<Area>(['bm', 'wx', 'today', 'hero']), 'bento').areas).toBe("'hero' 'today' 'wx' 'bm'");
+  });
+  it('arranges Console: agenda, tasks over notes, packages over weather, a slim photo column', () => {
+    expect(gridLayout('desktop', new Set<Area>([...all, 'wx', 'photo', 'photo2']), 'console')).toEqual({
+      areas: "'today tasks pkgs photo' 'today notes wx photo2' 'bm bm bm bm'",
+      columns: 'minmax(0, 0.95fr) minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 0.42fr)',
+      rows: 'minmax(0, 1.2fr) minmax(0, 0.8fr) auto',
+    });
+    // No weather and no photos: packages fill their column, the photo column goes.
+    expect(gridLayout('desktop', new Set(all), 'console').areas).toBe("'today tasks pkgs' 'today notes pkgs' 'bm bm bm'");
+  });
+  it('arranges Bento around the clock tile, in even rows', () => {
+    const g = gridLayout('wide', new Set<Area>([...all, 'hero', 'wx']), 'bento');
+    expect(g.areas).toBe("'hero today tasks pkgs' 'wx today notes pkgs' 'bm bm bm bm'");
+    expect(g.rows).toBe('minmax(0, 1fr) minmax(0, 1fr) auto');
   });
 });
 

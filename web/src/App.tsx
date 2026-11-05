@@ -5,14 +5,16 @@ import { emptyLearn, fmtStudy, parseStudy, timerMinutes } from '../../shared/lea
 import { starterMoney } from '../../shared/money';
 import { EMPTY_TRAINING, fmtKg, parseWeight } from '../../shared/training';
 import { MOOD_WORDS, engineUrl, fmtDuration, parseSearch, smokesOn } from '../../shared/trackers';
-import type { AppState, BookmarkGroup, Countdown, Learn, Money, Mood, Note, Package, Photo, Prefs, Task, Training, ViewKey } from '../../shared/types';
+import type { AppState, BookmarkGroup, DesignKey, Countdown, Learn, Money, Mood, Note, Package, Photo, Prefs, Task, Training, ViewKey } from '../../shared/types';
 import { api, cachedState, cacheState, localGet, localSet, ServerError } from './api';
 import { Bookmarks } from './components/Bookmarks';
-import { AddPackageDrawer, Drawer, PANEL_ROWS, PackageDrawer, SettingsDrawer } from './components/Drawers';
+import { AddPackageDrawer, DESIGNS, Drawer, PANEL_ROWS, PackageDrawer, SettingsDrawer } from './components/Drawers';
 import { Inbox, inboxBadge } from './components/Inbox';
 import { CourseDrawer, LearnView } from './components/Learn';
 import { MoneyView } from './components/Money';
 import { News } from './components/News';
+import { HeroPanel } from './components/Hero';
+import { HorizonHome } from './components/Horizon';
 import { FocusView, Notes } from './components/Notes';
 import { Packages } from './components/Packages';
 import { Palette, type PaletteItem } from './components/Palette';
@@ -22,7 +24,7 @@ import { Server, type ServerTab } from './components/Server';
 import { ServerBanner, type ServerIssue } from './components/ServerBanner';
 import { Tasks } from './components/Tasks';
 import { Today, todayAgenda } from './components/Today';
-import { TopBar } from './components/TopBar';
+import { TopBar, WeatherPanel } from './components/TopBar';
 import { ExerciseDrawer, TrainingView } from './components/Training';
 import { You, nearestCountdown } from './components/You';
 import { gridLayout, type Area, type Layout } from './layout';
@@ -156,6 +158,11 @@ export function App() {
   const [focus, setFocus] = useState(false);
   const [editBookmarks, setEditBookmarks] = useState(false);
   const [activeNote, setActiveNote] = useState(() => localGet('activeNote') || '');
+  const [localDesign, setLocalDesignState] = useState<DesignKey | ''>(() => (DESIGNS.some((d) => d.key === localGet('design')) ? (localGet('design') as DesignKey) : ''));
+  const setLocalDesign = (d: DesignKey | '') => {
+    setLocalDesignState(d);
+    localSet('design', d);
+  };
   const [saved, setSaved] = useState(false);
   const [moneySaved, setMoneySaved] = useState(false);
   const [toast, setToast] = useState<{ msg: string; action?: { label: string; run: () => void } } | null>(null);
@@ -258,11 +265,14 @@ export function App() {
 
   // ---------- theme & layout ----------
 
-  const dark = data.prefs.theme === 'dark' || (data.prefs.theme === 'system' && systemDark);
+  const design: DesignKey = localDesign || data.prefs.design || 'broadsheet';
+  // Console is always dark; the others follow Theme.
+  const dark = design === 'console' || data.prefs.theme === 'dark' || (data.prefs.theme === 'system' && systemDark);
   useLayoutEffect(() => {
     document.documentElement.dataset.mode = dark ? 'dark' : 'light';
     document.documentElement.dataset.accent = data.prefs.accent;
-  }, [dark, data.prefs.accent]);
+    document.documentElement.dataset.design = design;
+  }, [dark, data.prefs.accent, design]);
 
   useLayoutEffect(() => {
     const el = rootRef.current;
@@ -611,6 +621,8 @@ export function App() {
   // ---------- keyboard ----------
 
   const gAt = useRef(0);
+  const designRef = useRef(design);
+  designRef.current = design;
   const keyActions = useRef({ logSmoke });
   keyActions.current = { logSmoke };
 
@@ -629,6 +641,18 @@ export function App() {
         else if (drawer) setDrawer(null);
         else if (focus) setFocus(false);
         else if (view !== 'home') setView('home');
+        return;
+      }
+      // Console: F1–F8 open the views in rail order, F9 Settings.
+      if (designRef.current === 'console' && /^F[1-9]$/.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        e.preventDefault();
+        const n = Number(e.key.slice(1));
+        if (n === 9) setDrawer({ type: 'settings' });
+        else if (VIEWS[n - 1]) {
+          setPalette(false);
+          setDrawer(null);
+          setView(VIEWS[n - 1].key);
+        }
         return;
       }
       const t = e.target as HTMLElement;
@@ -687,14 +711,16 @@ export function App() {
       subline = `Next: ${next.title} ${inMinutes(Math.max(1, Math.round((next.s.getTime() - now.getTime()) / 60000)))}`;
       if (next.conferenceType) subline += ` · ${next.conferenceType}`;
     } else subline = 'Nothing else on today';
-    const overdue = data.prefs.sources.tasks ? data.tasks.filter((t) => t.due && dayDiff(now, parseYmd(t.due)) < 0).length : 0;
-    if (overdue) subline += ` · ${overdue} overdue task${overdue > 1 ? 's' : ''}`;
   }
+  // The tail of the summary line, which Bento's clock tile shows under the next event.
+  const extras: string[] = [];
+  const overdue = data.google.connected && data.prefs.sources.tasks ? data.tasks.filter((t) => t.due && dayDiff(now, parseYmd(t.due)) < 0).length : 0;
+  if (overdue) extras.push(`${overdue} overdue task${overdue > 1 ? 's' : ''}`);
   const outPk = data.packages.filter((p) => p.stage === 2 && !p.exception).length;
-  if (outPk) subline += ` · ${outPk} package${outPk > 1 ? 's' : ''} out for delivery`;
+  if (outPk) extras.push(`${outPk} package${outPk > 1 ? 's' : ''} out for delivery`);
   const soon = data.prefs.hidden.includes('top:countdown') ? '' : nearestCountdown(data.countdowns, now);
-  if (soon) subline += ` · ${soon}`;
-  subline = subline.replace(/^ · /, '');
+  if (soon) extras.push(soon);
+  subline = [subline, ...extras].filter(Boolean).join(' · ');
 
   const notes = data.notes.length ? data.notes : STARTER_NOTES;
   const activeId = notes.some((n) => n.id === activeNote) ? activeNote : notes[0].id;
@@ -716,10 +742,23 @@ export function App() {
   );
   if (photoCount > 0) shown.add('photo');
   if (photoCount > 1) shown.add('photo2');
-  const grid = gridLayout(layout, shown);
+  // Bento opens with a clock tile; Console and Bento print the weather details as a panel.
+  if (design === 'bento') shown.add('hero');
+  const weatherOn = !!data.prefs.weatherArea && !hidden.has('top:weather');
+  if ((design === 'console' || design === 'bento') && weatherOn) shown.add('wx');
+  const grid = gridLayout(layout, shown, design);
   const smokesToday = smokesOn(data.smokes, now).length;
   const todayMood = data.moods[ymd(now)];
   const inboxCount = inboxBadge(data);
+
+  const keepPackage = (id: string) => {
+    patchPackage(id, { isNew: false });
+    api.patchPackage(id, { isNew: false }).catch(onSaveError);
+  };
+  const notesPanel = (
+    <Notes notes={notes} activeId={activeId} onActive={pickNote} onChange={setNotes} saved={saved} onOpenFocus={() => setFocus(true)} onEditing={onNoteEditing} />
+  );
+  const bookmarksPanel = <Bookmarks groups={data.bookmarks} onChange={setBookmarks} search={search} edit={editBookmarks} setEdit={setEditBookmarks} />;
 
   // ---------- command palette ----------
 
@@ -769,6 +808,11 @@ export function App() {
       run: () => (setView('inbox'), refreshInbox()),
     },
     { id: 'a:theme', group: 'Actions', label: dark ? 'Switch to the light theme' : 'Switch to the dark theme', icon: dark ? 'ph-sun' : 'ph-moon', run: () => setPrefs({ ...data.prefs, theme: dark ? 'light' : 'dark' }) },
+    ...DESIGNS.filter((d) => d.key !== design).map((d) => ({
+      id: 'l:' + d.key, group: 'Actions', label: `Layout: ${d.name}`, icon: 'ph-layout', words: 'design look theme switch view',
+      sub: localDesign ? 'This browser only' : 'Every device',
+      run: () => (localDesign ? setLocalDesign(d.key) : setPrefs({ ...data.prefs, design: d.key })),
+    })),
     { id: 'a:settings', group: 'Actions', label: 'Open Settings', icon: 'ph-gear-six', words: 'preferences', run: () => setDrawer({ type: 'settings' }) },
     ...VIEWS.filter((v) => v.key !== view).map((v) => ({
       id: 'v:' + v.key, group: 'Go to', label: v.name, icon: v.icon, keys: ['G', v.letter], words: 'view', run: () => setView(v.key),
@@ -830,7 +874,7 @@ export function App() {
     drawer?.type === 'settings' ? 'Settings' : drawer?.type === 'add' ? 'Add package' : drawer?.type === 'exercise' ? drawer.title : drawer?.type === 'course' ? data.learn.courses.find((c) => c.id === drawer.id)?.name || 'Course' : drawerPkg ? 'Package' : '';
 
   return (
-    <div ref={rootRef} className="lp-root" data-layout={layout}>
+    <div ref={rootRef} className="lp-root" data-layout={layout} data-design={design} data-view={view}>
       <div className="lp-shell">
       <Rail view={view} hidden={data.prefs.hidden} badges={{ inbox: inboxCount }} onView={setView} onPalette={() => setPalette(true)} onSettings={() => setDrawer({ type: 'settings' })} />
       <div className="lp-inner">
@@ -868,10 +912,39 @@ export function App() {
             notify={showToast}
           />
         ) : view === 'money' ? (
-          <MoneyView money={data.money} now={now} saved={moneySaved} onChange={setMoney} onImport={importMoney} notify={showToast} />
+          <MoneyView money={data.money} now={now} saved={moneySaved} onChange={setMoney} onImport={importMoney} notify={showToast} together={design !== 'broadsheet' && layout !== 'narrow'} />
         ) : view === 'server' ? (
-          <Server data={data} now={now} openTab={serverTab} onOpenSettings={() => setDrawer({ type: 'settings' })} />
+          <Server data={data} now={now} openTab={serverTab} onOpenSettings={() => setDrawer({ type: 'settings' })} split={design !== 'broadsheet' && layout !== 'narrow'} />
         ) : (
+          design === 'horizon' ? (
+            <HorizonHome
+              data={data}
+              now={now}
+              smokesToday={smokesToday}
+              countdown={soon}
+              show={{ today: shown.has('today'), tasks: shown.has('tasks'), packages: shown.has('pkgs') }}
+              onConnect={connect}
+              onAddTask={addTask}
+              onCompleteTask={completeTask}
+              onOpenPackage={(id) => setDrawer({ type: 'pkg', id })}
+              onAddPackage={() => setDrawer({ type: 'add' })}
+              onKeepPackage={keepPackage}
+              onDismissPackage={archivePackage}
+              onLogSmoke={logSmoke}
+              onOpenLearn={() => setView('learn')}
+              notify={showToast}
+              notes={shown.has('notes') && notesPanel}
+              photos={
+                photoCount > 0 && (
+                  <div className="hz-photos">
+                    {photoCount > 0 && <PhotoPanel photos={data.photos} area="photo" index={photoSlots.shown[0]} onStep={(d) => photoSlots.step(0, d)} />}
+                    {photoCount > 1 && <PhotoPanel photos={data.photos} area="photo2" index={photoSlots.shown[1]} onStep={(d) => photoSlots.step(1, d)} />}
+                  </div>
+                )
+              }
+              bookmarks={shown.has('bm') && bookmarksPanel}
+            />
+          ) : (
           <main className="lp-grid" style={{ gridTemplateAreas: grid.areas, gridTemplateColumns: grid.columns, gridTemplateRows: grid.rows }}>
             {shown.has('today') && (
             <Today
@@ -886,31 +959,20 @@ export function App() {
             {shown.has('tasks') && <Tasks data={data} now={now} onConnect={connect} onAdd={addTask} onComplete={completeTask} />}
             {photoCount > 0 && <PhotoPanel photos={data.photos} area="photo" index={photoSlots.shown[0]} onStep={(d) => photoSlots.step(0, d)} />}
             {photoCount > 1 && <PhotoPanel photos={data.photos} area="photo2" index={photoSlots.shown[1]} onStep={(d) => photoSlots.step(1, d)} />}
-            {shown.has('notes') && (
-            <Notes
-              notes={notes}
-              activeId={activeId}
-              onActive={pickNote}
-              onChange={setNotes}
-              saved={saved}
-              onOpenFocus={() => setFocus(true)}
-              onEditing={onNoteEditing}
-            />
-            )}
+            {shown.has('hero') && <HeroPanel data={data} now={now} extras={extras.join(' · ')} />}
+            {shown.has('wx') && <WeatherPanel data={data} now={now} />}
+            {shown.has('notes') && notesPanel}
             {shown.has('pkgs') && (
             <Packages
               packages={data.packages}
               now={now}
               onOpen={(id) => setDrawer({ type: 'pkg', id })}
               onAdd={() => setDrawer({ type: 'add' })}
-              onKeep={(id) => {
-                patchPackage(id, { isNew: false });
-                api.patchPackage(id, { isNew: false }).catch(onSaveError);
-              }}
+              onKeep={keepPackage}
               onDismiss={archivePackage}
             />
             )}
-            {shown.has('bm') && <Bookmarks groups={data.bookmarks} onChange={setBookmarks} search={search} edit={editBookmarks} setEdit={setEditBookmarks} />}
+            {shown.has('bm') && bookmarksPanel}
             {!shown.size && (
               <div className="panel" style={{ gridColumn: '1 / -1' }}>
                 <div className="empty">
@@ -922,6 +984,7 @@ export function App() {
               </div>
             )}
           </main>
+          )
         )}
       </div>
       </div>
@@ -940,6 +1003,8 @@ export function App() {
               onAddPhotos={addPhotos}
               onRemovePhoto={removePhoto}
               onPhotoFocus={setPhotoFocus}
+              localDesign={localDesign}
+              onLocalDesign={setLocalDesign}
             />
           )}
           {drawer.type === 'add' && <AddPackageDrawer onSubmit={addPackage} onCancel={() => setDrawer(null)} />}

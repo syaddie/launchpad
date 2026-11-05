@@ -11,7 +11,8 @@ export const VIEWS: { key: ViewKey; name: string; icon: string; letter: string }
   { key: 'server', name: 'Server', icon: 'ph-hard-drives', letter: 'S' },
 ];
 
-/** The view switcher down the left edge (across the top on a phone). Hidden views stay reachable from ⌘K. */
+/** The view switcher down the left edge (across the top on a phone). Hidden views stay reachable from ⌘K.
+ * The designs restyle it: Console's F-key bar, Bento's dock, Horizon's row of tabs. */
 export function Rail({ view, hidden, badges, onView, onPalette, onSettings }: {
   view: ViewKey;
   hidden: string[];
@@ -27,23 +28,27 @@ export function Rail({ view, hidden, badges, onView, onPalette, onSettings }: {
       {views.map((v) => (
         <button
           key={v.key}
+          data-view={v.key}
           className={'rail-btn' + (v.key === view ? ' on' : '')}
           aria-current={v.key === view ? 'page' : undefined}
           title={`${v.name} (G then ${v.letter})`}
           onClick={() => onView(v.key)}
         >
           <i className={'ph-duotone ' + v.icon} aria-hidden="true" />
+          <kbd className="rail-fkey" aria-hidden="true">F{VIEWS.indexOf(v) + 1}</kbd>
+          <span className="rail-dot" aria-hidden="true" />
           {!!badges[v.key] && <b className="rail-badge" aria-label={`${badges[v.key]} need you`}>{badges[v.key]}</b>}
           <span>{v.name}</span>
         </button>
       ))}
       <span className="rail-sep" aria-hidden="true" />
-      <button className="rail-btn" title="Command palette (Ctrl K)" onClick={onPalette}>
+      <button className="rail-btn rail-palette" title="Command palette (Ctrl K)" onClick={onPalette}>
         <i className="ph-duotone ph-command" aria-hidden="true" />
         <span className="mono">⌘K</span>
       </button>
-      <button className="rail-btn" title="Settings" onClick={onSettings}>
+      <button className="rail-btn rail-settings" title="Settings" onClick={onSettings}>
         <i className="ph-duotone ph-gear-six" aria-hidden="true" />
+        <kbd className="rail-fkey" aria-hidden="true">F9</kbd>
         <span>Settings</span>
       </button>
     </nav>

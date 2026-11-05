@@ -21,8 +21,10 @@ const TABS: { key: Tab; name: string; icon: string }[] = [
 ];
 
 /** The Server view: the machine's health at a glance, a shell on it, and its files. */
-export function Server({ data, now, openTab, onOpenSettings }: {
+export function Server({ data, now, openTab, onOpenSettings, split }: {
   data: AppState;
+  /** Terminal and Files open side by side (Console, Bento and Horizon on a wide enough screen). */
+  split?: boolean;
   now: Date;
   /** A tab to switch to from ⌘K; `n` changes each time. */
   openTab: { tab: Tab; n: number } | null;
@@ -37,7 +39,10 @@ export function Server({ data, now, openTab, onOpenSettings }: {
 
   const setTab = (t: Tab) => {
     setTabState(t);
-    setOpened((o) => (o.has(t) ? o : new Set(o).add(t)));
+    setOpened((o) => {
+      const want: Tab[] = split && t !== 'overview' ? ['terminal', 'files'] : [t];
+      return want.every((w) => o.has(w)) ? o : new Set([...o, ...want]);
+    });
     localSet('serverTab', t);
   };
 
@@ -66,13 +71,18 @@ export function Server({ data, now, openTab, onOpenSettings }: {
   }, [needsShell, info, loadInfo]);
 
   const ready = !!info?.configured && !info.newHostKey;
+  const both = !!split && needsShell;
+  // Opening the shell side of a split view mounts both halves.
+  useEffect(() => {
+    if (both && !(opened.has('terminal') && opened.has('files'))) setOpened((o) => new Set([...o, 'terminal', 'files']));
+  }, [both, opened]);
 
   return (
-    <main className="server">
+    <main className={'server' + (both && ready ? ' split-shell' : '')}>
       <div className="server-head">
         <div className="tabs server-tabs" role="tablist" aria-label="Server">
           {TABS.map((t) => (
-            <button key={t.key} role="tab" aria-selected={tab === t.key} className={'tab' + (tab === t.key ? ' active' : '')} onClick={() => setTab(t.key)}>
+            <button key={t.key} role="tab" aria-selected={tab === t.key || (both && t.key !== 'overview')} className={'tab' + (tab === t.key || (both && t.key !== 'overview') ? ' active' : '')} onClick={() => setTab(t.key)}>
               <i className={'ph-duotone ' + t.icon} />
               {t.name}
             </button>
@@ -90,7 +100,7 @@ export function Server({ data, now, openTab, onOpenSettings }: {
       {ready && opened.has('terminal') && (
         <Suspense
           fallback={
-            tab === 'terminal' && (
+            (tab === 'terminal' || both) && (
               <section className="panel srv-panel term-panel">
                 <div className="empty">
                   <p>Opening the terminal…</p>
@@ -99,13 +109,13 @@ export function Server({ data, now, openTab, onOpenSettings }: {
             )
           }
         >
-          <TerminalPanel target={info.target!} publicKey={info.publicKey} hidden={tab !== 'terminal'} cd={cd} onFailed={loadInfo} />
+          <TerminalPanel target={info.target!} publicKey={info.publicKey} hidden={!both && tab !== 'terminal'} cd={cd} onFailed={loadInfo} />
         </Suspense>
       )}
       {ready && opened.has('files') && (
         <FilesPanel
           publicKey={info.publicKey}
-          hidden={tab !== 'files'}
+          hidden={!both && tab !== 'files'}
           now={now}
           onFailed={loadInfo}
           onOpenTerminal={(path) => {

@@ -93,6 +93,14 @@ export function Tasks({ data, now, onConnect, onAdd, onComplete }: Props) {
       </div>
       {connected && on ? (
         <>
+          {/* Bento leads each tile with one number; the other designs hide this. */}
+          <div className="big-count" aria-hidden="true">
+            <b>{vis.length}</b>
+            <span>
+              open
+              {groups[0]?.label === 'Overdue' && <em>{groups[0].items.length} overdue</em>}
+            </span>
+          </div>
           <div className="task-add">
             <i className="ph-duotone ph-plus" style={{ fontSize: 16, color: 'var(--t3)', width: 16 }} />
             <input

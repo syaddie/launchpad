@@ -176,6 +176,7 @@ app.put('/api/prefs', async (c) => {
     name: isStr(body.name) ? body.name.slice(0, 40) : prev.name,
     theme: ['system', 'light', 'dark'].includes(body.theme as string) ? body.theme! : prev.theme,
     accent: ['sage', 'slate', 'terracotta'].includes(body.accent as string) ? body.accent! : prev.accent,
+    design: ['broadsheet', 'console', 'bento', 'horizon'].includes(body.design as string) ? body.design! : prev.design ?? 'broadsheet',
     hiddenCalendars: Array.isArray(body.hiddenCalendars) ? body.hiddenCalendars.filter(isStr) : prev.hiddenCalendars,
     sources: { ...prev.sources, ...body.sources },
     newsTopics: Array.isArray(body.newsTopics) ? cleanTopics(body.newsTopics) : prev.newsTopics,
