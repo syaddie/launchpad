@@ -203,13 +203,17 @@ a.hz-row:hover .hz-grow { text-decoration: underline; }
 [data-design='console'] .search-drop { top: auto; bottom: 34px; left: 14px; right: auto; width: 420px; }
 
 /* Panes: a thin box with the title cut into its top edge. */
-[data-design='console'] .panel { position: relative; background: transparent; padding: 22px 6px 8px; overflow: hidden; }
+[data-design='console'] .panel { position: relative; background: transparent; padding: 0 6px 8px; overflow: hidden; }
 [data-design='console'] .panel::before { content: ''; position: absolute; inset: 8px 0 0 0; border: 1px solid var(--ln); pointer-events: none; }
+/* The header sits on the top edge, each piece on its own patch of background so the line runs
+   behind it; a taller header (a toolbar, wrapped tabs) just grows down into the pane. */
 [data-design='console'] .panel > .panel-head,
-[data-design='console'] .panel > .note-head { position: absolute; top: 0; left: 10px; right: 10px; z-index: 1; height: 17px; padding: 0; gap: 8px; align-items: center; flex-wrap: nowrap !important; overflow: hidden; }
+[data-design='console'] .panel > .note-head { position: relative; z-index: 1; min-height: 17px; margin: 0 4px 6px; padding: 0; gap: 8px; align-items: center; }
 [data-design='console'] .panel > .panel-head > *,
 [data-design='console'] .panel > .note-head > * { background: var(--bg); padding: 0 6px; }
 [data-design='console'] .panel > .panel-head > :empty { display: none; }
+/* A pane with no header still clears its top edge. */
+[data-design='console'] .panel > :first-child:not(.panel-head):not(.note-head) { margin-top: 18px; }
 [data-design='console'] .panel-title { font-size: 11px; line-height: 17px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ac); }
 [data-design='console'] .panel-head .btn-small, [data-design='console'] .panel-head .tab, [data-design='console'] .note-head .tab { padding-block: 0; line-height: 17px; font-size: 11px; }
 [data-design='console'] .meta { font-size: 11px; }
@@ -228,6 +232,7 @@ a.hz-row:hover .hz-grow { text-decoration: underline; }
 [data-design='console'] .focus-text { font-size: 15px; line-height: 1.7; }
 [data-design='console'] .tile { width: auto; min-width: 0; flex-direction: row; padding: 2px 8px 2px 2px; gap: 6px; }
 [data-design='console'] .tile .fav { width: 20px; height: 20px; }
+[data-design='console'] .tile .fav img { inset: 2px; }
 [data-design='console'] .tile-name { font-size: 12px; max-width: 120px; }
 [data-design='console'] .bm-tiles { gap: 0 4px; }
 [data-design='console'] .photo-panel { filter: grayscale(0.35) contrast(1.05); }
