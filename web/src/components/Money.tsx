@@ -30,6 +30,8 @@ interface Props {
   /** A workbook was read; the page swaps it in and offers an undo. */
   onImport: (m: Money, summary: string) => void;
   notify: Notify;
+  /** Month shows its calendar and list side by side instead of one at a time. */
+  together?: boolean;
 }
 
 /**
@@ -38,7 +40,7 @@ interface Props {
  * monthly summary and the charts are worked out from the entries (shared/money.ts).
  * Invoices in Owed each have their money as an entry, kept in step on every change.
  */
-export function MoneyView({ money, now, saved, onChange: save, onImport, notify }: Props) {
+export function MoneyView({ money, now, saved, onChange: save, onImport, notify, together }: Props) {
   const today = ymd(now);
   const onChange = (m: Money) => save(syncInvoices(m));
   const lateInvoices = invoiceRows(money, today).filter((r) => !r.paidOn && r.daysLeft < 0).length;
@@ -126,7 +128,7 @@ export function MoneyView({ money, now, saved, onChange: save, onImport, notify 
         </div>
       </div>
       {tab === 'overview' && <Overview money={money} today={today} onOpenMonth={openMonth} onChange={onChange} />}
-      {tab === 'month' && <MonthTab money={money} today={today} month={month} onMonth={setMonth} onChange={onChange} onOpenOwed={() => setTab('owed')} />}
+      {tab === 'month' && <MonthTab money={money} today={today} month={month} onMonth={setMonth} onChange={onChange} onOpenOwed={() => setTab('owed')} together={together} />}
       {tab === 'owed' && <Owed money={money} today={today} onChange={onChange} onOpenMonth={openMonth} notify={notify} />}
       {tab === 'wishlist' && (
         <Wishlist
@@ -315,8 +317,10 @@ function lastAccount(money: Money): string {
 /** Another account in use, for the other end of a move. */
 const otherAccount = (money: Money, id: string) => (money.accounts.find((a) => a.id !== id && !a.archived) ?? money.accounts.find((a) => a.id !== id))?.id ?? '';
 
-function MonthTab({ money, today, month, onMonth, onChange, onOpenOwed }: {
+function MonthTab({ money, today, month, onMonth, onChange, onOpenOwed, together }: {
   money: Money;
+  /** Show the calendar and the list side by side (Console, Bento and Horizon on a wide enough screen). */
+  together?: boolean;
   today: string;
   month: string;
   onMonth: (k: string) => void;
@@ -408,93 +412,8 @@ function MonthTab({ money, today, month, onMonth, onChange, onOpenOwed }: {
   const balanceAt = (date: string) => (shown ? accountBalance(money, shown.id, date) : calc.balances[Number(date.slice(8)) - 1]);
   const pickAccount = (account: string) => setDraft({ ...draft, account, to: draft.to === account ? otherAccount(money, account) : draft.to });
 
-  return (
-    <div className="money-body month-tab">
-      <div className="month-bar">
-        <div className="month-nav">
-          <button className="icon-btn md" aria-label="Previous month" disabled={month <= addMonths(keys[0], -1)} onClick={() => onMonth(addMonths(month, -1))}>
-            <i className="ph-duotone ph-caret-left" />
-          </button>
-          <h2 className="serif month-title">{monthName(month)}</h2>
-          <button className="icon-btn md" aria-label="Next month" disabled={month >= addMonths(today.slice(0, 7), 24)} onClick={() => onMonth(addMonths(month, 1))}>
-            <i className="ph-duotone ph-caret-right" />
-          </button>
-          {!isNow && (
-            <button className="btn btn-ghost btn-small" onClick={() => onMonth(today.slice(0, 7))}>
-              This month
-            </button>
-          )}
-        </div>
-        <div className="tabs layout-tabs" role="group" aria-label="Show as">
-          {(['list', 'calendar'] as const).map((l) => (
-            <button key={l} className={'tab' + (layout === l ? ' active' : '')} aria-pressed={layout === l} onClick={() => setLayout(l)}>
-              <i className={'ph-duotone ' + (l === 'list' ? 'ph-list-bullets' : 'ph-calendar-blank')} />
-              {l === 'list' ? 'List' : 'Calendar'}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <section className="month-sum" aria-label={`${monthName(month)} in numbers`}>
-        <div className="m-stats">
-          {isNow ? (
-            <MonthStat label="In the bank now" value={balanceOn(money, today, true)} note="day-to-day accounts, from what’s done" hero />
-          ) : (
-            <MonthStat label="Started with" value={calc.opening} note={month <= keys[0] ? 'what your day-to-day accounts opened with' : 'last month’s closing balance'} hero />
-          )}
-          <MonthStat label={`End of ${monthName(month, true)}`} value={calc.closing} note={calc.plannedIn || calc.plannedOut ? 'if the plan holds' : 'all of it done'} />
-          <MonthStat label="Money in" value={calc.totalIn} sign tone="in" note={calc.plannedIn ? `${fmtMoney(calc.plannedIn)} still to come` : 'all of it done'} />
-          <MonthStat label="Money out" value={-calc.totalOut} sign note={calc.plannedOut ? `${fmtMoney(calc.plannedOut)} still to come` : 'all of it done'} />
-        </div>
-        <p className="month-foot">
-          {isNow && (
-            <span>
-              Started the month with <Calc v={calc.opening} title="What your day-to-day accounts had at the start of the month" strong />
-            </span>
-          )}
-          {calc.lowest < calc.opening && (
-            <span>
-              <i className="ph-duotone ph-trend-down" aria-hidden="true" />
-              Lowest point <Calc v={calc.lowest} title="The lowest end-of-day balance this month" strong /> on {shortDate(lowDate)}
-            </span>
-          )}
-        </p>
-      </section>
-
-      {review.length > 0 && (
-        <div className="review-bar">
-          <div className="review-head">
-            <i className="ph-duotone ph-clock-countdown" />
-            <b>Did {review.length === 1 ? 'this' : 'these'} happen?</b>
-            <span>Planned for a day that’s passed.</span>
-            {review.length > 1 && (
-              <button className="btn btn-secondary btn-small" onClick={() => setEntries(money.entries.map((e) => (review.includes(e) ? { ...e, planned: false } : e)))}>
-                Mark all {review.length} as done
-              </button>
-            )}
-          </div>
-          {review.slice(0, 5).map((e) => (
-            <div key={e.id} className="review-item">
-              <span className="review-what">
-                {entryTitle(e, names)} <span className="meta">· {shortDate(e.date)}</span>
-              </span>
-              <b className="tnum">{fmtMoney(e.kind === 'move' ? e.amount : signed(e), e.kind !== 'move')}</b>
-              <button className="btn btn-small review-yes" onClick={() => patch(e.id, { planned: false })}>
-                Yes, it’s done
-              </button>
-              <button className="btn btn-ghost btn-small" onClick={() => (setLayout('list'), setOnly(''), setEditing(e.id))}>
-                Change it
-              </button>
-            </div>
-          ))}
-          {review.length > 5 && <span className="review-more">and {review.length - 5} more, marked Overdue in the list</span>}
-        </div>
-      )}
-
-      {layout === 'calendar' ? (
-        <MonthCalendar month={month} money={money} entries={inMonth} calc={calc} today={today} onPick={addOn} />
-      ) : (
-        <>
+  const listPart = (
+    <>
           <div
             className="composer"
             role="group"
@@ -634,7 +553,103 @@ function MonthTab({ money, today, month, onMonth, onChange, onOpenOwed }: {
               </p>
             )}
           </section>
-        </>
+    </>
+  );
+
+  return (
+    <div className="money-body month-tab">
+      <div className="month-bar">
+        <div className="month-nav">
+          <button className="icon-btn md" aria-label="Previous month" disabled={month <= addMonths(keys[0], -1)} onClick={() => onMonth(addMonths(month, -1))}>
+            <i className="ph-duotone ph-caret-left" />
+          </button>
+          <h2 className="serif month-title">{monthName(month)}</h2>
+          <button className="icon-btn md" aria-label="Next month" disabled={month >= addMonths(today.slice(0, 7), 24)} onClick={() => onMonth(addMonths(month, 1))}>
+            <i className="ph-duotone ph-caret-right" />
+          </button>
+          {!isNow && (
+            <button className="btn btn-ghost btn-small" onClick={() => onMonth(today.slice(0, 7))}>
+              This month
+            </button>
+          )}
+        </div>
+        {!together && (
+        <div className="tabs layout-tabs" role="group" aria-label="Show as">
+          {(['list', 'calendar'] as const).map((l) => (
+            <button key={l} className={'tab' + (layout === l ? ' active' : '')} aria-pressed={layout === l} onClick={() => setLayout(l)}>
+              <i className={'ph-duotone ' + (l === 'list' ? 'ph-list-bullets' : 'ph-calendar-blank')} />
+              {l === 'list' ? 'List' : 'Calendar'}
+            </button>
+          ))}
+        </div>
+        )}
+      </div>
+
+      <section className="month-sum" aria-label={`${monthName(month)} in numbers`}>
+        <div className="m-stats">
+          {isNow ? (
+            <MonthStat label="In the bank now" value={balanceOn(money, today, true)} note="day-to-day accounts, from what’s done" hero />
+          ) : (
+            <MonthStat label="Started with" value={calc.opening} note={month <= keys[0] ? 'what your day-to-day accounts opened with' : 'last month’s closing balance'} hero />
+          )}
+          <MonthStat label={`End of ${monthName(month, true)}`} value={calc.closing} note={calc.plannedIn || calc.plannedOut ? 'if the plan holds' : 'all of it done'} />
+          <MonthStat label="Money in" value={calc.totalIn} sign tone="in" note={calc.plannedIn ? `${fmtMoney(calc.plannedIn)} still to come` : 'all of it done'} />
+          <MonthStat label="Money out" value={-calc.totalOut} sign note={calc.plannedOut ? `${fmtMoney(calc.plannedOut)} still to come` : 'all of it done'} />
+        </div>
+        <p className="month-foot">
+          {isNow && (
+            <span>
+              Started the month with <Calc v={calc.opening} title="What your day-to-day accounts had at the start of the month" strong />
+            </span>
+          )}
+          {calc.lowest < calc.opening && (
+            <span>
+              <i className="ph-duotone ph-trend-down" aria-hidden="true" />
+              Lowest point <Calc v={calc.lowest} title="The lowest end-of-day balance this month" strong /> on {shortDate(lowDate)}
+            </span>
+          )}
+        </p>
+      </section>
+
+      {review.length > 0 && (
+        <div className="review-bar">
+          <div className="review-head">
+            <i className="ph-duotone ph-clock-countdown" />
+            <b>Did {review.length === 1 ? 'this' : 'these'} happen?</b>
+            <span>Planned for a day that’s passed.</span>
+            {review.length > 1 && (
+              <button className="btn btn-secondary btn-small" onClick={() => setEntries(money.entries.map((e) => (review.includes(e) ? { ...e, planned: false } : e)))}>
+                Mark all {review.length} as done
+              </button>
+            )}
+          </div>
+          {review.slice(0, 5).map((e) => (
+            <div key={e.id} className="review-item">
+              <span className="review-what">
+                {entryTitle(e, names)} <span className="meta">· {shortDate(e.date)}</span>
+              </span>
+              <b className="tnum">{fmtMoney(e.kind === 'move' ? e.amount : signed(e), e.kind !== 'move')}</b>
+              <button className="btn btn-small review-yes" onClick={() => patch(e.id, { planned: false })}>
+                Yes, it’s done
+              </button>
+              <button className="btn btn-ghost btn-small" onClick={() => (setLayout('list'), setOnly(''), setEditing(e.id))}>
+                Change it
+              </button>
+            </div>
+          ))}
+          {review.length > 5 && <span className="review-more">and {review.length - 5} more, marked Overdue in the list</span>}
+        </div>
+      )}
+
+      {together ? (
+        <div className="month-split">
+          <MonthCalendar month={month} money={money} entries={inMonth} calc={calc} today={today} onPick={addOn} />
+          <div className="month-list-col">{listPart}</div>
+        </div>
+      ) : layout === 'calendar' ? (
+        <MonthCalendar month={month} money={money} entries={inMonth} calc={calc} today={today} onPick={addOn} />
+      ) : (
+        listPart
       )}
     </div>
   );

@@ -17,7 +17,7 @@ export function cachedState(): AppState | null {
 export function cacheState(s: AppState): void {
   try {
     localStorage.setItem(STATE_KEY, JSON.stringify(s));
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: s.prefs.theme, accent: s.prefs.accent }));
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: s.prefs.theme, accent: s.prefs.accent, design: s.prefs.design }));
   } catch {
     // Storage full or blocked: the page still works, it just paints from the network.
   }

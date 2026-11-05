@@ -25,6 +25,7 @@ export const DEFAULT_PREFS: Prefs = {
   name: 'Syaddie',
   theme: 'system',
   accent: 'sage',
+  design: 'broadsheet',
   hiddenCalendars: [],
   sources: { calendar: true, tasks: true, gmail: true },
   newsTopics: ['K-pop', 'Video games'],

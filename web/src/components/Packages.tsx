@@ -27,6 +27,12 @@ export function Packages({ packages, now, onOpen, onAdd, onKeep, onDismiss }: Pr
           Add package
         </button>
       </div>
+      {active.length > 0 && (
+        <div className="big-count" aria-hidden="true">
+          <b>{active.filter((p) => p.stage === 2).length || active.length}</b>
+          <span>{active.some((p) => p.stage === 2) ? 'out for delivery' : 'on the way'}{active.some((p) => p.exception) && <em>{active.filter((p) => p.exception).length} need a look</em>}</span>
+        </div>
+      )}
       <div className="scroll" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {active.map((p) => {
           const chip = chipOf(p);

@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { CARRIERS, detectCarrier, trackUrl } from '../../../shared/carriers';
 import { startOfDay } from '../../../shared/dates';
 import { DEFAULT_ENGINES } from '../../../shared/defaults';
-import type { AccentKey, AppState, Backup, BookmarkGroup, GoogleSource, Note, Package, Photo, Prefs, SearchEngine, ThemeMode } from '../../../shared/types';
+import type { AccentKey, AppState, Backup, BookmarkGroup, DesignKey, GoogleSource, Note, Package, Photo, Prefs, SearchEngine, ThemeMode } from '../../../shared/types';
 import { PhotoSettings } from './Photos';
 import { STEP_LABELS, ago, chipOf, fmtStamp, hm, segColor, statusText } from '../util';
 
@@ -208,8 +208,11 @@ const ACCENTS: { key: AccentKey; name: string; light: string; dark: string }[] =
   { key: 'terracotta', name: 'Terracotta', light: '#ad603f', dark: '#dd9b7b' },
 ];
 
-export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconnect, onImport, onAddPhotos, onRemovePhoto, onPhotoFocus }: {
+export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconnect, onImport, onAddPhotos, onRemovePhoto, onPhotoFocus, localDesign, onLocalDesign }: {
   data: AppState;
+  /** This browser's own layout, or '' to use the one saved for every device. */
+  localDesign: DesignKey | '';
+  onLocalDesign: (d: DesignKey | '') => void;
   now: Date;
   dark: boolean;
   onPrefs: (p: Prefs) => void;
@@ -274,6 +277,7 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
           </button>
         ))}
       </div>
+      {tab === 'layout' && <LayoutSettings prefs={p} onPrefs={onPrefs} local={localDesign} onLocal={onLocalDesign} />}
       {tab === 'panels' && <PanelSettings prefs={p} onPrefs={onPrefs} photoCount={data.photos.length} />}
       {tab === 'search' && <SearchSettings prefs={p} onPrefs={onPrefs} />}
       {tab === 'trackers' && <TrackerSettings prefs={p} onPrefs={onPrefs} />}
@@ -468,14 +472,77 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
   );
 }
 
-type SettingsTab = 'general' | 'panels' | 'search' | 'trackers' | 'photos';
+type SettingsTab = 'general' | 'layout' | 'panels' | 'search' | 'trackers' | 'photos';
 const SETTINGS_TABS: { key: SettingsTab; name: string }[] = [
   { key: 'general', name: 'General' },
+  { key: 'layout', name: 'Layout' },
   { key: 'panels', name: 'Panels' },
   { key: 'search', name: 'Search' },
   { key: 'trackers', name: 'Trackers' },
   { key: 'photos', name: 'Photos' },
 ];
+
+export const DESIGNS: { key: DesignKey; name: string; blurb: string }[] = [
+  { key: 'broadsheet', name: 'Broadsheet', blurb: 'Calm panels, serif headings and a rail on the left. Follows Theme and Accent.' },
+  { key: 'console', name: 'Console', blurb: 'A terminal dashboard: monospace, boxed panes, F1–F9 for the views. Weather details are printed, not hovered. Always dark.' },
+  { key: 'bento', name: 'Bento', blurb: 'Tiles that lead with one big number, a colour for each part of life, and a dock at the bottom. Follows Theme.' },
+  { key: 'horizon', name: 'Horizon', blurb: 'Today’s hours across the top, then Now, Later today, This week and Anytime. Follows Theme.' },
+];
+
+function LayoutSettings({ prefs, onPrefs, local, onLocal }: { prefs: Prefs; onPrefs: (p: Prefs) => void; local: DesignKey | ''; onLocal: (d: DesignKey | '') => void }) {
+  const current = local || prefs.design;
+  return (
+    <>
+      <div className="drawer-section">
+        <div className="drawer-label">Layout</div>
+        <p className="meta" style={{ margin: 0 }}>
+          How the whole dashboard is put together. Every layout has every view, tab and number; your data, panels and shortcuts stay the same. Also in ⌘K: “Layout”.
+        </p>
+        <div className="design-picks" role="radiogroup" aria-label="Layout">
+          {DESIGNS.map((d) => (
+            <button
+              key={d.key}
+              role="radio"
+              aria-checked={current === d.key}
+              className={'design-pick' + (current === d.key ? ' on' : '')}
+              onClick={() => (local ? onLocal(d.key) : onPrefs({ ...prefs, design: d.key }))}
+            >
+              <span className={'design-mini mini-' + d.key} aria-hidden="true">
+                <i />
+                <i />
+                <i />
+                <i />
+              </span>
+              <span className="design-name">
+                {d.name}
+                {current === d.key && <span className="chip chip-accent">On</span>}
+              </span>
+              <span className="design-blurb">{d.blurb}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="drawer-section">
+        <div className="drawer-label">On this device</div>
+        <select
+          className="input sm"
+          style={{ maxWidth: 280 }}
+          aria-label="Layout on this device"
+          value={local}
+          onChange={(e) => onLocal(e.target.value as DesignKey | '')}
+        >
+          <option value="">Same as everywhere ({DESIGNS.find((d) => d.key === prefs.design)?.name})</option>
+          {DESIGNS.map((d) => (
+            <option key={d.key} value={d.key}>
+              {d.name}, on this browser only
+            </option>
+          ))}
+        </select>
+        <span className="meta">Say a work laptop wants Horizon while home stays on Console. Picking above changes {local ? 'this browser only' : 'every device'}.</span>
+      </div>
+    </>
+  );
+}
 
 function Switch({ on, label, onChange }: { on: boolean; label: string; onChange: (on: boolean) => void }) {
   return (

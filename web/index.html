@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500;700&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
     />
     <script>
       // Apply the saved theme before first paint so a new tab never flashes the wrong colours.
@@ -18,9 +18,14 @@
         var p = {};
         try { p = JSON.parse(localStorage.getItem('launchpad:prefs') || '{}'); } catch (e) {}
         var t = p.theme || 'system';
-        var dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+        // This browser's own layout (Settings › Layout › On this device) wins over the saved one.
+        var d = 'broadsheet';
+        try { d = localStorage.getItem('launchpad:design') || p.design || d; } catch (e) {}
+        // Console is always dark.
+        var dark = d === 'console' || t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
         document.documentElement.dataset.mode = dark ? 'dark' : 'light';
         document.documentElement.dataset.accent = p.accent || 'sage';
+        document.documentElement.dataset.design = d;
       })();
     </script>
   </head>
