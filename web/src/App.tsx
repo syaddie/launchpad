@@ -267,12 +267,21 @@ export function App() {
   useLayoutEffect(() => {
     const el = rootRef.current;
     if (!el) return;
+    // A short screen (a phone on its side) gets the stacked, page-scrolling layout too:
+    // the other layouts pin the panels to the window height, which squeezes them to nothing.
+    const short = window.matchMedia('(max-height: 599px)');
+    let w = el.clientWidth;
+    const pick = () => setLayout(w < 760 || short.matches ? 'narrow' : w >= 2000 ? 'wide' : 'desktop');
     const ro = new ResizeObserver(([e]) => {
-      const w = e.contentRect.width;
-      setLayout(w < 760 ? 'narrow' : w >= 2000 ? 'wide' : 'desktop');
+      w = e.contentRect.width;
+      pick();
     });
     ro.observe(el);
-    return () => ro.disconnect();
+    short.addEventListener('change', pick);
+    return () => {
+      ro.disconnect();
+      short.removeEventListener('change', pick);
+    };
   }, []);
 
   // Pick up anything the hourly news run (or the inbox's) fetched since the last poll.
