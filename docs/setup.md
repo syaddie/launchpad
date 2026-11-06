@@ -187,7 +187,7 @@ Launchpad tidies up after itself too: photo files no photo uses are removed afte
 
 ## Install it on your phone
 
-Over HTTPS (the Cloudflare URL), Launchpad can be installed as an app: on Android, Chrome's menu → **Install app**; on an iPhone, Safari's Share → **Add to Home Screen**. It opens full-screen, and a long press on the icon offers You, Money and Training directly. It also keeps a copy of the page, so it opens even when the server or the tunnel is down, showing your last data with a banner saying the server can't be reached. Data itself always comes from the server. Over the plain-HTTP LAN address none of this applies (browsers only allow it over HTTPS), and the page works as before.
+Over HTTPS (the Cloudflare URL), Launchpad can be installed as an app: on Android, Chrome's menu → **Install app**; on an iPhone, Safari's Share → **Add to Home Screen**. It opens full-screen; on Android a long press on the icon also offers You, Money and Training directly. On an iPhone the installed app keeps its own cookies, separate from Safari, so you sign in to Cloudflare Access once more inside it. It also keeps a copy of the page, so it opens even when the server or the tunnel is down, showing your last data with a banner saying the server can't be reached. Data itself always comes from the server. Over the plain-HTTP LAN address none of this applies (browsers only allow it over HTTPS), and the page works as before.
 
 If the install option doesn't appear behind Cloudflare Access, sign in once in that browser first; the page asks for the manifest with the Access cookie.
 
