@@ -1,9 +1,9 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CARRIERS, detectCarrier, trackUrl } from '../../../shared/carriers';
 import { startOfDay } from '../../../shared/dates';
 import { DEFAULT_ENGINES } from '../../../shared/defaults';
-import type { AccentKey, AppState, Backup, DesignKey, GoogleSource, Package, Photo, Prefs, SearchEngine, ThemeMode } from '../../../shared/types';
-import { BACKUP_URL, DB_BACKUP_URL } from '../api';
+import type { AccentKey, AppState, Backup, BackupSnapshot, DesignKey, GoogleSource, Package, Photo, Prefs, SearchEngine, ThemeMode } from '../../../shared/types';
+import { api, BACKUP_URL, DB_BACKUP_URL, snapshotUrl, ZIP_BACKUP_URL } from '../api';
 import { PhotoSettings } from './Photos';
 import { STEP_LABELS, ago, chipOf, fmtStamp, hm, segColor, statusText } from '../util';
 
@@ -209,7 +209,7 @@ const ACCENTS: { key: AccentKey; name: string; light: string; dark: string }[] =
   { key: 'terracotta', name: 'Terracotta', light: '#ad603f', dark: '#dd9b7b' },
 ];
 
-export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconnect, onRestore, onAddPhotos, onRemovePhoto, onPhotoFocus, localDesign, onLocalDesign }: {
+export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconnect, onRestore, onRestoreSnapshot, onAddPhotos, onRemovePhoto, onPhotoFocus, localDesign, onLocalDesign }: {
   data: AppState;
   /** This browser's own layout, or '' to use the one saved for every device. */
   localDesign: DesignKey | '';
@@ -220,7 +220,9 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
   onConnect: () => void;
   onDisconnect: () => void;
   /** Restore a backup file on the server; resolves to the names of what it put back. */
-  onRestore: (b: Partial<Backup>) => Promise<string[]>;
+  onRestore: (b: Partial<Backup> | Blob) => Promise<string[]>;
+  /** Put back one of the automatic copies; resolves to the names of what it put back. */
+  onRestoreSnapshot: (id: string) => Promise<string[]>;
   onAddPhotos: (files: File[]) => Promise<string>;
   onRemovePhoto: (id: string) => void;
   onPhotoFocus: (id: string, focus: Photo['focus']) => void;
@@ -261,31 +263,36 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
     setImportMsg(note);
   };
 
+  /** Restore from a backup file: the JSON as before, or a .zip with photos, which the server unpacks. */
   const importJson = async (f: File) => {
-    let d: Partial<Backup>;
-    try {
-      d = JSON.parse(await f.text()) as Partial<Backup>;
-      if (!d || typeof d !== 'object' || (d.version !== 1 && d.version !== 2)) throw new Error();
-    } catch {
-      setImportMsg('That file isn’t a Launchpad backup.');
-      if (fileRef.current) fileRef.current.value = '';
-      return;
+    const reset = () => fileRef.current && (fileRef.current.value = '');
+    const zip = /\.zip$/i.test(f.name) || /zip/.test(f.type);
+    let body: Partial<Backup> | Blob = f;
+    let question = 'Restore the backup and its photos? This replaces everything it holds (bookmarks, notes, settings, trackers, money, courses, workouts, packages and photos) with the copy in the file.';
+    if (!zip) {
+      try {
+        const d = JSON.parse(await f.text()) as Partial<Backup>;
+        if (!d || typeof d !== 'object' || (d.version !== 1 && d.version !== 2)) throw new Error();
+        body = d;
+        const when = d.exported && !Number.isNaN(Date.parse(d.exported)) ? ` from ${fmtStamp(new Date(d.exported))}` : '';
+        const what = d.version === 1 ? 'your bookmarks and notepads' : 'everything in it (bookmarks, notes, settings, trackers, money, courses, workouts and packages)';
+        question = `Restore the backup${when}? This replaces ${what} with the copy in the file.`;
+      } catch {
+        setImportMsg('That file isn’t a Launchpad backup.');
+        reset();
+        return;
+      }
     }
-    const when = d.exported && !Number.isNaN(Date.parse(d.exported)) ? ` from ${fmtStamp(new Date(d.exported))}` : '';
-    const what = d.version === 1 ? 'your bookmarks and notepads' : 'everything in it (bookmarks, notes, settings, trackers, money, courses, workouts and packages)';
-    if (!confirm(`Restore the backup${when}? This replaces ${what} with the copy in the file.`)) {
-      if (fileRef.current) fileRef.current.value = '';
-      return;
-    }
+    if (!confirm(`${question}\n\nA copy of how things are now is kept, and Undo puts it back.`)) return void reset();
     setRestoring(true);
     try {
-      const restored = await onRestore(d);
+      const restored = await onRestore(body);
       setImportMsg(`Restored ${restored.join(', ')}.`);
     } catch (e) {
       setImportMsg(`Couldn’t restore: ${(e as Error).message}`);
     } finally {
       setRestoring(false);
-      if (fileRef.current) fileRef.current.value = '';
+      reset();
     }
   };
 
@@ -487,10 +494,14 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
             <i className="ph-duotone ph-download-simple" />
             Download backup
           </button>
+          <a className="btn btn-secondary" style={{ padding: '7px 12px', gap: 5, fontWeight: 400 }} href={ZIP_BACKUP_URL} download title="The backup and every photo, in one .zip">
+            <i className="ph-duotone ph-file-zip" />
+            With photos (.zip)
+          </a>
           <label className="btn btn-secondary" style={{ padding: '7px 12px', gap: 5, fontWeight: 400, opacity: restoring ? 0.6 : 1 }}>
             <i className="ph-duotone ph-upload-simple" />
             {restoring ? 'Restoring…' : 'Restore…'}
-            <input ref={fileRef} type="file" accept=".json,application/json" disabled={restoring} style={{ display: 'none' }} onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])} />
+            <input ref={fileRef} type="file" accept=".json,application/json,.zip,application/zip" disabled={restoring} style={{ display: 'none' }} onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])} />
           </label>
           <a className="btn btn-secondary" style={{ padding: '7px 12px', gap: 5, fontWeight: 400 }} href={DB_BACKUP_URL} download title="A copy of the whole SQLite database">
             <i className="ph-duotone ph-database" />
@@ -500,17 +511,93 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
         <div style={{ fontSize: 12, color: 'var(--t3)' }}>
           {importMsg || (
             <>
-              The backup is one JSON file with your bookmarks, notes, settings, countdowns, cigarette, mood and weight logs, money tracker, courses, workouts and packages. Restoring it puts all of that back; older bookmarks-and-notes backups still work.
-              The database copy has everything, the Google sign-in included, so keep it private. Photos are files beside the database and are in neither.
+              The backup is one JSON file with your bookmarks, notes, settings, countdowns, cigarette, mood and weight logs, money tracker, courses, workouts and packages; the .zip adds your photos. Restore takes either, and older bookmarks-and-notes backups still work.
+              The database copy has everything except photos, the Google sign-in included, so keep it private.
             </>
           )}
         </div>
       </div>
+
+      <AutoCopies now={now} onRestore={onRestoreSnapshot} />
       </>
       )}
     </>
   );
 }
+
+const REASONS: Record<BackupSnapshot['reason'], string> = { daily: 'Daily', 'before-restore': 'Before a restore', manual: 'Taken by hand' };
+
+/** The copies of the database Launchpad keeps by itself, to download or put back. */
+function AutoCopies({ now, onRestore }: { now: Date; onRestore: (id: string) => Promise<string[]> }) {
+  const [list, setList] = useState<BackupSnapshot[] | null>(null);
+  const [all, setAll] = useState(false);
+  const [busy, setBusy] = useState('');
+  const [msg, setMsg] = useState('');
+  useEffect(() => {
+    api.snapshots().then(setList).catch((e) => setMsg(`Couldn’t list them: ${e.message}`));
+  }, []);
+
+  const takeNow = () => {
+    setBusy('new');
+    api.takeSnapshot().then((l) => (setList(l), setMsg('Copy taken.'))).catch((e) => setMsg(`Couldn’t take one: ${e.message}`)).finally(() => setBusy(''));
+  };
+  const putBack = async (s: BackupSnapshot) => {
+    if (!confirm(`Put back what you’d entered at ${fmtStamp(new Date(s.at))}? This replaces your bookmarks, notes, settings, trackers, money, courses, workouts, packages and photo list with that copy.\n\nA copy of how things are now is kept, and Undo puts it back.`)) return;
+    setBusy(s.id);
+    try {
+      const restored = await onRestore(s.id);
+      setMsg(`Put back ${restored.length} parts from ${fmtStamp(new Date(s.at))}.`);
+      setList(await api.snapshots());
+    } catch (e) {
+      setMsg(`Couldn’t put it back: ${(e as Error).message}`);
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const shown = list && (all ? list : list.slice(0, 5));
+  return (
+    <div className="drawer-section">
+      <div className="drawer-label">Automatic copies</div>
+      <div style={{ fontSize: 12, color: 'var(--t3)' }}>
+        A copy of the database is kept every day (the last 14) and just before every restore (the last 10), on the server in <span className="mono">backups</span> beside the database.
+      </div>
+      {shown && shown.length > 0 && (
+        <div className="snap-list">
+          {shown.map((s) => (
+            <div key={s.id} className="snap-row">
+              <div className="snap-when">
+                <span>{fmtStamp(new Date(s.at))}</span>
+                <span className="snap-meta">{REASONS[s.reason]} · {ago(s.at, now)} · {fmtSize(s.size)}</span>
+              </div>
+              <a className="icon-btn" href={snapshotUrl(s.id)} download aria-label="Download this copy" title="Download (.db)">
+                <i className="ph-duotone ph-download-simple" />
+              </a>
+              <button className="btn btn-secondary" style={{ padding: '4px 10px', fontWeight: 400 }} disabled={!!busy} onClick={() => putBack(s)}>
+                {busy === s.id ? 'Putting back…' : 'Put back'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {list && list.length === 0 && <div style={{ fontSize: 13, color: 'var(--t2)' }}>None yet: the first daily copy is taken a couple of minutes after the server starts.</div>}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button className="btn btn-secondary" style={{ padding: '7px 12px', gap: 5, fontWeight: 400 }} disabled={!!busy} onClick={takeNow}>
+          <i className="ph-duotone ph-camera" />
+          {busy === 'new' ? 'Taking a copy…' : 'Take a copy now'}
+        </button>
+        {list && list.length > 5 && (
+          <button className="btn-link" onClick={() => setAll(!all)}>
+            {all ? 'Show fewer' : `Show all ${list.length}`}
+          </button>
+        )}
+      </div>
+      {msg && <div style={{ fontSize: 12, color: 'var(--t3)' }}>{msg}</div>}
+    </div>
+  );
+}
+
+const fmtSize = (b: number) => (b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`);
 
 type SettingsTab = 'general' | 'layout' | 'panels' | 'search' | 'trackers' | 'photos';
 const SETTINGS_TABS: { key: SettingsTab; name: string }[] = [

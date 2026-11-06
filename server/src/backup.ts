@@ -6,7 +6,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { cleanCountdowns, cleanMoods, cleanPackages, cleanPrefs, cleanSmokes, cleanWeights, validBookmarks, validNotes } from './clean';
+import { MAX_PHOTOS, photoExists, readPhoto, restorePhotoFile, sniffImage, type StoredPhoto } from './photos';
 import { snapshotDb, store } from './store';
+import { isZip, unzip, zipStream, type ZipEntry } from './zip';
 import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
 import { MUSCLES, cleanTraining } from '../../shared/training';
@@ -28,6 +30,7 @@ export function exportBackup(): Backup {
     training: store.training(),
     exerciseMuscles: store.exerciseMuscles(),
     packages: store.packages(),
+    photos: store.photos(),
   };
 }
 
@@ -45,6 +48,7 @@ export const PART_NAMES: Record<BackupPart, string> = {
   training: 'workouts',
   exerciseMuscles: 'exercise muscles',
   packages: 'packages',
+  photos: 'photos',
 };
 
 function cleanMuscles(v: unknown): Record<string, ExerciseMuscles> | null {
@@ -113,6 +117,11 @@ export function restoreBackup(body: unknown): BackupPart[] {
     writes.push(['packages', () => store.setPackages(v)]);
   }
 
+  if (has('photos') && Array.isArray(b.photos)) {
+    const v = cleanPhotos(b.photos);
+    writes.push(['photos', () => store.setPhotos(v)]);
+  }
+
   if (!writes.length) throw new RestoreError('That file isn’t a Launchpad backup.');
   for (const [, write] of writes) write();
   return writes.map(([k]) => k);
@@ -120,11 +129,75 @@ export function restoreBackup(body: unknown): BackupPart[] {
 
 export class RestoreError extends Error {}
 
+/**
+ * The photo list from a backup, keeping only photos whose file is here (put back from a
+ * .zip, or never removed). Files of photos left off the list aren't deleted: the weekly
+ * cleanup does that, so undoing the restore within a week brings them back.
+ */
+function cleanPhotos(v: unknown[]): StoredPhoto[] {
+  const ids = new Set<string>();
+  const clamp = (n: unknown, d: number) => (typeof n === 'number' && Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : d);
+  return (v as Partial<StoredPhoto>[]).flatMap((p) => {
+    if (!p || typeof p.id !== 'string' || ids.has(p.id) || !photoExists(p.id)) return [];
+    const mime = sniffImage(new Uint8Array(readPhoto(p.id) ?? []));
+    if (!mime) return [];
+    ids.add(p.id);
+    return [{ id: p.id, mime, focus: { x: clamp(p.focus?.x, 50), y: clamp(p.focus?.y, 30) } }];
+  }).slice(0, MAX_PHOTOS);
+}
+
+const ZIP_JSON = 'launchpad-backup.json';
+
+/** The backup and every photo file, as a .zip. */
+export function zipBackup(): ReadableStream<Uint8Array> {
+  const backup = exportBackup();
+  const entries: ZipEntry[] = [{ name: ZIP_JSON, data: () => Buffer.from(JSON.stringify(backup, null, 2)) }];
+  for (const p of backup.photos ?? []) {
+    if (photoExists(p.id)) entries.push({ name: `photos/${p.id}`, data: () => readPhoto(p.id) ?? Buffer.alloc(0) });
+  }
+  return zipStream(entries);
+}
+
+/**
+ * A backup file as it was uploaded: the JSON itself, or a .zip holding it and the photos.
+ * The zip's photo files are written first (never over one that's there), so the restore keeps them listed.
+ */
+export function readBackupUpload(bytes: Buffer): unknown {
+  if (!isZip(bytes)) {
+    try {
+      return JSON.parse(bytes.toString('utf8'));
+    } catch {
+      throw new RestoreError('That file isn’t a Launchpad backup.');
+    }
+  }
+  let files: Map<string, Buffer>;
+  try {
+    files = unzip(bytes);
+  } catch (e) {
+    throw new RestoreError((e as Error).message);
+  }
+  // Re-zipped by hand, it may sit in a folder; macOS adds a __MACOSX folder of its own.
+  const names = [...files.keys()].filter((n) => !n.startsWith('__MACOSX/'));
+  const json = names.find((n) => n === ZIP_JSON || n.endsWith('/' + ZIP_JSON));
+  if (!json) throw new RestoreError('That .zip has no launchpad-backup.json in it.');
+  let body: unknown;
+  try {
+    body = JSON.parse(files.get(json)!.toString('utf8'));
+  } catch {
+    throw new RestoreError('The backup inside that .zip is damaged.');
+  }
+  for (const n of names) {
+    const m = /(?:^|\/)photos\/([A-Za-z0-9_-]{16})$/.exec(n);
+    if (m) restorePhotoFile(m[1], files.get(n)!);
+  }
+  return body;
+}
+
 const plural = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? one : many}`;
 
-/** What each restored part now holds, for the page: "3 countdowns", "money tracker (120 entries)". */
+/** What each restored part now holds, for the page: "3 countdowns", "money tracker (120 entries)". Empty ones are left out. */
 export function describeRestored(parts: BackupPart[]): string[] {
-  return parts.map((p) => {
+  const all = parts.map((p) => {
     switch (p) {
       case 'bookmarks': return plural(store.bookmarks().length, 'bookmark group');
       case 'notes': return plural(store.notes().length, 'notepad');
@@ -136,9 +209,12 @@ export function describeRestored(parts: BackupPart[]): string[] {
       case 'learn': return plural(store.learn().courses.length, 'course');
       case 'training': return plural(store.training().workouts.length, 'workout');
       case 'packages': return plural(store.packages().length, 'package');
+      case 'photos': return plural(store.photos().length, 'photo');
       default: return PART_NAMES[p];
     }
   });
+  const some = all.filter((l) => !/^0 |\(0 entries\)/.test(l));
+  return some.length ? some : all.slice(0, 1);
 }
 
 /** Copy the database to a temporary file and hand it over; the file is gone once it's read. */

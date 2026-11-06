@@ -1491,3 +1491,11 @@ button.m-stat { cursor: default; }
 .ln-conf i.f { background: var(--ac); box-shadow: none; }
 [data-layout='narrow'] .ln-days { gap: 4px; }
 [data-layout='narrow'] .ln-arow { grid-template-columns: minmax(0, 1fr) 40px 46px auto; }
+
+/* ---------- settings: automatic copies ---------- */
+
+.snap-list { display: flex; flex-direction: column; border: 1px solid var(--ln); border-radius: 4px; }
+.snap-row { display: flex; align-items: center; gap: 8px; padding: 7px 10px; }
+.snap-row + .snap-row { border-top: 1px solid var(--ln); }
+.snap-when { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 13px; }
+.snap-meta { font-size: 12px; color: var(--t3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

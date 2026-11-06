@@ -174,10 +174,18 @@ A shell keeps running for 15 minutes after you leave the tab or close the page, 
 
 Everything is in one SQLite file inside the `launchpad-data` volume, with photos in a `photos` folder beside it. Settings → General → **Backup** has:
 
-- **Download backup**: one JSON file with everything you've entered (bookmarks, notes, settings, countdowns, the cigarette, mood and weight logs, the money tracker, courses and study time, workouts, exercise muscles and packages). It leaves out what sync fetches again (calendar, tasks, mail, news, weather) and the Google sign-in. **Restore…** puts a file like this back: each part it holds replaces what's there, parts it doesn't hold are kept, and the older bookmarks-and-notes files from **Export JSON** still restore.
-- **Database (.db)**: a consistent copy of the whole SQLite database (`VACUUM INTO`, safe while Launchpad is running). It includes the Google sign-in, so keep it private. To put it back, stop the container, replace `launchpad.db` in the volume (and delete any `launchpad.db-wal` and `launchpad.db-shm` beside it), then start it.
+- **Download backup**: one JSON file with everything you've entered (bookmarks, notes, settings, countdowns, the cigarette, mood and weight logs, the money tracker, courses and study time, workouts, exercise muscles, packages and the photo list). It leaves out what sync fetches again (calendar, tasks, mail, news, weather) and the Google sign-in.
+- **With photos (.zip)**: the same backup plus every photo file, in one .zip.
+- **Restore…** takes either file (and the older bookmarks-and-notes files from **Export JSON**). Each part it holds replaces what's there; parts it doesn't hold are kept. From a .zip, photos missing here are put back. Cloudflare refuses uploads over 100 MB, so a bigger .zip has to be restored over the LAN address.
+- **Database (.db)**: a consistent copy of the whole SQLite database, safe to take while Launchpad runs. It includes the Google sign-in, so keep it private. To put it back by hand, stop the container, replace `launchpad.db` in the volume (and delete any `launchpad.db-wal` and `launchpad.db-shm` beside it), then start it.
 
-Neither includes the photo files. To copy those too, or to script the whole lot from the server:
+**Automatic copies.** Launchpad also keeps copies of the database by itself, in a `backups` folder beside it: one a day (the last 14), one just before every restore (the last 10), and any you take with **Take a copy now** (the last 10). Settings lists them; **Put back** restores what you'd entered from one, and each can be downloaded as a `.db`.
+
+**Undo.** Every restore, from a file or a copy, is preceded by a copy, so the message afterwards has **Undo**, and the copy stays in the list if you change your mind later.
+
+**Two devices editing at once.** Notes, bookmarks, the money tracker and Learn are saved whole. If another tab or device saved one since this page last loaded it, the save is refused and the page merges the two: different items, and different fields of one item, both survive. Where both changed the same value, this device's wins, and if both rewrote the same notepad, the other device's text is kept as a copy beside it. A message says when this happened.
+
+Photo files aren't in the database or its copies. To copy everything from the server instead:
 
 ```bash
 docker run --rm -v launchpad_launchpad-data:/data -v "$PWD":/backup alpine sh -c "apk add -q sqlite && sqlite3 /data/launchpad.db \"VACUUM INTO '/backup/launchpad.db'\" && cp -r /data/photos /backup/"

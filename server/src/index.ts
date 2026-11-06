@@ -5,14 +5,15 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { WebSocketServer } from 'ws';
 import { config, googleConfigured } from './config';
 import { authUrl, completeTask, createTask, exchangeCode, GoogleError, revoke } from './google';
-import { asTab, store, updatePackages } from './store';
-import { dbSnapshot, describeRestored, exportBackup, restoreBackup, RestoreError } from './backup';
+import { asTab, docVersion, store, updatePackages } from './store';
+import { dbSnapshot, describeRestored, exportBackup, readBackupUpload, restoreBackup, RestoreError, zipBackup } from './backup';
+import { listSnapshots, removeSnapshot, snapshotBackup, snapshotFile, startSnapshots, takeSnapshot } from './snapshots';
 import { cleanCountdowns, cleanMood, cleanPrefs, isStr, isYmd, validBookmarks, validNotes } from './clean';
 import { eventStream, tabOf } from './events';
 import { claudeEnabled } from './claude';
@@ -27,7 +28,7 @@ import { cleanMoney } from '../../shared/money';
 import { MAX_KG, MIN_KG, cleanKg, cleanTraining } from '../../shared/training';
 import { refreshLearnNote } from './learn';
 import { refreshTraining } from './training';
-import type { AppState, Mood, NewsTopic, Package, Photo, Prefs, SourceKey } from '../../shared/types';
+import type { AppState, Mood, NewsTopic, Package, Photo, Prefs, SavedDoc, SourceKey } from '../../shared/types';
 
 const app = new Hono();
 
@@ -105,6 +106,7 @@ function state(): AppState {
     weights: store.weights(),
     learn: store.learn(),
     learnNote: claudeEnabled() ? store.learnNote() : { note: null, error: null },
+    versions: { bookmarks: docVersion('bookmarks'), notes: docVersion('notes'), money: docVersion('money'), learn: docVersion('learn') },
   };
 }
 
@@ -127,18 +129,35 @@ app.get('/api/state', (c) => c.json(state()));
 
 // ---------- bookmarks, notes, prefs ----------
 
+/**
+ * A whole-document save says, in X-Base-Version, which version the page's copy started from.
+ * When another tab or device has saved since, it's refused with the current copy, which the
+ * page merges its edits into (shared/merge.ts) and saves again. A save without the header
+ * (a tab closing mid-save, or a page from before this) simply wins, as before.
+ */
+function staleSave(c: Context, key: SavedDoc, current: () => unknown): Response | null {
+  const base = c.req.header('x-base-version');
+  if (base === undefined || base === docVersion(key)) return null;
+  return c.json({ error: 'Changed on another device', conflict: true, version: docVersion(key), value: current() }, 409);
+}
+const saved = (c: Context, key: SavedDoc) => c.json({ ok: true, version: docVersion(key) });
+
 app.put('/api/bookmarks', async (c) => {
   const body = await c.req.json();
   if (!validBookmarks(body)) return c.json({ error: 'Invalid bookmarks' }, 400);
+  const stale = staleSave(c, 'bookmarks', store.bookmarks);
+  if (stale) return stale;
   store.setBookmarks(body);
-  return c.json({ ok: true });
+  return saved(c, 'bookmarks');
 });
 
 app.put('/api/notes', async (c) => {
   const body = await c.req.json();
   if (!validNotes(body)) return c.json({ error: 'Invalid notes' }, 400);
+  const stale = staleSave(c, 'notes', store.notes);
+  if (stale) return stale;
   store.setNotes(body);
-  return c.json({ ok: true });
+  return saved(c, 'notes');
 });
 
 app.put('/api/prefs', async (c) => {
@@ -287,9 +306,10 @@ app.put('/api/weights/:date', async (c) => {
 app.put('/api/money', bodyLimit({ maxSize: 1024 * 1024, onError: (c) => c.json({ error: 'That’s too much to save at once.' }, 413) }), async (c) => {
   const body = await c.req.json();
   if (!body || typeof body !== 'object' || !Array.isArray(body.entries)) return c.json({ error: 'Invalid money tracker' }, 400);
-  const money = cleanMoney(body);
-  store.setMoney(money);
-  return c.json(money);
+  const stale = staleSave(c, 'money', store.money);
+  if (stale) return stale;
+  store.setMoney(cleanMoney(body));
+  return saved(c, 'money');
 });
 
 // ---------- training ----------
@@ -317,9 +337,10 @@ app.post('/api/training/refresh', async (c) => {
 app.put('/api/learn', bodyLimit({ maxSize: 2 * 1024 * 1024, onError: (c) => c.json({ error: 'That’s too much to save at once.' }, 413) }), async (c) => {
   const body = await c.req.json();
   if (!body || typeof body !== 'object' || !Array.isArray(body.courses)) return c.json({ error: 'Invalid learn data' }, 400);
-  const learn = cleanLearn(body);
-  store.setLearn(learn);
-  return c.json(learn);
+  const stale = staleSave(c, 'learn', store.learn);
+  if (stale) return stale;
+  store.setLearn(cleanLearn(body));
+  return saved(c, 'learn');
 });
 
 /** Write the note on the week ahead when today's isn't written yet (or again, with ?force=1), then send the whole state. */
@@ -429,16 +450,64 @@ app.get('/api/backup', (c) => {
   });
 });
 
-/** Restore from a backup file. Parts it has replace what's here; parts it doesn't are kept. */
-app.post('/api/backup', bodyLimit({ maxSize: 32 * 1024 * 1024, onError: (c) => c.json({ error: 'That backup is over 32 MB.' }, 413) }), async (c) => {
-  const body = await c.req.json().catch(() => null);
+/**
+ * Restore a backup and say what came back. A copy of the database is taken first, and its id
+ * returned as `undo`, so the page can offer to put everything back as it was.
+ */
+function restoreWithUndo(c: Context, body: () => unknown) {
+  const before = takeSnapshot('before-restore');
   try {
-    const parts = restoreBackup(body);
-    return c.json({ restored: describeRestored(parts), state: state() });
+    const parts = restoreBackup(body());
+    return c.json({ restored: describeRestored(parts), undo: before.id, state: state() });
   } catch (e) {
+    removeSnapshot(before.id);
     if (e instanceof RestoreError) return c.json({ error: e.message }, 400);
     throw e;
   }
+}
+
+/** Restore from a backup file: the JSON, or a .zip with photos (sent as the raw file). Parts it has replace what's here; parts it doesn't are kept. */
+app.post('/api/backup', bodyLimit({ maxSize: 100 * 1024 * 1024, onError: (c) => c.json({ error: 'That backup is over 100 MB, more than Cloudflare lets through.' }, 413) }), async (c) => {
+  const bytes = Buffer.from(await c.req.arrayBuffer());
+  return restoreWithUndo(c, () => readBackupUpload(bytes));
+});
+
+/** Everything you've entered and the photo files, as one .zip that Restore takes back. */
+app.get('/api/backup/zip', (c) => {
+  const day = new Date().toISOString().slice(0, 10);
+  return c.body(zipBackup(), 200, {
+    'Content-Type': 'application/zip',
+    'Content-Disposition': `attachment; filename="launchpad-backup-${day}.zip"`,
+    'Cache-Control': 'no-store',
+  });
+});
+
+// The copies Launchpad takes by itself (see snapshots.ts).
+app.get('/api/backup/snapshots', (c) => c.json(listSnapshots()));
+
+app.post('/api/backup/snapshots', (c) => {
+  takeSnapshot('manual');
+  return c.json(listSnapshots());
+});
+
+app.get('/api/backup/snapshots/:id', (c) => {
+  const id = c.req.param('id');
+  const file = snapshotFile(id);
+  if (!file) return c.json({ error: 'That copy is gone.' }, 404);
+  return c.body(Readable.toWeb(fs.createReadStream(file)) as ReadableStream, 200, {
+    'Content-Type': 'application/vnd.sqlite3',
+    'Content-Length': String(fs.statSync(file).size),
+    'Content-Disposition': `attachment; filename="launchpad-${id}.db"`,
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+  });
+});
+
+/** Put back what you'd entered when this copy was taken. Undoable like any restore. */
+app.post('/api/backup/snapshots/:id/restore', (c) => {
+  const id = c.req.param('id');
+  if (!snapshotFile(id)) return c.json({ error: 'That copy is gone.' }, 404);
+  return restoreWithUndo(c, () => snapshotBackup(id));
 });
 
 /** The whole SQLite database, Google sign-in and caches included. Photos are files beside it, so aren't in it. */
@@ -611,3 +680,4 @@ server.on('upgrade', async (req, socket, head) => {
 startScheduler();
 startSampler();
 startCleanup();
+startSnapshots();

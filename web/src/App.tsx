@@ -5,8 +5,9 @@ import { emptyLearn, fmtStudy, parseStudy, timerMinutes } from '../../shared/lea
 import { starterMoney } from '../../shared/money';
 import { EMPTY_TRAINING, fmtKg, parseWeight } from '../../shared/training';
 import { MOOD_WORDS, engineUrl, fmtDuration, parseSearch, smokesOn } from '../../shared/trackers';
-import type { AppState, Backup, BookmarkGroup, DesignKey, Countdown, Learn, Money, Mood, Note, Package, Photo, Prefs, Task, Training, ViewKey } from '../../shared/types';
-import { api, cachedState, cacheState, localGet, localSet, ServerError, TAB_ID } from './api';
+import type { AppState, Backup, BookmarkGroup, DesignKey, Countdown, Learn, Money, Mood, Note, Package, Photo, Prefs, SavedDoc, Task, Training, ViewKey } from '../../shared/types';
+import { api, cachedState, cacheState, ConflictError, localGet, localSet, ServerError, TAB_ID, type RestoreResult } from './api';
+import { merge3, mergeNotes } from '../../shared/merge';
 import { Bookmarks } from './components/Bookmarks';
 import { AddPackageDrawer, DESIGNS, Drawer, PANEL_ROWS, PackageDrawer, SettingsDrawer } from './components/Drawers';
 import { Inbox, inboxBadge } from './components/Inbox';
@@ -77,20 +78,35 @@ function fromCache(c: AppState | null): AppState {
 
 type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings' } | { type: 'exercise'; title: string } | { type: 'course'; id: string; item?: string } | null;
 
-/** Debounced saver for whole-document PUTs, flushed when the tab closes. */
-function useSaver<T>(save: (v: T, keepalive?: boolean) => Promise<unknown>, delay: number, onSaved?: () => void, onError?: (e: Error) => void) {
+/**
+ * Debounced saver for whole-document PUTs, flushed when the tab closes. Saves go one at a
+ * time, so each starts from the version the last one made. `save` resolves to a value when
+ * that should be saved next instead (a merge after another device saved first).
+ */
+function useSaver<T>(save: (v: T, opts: { keepalive: boolean; unchecked: boolean }) => Promise<T | void>, delay: number, onSaved?: () => void, onError?: (e: Error) => void) {
   const timer = useRef(0);
   const latest = useRef<T | null>(null);
   const inflight = useRef(0);
+  const chain = useRef<Promise<void>>(Promise.resolve());
   const flush = useCallback(
-    (keepalive = false) => {
+    function flush(keepalive = false) {
       clearTimeout(timer.current);
       const v = latest.current;
       if (v === null) return;
       latest.current = null;
+      // The tab is closing and can't wait its turn: send now, without the version check.
+      if (keepalive && inflight.current) {
+        save(v, { keepalive, unchecked: true }).catch(() => {});
+        return;
+      }
       inflight.current++;
-      save(v, keepalive)
-        .then(() => onSaved?.())
+      chain.current = chain.current
+        .then(() => save(v, { keepalive, unchecked: false }))
+        .then((again) => {
+          if (again === undefined) return onSaved?.();
+          latest.current = again;
+          flush();
+        })
         .catch((e) => onError?.(e))
         .finally(() => inflight.current--);
     },
@@ -198,11 +214,6 @@ export function App() {
     moneySavedT.current = window.setTimeout(() => setMoneySaved(false), 1500);
   }, []);
 
-  const bookmarkSaver = useSaver(api.putBookmarks, 400, undefined, onSaveError);
-  const moneySaver = useSaver(api.putMoney, 500, flashMoneySaved, onSaveError);
-  const noteSaver = useSaver(api.putNotes, 500, flashSaved, onSaveError);
-  const learnSaver = useSaver(api.putLearn, 400, undefined, onSaveError);
-
   // ---------- data ----------
 
   const update = useCallback((fn: (d: AppState) => AppState) => {
@@ -213,15 +224,68 @@ export function App() {
     });
   }, []);
 
+  /** The latest data, for saves that finish after more edits. */
+  const dataRef = useRef(data);
+  dataRef.current = data;
+  /** For each document saved whole, the server's copy this page's edits started from, and its version. */
+  const bases = useRef<Partial<Record<SavedDoc, { value: unknown; version?: string }>> | null>(null);
+  bases.current ??= Object.fromEntries((['bookmarks', 'notes', 'money', 'learn'] as const).map((k) => [k, { value: data[k], version: data.versions?.[k] }]));
+
+  /**
+   * Save one document. If another tab or device saved it first, merge this page's edits
+   * (all of them, including any made while the save was out) into their copy, show the
+   * result, and hand it back to be saved on top of theirs.
+   */
+  const saveDoc = useCallback(
+    <K extends SavedDoc>(key: K) =>
+      async (v: AppState[K], { keepalive, unchecked }: { keepalive: boolean; unchecked: boolean }): Promise<AppState[K] | void> => {
+        const base = bases.current![key];
+        try {
+          const { version } = await api.putDoc(key, v, unchecked ? undefined : base?.version, keepalive);
+          bases.current![key] = { value: v, version };
+        } catch (e) {
+          if (!(e instanceof ConflictError)) throw e;
+          const mine = dataRef.current[key];
+          const theirs = e.value as AppState[K];
+          const { value, conflicts, copies = 0 } = key === 'notes'
+            ? (mergeNotes(base?.value as Note[], mine as Note[], theirs as Note[]) as { value: AppState[K]; conflicts: number; copies: number })
+            : { ...merge3(base?.value as AppState[K], mine, theirs), copies: 0 };
+          bases.current![key] = { value: theirs, version: e.version };
+          update((d) => ({ ...d, [key]: value }));
+          showToast(
+            `Merged with changes made on another device${copies ? '; its version of a notepad you both edited is kept as a copy' : ''}${conflicts ? ` (${conflicts} edit${conflicts === 1 ? '' : 's'} you both made: yours kept)` : ''}.`,
+          );
+          return value;
+        }
+      },
+    [update, showToast],
+  );
+  const saveBookmarks = useMemo(() => saveDoc('bookmarks'), [saveDoc]);
+  const saveNotes = useMemo(() => saveDoc('notes'), [saveDoc]);
+  const saveMoney = useMemo(() => saveDoc('money'), [saveDoc]);
+  const saveLearn = useMemo(() => saveDoc('learn'), [saveDoc]);
+  const bookmarkSaver = useSaver(saveBookmarks, 400, undefined, onSaveError);
+  const moneySaver = useSaver(saveMoney, 500, flashMoneySaved, onSaveError);
+  const noteSaver = useSaver(saveNotes, 500, flashSaved, onSaveError);
+  const learnSaver = useSaver(saveLearn, 400, undefined, onSaveError);
+
   /** Take fresh server state, but keep local edits that haven't been saved yet. */
   const merge = useCallback(
     (s: AppState) => {
+      const keep: Record<SavedDoc, boolean> = {
+        bookmarks: bookmarkSaver.busy(),
+        notes: noteSaver.busy() || noteEditing.current,
+        money: moneySaver.busy(),
+        learn: learnSaver.busy(),
+      };
+      // A document taken from the server is the new starting point for the next save; one kept keeps its old one.
+      for (const k of Object.keys(keep) as SavedDoc[]) if (!keep[k]) bases.current![k] = { value: s[k], version: s.versions?.[k] };
       update((prev) => ({
         ...s,
-        bookmarks: bookmarkSaver.busy() ? prev.bookmarks : s.bookmarks,
-        notes: noteSaver.busy() || noteEditing.current ? prev.notes : s.notes,
-        money: moneySaver.busy() ? prev.money : s.money,
-        learn: learnSaver.busy() ? prev.learn : s.learn,
+        bookmarks: keep.bookmarks ? prev.bookmarks : s.bookmarks,
+        notes: keep.notes ? prev.notes : s.notes,
+        money: keep.money ? prev.money : s.money,
+        learn: keep.learn ? prev.learn : s.learn,
       }));
     },
     [update, bookmarkSaver, noteSaver, moneySaver, learnSaver],
@@ -682,14 +746,22 @@ export function App() {
     api.speedTest().catch((e) => showToast(`Couldn’t start a speed test: ${e.message}`));
   };
 
-  /** Put a backup file back on the server, then show what it holds. Returns what was restored. */
-  const restoreBackup = async (b: Partial<Backup>): Promise<string[]> => {
-    const { restored, state } = await api.restoreBackup(b);
-    // The restored copy wins over anything on screen, unsaved edits included.
+  /**
+   * Restore something on the server (a backup file, or one of the automatic copies), show it,
+   * and offer Undo, which puts back the copy the server took just before. Returns what came back.
+   */
+  const restoreWith = async (run: () => Promise<RestoreResult>): Promise<string[]> => {
+    const { restored, undo, state } = await run();
+    // The restored copy wins over anything on screen, unsaved edits included, and is where the next saves start.
+    for (const k of ['bookmarks', 'notes', 'money', 'learn'] as const) bases.current![k] = { value: state[k], version: state.versions?.[k] };
     update(() => fromCache(state));
-    if (b.notes?.length) pickNote(state.notes[0].id);
+    if (!state.notes.some((n) => n.id === activeNote)) pickNote(state.notes[0].id);
+    const summary = `Restored ${restored.join(', ')}.`;
+    showToast(summary, undo ? { label: 'Undo', run: () => restoreWith(() => api.restoreSnapshot(undo)).catch((e) => showToast(`Couldn’t undo: ${e.message}`)) } : undefined);
     return restored;
   };
+  const restoreBackup = (b: Partial<Backup> | Blob) => restoreWith(() => api.restoreBackup(b));
+  const restoreSnapshot = (id: string) => restoreWith(() => api.restoreSnapshot(id));
 
   // ---------- keyboard ----------
 
@@ -1079,6 +1151,7 @@ export function App() {
               onConnect={connect}
               onDisconnect={() => api.disconnectGoogle().then(merge).catch(onSaveError)}
               onRestore={restoreBackup}
+              onRestoreSnapshot={restoreSnapshot}
               onAddPhotos={addPhotos}
               onRemovePhoto={removePhoto}
               onPhotoFocus={setPhotoFocus}
