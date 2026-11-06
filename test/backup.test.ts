@@ -22,6 +22,9 @@ let clean: typeof import('../server/src/clean');
 let keysFor: typeof import('../server/src/events').keysFor;
 let stalePart: typeof import('../server/src/shell').stalePart;
 let sweepPhotos: typeof import('../server/src/photos').sweepPhotos;
+let snapshots: typeof import('../server/src/snapshots');
+let zip: typeof import('../server/src/zip');
+let docVersion: typeof import('../server/src/store').docVersion;
 
 beforeAll(async () => {
   ({ store, asTab, asServer, changes } = await import('../server/src/store'));
@@ -30,6 +33,9 @@ beforeAll(async () => {
   ({ keysFor } = await import('../server/src/events'));
   ({ stalePart } = await import('../server/src/shell'));
   ({ sweepPhotos } = await import('../server/src/photos'));
+  snapshots = await import('../server/src/snapshots');
+  zip = await import('../server/src/zip');
+  ({ docVersion } = await import('../server/src/store'));
 });
 
 describe('backup', () => {
@@ -198,5 +204,89 @@ describe('shortcut list', () => {
   it('has a G shortcut for every view', () => {
     const go = SHORTCUT_GROUPS.find((g) => g.title === 'Go to a view')!;
     for (const v of VIEWS) expect(go.rows.some((r) => r.keys[0].join(' ') === `G ${v.letter}`)).toBe(true);
+  });
+});
+
+describe('automatic copies', () => {
+  it('names copies by time and reason, and reads the name back', () => {
+    const id = snapshots.snapshotId(new Date('2026-11-06T07:31:36.968Z'), 'daily');
+    expect(id).toBe('2026-11-06T07-31-36-968Z-daily');
+    expect(snapshots.parseSnapshotId(id)).toEqual({ at: '2026-11-06T07:31:36.968Z', reason: 'daily' });
+    expect(snapshots.parseSnapshotId('../../etc/passwd')).toBeNull();
+    expect(snapshots.snapshotFile('../launchpad')).toBeNull();
+  });
+
+  it('takes one a day', () => {
+    const now = Date.parse('2026-11-06T12:00:00Z');
+    const at = (h: number) => ({ id: 'x', at: new Date(now - h * 3_600_000).toISOString(), reason: 'daily' as const, size: 1 });
+    expect(snapshots.dailySnapshotDue([], now)).toBe(true);
+    expect(snapshots.dailySnapshotDue([at(5)], now)).toBe(false);
+    expect(snapshots.dailySnapshotDue([at(21)], now)).toBe(true);
+    expect(snapshots.dailySnapshotDue([{ ...at(1), reason: 'manual' }], now)).toBe(true);
+  });
+
+  it('keeps the newest of each kind and puts back what a copy holds', () => {
+    store.setCountdowns([{ id: 'k', title: 'Kept', date: '2027-03-03', yearly: false, createdAt: '2026-10-01T00:00:00.000Z' }]);
+    store.setWeights({ '2026-10-01': 70 });
+    const base = Date.parse('2026-01-01T00:00:00Z');
+    for (let i = 0; i < 12; i++) snapshots.takeSnapshot('before-restore', new Date(base + i * 1000));
+    const list = snapshots.listSnapshots().filter((s) => s.reason === 'before-restore');
+    expect(list).toHaveLength(10);
+    expect(list[0].at).toBe(new Date(base + 11_000).toISOString());
+
+    store.setCountdowns([]);
+    store.setWeights({ '2026-10-02': 99 });
+    const b = snapshots.snapshotBackup(list[0].id);
+    expect(backup.restoreBackup(b)).toContain('countdowns');
+    expect(store.countdowns().map((c) => c.title)).toEqual(['Kept']);
+    expect(store.weights()).toEqual({ '2026-10-01': 70 });
+  });
+});
+
+describe('backup with photos', () => {
+  const jpeg = (fill: number) => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(40, fill)]);
+
+  it('round-trips files through a .zip', async () => {
+    const files = [{ name: 'a.json', data: () => Buffer.from('{"x":1}') }, { name: 'photos/p', data: () => jpeg(7) }];
+    const bytes = Buffer.from(await new Response(zip.zipStream(files)).arrayBuffer());
+    expect(zip.isZip(bytes)).toBe(true);
+    const out = zip.unzip(bytes);
+    expect(out.get('a.json')!.toString()).toBe('{"x":1}');
+    expect(out.get('photos/p')).toEqual(jpeg(7));
+    expect(() => zip.unzip(Buffer.from('not a zip at all, sorry'))).toThrow();
+  });
+
+  it('puts photos back from a .zip backup, and re-lists only photos whose file is there', async () => {
+    const id = 'Zz0123456789abcd';
+    const missing = 'Mm0123456789abcd';
+    const json = { version: 2, exported: '2026-11-06T00:00:00Z', photos: [{ id, mime: 'image/jpeg', focus: { x: 10, y: 20 } }, { id: missing, mime: 'image/jpeg', focus: { x: 1, y: 1 } }] };
+    const bytes = Buffer.from(await new Response(zip.zipStream([
+      { name: 'backup/launchpad-backup.json', data: () => Buffer.from(JSON.stringify(json)) },
+      { name: `backup/photos/${id}`, data: () => jpeg(3) },
+      { name: 'backup/photos/../../evil', data: () => jpeg(1) },
+    ])).arrayBuffer());
+    const body = backup.readBackupUpload(bytes);
+    expect(backup.restoreBackup(body)).toEqual(['photos']);
+    expect(store.photos()).toEqual([{ id, mime: 'image/jpeg', focus: { x: 10, y: 20 } }]);
+    expect(fs.readFileSync(path.join(dataDir, 'photos', id))).toEqual(jpeg(3));
+    expect(fs.existsSync(path.join(dataDir, 'evil'))).toBe(false);
+    expect(backup.describeRestored(['photos'])).toEqual(['1 photo']);
+  });
+
+  it('refuses a .zip without a backup in it', async () => {
+    const bytes = Buffer.from(await new Response(zip.zipStream([{ name: 'x.txt', data: () => Buffer.from('hi') }])).arrayBuffer());
+    expect(() => backup.readBackupUpload(bytes)).toThrow(/launchpad-backup.json/);
+  });
+});
+
+describe('document versions', () => {
+  it('changes whenever a document is written', async () => {
+    store.setNotes([{ id: 'v', name: 'V', text: '1' }]);
+    const v1 = docVersion('notes');
+    expect(v1).not.toBe('');
+    await new Promise((r) => setTimeout(r, 5));
+    store.setNotes([{ id: 'v', name: 'V', text: '2' }]);
+    expect(docVersion('notes')).not.toBe(v1);
+    expect(docVersion('never-written')).toBe('');
   });
 });

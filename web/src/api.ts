@@ -1,4 +1,4 @@
-import type { AppState, Backup, BookmarkGroup, Countdown, DirListing, Learn, Money, Mood, Note, Package, Photo, Prefs, ServerStats, ShellInfo, SourceKey, Task, Training } from '../../shared/types';
+import type { AppState, Backup, BackupSnapshot, Countdown, DirListing, Mood, Package, Photo, Prefs, SavedDoc, ServerStats, ShellInfo, SourceKey, Task, Training } from '../../shared/types';
 
 const STATE_KEY = 'launchpad:state';
 const PREFS_KEY = 'launchpad:prefs';
@@ -70,13 +70,20 @@ export class ServerError extends Error {
   }
 }
 
-async function req<T>(method: string, url: string, body?: unknown, keepalive = false): Promise<T> {
+/** A whole-document save refused because another tab or device saved first; carries their copy. */
+export class ConflictError extends Error {
+  constructor(readonly version: string, readonly value: unknown) {
+    super('Changed on another device');
+  }
+}
+
+async function req<T>(method: string, url: string, body?: unknown, keepalive = false, extra?: Record<string, string>): Promise<T> {
   const raw = body instanceof Blob;
   let res: Response;
   try {
     res = await fetch(url, {
       method,
-      headers: body === undefined ? { 'X-Launchpad-Tab': TAB_ID } : { 'X-Launchpad-Tab': TAB_ID, 'Content-Type': raw ? body.type || 'application/octet-stream' : 'application/json' },
+      headers: { 'X-Launchpad-Tab': TAB_ID, ...(body === undefined ? {} : { 'Content-Type': raw ? body.type || 'application/octet-stream' : 'application/json' }), ...extra },
       body: body === undefined ? undefined : raw ? body : JSON.stringify(body),
       keepalive,
     });
@@ -89,14 +96,19 @@ async function req<T>(method: string, url: string, body?: unknown, keepalive = f
     throw new ServerError('down', `The Launchpad server isn’t answering (${res.status}).`, res.status);
   }
   const json = await res.json().catch(() => ({}));
+  if (res.status === 409 && (json as { conflict?: boolean }).conflict) {
+    const c = json as { version: string; value: unknown };
+    throw new ConflictError(c.version, c.value);
+  }
   if (!res.ok) throw new Error((json as { error?: string }).error || `Request failed (${res.status})`);
   return json as T;
 }
 
 export const api = {
   state: () => req<AppState>('GET', '/api/state'),
-  putBookmarks: (v: BookmarkGroup[], keepalive?: boolean) => req('PUT', '/api/bookmarks', v, keepalive),
-  putNotes: (v: Note[], keepalive?: boolean) => req('PUT', '/api/notes', v, keepalive),
+  /** Save a whole document. With `base`, the server refuses it (ConflictError) if someone else saved since that version. */
+  putDoc: <K extends SavedDoc>(key: K, v: AppState[K], base?: string, keepalive?: boolean) =>
+    req<{ ok: true; version: string }>('PUT', `/api/${key}`, v, keepalive, base === undefined ? undefined : { 'X-Base-Version': base }),
   putPrefs: (v: Prefs) => req<Prefs>('PUT', '/api/prefs', v),
   addTask: (listId: string, title: string, due: string | null) => req<Task>('POST', '/api/tasks', { listId, title, due }),
   completeTask: (t: Task, keepalive?: boolean) =>
@@ -114,10 +126,8 @@ export const api = {
   putCountdowns: (v: Countdown[]) => req<Countdown[]>('PUT', '/api/countdowns', v),
   addSmoke: () => req<string[]>('POST', '/api/smokes', {}),
   removeSmoke: (at?: string) => req<string[]>('DELETE', `/api/smokes${at ? `?at=${encodeURIComponent(at)}` : ''}`),
-  putMoney: (v: Money, keepalive?: boolean) => req<Money>('PUT', '/api/money', v, keepalive),
   putTraining: (v: Training) => req<Training>('PUT', '/api/training', v),
   refreshTraining: (force: boolean) => req<AppState>('POST', `/api/training/refresh${force ? '?force=1' : ''}`, {}),
-  putLearn: (v: Learn, keepalive?: boolean) => req<Learn>('PUT', '/api/learn', v, keepalive),
   refreshLearn: (force: boolean) => req<AppState>('POST', `/api/learn/refresh${force ? '?force=1' : ''}`, {}),
   putWeight: (date: string, kg: number | null) => req<Record<string, number>>('PUT', `/api/weights/${date}`, { kg }),
   putMood: (date: string, mood: Mood | { level: 0 }) => req<Record<string, Mood>>('PUT', `/api/moods/${date}`, mood),
@@ -131,11 +141,25 @@ export const api = {
   makeDir: (path: string) => req('POST', '/api/files/mkdir', { path }),
   renamePath: (from: string, to: string) => req('POST', '/api/files/rename', { from, to }),
   deletePath: (path: string) => req('POST', '/api/files/delete', { path }),
-  restoreBackup: (b: Partial<Backup>) => req<{ restored: string[]; state: AppState }>('POST', '/api/backup', b),
+  /** Restore a backup: the JSON, or a .zip with photos as the raw file. `undo` names the copy taken just before. */
+  restoreBackup: (b: Partial<Backup> | Blob) => req<RestoreResult>('POST', '/api/backup', b),
+  snapshots: () => req<BackupSnapshot[]>('GET', '/api/backup/snapshots'),
+  takeSnapshot: () => req<BackupSnapshot[]>('POST', '/api/backup/snapshots', {}),
+  restoreSnapshot: (id: string) => req<RestoreResult>('POST', `/api/backup/snapshots/${encodeURIComponent(id)}/restore`, {}),
 };
 
 /** Everything you've entered, as JSON. */
 export const BACKUP_URL = '/api/backup';
+export interface RestoreResult {
+  restored: string[];
+  /** The automatic copy taken just before, to put things back as they were. */
+  undo: string | null;
+  state: AppState;
+}
+
+/** Everything you've entered plus the photos, as a .zip. */
+export const ZIP_BACKUP_URL = '/api/backup/zip';
+export const snapshotUrl = (id: string) => `/api/backup/snapshots/${encodeURIComponent(id)}`;
 /** A copy of the whole SQLite database. */
 export const DB_BACKUP_URL = '/api/backup/db';
 

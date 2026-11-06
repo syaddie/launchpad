@@ -625,9 +625,14 @@ export interface AppState {
   learn: Learn;
   /** null before the first note, or without an Anthropic API key. */
   learnNote: { note: LearnNote | null; error: string | null };
+  /** The version of each document the page saves whole; missing in copies cached by older versions. */
+  versions?: Partial<Record<SavedDoc, string>>;
 }
 
 /** Bookmarks and notes (version 1, from older Launchpads), or everything you've entered (version 2). */
+/** The documents the page saves whole, so two devices could overwrite each other; each save says which version it started from. */
+export type SavedDoc = 'bookmarks' | 'notes' | 'money' | 'learn';
+
 export interface Backup {
   version: 1 | 2;
   exported: string;
@@ -645,6 +650,18 @@ export interface Backup {
   exerciseMuscles?: Record<string, ExerciseMuscles>;
   /** Including archived ones. */
   packages?: Package[];
+  /** The photo panels' order and focus points. The files come in a .zip backup; a JSON one only re-lists photos still on the server. */
+  photos?: Photo[];
 }
 
 export type BackupPart = Exclude<keyof Backup, 'version' | 'exported'>;
+
+/** A copy of the database Launchpad took by itself: every night, before a restore, or when asked. */
+export interface BackupSnapshot {
+  id: string;
+  /** ISO time it was taken. */
+  at: string;
+  reason: 'daily' | 'before-restore' | 'manual';
+  /** Bytes. */
+  size: number;
+}

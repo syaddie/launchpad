@@ -76,3 +76,13 @@ export function sweepPhotos(photos: StoredPhoto[], now = Date.now(), folder = di
   }
   return { photos: photos.filter((p) => files.has(p.id)), removed };
 }
+
+export const photoExists = (id: string) => validPhotoId(id) && fs.existsSync(path.join(dir, id));
+
+/** Put back a photo file from a backup under its own id. Leaves one that's already there alone. */
+export function restorePhotoFile(id: string, bytes: Uint8Array): string | null {
+  const mime = sniffImage(bytes);
+  if (!validPhotoId(id) || !mime || bytes.length > MAX_PHOTO_BYTES) return null;
+  if (!photoExists(id)) fs.writeFileSync(path.join(dir, id), bytes);
+  return mime;
+}

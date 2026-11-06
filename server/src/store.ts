@@ -29,6 +29,7 @@ db.exec(`
 `);
 
 const getStmt = db.prepare('SELECT value FROM docs WHERE key = ?');
+const versionStmt = db.prepare('SELECT updated_at FROM docs WHERE key = ?');
 const setStmt = db.prepare(
   'INSERT INTO docs (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at',
 );
@@ -97,6 +98,11 @@ export interface InboxCache {
 const EMPTY_INBOX: InboxCache = { emails: [], digests: { '2d': null, '7d': null }, fetchedAt: null, error: null };
 
 const EMPTY_SYNC: SyncStatus = { lastSuccess: null, lastAttempt: null, lastError: null };
+
+/** When a document was last written: its version, for saves that check nobody else saved meanwhile. '' before the first write. */
+export function docVersion(key: string): string {
+  return (versionStmt.get(key) as { updated_at: string } | undefined)?.updated_at ?? '';
+}
 
 export const store = {
   bookmarks: () => get<BookmarkGroup[]>('bookmarks', STARTER_BOOKMARKS),
