@@ -51,25 +51,28 @@ export function removePhotoFile(id: string): void {
   if (validPhotoId(id)) fs.rmSync(path.join(dir, id), { force: true });
 }
 
-/** Remove any photo file in `photoDir` whose id isn't in `keepIds`. Returns how many were removed. */
-export function cleanOrphanPhotos(keepIds: Iterable<string>, photoDir = dir): number {
-  const keep = new Set(keepIds);
+/** Files in the photo folder that no photo in the list uses, left alone for a week in case an older database is put back. */
+export const ORPHAN_AGE = 7 * 86_400_000;
+
+/**
+ * Tidy the photo folder against the list of photos: files no photo uses (and that
+ * are over a week old) are removed, and photos whose file is missing are dropped.
+ * Returns the photos that still have files, and how many files were removed.
+ */
+export function sweepPhotos(photos: StoredPhoto[], now = Date.now(), folder = dir): { photos: StoredPhoto[]; removed: number } {
+  const files = new Set(fs.readdirSync(folder));
+  const used = new Set(photos.map((p) => p.id));
   let removed = 0;
-  let names: string[];
-  try {
-    names = fs.readdirSync(photoDir);
-  } catch {
-    return 0;
-  }
-  for (const name of names) {
-    if (validPhotoId(name) && !keep.has(name)) {
-      try {
-        fs.rmSync(path.join(photoDir, name), { force: true });
-        removed++;
-      } catch {
-        // ignore
-      }
+  for (const f of files) {
+    if (used.has(f) || !validPhotoId(f)) continue;
+    const p = path.join(folder, f);
+    try {
+      if (now - fs.statSync(p).mtimeMs < ORPHAN_AGE) continue;
+      fs.rmSync(p, { force: true });
+      removed++;
+    } catch {
+      // Gone already.
     }
   }
-  return removed;
+  return { photos: photos.filter((p) => files.has(p.id)), removed };
 }

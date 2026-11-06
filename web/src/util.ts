@@ -1,5 +1,5 @@
 import { DOW, MON, dayDiff, pad2, parseYmd } from '../../shared/dates';
-import type { Bookmark, Package } from '../../shared/types';
+import type { Bookmark, Package, ViewKey } from '../../shared/types';
 
 export const hm = (d: Date) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 
@@ -129,3 +129,14 @@ export function fmtBytes(n: number): string {
   }
   return `${n >= 100 || i === 0 ? Math.round(n) : n.toFixed(n >= 10 ? 1 : 2)} ${units[i]}`;
 }
+
+const HASH_VIEWS: ViewKey[] = ['news', 'inbox', 'you', 'training', 'learn', 'money', 'server'];
+
+/** The view a URL's hash names ("#money"); home for none or one that isn't a view, so a new tab opens on home. */
+export function viewFromHash(hash: string): ViewKey {
+  const v = decodeURIComponent(hash.replace(/^#\/?/, '')).toLowerCase();
+  return (HASH_VIEWS as string[]).includes(v) ? (v as ViewKey) : 'home';
+}
+
+/** The hash for a view: none for home, so "/" stays the plain new-tab page. */
+export const hashFor = (v: ViewKey) => (v === 'home' ? '' : '#' + v);

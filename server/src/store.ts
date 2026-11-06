@@ -1,6 +1,8 @@
 // All state lives in one SQLite file as JSON documents keyed by name.
 // The app is single-user and single-process, so whole-document reads and
 // writes are simple and safe.
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -32,35 +34,6 @@ const setStmt = db.prepare(
 );
 const delStmt = db.prepare('DELETE FROM docs WHERE key = ?');
 
-const listeners = new Set<(key: string) => void>();
-
-/** Subscribe to store writes and deletes; returns an unsubscribe function. */
-export function onStoreChange(fn: (key: string) => void): () => void {
-  listeners.add(fn);
-  return () => listeners.delete(fn);
-}
-
-function notify(key: string): void {
-  for (const fn of listeners) {
-    try {
-      fn(key);
-    } catch {
-      // ignore
-    }
-  }
-}
-
-/** Consistent binary snapshot of launchpad.db via SQLite VACUUM INTO. */
-export function snapshotDb(): Buffer {
-  const tmp = path.join(config.dataDir, `launchpad-snapshot-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
-  try {
-    db.exec(`VACUUM INTO '${tmp.replace(/'/g, "''")}'`);
-    return fs.readFileSync(tmp);
-  } finally {
-    fs.rmSync(tmp, { force: true });
-  }
-}
-
 function get<T>(key: string, fallback: T): T {
   const row = getStmt.get(key) as { value: string } | undefined;
   if (!row) return fallback;
@@ -71,14 +44,34 @@ function get<T>(key: string, fallback: T): T {
   }
 }
 
+/**
+ * Every write is announced, so open tabs can refresh (see /api/events). A write made
+ * while handling a request carries the tab that sent it, so that tab can skip it.
+ */
+export const changes = new EventEmitter<{ change: [key: string, tab: string | undefined] }>();
+changes.setMaxListeners(0);
+const writer = new AsyncLocalStorage<string | undefined>();
+
+/** Run `fn` with its writes credited to `tab`. */
+export const asTab = <T>(tab: string | undefined, fn: () => T): T => writer.run(tab, fn);
+/** Run `fn` with its writes credited to no tab: background work every tab should hear about. */
+export const asServer = <T>(fn: () => T): T => writer.exit(fn);
+
 function set(key: string, value: unknown): void {
   setStmt.run(key, JSON.stringify(value), new Date().toISOString());
-  notify(key);
+  changes.emit('change', key, writer.getStore());
 }
 
 function del(key: string): void {
-  delStmt.run(key);
-  notify(key);
+  if (delStmt.run(key).changes) changes.emit('change', key, writer.getStore());
+}
+
+/**
+ * A consistent copy of the whole database at `dest` (which must not exist yet),
+ * taken while it's in use. Includes the Google sign-in, so it's as private as the original.
+ */
+export function snapshotDb(dest: string): void {
+  db.prepare('VACUUM INTO ?').run(dest);
 }
 
 export interface GoogleTokens {
@@ -217,6 +210,10 @@ export const store = {
   },
   setSync: (key: SourceKey, v: SyncStatus) => set('sync', { ...store.sync(), [key]: v }),
   resetSync: () => del('sync'),
+
+  /** Folders that uploads went into, with when the last one started, so abandoned part files there can be swept. */
+  uploadDirs: () => get<Record<string, string>>('uploadDirs', {}),
+  setUploadDirs: (v: Record<string, string>) => set('uploadDirs', v),
 };
 
 export function updatePackages(fn: (pkgs: Package[]) => Package[]): Package[] {

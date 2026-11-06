@@ -1,12 +1,10 @@
 import { useRef, useState } from 'react';
-import { parseBackup } from '../../../shared/backup';
 import { CARRIERS, detectCarrier, trackUrl } from '../../../shared/carriers';
 import { startOfDay } from '../../../shared/dates';
 import { DEFAULT_ENGINES } from '../../../shared/defaults';
 import type { AccentKey, AppState, Backup, DesignKey, GoogleSource, Package, Photo, Prefs, SearchEngine, ThemeMode } from '../../../shared/types';
-import { api, backupDbUrl } from '../api';
+import { BACKUP_URL, DB_BACKUP_URL } from '../api';
 import { PhotoSettings } from './Photos';
-import { VIEWS } from './Rail';
 import { STEP_LABELS, ago, chipOf, fmtStamp, hm, segColor, statusText } from '../util';
 
 export function Drawer({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
@@ -211,7 +209,7 @@ const ACCENTS: { key: AccentKey; name: string; light: string; dark: string }[] =
   { key: 'terracotta', name: 'Terracotta', light: '#ad603f', dark: '#dd9b7b' },
 ];
 
-export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconnect, onImport, onAddPhotos, onRemovePhoto, onPhotoFocus, localDesign, onLocalDesign }: {
+export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconnect, onRestore, onAddPhotos, onRemovePhoto, onPhotoFocus, localDesign, onLocalDesign }: {
   data: AppState;
   /** This browser's own layout, or '' to use the one saved for every device. */
   localDesign: DesignKey | '';
@@ -221,12 +219,14 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
   onPrefs: (p: Prefs) => void;
   onConnect: () => void;
   onDisconnect: () => void;
-  onImport: (raw: unknown) => Promise<string>;
+  /** Restore a backup file on the server; resolves to the names of what it put back. */
+  onRestore: (b: Partial<Backup>) => Promise<string[]>;
   onAddPhotos: (files: File[]) => Promise<string>;
   onRemovePhoto: (id: string) => void;
   onPhotoFocus: (id: string, focus: Photo['focus']) => void;
 }) {
-  const [importMsg, setImportMsg] = useState('Exports all your data (bookmarks, notes, settings, money, learn, training and trackers) in one JSON file, or downloads a snapshot of launchpad.db.');
+  const [importMsg, setImportMsg] = useState('');
+  const [restoring, setRestoring] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const p = data.prefs;
   const g = data.google;
@@ -239,41 +239,54 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
     { key: 'gmail', name: 'Gmail (packages and inbox)', icon: 'ph-envelope-simple' },
   ];
 
+  /** The server's full backup; when it can't be reached, what this page has (cigarettes from the last 60 days only). */
   const exportJson = async () => {
-    const local: Backup = {
-      version: 2,
-      exported: new Date().toISOString(),
-      bookmarks: data.bookmarks,
-      notes: data.notes,
-      prefs: data.prefs,
-      packages: data.packages,
-      countdowns: data.countdowns,
-      smokes: data.smokes,
-      moods: data.moods,
-      weights: data.weights,
-      money: data.money,
-      training: data.training,
-      exerciseMuscles: data.exerciseMuscles,
-      learn: data.learn,
-    };
-    const backup = await api.exportBackup().catch(() => local);
-    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    let blob: Blob;
+    let note = '';
+    try {
+      const res = await fetch(BACKUP_URL);
+      if (!res.ok) throw new Error();
+      blob = await res.blob();
+    } catch {
+      const { bookmarks, notes, prefs, countdowns, smokes, moods, weights, money, learn, training, exerciseMuscles, packages } = data;
+      const local: Backup = { version: 2, exported: new Date().toISOString(), bookmarks, notes, prefs, countdowns, smokes, moods, weights, money, learn, training, exerciseMuscles, packages };
+      blob = new Blob([JSON.stringify(local, null, 2)], { type: 'application/json' });
+      note = 'The server couldn’t be reached, so this is the copy this page had: cigarettes from the last 60 days, and no archived packages.';
+    }
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `launchpad-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    setImportMsg(note);
   };
 
   const importJson = async (f: File) => {
+    let d: Partial<Backup>;
     try {
-      const d = JSON.parse(await f.text());
-      if (!parseBackup(d, p)) throw new Error('That file isn’t a Launchpad backup.');
-      setImportMsg(await onImport(d));
-    } catch (e) {
-      setImportMsg((e as Error).message || 'That file isn’t a Launchpad backup.');
+      d = JSON.parse(await f.text()) as Partial<Backup>;
+      if (!d || typeof d !== 'object' || (d.version !== 1 && d.version !== 2)) throw new Error();
+    } catch {
+      setImportMsg('That file isn’t a Launchpad backup.');
+      if (fileRef.current) fileRef.current.value = '';
+      return;
     }
-    if (fileRef.current) fileRef.current.value = '';
+    const when = d.exported && !Number.isNaN(Date.parse(d.exported)) ? ` from ${fmtStamp(new Date(d.exported))}` : '';
+    const what = d.version === 1 ? 'your bookmarks and notepads' : 'everything in it (bookmarks, notes, settings, trackers, money, courses, workouts and packages)';
+    if (!confirm(`Restore the backup${when}? This replaces ${what} with the copy in the file.`)) {
+      if (fileRef.current) fileRef.current.value = '';
+      return;
+    }
+    setRestoring(true);
+    try {
+      const restored = await onRestore(d);
+      setImportMsg(`Restored ${restored.join(', ')}.`);
+    } catch (e) {
+      setImportMsg(`Couldn’t restore: ${(e as Error).message}`);
+    } finally {
+      setRestoring(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
   };
 
   const syncLine = (key: GoogleSource) => {
@@ -468,23 +481,30 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
       </div>
 
       <div className="drawer-section">
-        <div className="drawer-label">Backup and restore</div>
+        <div className="drawer-label">Backup</div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button className="btn btn-secondary" style={{ padding: '7px 12px', gap: 5, fontWeight: 400 }} onClick={exportJson}>
             <i className="ph-duotone ph-download-simple" />
-            Export JSON
+            Download backup
           </button>
-          <label className="btn btn-secondary" style={{ padding: '7px 12px', gap: 5, fontWeight: 400 }}>
+          <label className="btn btn-secondary" style={{ padding: '7px 12px', gap: 5, fontWeight: 400, opacity: restoring ? 0.6 : 1 }}>
             <i className="ph-duotone ph-upload-simple" />
-            Import JSON
-            <input ref={fileRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])} />
+            {restoring ? 'Restoring…' : 'Restore…'}
+            <input ref={fileRef} type="file" accept=".json,application/json" disabled={restoring} style={{ display: 'none' }} onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])} />
           </label>
-          <a className="btn btn-secondary" style={{ padding: '7px 12px', gap: 5, fontWeight: 400 }} href={backupDbUrl} download="launchpad.db">
+          <a className="btn btn-secondary" style={{ padding: '7px 12px', gap: 5, fontWeight: 400 }} href={DB_BACKUP_URL} download title="A copy of the whole SQLite database">
             <i className="ph-duotone ph-database" />
-            SQLite .db
+            Database (.db)
           </a>
         </div>
-        <div style={{ fontSize: 12, color: 'var(--t3)' }}>{importMsg}</div>
+        <div style={{ fontSize: 12, color: 'var(--t3)' }}>
+          {importMsg || (
+            <>
+              The backup is one JSON file with your bookmarks, notes, settings, countdowns, cigarette, mood and weight logs, money tracker, courses, workouts and packages. Restoring it puts all of that back; older bookmarks-and-notes backups still work.
+              The database copy has everything, the Google sign-in included, so keep it private. Photos are files beside the database and are in neither.
+            </>
+          )}
+        </div>
       </div>
       </>
       )}
@@ -755,77 +775,6 @@ function TrackerSettings({ prefs, onPrefs }: { prefs: Prefs; onPrefs: (p: Prefs)
         <div className="meta">How often the server tests its connection, against Cloudflare. Each test moves about 130 MB.</div>
         <NumberField label="Plan speed" value={prefs.speedPlanMbps} min={0} max={100000} suffix="Mbps plan, shown as a line on the chart" onSave={(n) => onPrefs({ ...prefs, speedPlanMbps: n })} />
       </div>
-    </>
-  );
-}
-
-// ---------- keyboard shortcuts ----------
-
-export const SHORTCUT_SECTIONS: { section: string; hint?: string; rows: { label: string; keys: string[] }[] }[] = [
-  {
-    section: 'Everywhere',
-    rows: [
-      { label: 'Command palette (search, actions, log weight or study time)', keys: ['⌘K'] },
-      { label: 'Focus the search bar', keys: ['/'] },
-      { label: 'Keyboard shortcuts', keys: ['?'] },
-      { label: 'Close palette, drawer or focus view · return to Home', keys: ['Esc'] },
-      { label: 'Log a cigarette', keys: ['C'] },
-      { label: 'Open You to log today’s mood', keys: ['M'] },
-      { label: 'Toggle between Home and News', keys: ['N'] },
-    ],
-  },
-  {
-    section: 'Views',
-    hint: 'Press G, then a letter',
-    rows: [
-      ...VIEWS.map((v) => ({ label: v.name, keys: ['G', v.letter] })),
-      { label: 'Views and Settings in the Console layout', keys: ['F1–F9'] },
-    ],
-  },
-  {
-    section: 'Home & Notes',
-    rows: [
-      { label: 'Open the first nine links in Daily bookmarks', keys: ['1–9'] },
-      { label: 'Bold selected text in Notes', keys: ['⌘B'] },
-      { label: 'Italicise selected text in Notes', keys: ['⌘I'] },
-      { label: 'Turn selected text into a link in Notes', keys: ['⌘K'] },
-    ],
-  },
-  {
-    section: 'Money & Server',
-    rows: [
-      { label: 'Move around the Money and Wishlist spreadsheets', keys: ['↑', '↓', '←', '→'] },
-      { label: 'Edit the selected cell, or open a folder / file in Files', keys: ['Enter'] },
-      { label: 'Clear the selected spreadsheet cell', keys: ['⌫'] },
-      { label: 'Undo the last spreadsheet change', keys: ['⌘Z'] },
-      { label: 'Save the open file in the Server text editor', keys: ['⌘S'] },
-    ],
-  },
-];
-
-export function ShortcutsDrawer() {
-  return (
-    <>
-      {SHORTCUT_SECTIONS.map((s) => (
-        <div key={s.section} className="drawer-section" style={{ gap: 4 }}>
-          <div className="split" style={{ paddingBottom: 4 }}>
-            <span className="drawer-label">{s.section}</span>
-            {s.hint && <span className="meta">{s.hint}</span>}
-          </div>
-          {s.rows.map((r) => (
-            <div key={r.label} className="setting-row" style={{ padding: '6px 0' }}>
-              <span style={{ fontSize: 13, color: 'var(--tx)', flex: 1, minWidth: 0 }}>{r.label}</span>
-              <span style={{ display: 'flex', gap: 4, flex: 'none' }}>
-                {r.keys.map((k, i) => (
-                  <kbd key={i} className="kbd">
-                    {k}
-                  </kbd>
-                ))}
-              </span>
-            </div>
-          ))}
-        </div>
-      ))}
     </>
   );
 }

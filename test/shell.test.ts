@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanName, cleanPath, cleanSize, cleanUploadId, isPartFile, isStalePart, kindOf, shellQuote, STALE_PART_MS, UPLOAD_CHUNK } from '../server/src/shell';
+import { cleanName, cleanPath, cleanSize, cleanUploadId, kindOf, PART_MAX_AGE, shellQuote, stalePart, UPLOAD_CHUNK } from '../server/src/shell';
 import { UPLOAD_CHUNK as PAGE_CHUNK, uploadPieces } from '../web/src/api';
 import { permString } from '../web/src/components/Files';
 
@@ -62,14 +62,13 @@ describe('server files', () => {
 
   it('spots abandoned .launchpad-upload-*.part files older than 24 hours', () => {
     const part = '.launchpad-upload-0123456789abcdef0123456789abcdef.part';
-    expect(isPartFile(part)).toBe(true);
-    expect(isPartFile('.bashrc')).toBe(false);
-    expect(isPartFile('.launchpad-upload-short.part')).toBe(false);
     const nowMs = 1_700_000_000_000;
     const recentSec = Math.floor((nowMs - 3600_000) / 1000);
-    const staleSec = Math.floor((nowMs - STALE_PART_MS - 1000) / 1000);
-    expect(isStalePart(part, recentSec, nowMs)).toBe(false);
-    expect(isStalePart(part, staleSec, nowMs)).toBe(true);
-    expect(isStalePart('notes.txt', staleSec, nowMs)).toBe(false);
+    const staleSec = Math.floor((nowMs - PART_MAX_AGE - 1000) / 1000);
+    expect(stalePart(part, recentSec, nowMs)).toBe(false);
+    expect(stalePart(part, staleSec, nowMs)).toBe(true);
+    expect(stalePart('.bashrc', staleSec, nowMs)).toBe(false);
+    expect(stalePart('.launchpad-upload-short.part', staleSec, nowMs)).toBe(false);
+    expect(stalePart('notes.txt', staleSec, nowMs)).toBe(false);
   });
 });

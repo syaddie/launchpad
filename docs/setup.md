@@ -168,17 +168,28 @@ The Server view's **Terminal** and **Files** tabs give you a shell on the server
 - *Nothing is answering SSH*: sshd isn't running, or a firewall drops connections from Docker's network. With ufw: `sudo ufw allow from 172.16.0.0/12 to any port 22`.
 - *Didn't accept Launchpad's key*: the line from step 3 went into a different user's home, or `~/.ssh` has loose permissions (`chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys`).
 
-A shell keeps running for 15 minutes after you leave the tab or close the page, so coming back (or reloading) picks it up where it was. **Restart** ends it and starts a fresh one. In the terminal, `Ctrl Shift C` and `Ctrl Shift V` copy and paste; Esc and `Ctrl K` go to the shell, not to Launchpad. Text files up to 1 MB open in the editor (`Ctrl S` saves); anything else downloads. Uploads have no size limit of their own: Cloudflare refuses any single request over 100 MB, so the page sends files in 32 MB pieces into a hidden `.launchpad-upload-….part` file next to the destination, which takes the real name when the last piece lands (and is removed if the upload fails). A piece that's cut off by a dropped connection is retried a few times before the upload gives up. To turn the tabs off again, empty `SSH_USER` and remove Launchpad's line from `authorized_keys`.
+A shell keeps running for 15 minutes after you leave the tab or close the page, so coming back (or reloading) picks it up where it was. **Restart** ends it and starts a fresh one. In the terminal, `Ctrl Shift C` and `Ctrl Shift V` copy and paste; Esc and `Ctrl K` go to the shell, not to Launchpad. Text files up to 1 MB open in the editor (`Ctrl S` saves); anything else downloads. Uploads have no size limit of their own: Cloudflare refuses any single request over 100 MB, so the page sends files in 32 MB pieces into a hidden `.launchpad-upload-….part` file next to the destination, which takes the real name when the last piece lands (and is removed if the upload fails, or swept away a day later if the tab closed before it could say so). A piece that's cut off by a dropped connection is retried a few times before the upload gives up. To turn the tabs off again, empty `SSH_USER` and remove Launchpad's line from `authorized_keys`.
 
 ## Backups
 
-Everything is in one SQLite file inside the `launchpad-data` volume. Two ways to keep a copy:
+Everything is in one SQLite file inside the `launchpad-data` volume, with photos in a `photos` folder beside it. Settings → General → **Backup** has:
 
-- Settings → **Export JSON** downloads bookmarks and notes.
-- Full copy of the database:
-  ```bash
-  docker run --rm -v launchpad_launchpad-data:/data -v "$PWD":/backup alpine cp /data/launchpad.db /backup/
-  ```
+- **Download backup**: one JSON file with everything you've entered (bookmarks, notes, settings, countdowns, the cigarette, mood and weight logs, the money tracker, courses and study time, workouts, exercise muscles and packages). It leaves out what sync fetches again (calendar, tasks, mail, news, weather) and the Google sign-in. **Restore…** puts a file like this back: each part it holds replaces what's there, parts it doesn't hold are kept, and the older bookmarks-and-notes files from **Export JSON** still restore.
+- **Database (.db)**: a consistent copy of the whole SQLite database (`VACUUM INTO`, safe while Launchpad is running). It includes the Google sign-in, so keep it private. To put it back, stop the container, replace `launchpad.db` in the volume (and delete any `launchpad.db-wal` and `launchpad.db-shm` beside it), then start it.
+
+Neither includes the photo files. To copy those too, or to script the whole lot from the server:
+
+```bash
+docker run --rm -v launchpad_launchpad-data:/data -v "$PWD":/backup alpine sh -c "apk add -q sqlite && sqlite3 /data/launchpad.db \"VACUUM INTO '/backup/launchpad.db'\" && cp -r /data/photos /backup/"
+```
+
+Launchpad tidies up after itself too: photo files no photo uses are removed after a week, and the part files of uploads abandoned without the page saying so (the tab closed mid-upload) are removed once they've sat for a day, both from the folder when you next open it in Files and from a sweep every 6 hours.
+
+## Install it on your phone
+
+Over HTTPS (the Cloudflare URL), Launchpad can be installed as an app: on Android, Chrome's menu → **Install app**; on an iPhone, Safari's Share → **Add to Home Screen**. It opens full-screen; on Android a long press on the icon also offers You, Money and Training directly. On an iPhone the installed app keeps its own cookies, separate from Safari, so you sign in to Cloudflare Access once more inside it. It also keeps a copy of the page, so it opens even when the server or the tunnel is down, showing your last data with a banner saying the server can't be reached. Data itself always comes from the server. Over the plain-HTTP LAN address none of this applies (browsers only allow it over HTTPS), and the page works as before.
+
+If the install option doesn't appear behind Cloudflare Access, sign in once in that browser first; the page asks for the manifest with the Access cookie.
 
 ## Running it locally (development)
 

@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { parseBackup } from '../../shared/backup';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
 import { ymd } from '../../shared/dates';
 import { emptyLearn, fmtStudy, parseStudy, timerMinutes } from '../../shared/learn';
 import { starterMoney } from '../../shared/money';
 import { EMPTY_TRAINING, fmtKg, parseWeight } from '../../shared/training';
 import { MOOD_WORDS, engineUrl, fmtDuration, parseSearch, smokesOn } from '../../shared/trackers';
-import type { AppState, BookmarkGroup, DesignKey, Countdown, Learn, Money, Mood, Note, Package, Photo, Prefs, Task, Training, ViewKey } from '../../shared/types';
-import { api, cachedState, cacheState, localGet, localSet, ServerError } from './api';
+import type { AppState, Backup, BookmarkGroup, DesignKey, Countdown, Learn, Money, Mood, Note, Package, Photo, Prefs, Task, Training, ViewKey } from '../../shared/types';
+import { api, cachedState, cacheState, localGet, localSet, ServerError, TAB_ID } from './api';
 import { Bookmarks } from './components/Bookmarks';
-import { AddPackageDrawer, DESIGNS, Drawer, PANEL_ROWS, PackageDrawer, SettingsDrawer, ShortcutsDrawer } from './components/Drawers';
+import { AddPackageDrawer, DESIGNS, Drawer, PANEL_ROWS, PackageDrawer, SettingsDrawer } from './components/Drawers';
 import { Inbox, inboxBadge } from './components/Inbox';
 import { CourseDrawer, LearnView } from './components/Learn';
 import { MoneyView } from './components/Money';
@@ -20,16 +19,17 @@ import { FocusView, Notes } from './components/Notes';
 import { Packages } from './components/Packages';
 import { Palette, type PaletteItem } from './components/Palette';
 import { PhotoPanel, shrinkImage, usePhotoSlots } from './components/Photos';
-import { Rail, VIEWS, hashForView, viewFromHash } from './components/Rail';
+import { Rail, VIEWS } from './components/Rail';
 import { Server, type ServerTab } from './components/Server';
 import { ServerBanner, type ServerIssue } from './components/ServerBanner';
+import { Shortcuts } from './components/Shortcuts';
 import { Tasks } from './components/Tasks';
 import { Today, todayAgenda } from './components/Today';
 import { TopBar, WeatherPanel } from './components/TopBar';
 import { ExerciseDrawer, TrainingView } from './components/Training';
 import { You, nearestCountdown } from './components/You';
 import { gridLayout, type Area, type Layout } from './layout';
-import { dayDiff, hm, host, inMinutes, parseYmd } from './util';
+import { dayDiff, hashFor, hm, host, inMinutes, parseYmd, viewFromHash } from './util';
 
 const EMPTY: AppState = {
   bookmarks: STARTER_BOOKMARKS,
@@ -75,7 +75,7 @@ function fromCache(c: AppState | null): AppState {
   return { ...EMPTY, ...c, prefs: { ...DEFAULT_PREFS, ...c.prefs }, sync: { ...EMPTY.sync, ...c.sync }, inbox: c.inbox ?? EMPTY.inbox, money: Array.isArray(c.money?.entries) ? c.money : EMPTY.money, training: Array.isArray(c.training?.workouts) ? c.training : EMPTY.training, exerciseMuscles: c.exerciseMuscles ?? {}, trainingNote: c.trainingNote ?? EMPTY.trainingNote, weights: c.weights ?? {}, learn: Array.isArray(c.learn?.courses) ? c.learn : EMPTY.learn, learnNote: c.learnNote ?? EMPTY.learnNote };
 }
 
-type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings' } | { type: 'shortcuts' } | { type: 'exercise'; title: string } | { type: 'course'; id: string; item?: string } | null;
+type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings' } | { type: 'exercise'; title: string } | { type: 'course'; id: string; item?: string } | null;
 
 /** Debounced saver for whole-document PUTs, flushed when the tab closes. */
 function useSaver<T>(save: (v: T, keepalive?: boolean) => Promise<unknown>, delay: number, onSaved?: () => void, onError?: (e: Error) => void) {
@@ -143,28 +143,9 @@ function useSystemDark(): boolean {
 
 export function App() {
   const [data, setData] = useState<AppState>(() => fromCache(cachedState()));
-  const [view, setViewState] = useState<ViewKey>(() => viewFromHash(location.hash));
-  const setView = useCallback((next: ViewKey | ((prev: ViewKey) => ViewKey)) => {
-    setViewState((prev) => {
-      const v = typeof next === 'function' ? next(prev) : next;
-      const targetHash = hashForView(v);
-      if (location.hash !== targetHash && !(targetHash === '' && (location.hash === '' || location.hash === '#'))) {
-        const url = targetHash ? `${location.pathname}${location.search}${targetHash}` : `${location.pathname}${location.search}`;
-        history.pushState(null, '', url);
-      }
-      return v;
-    });
-  }, []);
-  useEffect(() => {
-    const onNav = () => setViewState(viewFromHash(location.hash));
-    window.addEventListener('popstate', onNav);
-    window.addEventListener('hashchange', onNav);
-    return () => {
-      window.removeEventListener('popstate', onNav);
-      window.removeEventListener('hashchange', onNav);
-    };
-  }, []);
+  const [view, setView] = useState<ViewKey>(() => viewFromHash(location.hash));
   const [palette, setPalette] = useState(false);
+  const [shortcuts, setShortcuts] = useState(false);
   const [addCountdown, setAddCountdown] = useState(0);
   const [weightSignal, setWeightSignal] = useState(0);
   const [addWorkSignal, setAddWorkSignal] = useState(0);
@@ -246,6 +227,9 @@ export function App() {
     [update, bookmarkSaver, noteSaver, moneySaver, learnSaver],
   );
 
+  const lastRefresh = useRef(0);
+  /** The change stream is open, so polling can slow right down. */
+  const live = useRef(false);
   const refresh = useCallback(
     () =>
       api
@@ -253,6 +237,7 @@ export function App() {
         .then((s) => {
           merge(s);
           setServerIssue(null);
+          lastRefresh.current = Date.now();
         })
         .catch((e) => {
           console.warn('refresh failed', e);
@@ -264,12 +249,8 @@ export function App() {
 
   useEffect(() => {
     refresh();
-    const iv = window.setInterval(refresh, 60_000);
-    let es: EventSource | null = null;
-    if (typeof EventSource !== 'undefined') {
-      es = new EventSource('/api/events');
-      es.onmessage = () => refresh();
-    }
+    // While the change stream is open, a poll every 5 minutes is only a backstop.
+    const iv = window.setInterval(() => (!live.current || Date.now() - lastRefresh.current > 5 * 60_000) && refresh(), 60_000);
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
       // Tasks sync "on focus", throttled server-side to once every 30 s.
@@ -284,11 +265,75 @@ export function App() {
     }
     return () => {
       clearInterval(iv);
-      es?.close();
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onVisible);
     };
   }, [refresh, merge, showToast]);
+
+  // Live updates: the server says when something changed (another tab, a phone, a sync that
+  // finished) and this tab fetches the state. Only a visible tab keeps the stream open, so a
+  // pile of background tabs doesn't use up the browser's six connections over plain HTTP.
+  useEffect(() => {
+    if (typeof EventSource === 'undefined') return;
+    let es: EventSource | null = null;
+    let soon = 0;
+    let retry = 0;
+    const later = () => {
+      clearTimeout(soon);
+      soon = window.setTimeout(refresh, 150);
+    };
+    const open = () => {
+      if (es || document.visibilityState !== 'visible') return;
+      const src = new EventSource(`/api/events?tab=${TAB_ID}`);
+      let hellos = 0;
+      // Reconnected after a restart or a dropped connection: catch up on what was missed.
+      src.addEventListener('hello', () => {
+        live.current = true;
+        if (hellos++) later();
+      });
+      src.addEventListener('change', later);
+      src.onerror = () => {
+        live.current = false;
+        // EventSource retries a dropped stream itself, but gives up on an error status (a
+        // proxy's 502, Access's 403). Then try again in a while, and let refresh show why.
+        if (src.readyState === EventSource.CLOSED) {
+          close();
+          refresh();
+          retry = window.setTimeout(open, 30_000);
+        }
+      };
+      es = src;
+    };
+    const close = () => {
+      es?.close();
+      es = null;
+      live.current = false;
+      clearTimeout(retry);
+    };
+    const onVisible = () => (document.visibilityState === 'visible' ? open() : close());
+    open();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      close();
+      clearTimeout(soon);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [refresh]);
+
+  // The view lives in the URL's hash (#money), so a reload stays put and Back and Forward
+  // move between views. Home has no hash, so a new tab is still the plain "/".
+  useEffect(() => {
+    if (viewFromHash(location.hash) !== view) history.pushState(null, '', hashFor(view) || location.pathname + location.search);
+  }, [view]);
+  useEffect(() => {
+    const onNav = () => setView(viewFromHash(location.hash));
+    window.addEventListener('popstate', onNav);
+    window.addEventListener('hashchange', onNav);
+    return () => {
+      window.removeEventListener('popstate', onNav);
+      window.removeEventListener('hashchange', onNav);
+    };
+  }, []);
 
   // ---------- theme & layout ----------
 
@@ -637,29 +682,13 @@ export function App() {
     api.speedTest().catch((e) => showToast(`Couldn’t start a speed test: ${e.message}`));
   };
 
-  const importBackup = async (raw: unknown): Promise<string> => {
-    try {
-      const { state: s, summary } = await api.importBackup(raw);
-      merge(s);
-      if (s.notes.length) pickNote(s.notes[0].id);
-      showToast(summary);
-      return summary;
-    } catch {
-      const parsed = parseBackup(raw, data.prefs);
-      if (!parsed) throw new Error('That file isn’t a Launchpad backup.');
-      if (parsed.bookmarks) setBookmarks(parsed.bookmarks);
-      if (parsed.notes) {
-        setNotes(parsed.notes);
-        pickNote(parsed.notes[0].id);
-      }
-      if (parsed.prefs) setPrefs(parsed.prefs);
-      if (parsed.countdowns) setCountdowns(parsed.countdowns);
-      if (parsed.money) setMoney(parsed.money);
-      if (parsed.training) setTraining(parsed.training);
-      if (parsed.learn) setLearn(parsed.learn);
-      showToast(parsed.summary);
-      return parsed.summary;
-    }
+  /** Put a backup file back on the server, then show what it holds. Returns what was restored. */
+  const restoreBackup = async (b: Partial<Backup>): Promise<string[]> => {
+    const { restored, state } = await api.restoreBackup(b);
+    // The restored copy wins over anything on screen, unsaved edits included.
+    update(() => fromCache(state));
+    if (b.notes?.length) pickNote(state.notes[0].id);
+    return restored;
   };
 
   // ---------- keyboard ----------
@@ -701,7 +730,7 @@ export function App() {
       }
       const t = e.target as HTMLElement;
       const typing = /INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable;
-      if (typing || e.metaKey || e.ctrlKey || e.altKey || palette) return;
+      if (typing || e.metaKey || e.ctrlKey || e.altKey || palette || shortcuts) return;
       const key = e.key.toLowerCase();
       // G then a letter jumps to a view.
       if (Date.now() - gAt.current < 1500) {
@@ -721,9 +750,9 @@ export function App() {
         searchRef.current?.focus();
         return;
       }
-      if (e.key === '?' && !focus) {
+      if (e.key === '?') {
         e.preventDefault();
-        setDrawer((d) => (d?.type === 'shortcuts' ? null : { type: 'shortcuts' }));
+        setShortcuts(true);
         return;
       }
       if (drawer || focus) return;
@@ -747,7 +776,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [drawer, focus, search, editBookmarks, data.bookmarks, view, palette]);
+  }, [drawer, focus, search, editBookmarks, data.bookmarks, view, palette, shortcuts]);
 
   // ---------- derived ----------
 
@@ -862,8 +891,8 @@ export function App() {
       sub: localDesign ? 'This browser only' : 'Every device',
       run: () => (localDesign ? setLocalDesign(d.key) : setPrefs({ ...data.prefs, design: d.key })),
     })),
+    { id: 'a:shortcuts', group: 'Actions', label: 'Keyboard shortcuts', icon: 'ph-keyboard', keys: ['?'], words: 'keys hotkeys help cheat sheet', run: () => setShortcuts(true) },
     { id: 'a:settings', group: 'Actions', label: 'Open Settings', icon: 'ph-gear-six', words: 'preferences', run: () => setDrawer({ type: 'settings' }) },
-    { id: 'a:shortcuts', group: 'Actions', label: 'Keyboard shortcuts', icon: 'ph-keyboard', keys: ['?'], words: 'keys hotkeys help cheat sheet', run: () => setDrawer({ type: 'shortcuts' }) },
     ...VIEWS.filter((v) => v.key !== view).map((v) => ({
       id: 'v:' + v.key, group: 'Go to', label: v.name, icon: v.icon, keys: ['G', v.letter], words: 'view', run: () => setView(v.key),
     })),
@@ -921,7 +950,7 @@ export function App() {
     }))];
   };
   const drawerTitle =
-    drawer?.type === 'settings' ? 'Settings' : drawer?.type === 'shortcuts' ? 'Keyboard shortcuts' : drawer?.type === 'add' ? 'Add package' : drawer?.type === 'exercise' ? drawer.title : drawer?.type === 'course' ? data.learn.courses.find((c) => c.id === drawer.id)?.name || 'Course' : drawerPkg ? 'Package' : '';
+    drawer?.type === 'settings' ? 'Settings' : drawer?.type === 'add' ? 'Add package' : drawer?.type === 'exercise' ? drawer.title : drawer?.type === 'course' ? data.learn.courses.find((c) => c.id === drawer.id)?.name || 'Course' : drawerPkg ? 'Package' : '';
 
   return (
     <div ref={rootRef} className="lp-root" data-layout={layout} data-design={design} data-view={view}>
@@ -1049,7 +1078,7 @@ export function App() {
               onPrefs={setPrefs}
               onConnect={connect}
               onDisconnect={() => api.disconnectGoogle().then(merge).catch(onSaveError)}
-              onImport={importBackup}
+              onRestore={restoreBackup}
               onAddPhotos={addPhotos}
               onRemovePhoto={removePhoto}
               onPhotoFocus={setPhotoFocus}
@@ -1058,7 +1087,6 @@ export function App() {
             />
           )}
           {drawer.type === 'add' && <AddPackageDrawer onSubmit={addPackage} onCancel={() => setDrawer(null)} />}
-          {drawer.type === 'shortcuts' && <ShortcutsDrawer />}
           {drawer.type === 'exercise' && (
             <ExerciseDrawer key={drawer.title} title={drawer.title} data={data} pinned={data.prefs.pinnedLifts.includes(drawer.title)} onPin={() => togglePin(drawer.title)} />
           )}
@@ -1070,6 +1098,8 @@ export function App() {
       )}
 
       {focus && <FocusView notes={notes} activeId={activeId} onActive={pickNote} onChange={setNotes} saved={saved} onClose={() => setFocus(false)} />}
+
+      {shortcuts && <Shortcuts onClose={() => setShortcuts(false)} />}
 
       {palette && <Palette items={paletteItems} searches={paletteSearches} onClose={() => setPalette(false)} />}
 

@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import type http from 'node:http';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
@@ -10,20 +11,23 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { WebSocketServer } from 'ws';
 import { config, googleConfigured } from './config';
 import { authUrl, completeTask, createTask, exchangeCode, GoogleError, revoke } from './google';
-import { onStoreChange, snapshotDb, store, updatePackages } from './store';
+import { asTab, store, updatePackages } from './store';
+import { dbSnapshot, describeRestored, exportBackup, restoreBackup, RestoreError } from './backup';
+import { cleanCountdowns, cleanMood, cleanPrefs, isStr, isYmd, validBookmarks, validNotes } from './clean';
+import { eventStream, tabOf } from './events';
 import { claudeEnabled } from './claude';
-import { cleanOrphanPhotos, MAX_PHOTOS, MAX_PHOTO_BYTES, readPhoto, removePhotoFile, sniffImage, writePhoto } from './photos';
+import { MAX_PHOTOS, MAX_PHOTO_BYTES, readPhoto, removePhotoFile, sniffImage, writePhoto } from './photos';
 import { isRunning, newPackage, refreshPackage, refreshSummaries, refreshWeather, runAllGoogle, runIfStale, runSource, signOutGoogle, startScheduler } from './sync';
 import { attachTerminal, FileError, listDir, makeDir, MAX_TEXT, readFileStream, readText, remove, rename, shellInfo, trustHostKey, abandonUpload, uploadPiece, UPLOAD_CHUNK, writeText } from './shell';
 import { serverStats, startSampler } from './system';
-import { cleanCountdowns, cleanPrefs, parseBackup, validBookmarks, validNotes } from '../../shared/backup';
+import { startCleanup } from './cleanup';
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
 import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
 import { MAX_KG, MIN_KG, cleanKg, cleanTraining } from '../../shared/training';
 import { refreshLearnNote } from './learn';
 import { refreshTraining } from './training';
-import type { AppState, Backup, Mood, NewsTopic, Package, Photo, Prefs, SourceKey } from '../../shared/types';
+import type { AppState, Mood, NewsTopic, Package, Photo, Prefs, SourceKey } from '../../shared/types';
 
 const app = new Hono();
 
@@ -53,6 +57,12 @@ if (accessOn) {
 }
 
 app.get('/healthz', (c) => c.text('ok'));
+
+// Writes are credited to the tab that sent them, so /api/events doesn't send that tab its own change back.
+app.use('/api/*', (c, next) => asTab(tabOf(c.req.header('x-launchpad-tab')), next));
+
+/** Changes as they happen; see events.ts. */
+app.get('/api/events', (c) => eventStream(c));
 
 // ---------- state ----------
 
@@ -115,110 +125,7 @@ const recentSmokes = () => store.smokes().filter((s) => Date.now() - Date.parse(
 
 app.get('/api/state', (c) => c.json(state()));
 
-/** Server-Sent Events stream: notifies open tabs whenever the store changes so edits and background syncs appear at once. */
-app.get('/api/events', () => {
-  const enc = new TextEncoder();
-  let cleanup = () => {};
-  const stream = new ReadableStream<Uint8Array>({
-    start(ctl) {
-      let timer: NodeJS.Timeout | undefined;
-      let latestKey = '';
-      const send = (line: string) => {
-        try {
-          ctl.enqueue(enc.encode(line));
-        } catch {
-          cleanup();
-        }
-      };
-      send(': connected\n\n');
-      const unsub = onStoreChange((key) => {
-        latestKey = key;
-        if (timer) return;
-        timer = setTimeout(() => {
-          timer = undefined;
-          send(`data: ${JSON.stringify({ type: 'state', key: latestKey })}\n\n`);
-        }, 80);
-      });
-      const hb = setInterval(() => send(': keepalive\n\n'), 25_000);
-      cleanup = () => {
-        clearTimeout(timer);
-        clearInterval(hb);
-        unsub();
-      };
-    },
-    cancel() {
-      cleanup();
-    },
-  });
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-      'X-Accel-Buffering': 'no',
-    },
-  });
-});
-
-// ---------- backup ----------
-
-app.get('/api/backup', (c) => {
-  const backup: Backup = {
-    version: 2,
-    exported: new Date().toISOString(),
-    bookmarks: store.bookmarks(),
-    notes: store.notes(),
-    prefs: store.prefs(),
-    packages: store.packages(),
-    countdowns: store.countdowns(),
-    smokes: store.smokes(),
-    moods: store.moods(),
-    weights: store.weights(),
-    money: store.money(),
-    training: store.training(),
-    exerciseMuscles: store.exerciseMuscles(),
-    learn: store.learn(),
-  };
-  return c.json(backup);
-});
-
-app.post(
-  '/api/backup',
-  bodyLimit({ maxSize: 16 * 1024 * 1024, onError: (c) => c.json({ error: 'That backup file is over 16 MB.' }, 413) }),
-  async (c) => {
-    const body = await c.req.json().catch(() => null);
-    const parsed = parseBackup(body, store.prefs());
-    if (!parsed) return c.json({ error: 'That file isn’t a Launchpad backup.' }, 400);
-    if (parsed.bookmarks) store.setBookmarks(parsed.bookmarks);
-    if (parsed.notes) store.setNotes(parsed.notes);
-    if (parsed.prefs) store.setPrefs(parsed.prefs);
-    if (parsed.packages) store.setPackages(parsed.packages);
-    if (parsed.countdowns) store.setCountdowns(parsed.countdowns);
-    if (parsed.smokes) store.setSmokes(parsed.smokes);
-    if (parsed.moods) store.setMoods(parsed.moods);
-    if (parsed.weights) store.setWeights(parsed.weights);
-    if (parsed.money) store.setMoney(parsed.money);
-    if (parsed.training) store.setTraining(parsed.training);
-    if (parsed.exerciseMuscles) store.setExerciseMuscles({ ...store.exerciseMuscles(), ...parsed.exerciseMuscles });
-    if (parsed.learn) store.setLearn(parsed.learn);
-    return c.json({ state: state(), summary: parsed.summary });
-  },
-);
-
-app.get('/api/backup.db', (c) => {
-  const bytes = snapshotDb();
-  return c.body(new Uint8Array(bytes), 200, {
-    'Content-Type': 'application/vnd.sqlite3',
-    'Content-Length': String(bytes.byteLength),
-    'Content-Disposition': 'attachment; filename="launchpad.db"',
-    'Cache-Control': 'no-store',
-    'X-Content-Type-Options': 'nosniff',
-  });
-});
-
 // ---------- bookmarks, notes, prefs ----------
-
-const isStr = (v: unknown): v is string => typeof v === 'string';
 
 app.put('/api/bookmarks', async (c) => {
   const body = await c.req.json();
@@ -233,8 +140,6 @@ app.put('/api/notes', async (c) => {
   store.setNotes(body);
   return c.json({ ok: true });
 });
-
-const num = (v: unknown, min: number, max: number, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, Math.round(v))) : d);
 
 app.put('/api/prefs', async (c) => {
   const body = (await c.req.json()) as Partial<Prefs>;
@@ -315,8 +220,6 @@ app.post('/api/packages/:id/refresh', async (c) => {
 
 // ---------- countdowns, cigarettes, mood ----------
 
-const isYmd = (v: unknown): v is string => isStr(v) && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v));
-
 app.put('/api/countdowns', async (c) => {
   const body = await c.req.json();
   if (!Array.isArray(body)) return c.json({ error: 'Expected a list of countdowns' }, 400);
@@ -354,10 +257,10 @@ app.put('/api/moods/:date', async (c) => {
   const date = c.req.param('date');
   if (!isYmd(date)) return c.json({ error: 'Expected a YYYY-MM-DD date' }, 400);
   const body = (await c.req.json()) as Partial<Mood>;
-  const level = num(body.level, 0, 5, 0);
   const moods = { ...store.moods() };
-  if (level === 0) delete moods[date];
-  else moods[date] = { level, note: isStr(body.note) ? body.note.trim().slice(0, 280) : moods[date]?.note ?? '' };
+  const mood = cleanMood(body, moods[date]?.note ?? '');
+  if (!mood) delete moods[date];
+  else moods[date] = mood;
   store.setMoods(moods);
   return c.json(moods);
 });
@@ -449,7 +352,7 @@ function foreignOrigin(origin: string | undefined, host: string | undefined): bo
   }
 }
 
-for (const p of ['/api/shell/*', '/api/files/*']) {
+for (const p of ['/api/shell/*', '/api/files/*', '/api/backup', '/api/backup/*']) {
   app.use(p, async (c, next) => (foreignOrigin(c.req.header('origin'), c.req.header('host')) ? c.json({ error: 'Cross-site request refused' }, 403) : next()));
 }
 
@@ -515,6 +418,44 @@ app.post('/api/files/delete', async (c) => {
   return c.json({ ok: true });
 });
 
+// ---------- backup ----------
+
+app.get('/api/backup', (c) => {
+  const day = new Date().toISOString().slice(0, 10);
+  return c.body(JSON.stringify(exportBackup(), null, 2), 200, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Content-Disposition': `attachment; filename="launchpad-backup-${day}.json"`,
+    'Cache-Control': 'no-store',
+  });
+});
+
+/** Restore from a backup file. Parts it has replace what's here; parts it doesn't are kept. */
+app.post('/api/backup', bodyLimit({ maxSize: 32 * 1024 * 1024, onError: (c) => c.json({ error: 'That backup is over 32 MB.' }, 413) }), async (c) => {
+  const body = await c.req.json().catch(() => null);
+  try {
+    const parts = restoreBackup(body);
+    return c.json({ restored: describeRestored(parts), state: state() });
+  } catch (e) {
+    if (e instanceof RestoreError) return c.json({ error: e.message }, 400);
+    throw e;
+  }
+});
+
+/** The whole SQLite database, Google sign-in and caches included. Photos are files beside it, so aren't in it. */
+app.get('/api/backup/db', (c) => {
+  const snap = dbSnapshot();
+  const day = new Date().toISOString().slice(0, 10);
+  const file = fs.createReadStream(snap.path);
+  file.on('close', snap.cleanup);
+  return c.body(Readable.toWeb(file) as ReadableStream, 200, {
+    'Content-Type': 'application/vnd.sqlite3',
+    'Content-Length': String(snap.size),
+    'Content-Disposition': `attachment; filename="launchpad-${day}.db"`,
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+  });
+});
+
 // ---------- photos ----------
 
 app.post(
@@ -562,10 +503,8 @@ app.put('/api/photos', async (c) => {
 
 app.delete('/api/photos/:id', (c) => {
   const id = c.req.param('id');
-  const next = store.photos().filter((p) => p.id !== id);
-  store.setPhotos(next);
+  store.setPhotos(store.photos().filter((p) => p.id !== id));
   removePhotoFile(id);
-  cleanOrphanPhotos(next.map((p) => p.id));
   return c.json({ ok: true });
 });
 
@@ -669,6 +608,6 @@ server.on('upgrade', async (req, socket, head) => {
   });
 });
 
-cleanOrphanPhotos(store.photos().map((p) => p.id));
 startScheduler();
 startSampler();
+startCleanup();

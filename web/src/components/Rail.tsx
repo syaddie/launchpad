@@ -11,18 +11,6 @@ export const VIEWS: { key: ViewKey; name: string; icon: string; letter: string }
   { key: 'server', name: 'Server', icon: 'ph-hard-drives', letter: 'S' },
 ];
 
-/** Read the view from `location.hash` (e.g. `#money` → `'money'`); unknown or empty hashes open `'home'`. */
-export function viewFromHash(hash: string): ViewKey {
-  const key = hash.replace(/^#\/?/, '').trim().toLowerCase();
-  const found = VIEWS.find((v) => v.key === key);
-  return found ? found.key : 'home';
-}
-
-/** The URL hash for a view (`''` for `'home'`, `'#money'` for `'money'`, etc.). */
-export function hashForView(view: ViewKey): string {
-  return view === 'home' ? '' : `#${view}`;
-}
-
 /** The view switcher down the left edge (across the top on a phone). Hidden views stay reachable from ⌘K.
  * The designs restyle it: Console's F-key bar, Bento's dock, Horizon's row of tabs. */
 export function Rail({ view, hidden, badges, onView, onPalette, onSettings }: {
