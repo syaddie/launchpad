@@ -1,13 +1,19 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_ENGINES } from '../shared/defaults';
+import { parseBackup } from '../shared/backup';
+import { DEFAULT_ENGINES, STARTER_BOOKMARKS, STARTER_NOTES } from '../shared/defaults';
 import {
   countdownNext, countdownPhrase, countdownProgress, dailyCounts, engineUrl, fmtDuration, longestGapMs, moodMonth, parseSearch, smokesOn, sortCountdowns,
 } from '../shared/trackers';
 import type { Countdown } from '../shared/types';
+import { cleanOrphanPhotos } from '../server/src/photos';
 import { latencyStats, mbps } from '../server/src/speedtest';
 import { isPhysical, parseNetDev, toContainers } from '../server/src/system';
 import { pickAir, pickOutlook, pickRain, pickUv } from '../server/src/weather';
 import { gridLayout, type Area } from '../web/src/layout';
+import { hashForView, viewFromHash } from '../web/src/components/Rail';
 import { niceMax, slowTests } from '../web/src/components/Server';
 import { searchRows } from '../web/src/components/TopBar';
 import { psiBand, uvBand } from '../web/src/util';
@@ -194,5 +200,63 @@ describe('server health', () => {
   });
   it('rounds chart tops to tidy numbers', () => {
     expect([7, 64, 1050, 2600].map(niceMax)).toEqual([8, 80, 1200, 3000]);
+  });
+});
+
+describe('view hash routing', () => {
+  it('maps location hashes to views and back', () => {
+    expect(viewFromHash('')).toBe('home');
+    expect(viewFromHash('#')).toBe('home');
+    expect(viewFromHash('#money')).toBe('money');
+    expect(viewFromHash('#/training')).toBe('training');
+    expect(viewFromHash('#SERVER')).toBe('server');
+    expect(viewFromHash('#unknown')).toBe('home');
+    expect(hashForView('home')).toBe('');
+    expect(hashForView('money')).toBe('#money');
+    expect(hashForView('learn')).toBe('#learn');
+  });
+});
+
+describe('full-state backup & orphan cleanup', () => {
+  it('validates v1 and v2 backups and rejects non-backups', () => {
+    expect(parseBackup(null)).toBeNull();
+    expect(parseBackup({})).toBeNull();
+    const v1 = parseBackup({ version: 1, exported: '2026-10-27T00:00:00Z', bookmarks: STARTER_BOOKMARKS, notes: STARTER_NOTES });
+    expect(v1?.bookmarks).toHaveLength(2);
+    expect(v1?.notes).toHaveLength(1);
+    expect(v1?.summary).toContain('2 bookmark groups');
+
+    const v2 = parseBackup({
+      version: 2,
+      exported: '2026-10-27T00:00:00Z',
+      bookmarks: STARTER_BOOKMARKS,
+      notes: STARTER_NOTES,
+      prefs: { name: 'Alex', theme: 'dark', setsPerWeek: 12 },
+      countdowns: [{ id: 'c1', title: 'Trip', date: '2026-12-01', yearly: false, createdAt: '2026-10-01T00:00:00Z' }],
+      moods: { '2026-10-27': { level: 5, note: 'Great day' }, bad: { level: 9, note: '' } },
+      weights: { '2026-10-27': 72.4, bad: 9999 },
+      exerciseMuscles: { 'Bench Press': { primary: 'chest', secondary: ['triceps', 'shoulders'] } },
+    });
+    expect(v2?.prefs?.name).toBe('Alex');
+    expect(v2?.prefs?.setsPerWeek).toBe(12);
+    expect(v2?.countdowns).toHaveLength(1);
+    expect(Object.keys(v2?.moods ?? {})).toEqual(['2026-10-27']);
+    expect(v2?.weights).toEqual({ '2026-10-27': 72.4 });
+    expect(v2?.exerciseMuscles?.['Bench Press']?.primary).toBe('chest');
+  });
+
+  it('removes orphan photo files while keeping active photos', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lp-photos-'));
+    try {
+      const keepId = 'ABCDEFGHIJKLMNOP';
+      const orphanId = '1234567890abcdef';
+      fs.writeFileSync(path.join(tmp, keepId), 'keep');
+      fs.writeFileSync(path.join(tmp, orphanId), 'orphan');
+      fs.writeFileSync(path.join(tmp, 'ignore.txt'), 'other');
+      expect(cleanOrphanPhotos([keepId], tmp)).toBe(1);
+      expect(fs.readdirSync(tmp).sort()).toEqual([keepId, 'ignore.txt'].sort());
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });

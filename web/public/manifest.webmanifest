@@ -1,0 +1,25 @@
+{
+  "name": "Launchpad",
+  "short_name": "Launchpad",
+  "description": "Personal dashboard for calendar, tasks, notes, inbox, training, learning, money and server.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#1d1c1a",
+  "theme_color": "#5a7a5c",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    { "name": "Money", "url": "/#money" },
+    { "name": "Training", "url": "/#training" },
+    { "name": "Learn", "url": "/#learn" },
+    { "name": "You", "url": "/#you" }
+  ]
+}
+

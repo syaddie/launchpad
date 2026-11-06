@@ -1,9 +1,12 @@
 import { useRef, useState } from 'react';
+import { parseBackup } from '../../../shared/backup';
 import { CARRIERS, detectCarrier, trackUrl } from '../../../shared/carriers';
 import { startOfDay } from '../../../shared/dates';
 import { DEFAULT_ENGINES } from '../../../shared/defaults';
-import type { AccentKey, AppState, Backup, BookmarkGroup, DesignKey, GoogleSource, Note, Package, Photo, Prefs, SearchEngine, ThemeMode } from '../../../shared/types';
+import type { AccentKey, AppState, Backup, DesignKey, GoogleSource, Package, Photo, Prefs, SearchEngine, ThemeMode } from '../../../shared/types';
+import { api, backupDbUrl } from '../api';
 import { PhotoSettings } from './Photos';
+import { VIEWS } from './Rail';
 import { STEP_LABELS, ago, chipOf, fmtStamp, hm, segColor, statusText } from '../util';
 
 export function Drawer({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
@@ -218,12 +221,12 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
   onPrefs: (p: Prefs) => void;
   onConnect: () => void;
   onDisconnect: () => void;
-  onImport: (bookmarks: BookmarkGroup[] | undefined, notes: Note[] | undefined) => void;
+  onImport: (raw: unknown) => Promise<string>;
   onAddPhotos: (files: File[]) => Promise<string>;
   onRemovePhoto: (id: string) => void;
   onPhotoFocus: (id: string, focus: Photo['focus']) => void;
 }) {
-  const [importMsg, setImportMsg] = useState('Exports bookmarks and all notepads in one file.');
+  const [importMsg, setImportMsg] = useState('Exports all your data (bookmarks, notes, settings, money, learn, training and trackers) in one JSON file, or downloads a snapshot of launchpad.db.');
   const fileRef = useRef<HTMLInputElement>(null);
   const p = data.prefs;
   const g = data.google;
@@ -236,26 +239,39 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
     { key: 'gmail', name: 'Gmail (packages and inbox)', icon: 'ph-envelope-simple' },
   ];
 
-  const exportJson = () => {
-    const backup: Backup = { version: 1, exported: new Date().toISOString(), bookmarks: data.bookmarks, notes: data.notes };
+  const exportJson = async () => {
+    const local: Backup = {
+      version: 2,
+      exported: new Date().toISOString(),
+      bookmarks: data.bookmarks,
+      notes: data.notes,
+      prefs: data.prefs,
+      packages: data.packages,
+      countdowns: data.countdowns,
+      smokes: data.smokes,
+      moods: data.moods,
+      weights: data.weights,
+      money: data.money,
+      training: data.training,
+      exerciseMuscles: data.exerciseMuscles,
+      learn: data.learn,
+    };
+    const backup = await api.exportBackup().catch(() => local);
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'launchpad-backup.json';
+    a.download = `launchpad-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
 
   const importJson = async (f: File) => {
     try {
-      const d = JSON.parse(await f.text()) as Partial<Backup>;
-      const okB = Array.isArray(d.bookmarks) && d.bookmarks.every((x) => x && typeof x.name === 'string' && Array.isArray(x.items));
-      const okN = Array.isArray(d.notes) && d.notes.length > 0 && d.notes.every((x) => x && typeof x.text === 'string');
-      if (!okB && !okN) throw new Error();
-      onImport(okB ? d.bookmarks : undefined, okN ? d.notes : undefined);
-      setImportMsg(`Imported ${[okB && `${d.bookmarks!.length} groups`, okN && `${d.notes!.length} notepads`].filter(Boolean).join(', ')}.`);
-    } catch {
-      setImportMsg('That file isn’t a Launchpad backup.');
+      const d = JSON.parse(await f.text());
+      if (!parseBackup(d, p)) throw new Error('That file isn’t a Launchpad backup.');
+      setImportMsg(await onImport(d));
+    } catch (e) {
+      setImportMsg((e as Error).message || 'That file isn’t a Launchpad backup.');
     }
     if (fileRef.current) fileRef.current.value = '';
   };
@@ -452,7 +468,7 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
       </div>
 
       <div className="drawer-section">
-        <div className="drawer-label">Bookmarks and notes</div>
+        <div className="drawer-label">Backup and restore</div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button className="btn btn-secondary" style={{ padding: '7px 12px', gap: 5, fontWeight: 400 }} onClick={exportJson}>
             <i className="ph-duotone ph-download-simple" />
@@ -463,6 +479,10 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
             Import JSON
             <input ref={fileRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])} />
           </label>
+          <a className="btn btn-secondary" style={{ padding: '7px 12px', gap: 5, fontWeight: 400 }} href={backupDbUrl} download="launchpad.db">
+            <i className="ph-duotone ph-database" />
+            SQLite .db
+          </a>
         </div>
         <div style={{ fontSize: 12, color: 'var(--t3)' }}>{importMsg}</div>
       </div>
@@ -735,6 +755,77 @@ function TrackerSettings({ prefs, onPrefs }: { prefs: Prefs; onPrefs: (p: Prefs)
         <div className="meta">How often the server tests its connection, against Cloudflare. Each test moves about 130 MB.</div>
         <NumberField label="Plan speed" value={prefs.speedPlanMbps} min={0} max={100000} suffix="Mbps plan, shown as a line on the chart" onSave={(n) => onPrefs({ ...prefs, speedPlanMbps: n })} />
       </div>
+    </>
+  );
+}
+
+// ---------- keyboard shortcuts ----------
+
+export const SHORTCUT_SECTIONS: { section: string; hint?: string; rows: { label: string; keys: string[] }[] }[] = [
+  {
+    section: 'Everywhere',
+    rows: [
+      { label: 'Command palette (search, actions, log weight or study time)', keys: ['⌘K'] },
+      { label: 'Focus the search bar', keys: ['/'] },
+      { label: 'Keyboard shortcuts', keys: ['?'] },
+      { label: 'Close palette, drawer or focus view · return to Home', keys: ['Esc'] },
+      { label: 'Log a cigarette', keys: ['C'] },
+      { label: 'Open You to log today’s mood', keys: ['M'] },
+      { label: 'Toggle between Home and News', keys: ['N'] },
+    ],
+  },
+  {
+    section: 'Views',
+    hint: 'Press G, then a letter',
+    rows: [
+      ...VIEWS.map((v) => ({ label: v.name, keys: ['G', v.letter] })),
+      { label: 'Views and Settings in the Console layout', keys: ['F1–F9'] },
+    ],
+  },
+  {
+    section: 'Home & Notes',
+    rows: [
+      { label: 'Open the first nine links in Daily bookmarks', keys: ['1–9'] },
+      { label: 'Bold selected text in Notes', keys: ['⌘B'] },
+      { label: 'Italicise selected text in Notes', keys: ['⌘I'] },
+      { label: 'Turn selected text into a link in Notes', keys: ['⌘K'] },
+    ],
+  },
+  {
+    section: 'Money & Server',
+    rows: [
+      { label: 'Move around the Money and Wishlist spreadsheets', keys: ['↑', '↓', '←', '→'] },
+      { label: 'Edit the selected cell, or open a folder / file in Files', keys: ['Enter'] },
+      { label: 'Clear the selected spreadsheet cell', keys: ['⌫'] },
+      { label: 'Undo the last spreadsheet change', keys: ['⌘Z'] },
+      { label: 'Save the open file in the Server text editor', keys: ['⌘S'] },
+    ],
+  },
+];
+
+export function ShortcutsDrawer() {
+  return (
+    <>
+      {SHORTCUT_SECTIONS.map((s) => (
+        <div key={s.section} className="drawer-section" style={{ gap: 4 }}>
+          <div className="split" style={{ paddingBottom: 4 }}>
+            <span className="drawer-label">{s.section}</span>
+            {s.hint && <span className="meta">{s.hint}</span>}
+          </div>
+          {s.rows.map((r) => (
+            <div key={r.label} className="setting-row" style={{ padding: '6px 0' }}>
+              <span style={{ fontSize: 13, color: 'var(--tx)', flex: 1, minWidth: 0 }}>{r.label}</span>
+              <span style={{ display: 'flex', gap: 4, flex: 'none' }}>
+                {r.keys.map((k, i) => (
+                  <kbd key={i} className="kbd">
+                    {k}
+                  </kbd>
+                ))}
+              </span>
+            </div>
+          ))}
+        </div>
+      ))}
     </>
   );
 }

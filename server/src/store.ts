@@ -32,6 +32,35 @@ const setStmt = db.prepare(
 );
 const delStmt = db.prepare('DELETE FROM docs WHERE key = ?');
 
+const listeners = new Set<(key: string) => void>();
+
+/** Subscribe to store writes and deletes; returns an unsubscribe function. */
+export function onStoreChange(fn: (key: string) => void): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
+function notify(key: string): void {
+  for (const fn of listeners) {
+    try {
+      fn(key);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+/** Consistent binary snapshot of launchpad.db via SQLite VACUUM INTO. */
+export function snapshotDb(): Buffer {
+  const tmp = path.join(config.dataDir, `launchpad-snapshot-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
+  try {
+    db.exec(`VACUUM INTO '${tmp.replace(/'/g, "''")}'`);
+    return fs.readFileSync(tmp);
+  } finally {
+    fs.rmSync(tmp, { force: true });
+  }
+}
+
 function get<T>(key: string, fallback: T): T {
   const row = getStmt.get(key) as { value: string } | undefined;
   if (!row) return fallback;
@@ -44,6 +73,12 @@ function get<T>(key: string, fallback: T): T {
 
 function set(key: string, value: unknown): void {
   setStmt.run(key, JSON.stringify(value), new Date().toISOString());
+  notify(key);
+}
+
+function del(key: string): void {
+  delStmt.run(key);
+  notify(key);
 }
 
 export interface GoogleTokens {
@@ -86,16 +121,16 @@ export const store = {
   google: () => get<GoogleTokens | null>('google', null),
   setGoogle: (v: GoogleTokens) => set('google', v),
   clearGoogle: () => {
-    delStmt.run('google');
-    delStmt.run('calendar');
-    delStmt.run('tasks');
-    delStmt.run('inbox');
+    del('google');
+    del('calendar');
+    del('tasks');
+    del('inbox');
   },
   /** Why Google disconnected itself, shown until it's reconnected. */
   googleSignedOut: () => get<{ reason: string; at: string } | null>('googleSignedOut', null),
   setGoogleSignedOut: (reason: string | null) => {
     if (reason) set('googleSignedOut', { reason, at: new Date().toISOString() });
-    else delStmt.run('googleSignedOut');
+    else del('googleSignedOut');
   },
 
   calendar: () => get<CalendarCache>('calendar', { calendars: [], events: [] }),
@@ -181,7 +216,7 @@ export const store = {
     };
   },
   setSync: (key: SourceKey, v: SyncStatus) => set('sync', { ...store.sync(), [key]: v }),
-  resetSync: () => delStmt.run('sync'),
+  resetSync: () => del('sync'),
 };
 
 export function updatePackages(fn: (pkgs: Package[]) => Package[]): Package[] {
