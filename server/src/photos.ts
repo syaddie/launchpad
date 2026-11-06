@@ -50,3 +50,26 @@ export function readPhoto(id: string): Buffer | null {
 export function removePhotoFile(id: string): void {
   if (validPhotoId(id)) fs.rmSync(path.join(dir, id), { force: true });
 }
+
+/** Remove any photo file in `photoDir` whose id isn't in `keepIds`. Returns how many were removed. */
+export function cleanOrphanPhotos(keepIds: Iterable<string>, photoDir = dir): number {
+  const keep = new Set(keepIds);
+  let removed = 0;
+  let names: string[];
+  try {
+    names = fs.readdirSync(photoDir);
+  } catch {
+    return 0;
+  }
+  for (const name of names) {
+    if (validPhotoId(name) && !keep.has(name)) {
+      try {
+        fs.rmSync(path.join(photoDir, name), { force: true });
+        removed++;
+      } catch {
+        // ignore
+      }
+    }
+  }
+  return removed;
+}

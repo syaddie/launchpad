@@ -281,13 +281,36 @@ export function kindOf(mode: number): FileEntry['kind'] | 'link' {
 
 const stat = (sftp: SFTPWrapper, p: string) => call<Stats>(p, (cb) => sftp.stat(p, cb));
 
+export const PART_PREFIX = '.launchpad-upload-';
+export const PART_SUFFIX = '.part';
+export const STALE_PART_MS = 24 * 3600_000;
+
+/** Whether `name` is a Launchpad upload `.part` file. */
+export function isPartFile(name: string): boolean {
+  if (!name.startsWith(PART_PREFIX) || !name.endsWith(PART_SUFFIX)) return false;
+  const id = name.slice(PART_PREFIX.length, -PART_SUFFIX.length);
+  return /^[A-Za-z0-9-]{8,64}$/.test(id);
+}
+
+/** Whether `name` is an upload `.part` file untouched for at least 24 hours. */
+export function isStalePart(name: string, mtimeSec: number, nowMs = Date.now()): boolean {
+  return isPartFile(name) && nowMs - mtimeSec * 1000 >= STALE_PART_MS;
+}
+
 /** A folder's contents, folders first. Without a path, the SSH user's home folder. */
 export async function listDir(p?: string): Promise<DirListing> {
   const { sftp } = await sftpSession();
   const abs = await call<string>(p || '~', (cb) => sftp.realpath(p ? cleanPath(p) : '.', cb));
   const list = await call<{ filename: string; attrs: Stats }[]>(abs, (cb) => sftp.readdir(abs, cb));
+  const nowMs = Date.now();
+  const kept = list.filter(({ filename, attrs }) => {
+    if (!isStalePart(filename, attrs.mtime, nowMs)) return true;
+    const stale = path.posix.join(abs, filename);
+    call<void>(stale, (cb) => sftp.unlink(stale, cb)).catch(() => {});
+    return false;
+  });
   const entries = await Promise.all(
-    list.map(async ({ filename, attrs }): Promise<FileEntry> => {
+    kept.map(async ({ filename, attrs }): Promise<FileEntry> => {
       let kind = kindOf(attrs.mode);
       let { size, mtime, mode } = attrs;
       const link = kind === 'link';
@@ -357,7 +380,7 @@ export function cleanSize(n: unknown, what: string): number {
   return v;
 }
 
-const partPath = (dir: string, id: string) => path.posix.join(dir, `.launchpad-upload-${id}.part`);
+const partPath = (dir: string, id: string) => path.posix.join(dir, `${PART_PREFIX}${id}${PART_SUFFIX}`);
 
 export interface UploadPiece {
   dir: unknown;

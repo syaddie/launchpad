@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { parseBackup } from '../../shared/backup';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
 import { ymd } from '../../shared/dates';
 import { emptyLearn, fmtStudy, parseStudy, timerMinutes } from '../../shared/learn';
@@ -8,7 +9,7 @@ import { MOOD_WORDS, engineUrl, fmtDuration, parseSearch, smokesOn } from '../..
 import type { AppState, BookmarkGroup, DesignKey, Countdown, Learn, Money, Mood, Note, Package, Photo, Prefs, Task, Training, ViewKey } from '../../shared/types';
 import { api, cachedState, cacheState, localGet, localSet, ServerError } from './api';
 import { Bookmarks } from './components/Bookmarks';
-import { AddPackageDrawer, DESIGNS, Drawer, PANEL_ROWS, PackageDrawer, SettingsDrawer } from './components/Drawers';
+import { AddPackageDrawer, DESIGNS, Drawer, PANEL_ROWS, PackageDrawer, SettingsDrawer, ShortcutsDrawer } from './components/Drawers';
 import { Inbox, inboxBadge } from './components/Inbox';
 import { CourseDrawer, LearnView } from './components/Learn';
 import { MoneyView } from './components/Money';
@@ -19,7 +20,7 @@ import { FocusView, Notes } from './components/Notes';
 import { Packages } from './components/Packages';
 import { Palette, type PaletteItem } from './components/Palette';
 import { PhotoPanel, shrinkImage, usePhotoSlots } from './components/Photos';
-import { Rail, VIEWS } from './components/Rail';
+import { Rail, VIEWS, hashForView, viewFromHash } from './components/Rail';
 import { Server, type ServerTab } from './components/Server';
 import { ServerBanner, type ServerIssue } from './components/ServerBanner';
 import { Tasks } from './components/Tasks';
@@ -74,7 +75,7 @@ function fromCache(c: AppState | null): AppState {
   return { ...EMPTY, ...c, prefs: { ...DEFAULT_PREFS, ...c.prefs }, sync: { ...EMPTY.sync, ...c.sync }, inbox: c.inbox ?? EMPTY.inbox, money: Array.isArray(c.money?.entries) ? c.money : EMPTY.money, training: Array.isArray(c.training?.workouts) ? c.training : EMPTY.training, exerciseMuscles: c.exerciseMuscles ?? {}, trainingNote: c.trainingNote ?? EMPTY.trainingNote, weights: c.weights ?? {}, learn: Array.isArray(c.learn?.courses) ? c.learn : EMPTY.learn, learnNote: c.learnNote ?? EMPTY.learnNote };
 }
 
-type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings' } | { type: 'exercise'; title: string } | { type: 'course'; id: string; item?: string } | null;
+type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings' } | { type: 'shortcuts' } | { type: 'exercise'; title: string } | { type: 'course'; id: string; item?: string } | null;
 
 /** Debounced saver for whole-document PUTs, flushed when the tab closes. */
 function useSaver<T>(save: (v: T, keepalive?: boolean) => Promise<unknown>, delay: number, onSaved?: () => void, onError?: (e: Error) => void) {
@@ -142,7 +143,27 @@ function useSystemDark(): boolean {
 
 export function App() {
   const [data, setData] = useState<AppState>(() => fromCache(cachedState()));
-  const [view, setView] = useState<ViewKey>('home');
+  const [view, setViewState] = useState<ViewKey>(() => viewFromHash(location.hash));
+  const setView = useCallback((next: ViewKey | ((prev: ViewKey) => ViewKey)) => {
+    setViewState((prev) => {
+      const v = typeof next === 'function' ? next(prev) : next;
+      const targetHash = hashForView(v);
+      if (location.hash !== targetHash && !(targetHash === '' && (location.hash === '' || location.hash === '#'))) {
+        const url = targetHash ? `${location.pathname}${location.search}${targetHash}` : `${location.pathname}${location.search}`;
+        history.pushState(null, '', url);
+      }
+      return v;
+    });
+  }, []);
+  useEffect(() => {
+    const onNav = () => setViewState(viewFromHash(location.hash));
+    window.addEventListener('popstate', onNav);
+    window.addEventListener('hashchange', onNav);
+    return () => {
+      window.removeEventListener('popstate', onNav);
+      window.removeEventListener('hashchange', onNav);
+    };
+  }, []);
   const [palette, setPalette] = useState(false);
   const [addCountdown, setAddCountdown] = useState(0);
   const [weightSignal, setWeightSignal] = useState(0);
@@ -244,6 +265,11 @@ export function App() {
   useEffect(() => {
     refresh();
     const iv = window.setInterval(refresh, 60_000);
+    let es: EventSource | null = null;
+    if (typeof EventSource !== 'undefined') {
+      es = new EventSource('/api/events');
+      es.onmessage = () => refresh();
+    }
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
       // Tasks sync "on focus", throttled server-side to once every 30 s.
@@ -254,10 +280,11 @@ export function App() {
     const err = new URLSearchParams(location.search).get('google');
     if (err) {
       showToast(err === 'access_denied' ? 'Google sign-in was cancelled.' : `Google sign-in failed: ${err}`);
-      history.replaceState(null, '', '/');
+      history.replaceState(null, '', '/' + location.hash);
     }
     return () => {
       clearInterval(iv);
+      es?.close();
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onVisible);
     };
@@ -610,11 +637,28 @@ export function App() {
     api.speedTest().catch((e) => showToast(`Couldn’t start a speed test: ${e.message}`));
   };
 
-  const importBackup = (bookmarks?: BookmarkGroup[], notes?: Note[]) => {
-    if (bookmarks) setBookmarks(bookmarks);
-    if (notes) {
-      setNotes(notes);
-      pickNote(notes[0].id);
+  const importBackup = async (raw: unknown): Promise<string> => {
+    try {
+      const { state: s, summary } = await api.importBackup(raw);
+      merge(s);
+      if (s.notes.length) pickNote(s.notes[0].id);
+      showToast(summary);
+      return summary;
+    } catch {
+      const parsed = parseBackup(raw, data.prefs);
+      if (!parsed) throw new Error('That file isn’t a Launchpad backup.');
+      if (parsed.bookmarks) setBookmarks(parsed.bookmarks);
+      if (parsed.notes) {
+        setNotes(parsed.notes);
+        pickNote(parsed.notes[0].id);
+      }
+      if (parsed.prefs) setPrefs(parsed.prefs);
+      if (parsed.countdowns) setCountdowns(parsed.countdowns);
+      if (parsed.money) setMoney(parsed.money);
+      if (parsed.training) setTraining(parsed.training);
+      if (parsed.learn) setLearn(parsed.learn);
+      showToast(parsed.summary);
+      return parsed.summary;
     }
   };
 
@@ -675,6 +719,11 @@ export function App() {
       if (e.key === '/') {
         e.preventDefault();
         searchRef.current?.focus();
+        return;
+      }
+      if (e.key === '?' && !focus) {
+        e.preventDefault();
+        setDrawer((d) => (d?.type === 'shortcuts' ? null : { type: 'shortcuts' }));
         return;
       }
       if (drawer || focus) return;
@@ -814,6 +863,7 @@ export function App() {
       run: () => (localDesign ? setLocalDesign(d.key) : setPrefs({ ...data.prefs, design: d.key })),
     })),
     { id: 'a:settings', group: 'Actions', label: 'Open Settings', icon: 'ph-gear-six', words: 'preferences', run: () => setDrawer({ type: 'settings' }) },
+    { id: 'a:shortcuts', group: 'Actions', label: 'Keyboard shortcuts', icon: 'ph-keyboard', keys: ['?'], words: 'keys hotkeys help cheat sheet', run: () => setDrawer({ type: 'shortcuts' }) },
     ...VIEWS.filter((v) => v.key !== view).map((v) => ({
       id: 'v:' + v.key, group: 'Go to', label: v.name, icon: v.icon, keys: ['G', v.letter], words: 'view', run: () => setView(v.key),
     })),
@@ -871,7 +921,7 @@ export function App() {
     }))];
   };
   const drawerTitle =
-    drawer?.type === 'settings' ? 'Settings' : drawer?.type === 'add' ? 'Add package' : drawer?.type === 'exercise' ? drawer.title : drawer?.type === 'course' ? data.learn.courses.find((c) => c.id === drawer.id)?.name || 'Course' : drawerPkg ? 'Package' : '';
+    drawer?.type === 'settings' ? 'Settings' : drawer?.type === 'shortcuts' ? 'Keyboard shortcuts' : drawer?.type === 'add' ? 'Add package' : drawer?.type === 'exercise' ? drawer.title : drawer?.type === 'course' ? data.learn.courses.find((c) => c.id === drawer.id)?.name || 'Course' : drawerPkg ? 'Package' : '';
 
   return (
     <div ref={rootRef} className="lp-root" data-layout={layout} data-design={design} data-view={view}>
@@ -1008,6 +1058,7 @@ export function App() {
             />
           )}
           {drawer.type === 'add' && <AddPackageDrawer onSubmit={addPackage} onCancel={() => setDrawer(null)} />}
+          {drawer.type === 'shortcuts' && <ShortcutsDrawer />}
           {drawer.type === 'exercise' && (
             <ExerciseDrawer key={drawer.title} title={drawer.title} data={data} pinned={data.prefs.pinnedLifts.includes(drawer.title)} onPin={() => togglePin(drawer.title)} />
           )}

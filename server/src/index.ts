@@ -10,20 +10,20 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { WebSocketServer } from 'ws';
 import { config, googleConfigured } from './config';
 import { authUrl, completeTask, createTask, exchangeCode, GoogleError, revoke } from './google';
-import { store, updatePackages } from './store';
+import { onStoreChange, snapshotDb, store, updatePackages } from './store';
 import { claudeEnabled } from './claude';
-import { MAX_PHOTOS, MAX_PHOTO_BYTES, readPhoto, removePhotoFile, sniffImage, writePhoto } from './photos';
+import { cleanOrphanPhotos, MAX_PHOTOS, MAX_PHOTO_BYTES, readPhoto, removePhotoFile, sniffImage, writePhoto } from './photos';
 import { isRunning, newPackage, refreshPackage, refreshSummaries, refreshWeather, runAllGoogle, runIfStale, runSource, signOutGoogle, startScheduler } from './sync';
 import { attachTerminal, FileError, listDir, makeDir, MAX_TEXT, readFileStream, readText, remove, rename, shellInfo, trustHostKey, abandonUpload, uploadPiece, UPLOAD_CHUNK, writeText } from './shell';
 import { serverStats, startSampler } from './system';
+import { cleanCountdowns, cleanPrefs, parseBackup, validBookmarks, validNotes } from '../../shared/backup';
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
-import { DEFAULT_ENGINES, HIDEABLE_KEYS } from '../../shared/defaults';
 import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
 import { MAX_KG, MIN_KG, cleanKg, cleanTraining } from '../../shared/training';
 import { refreshLearnNote } from './learn';
 import { refreshTraining } from './training';
-import type { AppState, BookmarkGroup, Countdown, Mood, NewsTopic, Note, Package, Photo, Prefs, SearchEngine, SourceKey } from '../../shared/types';
+import type { AppState, Backup, Mood, NewsTopic, Package, Photo, Prefs, SourceKey } from '../../shared/types';
 
 const app = new Hono();
 
@@ -115,18 +115,110 @@ const recentSmokes = () => store.smokes().filter((s) => Date.now() - Date.parse(
 
 app.get('/api/state', (c) => c.json(state()));
 
+/** Server-Sent Events stream: notifies open tabs whenever the store changes so edits and background syncs appear at once. */
+app.get('/api/events', () => {
+  const enc = new TextEncoder();
+  let cleanup = () => {};
+  const stream = new ReadableStream<Uint8Array>({
+    start(ctl) {
+      let timer: NodeJS.Timeout | undefined;
+      let latestKey = '';
+      const send = (line: string) => {
+        try {
+          ctl.enqueue(enc.encode(line));
+        } catch {
+          cleanup();
+        }
+      };
+      send(': connected\n\n');
+      const unsub = onStoreChange((key) => {
+        latestKey = key;
+        if (timer) return;
+        timer = setTimeout(() => {
+          timer = undefined;
+          send(`data: ${JSON.stringify({ type: 'state', key: latestKey })}\n\n`);
+        }, 80);
+      });
+      const hb = setInterval(() => send(': keepalive\n\n'), 25_000);
+      cleanup = () => {
+        clearTimeout(timer);
+        clearInterval(hb);
+        unsub();
+      };
+    },
+    cancel() {
+      cleanup();
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  });
+});
+
+// ---------- backup ----------
+
+app.get('/api/backup', (c) => {
+  const backup: Backup = {
+    version: 2,
+    exported: new Date().toISOString(),
+    bookmarks: store.bookmarks(),
+    notes: store.notes(),
+    prefs: store.prefs(),
+    packages: store.packages(),
+    countdowns: store.countdowns(),
+    smokes: store.smokes(),
+    moods: store.moods(),
+    weights: store.weights(),
+    money: store.money(),
+    training: store.training(),
+    exerciseMuscles: store.exerciseMuscles(),
+    learn: store.learn(),
+  };
+  return c.json(backup);
+});
+
+app.post(
+  '/api/backup',
+  bodyLimit({ maxSize: 16 * 1024 * 1024, onError: (c) => c.json({ error: 'That backup file is over 16 MB.' }, 413) }),
+  async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const parsed = parseBackup(body, store.prefs());
+    if (!parsed) return c.json({ error: 'That file isn’t a Launchpad backup.' }, 400);
+    if (parsed.bookmarks) store.setBookmarks(parsed.bookmarks);
+    if (parsed.notes) store.setNotes(parsed.notes);
+    if (parsed.prefs) store.setPrefs(parsed.prefs);
+    if (parsed.packages) store.setPackages(parsed.packages);
+    if (parsed.countdowns) store.setCountdowns(parsed.countdowns);
+    if (parsed.smokes) store.setSmokes(parsed.smokes);
+    if (parsed.moods) store.setMoods(parsed.moods);
+    if (parsed.weights) store.setWeights(parsed.weights);
+    if (parsed.money) store.setMoney(parsed.money);
+    if (parsed.training) store.setTraining(parsed.training);
+    if (parsed.exerciseMuscles) store.setExerciseMuscles({ ...store.exerciseMuscles(), ...parsed.exerciseMuscles });
+    if (parsed.learn) store.setLearn(parsed.learn);
+    return c.json({ state: state(), summary: parsed.summary });
+  },
+);
+
+app.get('/api/backup.db', (c) => {
+  const bytes = snapshotDb();
+  return c.body(new Uint8Array(bytes), 200, {
+    'Content-Type': 'application/vnd.sqlite3',
+    'Content-Length': String(bytes.byteLength),
+    'Content-Disposition': 'attachment; filename="launchpad.db"',
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+  });
+});
+
 // ---------- bookmarks, notes, prefs ----------
 
 const isStr = (v: unknown): v is string => typeof v === 'string';
-
-function validBookmarks(v: unknown): v is BookmarkGroup[] {
-  return Array.isArray(v) && v.every((g) => g && isStr(g.id) && isStr(g.name) && Array.isArray(g.items)
-    && g.items.every((b: any) => b && isStr(b.id) && isStr(b.name) && isStr(b.url)));
-}
-
-function validNotes(v: unknown): v is Note[] {
-  return Array.isArray(v) && v.length > 0 && v.every((n) => n && isStr(n.id) && isStr(n.name) && isStr(n.text));
-}
 
 app.put('/api/bookmarks', async (c) => {
   const body = await c.req.json();
@@ -142,56 +234,12 @@ app.put('/api/notes', async (c) => {
   return c.json({ ok: true });
 });
 
-/** Trimmed, de-duplicated (ignoring case), at most 8 topics of 60 characters. */
-function cleanTopics(v: unknown[]): string[] {
-  const seen = new Set<string>();
-  return v
-    .filter(isStr)
-    .map((t) => t.trim().replace(/\s+/g, ' ').slice(0, 60))
-    .filter((t) => t && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()))
-    .slice(0, 8);
-}
-
-/** Prefixes are single words, unique ignoring case; URLs must be http(s). At most 12. */
-function cleanEngines(v: unknown[]): SearchEngine[] {
-  const seen = new Set<string>();
-  const out: SearchEngine[] = [];
-  for (const e of v as Partial<SearchEngine>[]) {
-    if (!e || !isStr(e.prefix) || !isStr(e.name) || !isStr(e.url)) continue;
-    const prefix = e.prefix.trim().toLowerCase().replace(/\s+/g, '').slice(0, 12);
-    const url = e.url.trim();
-    if (!prefix || seen.has(prefix) || !/^https?:\/\//i.test(url)) continue;
-    seen.add(prefix);
-    out.push({ prefix, name: e.name.trim().slice(0, 40) || prefix, url: url.slice(0, 500) });
-  }
-  return out.slice(0, 12);
-}
-
 const num = (v: unknown, min: number, max: number, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, Math.round(v))) : d);
 
 app.put('/api/prefs', async (c) => {
   const body = (await c.req.json()) as Partial<Prefs>;
   const prev = store.prefs();
-  const next: Prefs = {
-    name: isStr(body.name) ? body.name.slice(0, 40) : prev.name,
-    theme: ['system', 'light', 'dark'].includes(body.theme as string) ? body.theme! : prev.theme,
-    accent: ['sage', 'slate', 'terracotta'].includes(body.accent as string) ? body.accent! : prev.accent,
-    design: ['broadsheet', 'console', 'bento', 'horizon'].includes(body.design as string) ? body.design! : prev.design ?? 'broadsheet',
-    hiddenCalendars: Array.isArray(body.hiddenCalendars) ? body.hiddenCalendars.filter(isStr) : prev.hiddenCalendars,
-    sources: { ...prev.sources, ...body.sources },
-    newsTopics: Array.isArray(body.newsTopics) ? cleanTopics(body.newsTopics) : prev.newsTopics,
-    weatherArea: isStr(body.weatherArea) ? body.weatherArea.trim().slice(0, 60) : prev.weatherArea,
-    aboutMe: isStr(body.aboutMe) ? body.aboutMe.trim().slice(0, 1000) : prev.aboutMe,
-    hidden: Array.isArray(body.hidden) ? [...new Set(body.hidden.filter((h) => isStr(h) && HIDEABLE_KEYS.includes(h)))] : prev.hidden,
-    searchEngines: Array.isArray(body.searchEngines) ? cleanEngines(body.searchEngines) : prev.searchEngines,
-    cigaretteLimit: num(body.cigaretteLimit, 0, 99, prev.cigaretteLimit),
-    speedTestHours: num(body.speedTestHours, 0, 24, prev.speedTestHours),
-    speedPlanMbps: num(body.speedPlanMbps, 0, 100_000, prev.speedPlanMbps),
-    setsPerWeek: num(body.setsPerWeek, 1, 40, prev.setsPerWeek),
-    gymMonthly: typeof body.gymMonthly === 'number' && Number.isFinite(body.gymMonthly) ? Math.min(10_000, Math.max(0, Math.round(body.gymMonthly * 100) / 100)) : prev.gymMonthly,
-    pinnedLifts: Array.isArray(body.pinnedLifts) ? [...new Set(body.pinnedLifts.filter(isStr).map((t) => t.slice(0, 120)))].slice(0, 12) : prev.pinnedLifts,
-  };
-  if (!next.searchEngines.length) next.searchEngines = DEFAULT_ENGINES;
+  const next = cleanPrefs(body, prev);
   store.setPrefs(next);
   // A source switched back on should sync straight away.
   for (const k of ['calendar', 'tasks', 'gmail'] as const) {
@@ -272,16 +320,7 @@ const isYmd = (v: unknown): v is string => isStr(v) && /^\d{4}-\d{2}-\d{2}$/.tes
 app.put('/api/countdowns', async (c) => {
   const body = await c.req.json();
   if (!Array.isArray(body)) return c.json({ error: 'Expected a list of countdowns' }, 400);
-  const list: Countdown[] = body
-    .filter((x: Partial<Countdown>) => x && isStr(x.id) && isStr(x.title) && x.title.trim() && isYmd(x.date))
-    .slice(0, 50)
-    .map((x: Countdown) => ({
-      id: x.id.slice(0, 40),
-      title: x.title.trim().slice(0, 60),
-      date: x.date,
-      yearly: x.yearly === true,
-      createdAt: isStr(x.createdAt) && !Number.isNaN(Date.parse(x.createdAt)) ? x.createdAt : new Date().toISOString(),
-    }));
+  const list = cleanCountdowns(body);
   store.setCountdowns(list);
   return c.json(list);
 });
@@ -523,8 +562,10 @@ app.put('/api/photos', async (c) => {
 
 app.delete('/api/photos/:id', (c) => {
   const id = c.req.param('id');
-  store.setPhotos(store.photos().filter((p) => p.id !== id));
+  const next = store.photos().filter((p) => p.id !== id);
+  store.setPhotos(next);
   removePhotoFile(id);
+  cleanOrphanPhotos(next.map((p) => p.id));
   return c.json({ ok: true });
 });
 
@@ -628,5 +669,6 @@ server.on('upgrade', async (req, socket, head) => {
   });
 });
 
+cleanOrphanPhotos(store.photos().map((p) => p.id));
 startScheduler();
 startSampler();

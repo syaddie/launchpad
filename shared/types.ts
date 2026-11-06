@@ -628,8 +628,18 @@ export interface AppState {
 }
 
 export interface Backup {
-  version: 1;
+  version: 1 | 2;
   exported: string;
   bookmarks: BookmarkGroup[];
   notes: Note[];
+  prefs?: Partial<Prefs>;
+  packages?: Package[];
+  countdowns?: Countdown[];
+  smokes?: string[];
+  moods?: Record<string, Mood>;
+  weights?: Record<string, number>;
+  money?: Money;
+  training?: Training;
+  exerciseMuscles?: Record<string, ExerciseMuscles>;
+  learn?: Learn;
 }

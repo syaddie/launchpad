@@ -1,4 +1,4 @@
-import type { AppState, BookmarkGroup, Countdown, DirListing, Learn, Money, Mood, Note, Package, Photo, Prefs, ServerStats, ShellInfo, SourceKey, Task, Training } from '../../shared/types';
+import type { AppState, Backup, BookmarkGroup, Countdown, DirListing, Learn, Money, Mood, Note, Package, Photo, Prefs, ServerStats, ShellInfo, SourceKey, Task, Training } from '../../shared/types';
 
 const STATE_KEY = 'launchpad:state';
 const PREFS_KEY = 'launchpad:prefs';
@@ -125,8 +125,11 @@ export const api = {
   makeDir: (path: string) => req('POST', '/api/files/mkdir', { path }),
   renamePath: (from: string, to: string) => req('POST', '/api/files/rename', { from, to }),
   deletePath: (path: string) => req('POST', '/api/files/delete', { path }),
+  exportBackup: () => req<Backup>('GET', '/api/backup'),
+  importBackup: (b: unknown) => req<{ state: AppState; summary: string }>('POST', '/api/backup', b),
 };
 
+export const backupDbUrl = '/api/backup.db';
 export const downloadUrl = (path: string) => `/api/files/download?path=${encodeURIComponent(path)}`;
 
 /** An upload that failed, with the status so a clash (409) can be offered as a replace. */
