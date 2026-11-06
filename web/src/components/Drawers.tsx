@@ -2,7 +2,8 @@ import { useRef, useState } from 'react';
 import { CARRIERS, detectCarrier, trackUrl } from '../../../shared/carriers';
 import { startOfDay } from '../../../shared/dates';
 import { DEFAULT_ENGINES } from '../../../shared/defaults';
-import type { AccentKey, AppState, Backup, BookmarkGroup, DesignKey, GoogleSource, Note, Package, Photo, Prefs, SearchEngine, ThemeMode } from '../../../shared/types';
+import type { AccentKey, AppState, Backup, DesignKey, GoogleSource, Package, Photo, Prefs, SearchEngine, ThemeMode } from '../../../shared/types';
+import { BACKUP_URL, DB_BACKUP_URL } from '../api';
 import { PhotoSettings } from './Photos';
 import { STEP_LABELS, ago, chipOf, fmtStamp, hm, segColor, statusText } from '../util';
 
@@ -208,7 +209,7 @@ const ACCENTS: { key: AccentKey; name: string; light: string; dark: string }[] =
   { key: 'terracotta', name: 'Terracotta', light: '#ad603f', dark: '#dd9b7b' },
 ];
 
-export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconnect, onImport, onAddPhotos, onRemovePhoto, onPhotoFocus, localDesign, onLocalDesign }: {
+export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconnect, onRestore, onAddPhotos, onRemovePhoto, onPhotoFocus, localDesign, onLocalDesign }: {
   data: AppState;
   /** This browser's own layout, or '' to use the one saved for every device. */
   localDesign: DesignKey | '';
@@ -218,12 +219,14 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
   onPrefs: (p: Prefs) => void;
   onConnect: () => void;
   onDisconnect: () => void;
-  onImport: (bookmarks: BookmarkGroup[] | undefined, notes: Note[] | undefined) => void;
+  /** Restore a backup file on the server; resolves to the names of what it put back. */
+  onRestore: (b: Partial<Backup>) => Promise<string[]>;
   onAddPhotos: (files: File[]) => Promise<string>;
   onRemovePhoto: (id: string) => void;
   onPhotoFocus: (id: string, focus: Photo['focus']) => void;
 }) {
-  const [importMsg, setImportMsg] = useState('Exports bookmarks and all notepads in one file.');
+  const [importMsg, setImportMsg] = useState('');
+  const [restoring, setRestoring] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const p = data.prefs;
   const g = data.google;
@@ -236,28 +239,32 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
     { key: 'gmail', name: 'Gmail (packages and inbox)', icon: 'ph-envelope-simple' },
   ];
 
-  const exportJson = () => {
-    const backup: Backup = { version: 1, exported: new Date().toISOString(), bookmarks: data.bookmarks, notes: data.notes };
-    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'launchpad-backup.json';
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  };
-
   const importJson = async (f: File) => {
+    let d: Partial<Backup>;
     try {
-      const d = JSON.parse(await f.text()) as Partial<Backup>;
-      const okB = Array.isArray(d.bookmarks) && d.bookmarks.every((x) => x && typeof x.name === 'string' && Array.isArray(x.items));
-      const okN = Array.isArray(d.notes) && d.notes.length > 0 && d.notes.every((x) => x && typeof x.text === 'string');
-      if (!okB && !okN) throw new Error();
-      onImport(okB ? d.bookmarks : undefined, okN ? d.notes : undefined);
-      setImportMsg(`Imported ${[okB && `${d.bookmarks!.length} groups`, okN && `${d.notes!.length} notepads`].filter(Boolean).join(', ')}.`);
+      d = JSON.parse(await f.text()) as Partial<Backup>;
+      if (!d || typeof d !== 'object' || (d.version !== 1 && d.version !== 2)) throw new Error();
     } catch {
       setImportMsg('That file isn’t a Launchpad backup.');
+      if (fileRef.current) fileRef.current.value = '';
+      return;
     }
-    if (fileRef.current) fileRef.current.value = '';
+    const when = d.exported && !Number.isNaN(Date.parse(d.exported)) ? ` from ${fmtStamp(new Date(d.exported))}` : '';
+    const what = d.version === 1 ? 'your bookmarks and notepads' : 'everything in it (bookmarks, notes, settings, trackers, money, courses, workouts and packages)';
+    if (!confirm(`Restore the backup${when}? This replaces ${what} with the copy in the file.`)) {
+      if (fileRef.current) fileRef.current.value = '';
+      return;
+    }
+    setRestoring(true);
+    try {
+      const restored = await onRestore(d);
+      setImportMsg(`Restored ${restored.join(', ')}.`);
+    } catch (e) {
+      setImportMsg(`Couldn’t restore: ${(e as Error).message}`);
+    } finally {
+      setRestoring(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
   };
 
   const syncLine = (key: GoogleSource) => {
@@ -452,19 +459,30 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
       </div>
 
       <div className="drawer-section">
-        <div className="drawer-label">Bookmarks and notes</div>
+        <div className="drawer-label">Backup</div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button className="btn btn-secondary" style={{ padding: '7px 12px', gap: 5, fontWeight: 400 }} onClick={exportJson}>
+          <a className="btn btn-secondary" style={{ padding: '7px 12px', gap: 5, fontWeight: 400 }} href={BACKUP_URL} download>
             <i className="ph-duotone ph-download-simple" />
-            Export JSON
-          </button>
-          <label className="btn btn-secondary" style={{ padding: '7px 12px', gap: 5, fontWeight: 400 }}>
+            Download backup
+          </a>
+          <label className="btn btn-secondary" style={{ padding: '7px 12px', gap: 5, fontWeight: 400, opacity: restoring ? 0.6 : 1 }}>
             <i className="ph-duotone ph-upload-simple" />
-            Import JSON
-            <input ref={fileRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])} />
+            {restoring ? 'Restoring…' : 'Restore…'}
+            <input ref={fileRef} type="file" accept=".json,application/json" disabled={restoring} style={{ display: 'none' }} onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])} />
           </label>
+          <a className="btn btn-secondary" style={{ padding: '7px 12px', gap: 5, fontWeight: 400 }} href={DB_BACKUP_URL} download title="A copy of the whole SQLite database">
+            <i className="ph-duotone ph-database" />
+            Database (.db)
+          </a>
         </div>
-        <div style={{ fontSize: 12, color: 'var(--t3)' }}>{importMsg}</div>
+        <div style={{ fontSize: 12, color: 'var(--t3)' }}>
+          {importMsg || (
+            <>
+              The backup is one JSON file with your bookmarks, notes, settings, countdowns, cigarette, mood and weight logs, money tracker, courses, workouts and packages. Restoring it puts all of that back; older bookmarks-and-notes backups still work.
+              The database copy has everything, the Google sign-in included, so keep it private. Photos are files beside the database and are in neither.
+            </>
+          )}
+        </div>
       </div>
       </>
       )}

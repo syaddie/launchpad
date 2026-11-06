@@ -703,6 +703,19 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .palette-empty { padding: 14px 10px; font-size: 13px; color: var(--t3); }
 .palette-foot { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 10px 16px; border-top: 1px solid var(--ln); font-size: 12px; color: var(--t3); }
 
+/* ---------- keyboard shortcuts (?) ---------- */
+
+.shortcuts { top: 8vh; width: min(760px, calc(100vw - 32px)); max-height: 84vh; }
+.shortcuts-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 12px 12px 18px; border-bottom: 1px solid var(--ln); }
+.shortcuts-head h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.shortcuts-body { flex: 1; min-height: 0; overflow: auto; padding: 6px 18px 14px; columns: 2 300px; column-gap: 28px; }
+.shortcuts-group { break-inside: avoid; padding-top: 10px; }
+.shortcuts-group h3 { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--t3); }
+.shortcut-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 13px; }
+.shortcut-what { color: var(--t2); min-width: 0; }
+.shortcut-keys, .shortcut-combo { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.shortcut-or { font-size: 11px; color: var(--t3); }
+
 /* ---------- you ---------- */
 
 .you, .server { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 20px; animation: lpFade 0.15s ease-out; }

@@ -1,6 +1,8 @@
 // All state lives in one SQLite file as JSON documents keyed by name.
 // The app is single-user and single-process, so whole-document reads and
 // writes are simple and safe.
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -42,8 +44,34 @@ function get<T>(key: string, fallback: T): T {
   }
 }
 
+/**
+ * Every write is announced, so open tabs can refresh (see /api/events). A write made
+ * while handling a request carries the tab that sent it, so that tab can skip it.
+ */
+export const changes = new EventEmitter<{ change: [key: string, tab: string | undefined] }>();
+changes.setMaxListeners(0);
+const writer = new AsyncLocalStorage<string | undefined>();
+
+/** Run `fn` with its writes credited to `tab`. */
+export const asTab = <T>(tab: string | undefined, fn: () => T): T => writer.run(tab, fn);
+/** Run `fn` with its writes credited to no tab: background work every tab should hear about. */
+export const asServer = <T>(fn: () => T): T => writer.exit(fn);
+
 function set(key: string, value: unknown): void {
   setStmt.run(key, JSON.stringify(value), new Date().toISOString());
+  changes.emit('change', key, writer.getStore());
+}
+
+function del(key: string): void {
+  if (delStmt.run(key).changes) changes.emit('change', key, writer.getStore());
+}
+
+/**
+ * A consistent copy of the whole database at `dest` (which must not exist yet),
+ * taken while it's in use. Includes the Google sign-in, so it's as private as the original.
+ */
+export function snapshotDb(dest: string): void {
+  db.prepare('VACUUM INTO ?').run(dest);
 }
 
 export interface GoogleTokens {
@@ -86,16 +114,16 @@ export const store = {
   google: () => get<GoogleTokens | null>('google', null),
   setGoogle: (v: GoogleTokens) => set('google', v),
   clearGoogle: () => {
-    delStmt.run('google');
-    delStmt.run('calendar');
-    delStmt.run('tasks');
-    delStmt.run('inbox');
+    del('google');
+    del('calendar');
+    del('tasks');
+    del('inbox');
   },
   /** Why Google disconnected itself, shown until it's reconnected. */
   googleSignedOut: () => get<{ reason: string; at: string } | null>('googleSignedOut', null),
   setGoogleSignedOut: (reason: string | null) => {
     if (reason) set('googleSignedOut', { reason, at: new Date().toISOString() });
-    else delStmt.run('googleSignedOut');
+    else del('googleSignedOut');
   },
 
   calendar: () => get<CalendarCache>('calendar', { calendars: [], events: [] }),
@@ -181,7 +209,11 @@ export const store = {
     };
   },
   setSync: (key: SourceKey, v: SyncStatus) => set('sync', { ...store.sync(), [key]: v }),
-  resetSync: () => delStmt.run('sync'),
+  resetSync: () => del('sync'),
+
+  /** Folders that uploads went into, with when the last one started, so abandoned part files there can be swept. */
+  uploadDirs: () => get<Record<string, string>>('uploadDirs', {}),
+  setUploadDirs: (v: Record<string, string>) => set('uploadDirs', v),
 };
 
 export function updatePackages(fn: (pkgs: Package[]) => Package[]): Package[] {

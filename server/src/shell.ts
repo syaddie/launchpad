@@ -16,6 +16,7 @@ import { pipeline } from 'node:stream/promises';
 import { Client, utils, type ClientChannel, type SFTPWrapper, type Stats } from 'ssh2';
 import type { WebSocket } from 'ws';
 import { config } from './config';
+import { store } from './store';
 import type { DirListing, FileEntry, ShellInfo } from '../../shared/types';
 
 const dir = path.join(config.dataDir, 'ssh');
@@ -285,7 +286,11 @@ const stat = (sftp: SFTPWrapper, p: string) => call<Stats>(p, (cb) => sftp.stat(
 export async function listDir(p?: string): Promise<DirListing> {
   const { sftp } = await sftpSession();
   const abs = await call<string>(p || '~', (cb) => sftp.realpath(p ? cleanPath(p) : '.', cb));
-  const list = await call<{ filename: string; attrs: Stats }[]>(abs, (cb) => sftp.readdir(abs, cb));
+  const all = await call<{ filename: string; attrs: Stats }[]>(abs, (cb) => sftp.readdir(abs, cb));
+  // Part files of uploads given up on long ago are cleared away as the folder is opened.
+  const stale = all.filter((f) => stalePart(f.filename, f.attrs.mtime));
+  if (stale.length) removeParts(sftp, abs, stale.map((f) => f.filename)).catch(() => {});
+  const list = stale.length ? all.filter((f) => !stale.includes(f)) : all;
   const entries = await Promise.all(
     list.map(async ({ filename, attrs }): Promise<FileEntry> => {
       let kind = kindOf(attrs.mode);
@@ -359,6 +364,58 @@ export function cleanSize(n: unknown, what: string): number {
 
 const partPath = (dir: string, id: string) => path.posix.join(dir, `.launchpad-upload-${id}.part`);
 
+/** A part file stops growing once its upload is given up on; after this long it's swept away. */
+export const PART_MAX_AGE = 24 * 60 * 60_000;
+const PART_NAME = /^\.launchpad-upload-[A-Za-z0-9-]{8,64}\.part$/;
+
+/** An upload's part file that hasn't been written to for a day. `mtime` is in seconds, as SFTP gives it. */
+export function stalePart(name: string, mtime: number, now = Date.now()): boolean {
+  return PART_NAME.test(name) && now - mtime * 1000 > PART_MAX_AGE;
+}
+
+async function removeParts(sftp: SFTPWrapper, dir: string, names: string[]): Promise<void> {
+  for (const n of names) {
+    const p = path.posix.join(dir, n);
+    await call<void>(p, (cb) => sftp.unlink(p, cb)).catch((e) => console.warn('[files] couldn’t sweep', p, (e as Error).message));
+  }
+}
+
+/** Remember the folder an upload went into, so its part file is swept even if the folder is never opened again. */
+function noteUploadDir(dir: string): void {
+  store.setUploadDirs({ ...store.uploadDirs(), [dir]: new Date().toISOString() });
+}
+
+/**
+ * Clear away part files that uploads left behind when the tab closed before it could
+ * say so. Only the folders uploads went into are looked at; a folder is forgotten once
+ * it has nothing left to sweep and its last upload started more than a day ago.
+ */
+export async function sweepUploads(now = Date.now()): Promise<number> {
+  const dirs = store.uploadDirs();
+  if (!shellConfigured() || !Object.keys(dirs).length) return 0;
+  const { sftp } = await sftpSession();
+  let removed = 0;
+  const keep: Record<string, string> = {};
+  for (const [dir, last] of Object.entries(dirs)) {
+    let list: { filename: string; attrs: Stats }[];
+    try {
+      list = await call(dir, (cb) => sftp.readdir(dir, cb));
+    } catch (e) {
+      // Gone or unreadable: nothing to sweep there.
+      if (!(e instanceof FileError && (e.status === 404 || e.status === 403))) keep[dir] = last;
+      continue;
+    }
+    const stale = list.filter((f) => stalePart(f.filename, f.attrs.mtime, now)).map((f) => f.filename);
+    await removeParts(sftp, dir, stale);
+    removed += stale.length;
+    const waiting = list.some((f) => PART_NAME.test(f.filename) && !stale.includes(f.filename));
+    if (waiting || now - Date.parse(last) < PART_MAX_AGE) keep[dir] = last;
+  }
+  // An upload may have started meanwhile; keep what it added.
+  store.setUploadDirs({ ...keep, ...Object.fromEntries(Object.entries(store.uploadDirs()).filter(([d, at]) => at !== dirs[d])) });
+  return removed;
+}
+
 export interface UploadPiece {
   dir: unknown;
   name: unknown;
@@ -385,6 +442,7 @@ export async function uploadPiece(u: UploadPiece): Promise<{ done: boolean }> {
   if (offset === 0) {
     const existing = await stat(sftp, dest).catch(() => null);
     if (existing && !overwrite(u, existing)) throw new FileError(`${path.posix.basename(dest)} is already there.`, 409);
+    noteUploadDir(dir);
   } else {
     // A retried piece may find some of itself already written; anything short of its start means one went missing.
     const sofar = await stat(sftp, part).catch(() => null);

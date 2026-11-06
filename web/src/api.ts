@@ -1,4 +1,4 @@
-import type { AppState, BookmarkGroup, Countdown, DirListing, Learn, Money, Mood, Note, Package, Photo, Prefs, ServerStats, ShellInfo, SourceKey, Task, Training } from '../../shared/types';
+import type { AppState, Backup, BookmarkGroup, Countdown, DirListing, Learn, Money, Mood, Note, Package, Photo, Prefs, ServerStats, ShellInfo, SourceKey, Task, Training } from '../../shared/types';
 
 const STATE_KEY = 'launchpad:state';
 const PREFS_KEY = 'launchpad:prefs';
@@ -57,6 +57,12 @@ export function localSet(key: string, value: string): void {
   }
 }
 
+/**
+ * This tab's id, sent with every request so the server's change stream (/api/events)
+ * doesn't echo a tab's own saves back to it. Not randomUUID: that needs HTTPS.
+ */
+export const TAB_ID = Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, '0')).join('');
+
 /** The Launchpad server itself can't be used: not reachable, not answering, or the Access sign-in lapsed. */
 export class ServerError extends Error {
   constructor(readonly kind: 'unreachable' | 'down' | 'access', message: string, readonly status = 0) {
@@ -70,7 +76,7 @@ async function req<T>(method: string, url: string, body?: unknown, keepalive = f
   try {
     res = await fetch(url, {
       method,
-      headers: body === undefined ? undefined : { 'Content-Type': raw ? body.type || 'application/octet-stream' : 'application/json' },
+      headers: body === undefined ? { 'X-Launchpad-Tab': TAB_ID } : { 'X-Launchpad-Tab': TAB_ID, 'Content-Type': raw ? body.type || 'application/octet-stream' : 'application/json' },
       body: body === undefined ? undefined : raw ? body : JSON.stringify(body),
       keepalive,
     });
@@ -125,7 +131,13 @@ export const api = {
   makeDir: (path: string) => req('POST', '/api/files/mkdir', { path }),
   renamePath: (from: string, to: string) => req('POST', '/api/files/rename', { from, to }),
   deletePath: (path: string) => req('POST', '/api/files/delete', { path }),
+  restoreBackup: (b: Partial<Backup>) => req<{ restored: string[]; state: AppState }>('POST', '/api/backup', b),
 };
+
+/** Everything you've entered, as JSON. */
+export const BACKUP_URL = '/api/backup';
+/** A copy of the whole SQLite database. */
+export const DB_BACKUP_URL = '/api/backup/db';
 
 export const downloadUrl = (path: string) => `/api/files/download?path=${encodeURIComponent(path)}`;
 

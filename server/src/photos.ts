@@ -50,3 +50,29 @@ export function readPhoto(id: string): Buffer | null {
 export function removePhotoFile(id: string): void {
   if (validPhotoId(id)) fs.rmSync(path.join(dir, id), { force: true });
 }
+
+/** Files in the photo folder that no photo in the list uses, left alone for a week in case an older database is put back. */
+export const ORPHAN_AGE = 7 * 86_400_000;
+
+/**
+ * Tidy the photo folder against the list of photos: files no photo uses (and that
+ * are over a week old) are removed, and photos whose file is missing are dropped.
+ * Returns the photos that still have files, and how many files were removed.
+ */
+export function sweepPhotos(photos: StoredPhoto[], now = Date.now(), folder = dir): { photos: StoredPhoto[]; removed: number } {
+  const files = new Set(fs.readdirSync(folder));
+  const used = new Set(photos.map((p) => p.id));
+  let removed = 0;
+  for (const f of files) {
+    if (used.has(f) || !validPhotoId(f)) continue;
+    const p = path.join(folder, f);
+    try {
+      if (now - fs.statSync(p).mtimeMs < ORPHAN_AGE) continue;
+      fs.rmSync(p, { force: true });
+      removed++;
+    } catch {
+      // Gone already.
+    }
+  }
+  return { photos: photos.filter((p) => files.has(p.id)), removed };
+}

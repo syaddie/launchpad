@@ -627,9 +627,24 @@ export interface AppState {
   learnNote: { note: LearnNote | null; error: string | null };
 }
 
+/** Bookmarks and notes (version 1, from older Launchpads), or everything you've entered (version 2). */
 export interface Backup {
-  version: 1;
+  version: 1 | 2;
   exported: string;
   bookmarks: BookmarkGroup[];
   notes: Note[];
+  prefs?: Prefs;
+  countdowns?: Countdown[];
+  /** Every cigarette logged, not just the last 60 days. */
+  smokes?: string[];
+  moods?: Record<string, Mood>;
+  weights?: Record<string, number>;
+  money?: Money;
+  learn?: Learn;
+  training?: Training;
+  exerciseMuscles?: Record<string, ExerciseMuscles>;
+  /** Including archived ones. */
+  packages?: Package[];
 }
+
+export type BackupPart = Exclude<keyof Backup, 'version' | 'exported'>;

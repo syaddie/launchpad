@@ -6,7 +6,7 @@ import { claudeEnabled } from './claude';
 import { fetchCalendar, fetchInbox, fetchTasks, GoogleError, scanGmail } from './google';
 import { inRange, summariseInbox } from './inbox';
 import { fetchHeadlines, summariseHeadlines } from './news';
-import { store, updatePackages, type NewsCache } from './store';
+import { asServer, store, updatePackages, type NewsCache } from './store';
 import { runSpeedTest } from './speedtest';
 import { canTrack, track, TrackingUnavailable } from './tracking';
 import { fetchWeather } from './weather';
@@ -188,7 +188,8 @@ export function runSource(key: SourceKey, force = false): Promise<void> {
   const existing = running.get(key);
   if (existing) return existing;
   if (!enabled(key, force)) return Promise.resolve();
-  const p = (async () => {
+  // Background work, even when a tab asked for it: every tab should hear what it changed.
+  const p = asServer(async () => {
     const prev = store.sync()[key];
     const at = new Date().toISOString();
     try {
@@ -202,7 +203,7 @@ export function runSource(key: SourceKey, force = false): Promise<void> {
     } finally {
       running.delete(key);
     }
-  })();
+  });
   running.set(key, p);
   return p;
 }

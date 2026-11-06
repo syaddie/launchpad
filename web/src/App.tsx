@@ -5,8 +5,8 @@ import { emptyLearn, fmtStudy, parseStudy, timerMinutes } from '../../shared/lea
 import { starterMoney } from '../../shared/money';
 import { EMPTY_TRAINING, fmtKg, parseWeight } from '../../shared/training';
 import { MOOD_WORDS, engineUrl, fmtDuration, parseSearch, smokesOn } from '../../shared/trackers';
-import type { AppState, BookmarkGroup, DesignKey, Countdown, Learn, Money, Mood, Note, Package, Photo, Prefs, Task, Training, ViewKey } from '../../shared/types';
-import { api, cachedState, cacheState, localGet, localSet, ServerError } from './api';
+import type { AppState, Backup, BookmarkGroup, DesignKey, Countdown, Learn, Money, Mood, Note, Package, Photo, Prefs, Task, Training, ViewKey } from '../../shared/types';
+import { api, cachedState, cacheState, localGet, localSet, ServerError, TAB_ID } from './api';
 import { Bookmarks } from './components/Bookmarks';
 import { AddPackageDrawer, DESIGNS, Drawer, PANEL_ROWS, PackageDrawer, SettingsDrawer } from './components/Drawers';
 import { Inbox, inboxBadge } from './components/Inbox';
@@ -22,13 +22,14 @@ import { PhotoPanel, shrinkImage, usePhotoSlots } from './components/Photos';
 import { Rail, VIEWS } from './components/Rail';
 import { Server, type ServerTab } from './components/Server';
 import { ServerBanner, type ServerIssue } from './components/ServerBanner';
+import { Shortcuts } from './components/Shortcuts';
 import { Tasks } from './components/Tasks';
 import { Today, todayAgenda } from './components/Today';
 import { TopBar, WeatherPanel } from './components/TopBar';
 import { ExerciseDrawer, TrainingView } from './components/Training';
 import { You, nearestCountdown } from './components/You';
 import { gridLayout, type Area, type Layout } from './layout';
-import { dayDiff, hm, host, inMinutes, parseYmd } from './util';
+import { dayDiff, hashFor, hm, host, inMinutes, parseYmd, viewFromHash } from './util';
 
 const EMPTY: AppState = {
   bookmarks: STARTER_BOOKMARKS,
@@ -142,8 +143,9 @@ function useSystemDark(): boolean {
 
 export function App() {
   const [data, setData] = useState<AppState>(() => fromCache(cachedState()));
-  const [view, setView] = useState<ViewKey>('home');
+  const [view, setView] = useState<ViewKey>(() => viewFromHash(location.hash));
   const [palette, setPalette] = useState(false);
+  const [shortcuts, setShortcuts] = useState(false);
   const [addCountdown, setAddCountdown] = useState(0);
   const [weightSignal, setWeightSignal] = useState(0);
   const [addWorkSignal, setAddWorkSignal] = useState(0);
@@ -225,6 +227,9 @@ export function App() {
     [update, bookmarkSaver, noteSaver, moneySaver, learnSaver],
   );
 
+  const lastRefresh = useRef(0);
+  /** The change stream is open, so polling can slow right down. */
+  const live = useRef(false);
   const refresh = useCallback(
     () =>
       api
@@ -232,6 +237,7 @@ export function App() {
         .then((s) => {
           merge(s);
           setServerIssue(null);
+          lastRefresh.current = Date.now();
         })
         .catch((e) => {
           console.warn('refresh failed', e);
@@ -243,7 +249,8 @@ export function App() {
 
   useEffect(() => {
     refresh();
-    const iv = window.setInterval(refresh, 60_000);
+    // While the change stream is open, a poll every 5 minutes is only a backstop.
+    const iv = window.setInterval(() => (!live.current || Date.now() - lastRefresh.current > 5 * 60_000) && refresh(), 60_000);
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
       // Tasks sync "on focus", throttled server-side to once every 30 s.
@@ -254,7 +261,7 @@ export function App() {
     const err = new URLSearchParams(location.search).get('google');
     if (err) {
       showToast(err === 'access_denied' ? 'Google sign-in was cancelled.' : `Google sign-in failed: ${err}`);
-      history.replaceState(null, '', '/');
+      history.replaceState(null, '', '/' + location.hash);
     }
     return () => {
       clearInterval(iv);
@@ -262,6 +269,71 @@ export function App() {
       window.removeEventListener('focus', onVisible);
     };
   }, [refresh, merge, showToast]);
+
+  // Live updates: the server says when something changed (another tab, a phone, a sync that
+  // finished) and this tab fetches the state. Only a visible tab keeps the stream open, so a
+  // pile of background tabs doesn't use up the browser's six connections over plain HTTP.
+  useEffect(() => {
+    if (typeof EventSource === 'undefined') return;
+    let es: EventSource | null = null;
+    let soon = 0;
+    let retry = 0;
+    const later = () => {
+      clearTimeout(soon);
+      soon = window.setTimeout(refresh, 150);
+    };
+    const open = () => {
+      if (es || document.visibilityState !== 'visible') return;
+      const src = new EventSource(`/api/events?tab=${TAB_ID}`);
+      let hellos = 0;
+      // Reconnected after a restart or a dropped connection: catch up on what was missed.
+      src.addEventListener('hello', () => {
+        live.current = true;
+        if (hellos++) later();
+      });
+      src.addEventListener('change', later);
+      src.onerror = () => {
+        live.current = false;
+        // EventSource retries a dropped stream itself, but gives up on an error status (a
+        // proxy's 502, Access's 403). Then try again in a while, and let refresh show why.
+        if (src.readyState === EventSource.CLOSED) {
+          close();
+          refresh();
+          retry = window.setTimeout(open, 30_000);
+        }
+      };
+      es = src;
+    };
+    const close = () => {
+      es?.close();
+      es = null;
+      live.current = false;
+      clearTimeout(retry);
+    };
+    const onVisible = () => (document.visibilityState === 'visible' ? open() : close());
+    open();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      close();
+      clearTimeout(soon);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [refresh]);
+
+  // The view lives in the URL's hash (#money), so a reload stays put and Back and Forward
+  // move between views. Home has no hash, so a new tab is still the plain "/".
+  useEffect(() => {
+    if (viewFromHash(location.hash) !== view) history.pushState(null, '', hashFor(view) || location.pathname + location.search);
+  }, [view]);
+  useEffect(() => {
+    const onNav = () => setView(viewFromHash(location.hash));
+    window.addEventListener('popstate', onNav);
+    window.addEventListener('hashchange', onNav);
+    return () => {
+      window.removeEventListener('popstate', onNav);
+      window.removeEventListener('hashchange', onNav);
+    };
+  }, []);
 
   // ---------- theme & layout ----------
 
@@ -610,12 +682,13 @@ export function App() {
     api.speedTest().catch((e) => showToast(`Couldn’t start a speed test: ${e.message}`));
   };
 
-  const importBackup = (bookmarks?: BookmarkGroup[], notes?: Note[]) => {
-    if (bookmarks) setBookmarks(bookmarks);
-    if (notes) {
-      setNotes(notes);
-      pickNote(notes[0].id);
-    }
+  /** Put a backup file back on the server, then show what it holds. Returns what was restored. */
+  const restoreBackup = async (b: Partial<Backup>): Promise<string[]> => {
+    const { restored, state } = await api.restoreBackup(b);
+    // The restored copy wins over anything on screen, unsaved edits included.
+    update(() => fromCache(state));
+    if (b.notes?.length) pickNote(state.notes[0].id);
+    return restored;
   };
 
   // ---------- keyboard ----------
@@ -657,7 +730,7 @@ export function App() {
       }
       const t = e.target as HTMLElement;
       const typing = /INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable;
-      if (typing || e.metaKey || e.ctrlKey || e.altKey || palette) return;
+      if (typing || e.metaKey || e.ctrlKey || e.altKey || palette || shortcuts) return;
       const key = e.key.toLowerCase();
       // G then a letter jumps to a view.
       if (Date.now() - gAt.current < 1500) {
@@ -675,6 +748,11 @@ export function App() {
       if (e.key === '/') {
         e.preventDefault();
         searchRef.current?.focus();
+        return;
+      }
+      if (e.key === '?') {
+        e.preventDefault();
+        setShortcuts(true);
         return;
       }
       if (drawer || focus) return;
@@ -698,7 +776,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [drawer, focus, search, editBookmarks, data.bookmarks, view, palette]);
+  }, [drawer, focus, search, editBookmarks, data.bookmarks, view, palette, shortcuts]);
 
   // ---------- derived ----------
 
@@ -813,6 +891,7 @@ export function App() {
       sub: localDesign ? 'This browser only' : 'Every device',
       run: () => (localDesign ? setLocalDesign(d.key) : setPrefs({ ...data.prefs, design: d.key })),
     })),
+    { id: 'a:shortcuts', group: 'Actions', label: 'Keyboard shortcuts', icon: 'ph-keyboard', keys: ['?'], words: 'keys hotkeys help cheat sheet', run: () => setShortcuts(true) },
     { id: 'a:settings', group: 'Actions', label: 'Open Settings', icon: 'ph-gear-six', words: 'preferences', run: () => setDrawer({ type: 'settings' }) },
     ...VIEWS.filter((v) => v.key !== view).map((v) => ({
       id: 'v:' + v.key, group: 'Go to', label: v.name, icon: v.icon, keys: ['G', v.letter], words: 'view', run: () => setView(v.key),
@@ -999,7 +1078,7 @@ export function App() {
               onPrefs={setPrefs}
               onConnect={connect}
               onDisconnect={() => api.disconnectGoogle().then(merge).catch(onSaveError)}
-              onImport={importBackup}
+              onRestore={restoreBackup}
               onAddPhotos={addPhotos}
               onRemovePhoto={removePhoto}
               onPhotoFocus={setPhotoFocus}
@@ -1019,6 +1098,8 @@ export function App() {
       )}
 
       {focus && <FocusView notes={notes} activeId={activeId} onActive={pickNote} onChange={setNotes} saved={saved} onClose={() => setFocus(false)} />}
+
+      {shortcuts && <Shortcuts onClose={() => setShortcuts(false)} />}
 
       {palette && <Palette items={paletteItems} searches={paletteSearches} onClose={() => setPalette(false)} />}
 
