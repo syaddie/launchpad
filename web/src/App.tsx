@@ -511,7 +511,7 @@ export function App({ cached }: { cached: AppState | null }) {
     api.patchPackage(id, { isNew: false }).catch(onSaveError);
   };
   const notesPanel = (
-    <Notes notes={notes} activeId={activeId} onActive={pickNote} onChange={setNotes} saved={saved} onOpenFocus={() => setFocus(true)} onEditing={onNoteEditing} />
+    <Notes notes={notes} activeId={activeId} onActive={pickNote} onChange={setNotes} saved={saved} onOpenFocus={() => setFocus(true)} onEditing={onNoteEditing} notify={showToast} />
   );
   const checkLinks = () => api.checkLinks().then((linkCheck) => update((d) => ({ ...d, linkCheck }))).catch((e) => showToast(`Couldn’t start the link check: ${e.message}`));
   const bookmarksPanel = <Bookmarks groups={data.bookmarks} onChange={setBookmarks} search={search} edit={editBookmarks} setEdit={setEditBookmarks} linkCheck={data.linkCheck} onCheckLinks={checkLinks} notify={showToast} />;
@@ -527,6 +527,7 @@ export function App({ cached }: { cached: AppState | null }) {
     addPackage: () => setDrawer({ type: 'add' }),
     refreshNews, refreshInbox,
     openReading: () => (setView('news'), setReadingSignal((n) => n + 1)),
+    openNote: (id: string) => (pickNote(id), setView('home')),
     showShortcuts: () => setShortcuts(true),
     openSettings: () => setDrawer({ type: 'settings' }),
     toggleHidden,
@@ -685,7 +686,7 @@ export function App({ cached }: { cached: AppState | null }) {
         </Drawer>
       )}
 
-      {focus && <FocusView notes={notes} activeId={activeId} onActive={pickNote} onChange={setNotes} saved={saved} onClose={() => setFocus(false)} />}
+      {focus && <FocusView notes={notes} activeId={activeId} onActive={pickNote} onChange={setNotes} saved={saved} onClose={() => setFocus(false)} notify={showToast} />}
 
       {shortcuts && <Shortcuts onClose={() => setShortcuts(false)} />}
 

@@ -17,6 +17,7 @@ import { listSnapshots, removeSnapshot, snapshotBackup, snapshotFile, startSnaps
 import { cleanCountdowns, cleanMood, cleanPrefs, cleanTopics, isStr, isYmd, validBookmarks, validNotes } from './clean';
 import { checkSource } from './news';
 import { checkLinks, favicon, startLinkChecks } from './bookmarks';
+import { keepVersion, MAX_NOTE_IMAGE, readNoteImage, recordVersions, writeNoteImage } from './notes';
 import { bumpOpen, cleanOpens } from '../../shared/bookmarks';
 import { sameUrl, sourceKey } from '../../shared/news';
 import { eventStream, tabOf } from './events';
@@ -137,8 +138,37 @@ app.put('/api/notes', async (c) => {
   if (!validNotes(body)) return c.json({ error: 'Invalid notes' }, 400);
   const stale = staleSave(c, 'notes', store.notes);
   if (stale) return stale;
+  recordVersions(store.notes(), body);
   store.setNotes(body);
   return saved(c, 'notes');
+});
+
+/** A notepad's earlier versions, newest first. */
+app.get('/api/notes/:id/history', (c) => c.json(store.noteHistory()[c.req.param('id')] ?? []));
+
+/** Keep the notepad's text as it is now among its versions (the page does this before putting back an older one). */
+app.post('/api/notes/:id/history', (c) => c.json(keepVersion(c.req.param('id'))));
+
+/** An image pasted or dropped into a note. Its file is removed a week after no note shows it any more. */
+app.post(
+  '/api/note-images',
+  bodyLimit({ maxSize: MAX_NOTE_IMAGE, onError: (c) => c.json({ error: 'That image is over 10 MB.' }, 413) }),
+  async (c) => {
+    const bytes = new Uint8Array(await c.req.arrayBuffer());
+    if (!sniffImage(bytes)) return c.json({ error: 'Use a JPEG, PNG, WebP or GIF image.' }, 415);
+    return c.json({ id: writeNoteImage(bytes) });
+  },
+);
+
+app.get('/api/note-images/:id', (c) => {
+  const img = readNoteImage(c.req.param('id'));
+  if (!img) return c.json({ error: 'Not found' }, 404);
+  // Ids are never reused, so the browser can keep an image for good.
+  return c.body(new Uint8Array(img.bytes), 200, {
+    'Content-Type': img.mime,
+    'Cache-Control': 'private, max-age=31536000, immutable',
+    'X-Content-Type-Options': 'nosniff',
+  });
 });
 
 app.put('/api/prefs', async (c) => {

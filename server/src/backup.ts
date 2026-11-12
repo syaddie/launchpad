@@ -13,6 +13,8 @@ import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
 import { cleanNewsLists } from '../../shared/news';
 import { cleanOpens } from '../../shared/bookmarks';
+import { cleanHistory } from '../../shared/notes';
+import { historyRestored, noteImageExists, readNoteImage, restoreNoteImage, usedImages } from './notes';
 import { MUSCLES, cleanTraining } from '../../shared/training';
 import type { Backup, BackupPart, ExerciseMuscles, Muscle, Prefs } from '../../shared/types';
 
@@ -35,6 +37,7 @@ export function exportBackup(): Backup {
     photos: store.photos(),
     newsLists: store.newsLists(),
     bookmarkOpens: store.bookmarkOpens(),
+    noteHistory: store.noteHistory(),
   };
 }
 
@@ -55,6 +58,7 @@ export const PART_NAMES: Record<BackupPart, string> = {
   photos: 'photos',
   newsLists: 'reading list',
   bookmarkOpens: 'bookmark ranking',
+  noteHistory: 'notepad history',
 };
 
 function cleanMuscles(v: unknown): Record<string, ExerciseMuscles> | null {
@@ -83,6 +87,10 @@ export function restoreBackup(body: unknown): BackupPart[] {
   const has = (k: BackupPart) => k in b && b[k] !== undefined && b[k] !== null;
   if (has('bookmarks') && validBookmarks(b.bookmarks)) writes.push(['bookmarks', () => store.setBookmarks(b.bookmarks as never)]);
   if (has('notes') && validNotes(b.notes)) writes.push(['notes', () => store.setNotes(b.notes as never)]);
+  if (has('noteHistory') && typeof b.noteHistory === 'object') {
+    const v = cleanHistory(b.noteHistory);
+    writes.push(['noteHistory', () => store.setNoteHistory(v)]);
+  }
   if (has('prefs') && typeof b.prefs === 'object') {
     const prefs = cleanPrefs(b.prefs as Partial<Prefs>, store.prefs());
     writes.push(['prefs', () => store.setPrefs(prefs)]);
@@ -140,6 +148,7 @@ export function restoreBackup(body: unknown): BackupPart[] {
 
   if (!writes.length) throw new RestoreError('That file isn’t a Launchpad backup.');
   for (const [, write] of writes) write();
+  historyRestored();
   return writes.map(([k]) => k);
 }
 
@@ -164,19 +173,22 @@ function cleanPhotos(v: unknown[]): StoredPhoto[] {
 
 const ZIP_JSON = 'launchpad-backup.json';
 
-/** The backup and every photo file, as a .zip. */
+/** The backup, every photo file and the images notes show, as a .zip. */
 export function zipBackup(): ReadableStream<Uint8Array> {
   const backup = exportBackup();
   const entries: ZipEntry[] = [{ name: ZIP_JSON, data: () => Buffer.from(JSON.stringify(backup, null, 2)) }];
   for (const p of backup.photos ?? []) {
     if (photoExists(p.id)) entries.push({ name: `photos/${p.id}`, data: () => readPhoto(p.id) ?? Buffer.alloc(0) });
   }
+  for (const id of usedImages(backup.notes, backup.noteHistory)) {
+    if (noteImageExists(id)) entries.push({ name: `note-images/${id}`, data: () => readNoteImage(id)?.bytes ?? Buffer.alloc(0) });
+  }
   return zipStream(entries);
 }
 
 /**
- * A backup file as it was uploaded: the JSON itself, or a .zip holding it and the photos.
- * The zip's photo files are written first (never over one that's there), so the restore keeps them listed.
+ * A backup file as it was uploaded: the JSON itself, or a .zip holding it, the photos and note images.
+ * The zip's photo and image files are written first (never over one that's there), so the restore keeps them listed.
  */
 export function readBackupUpload(bytes: Buffer): unknown {
   if (!isZip(bytes)) {
@@ -205,6 +217,8 @@ export function readBackupUpload(bytes: Buffer): unknown {
   for (const n of names) {
     const m = /(?:^|\/)photos\/([A-Za-z0-9_-]{16})$/.exec(n);
     if (m) restorePhotoFile(m[1], files.get(n)!);
+    const img = /(?:^|\/)note-images\/([A-Za-z0-9_-]{16})$/.exec(n);
+    if (img) restoreNoteImage(img[1], files.get(n)!);
   }
   return body;
 }

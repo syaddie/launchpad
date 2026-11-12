@@ -41,6 +41,8 @@ export interface PaletteContext {
   refreshInbox: () => void;
   /** News › Reading list. */
   openReading: () => void;
+  /** Show a notepad on home. */
+  openNote: (id: string) => void;
   showShortcuts: () => void;
   openSettings: () => void;
   toggleHidden: (key: string) => void;
@@ -86,6 +88,13 @@ export function paletteItems(c: PaletteContext): PaletteItem[] {
     { id: 'a:package', group: 'Actions', label: 'Add a package', icon: 'ph-package', words: 'tracking', run: c.addPackage },
     { id: 'a:news', group: 'Actions', label: 'Refresh the news', icon: 'ph-arrows-clockwise', run: () => (setView('news'), c.refreshNews()) },
     ...readingItems(c),
+    // Notepads by name, tag or anything in them, once something's typed.
+    ...data.notes.map((n) => ({
+      id: 'n:' + n.id, group: 'Notes', label: n.name || 'Untitled', icon: 'ph-notebook', onlyWhenTyping: true,
+      sub: n.tags?.length ? n.tags.map((t) => '#' + t).join(' ') : undefined,
+      words: `notepad note ${n.text.slice(0, 5000)}`,
+      run: () => c.openNote(n.id),
+    })),
     {
       id: 'a:inbox', group: 'Actions', label: 'Catch up on email', icon: 'ph-envelope-open', words: 'inbox gmail mail summary digest',
       sub: inboxCount ? `${inboxCount} need${inboxCount === 1 ? 's' : ''} you` : undefined,

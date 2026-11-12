@@ -172,11 +172,11 @@ A shell keeps running for 15 minutes after you leave the tab or close the page, 
 
 ## Backups
 
-Everything is in one SQLite file inside the `launchpad-data` volume, with photos in a `photos` folder beside it. Settings → General → **Backup** has:
+Everything is in one SQLite file inside the `launchpad-data` volume, with photos in a `photos` folder beside it, images pasted into notes in `note-images` and bookmark icons in `favicons` (a cache, fetched again when missing). Settings → General → **Backup** has:
 
-- **Download backup**: one JSON file with everything you've entered (bookmarks, notes, settings, countdowns, the cigarette, mood and weight logs, the money tracker, courses and study time, workouts, exercise muscles, packages and the photo list). It leaves out what sync fetches again (calendar, tasks, mail, news, weather) and the Google sign-in.
-- **With photos (.zip)**: the same backup plus every photo file, in one .zip.
-- **Restore…** takes either file (and the older bookmarks-and-notes files from **Export JSON**). Each part it holds replaces what's there; parts it doesn't hold are kept. From a .zip, photos missing here are put back. Cloudflare refuses uploads over 100 MB, so a bigger .zip has to be restored over the LAN address.
+- **Download backup**: one JSON file with everything you've entered (bookmarks, notes, settings, countdowns, the cigarette, mood and weight logs, the money tracker, courses and study time, workouts, exercise muscles, packages, the photo list, notepads' earlier versions, the news reading list with hidden headlines and muted sources, and how often each bookmark's been opened). It leaves out what sync fetches again (calendar, tasks, mail, news, weather) and the Google sign-in.
+- **With photos (.zip)**: the same backup plus every photo file and every image the notes show, in one .zip.
+- **Restore…** takes either file (and the older bookmarks-and-notes files from **Export JSON**). Each part it holds replaces what's there; parts it doesn't hold are kept. From a .zip, photos and note images missing here are put back. Cloudflare refuses uploads over 100 MB, so a bigger .zip has to be restored over the LAN address.
 - **Database (.db)**: a consistent copy of the whole SQLite database, safe to take while Launchpad runs. It includes the Google sign-in, so keep it private. To put it back by hand, stop the container, replace `launchpad.db` in the volume (and delete any `launchpad.db-wal` and `launchpad.db-shm` beside it), then start it.
 
 **Automatic copies.** Launchpad also keeps copies of the database by itself, in a `backups` folder beside it: one a day (the last 14), one just before every restore (the last 10), and any you take with **Take a copy now** (the last 10). Settings lists them; **Put back** restores what you'd entered from one, and each can be downloaded as a `.db`.

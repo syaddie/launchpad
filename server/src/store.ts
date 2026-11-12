@@ -13,10 +13,11 @@ import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/de
 import { cleanOpens } from '../../shared/bookmarks';
 import { cleanLearn } from '../../shared/learn';
 import { cleanNewsLists } from '../../shared/news';
+import { cleanHistory } from '../../shared/notes';
 import { cleanMoney } from '../../shared/money';
 import { cleanTraining } from '../../shared/training';
 import type {
-  BookmarkGroup, BookmarkOpens, CalEvent, LinkCheck, CalendarInfo, Countdown, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsLists, NewsTopic, Note, Package, Prefs, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
+  BookmarkGroup, BookmarkOpens, CalEvent, LinkCheck, CalendarInfo, Countdown, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsLists, NewsTopic, Note, NoteVersion, Package, Prefs, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
 } from '../../shared/types';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
@@ -118,6 +119,9 @@ export const store = {
 
   notes: () => get<Note[]>('notes', STARTER_NOTES),
   setNotes: (v: Note[]) => set('notes', v),
+  /** Earlier versions of each notepad, newest first (server/src/notes.ts). */
+  noteHistory: (): Record<string, NoteVersion[]> => cleanHistory(get<unknown>('noteHistory', null)),
+  setNoteHistory: (v: Record<string, NoteVersion[]>) => set('noteHistory', v),
 
   prefs: (): Prefs => {
     const p = get<Partial<Prefs>>('prefs', {});

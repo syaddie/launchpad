@@ -110,6 +110,8 @@ export const KEY_FIELDS: Record<string, Field[]> = {
   learn: ['learn'],
   learnNote: ['learnNote'],
   sync: ['sync'],
+  // Fetched when a notepad's history is opened.
+  noteHistory: [],
   gmailSeen: [],
   registered17: [],
   speedTests: [],

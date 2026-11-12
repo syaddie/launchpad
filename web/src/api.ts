@@ -1,4 +1,4 @@
-import type { AppState, Backup, BackupSnapshot, Countdown, DirListing, LinkCheck, Mood, NewsLists, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, SourceKey, Task, Training } from '../../shared/types';
+import type { AppState, Backup, BackupSnapshot, Countdown, DirListing, LinkCheck, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, SourceKey, Task, Training } from '../../shared/types';
 import { kvGet, kvSet } from './idb';
 
 /** Where the state was kept before it moved to IndexedDB; still used where IndexedDB isn't available. */
@@ -186,6 +186,12 @@ export const api = {
   sync: (source: SourceKey, ifOlderThanSec = 0) =>
     req<AppState>('POST', `/api/sync/${source}${ifOlderThanSec ? `?ifOlderThan=${ifOlderThanSec}` : ''}`, {}),
   disconnectGoogle: () => req<AppState>('POST', '/api/auth/google/disconnect', {}),
+  /** An image pasted or dropped into a note; shown with imageMarkdown(id) (shared/notes.ts). */
+  uploadNoteImage: (image: Blob) => req<{ id: string }>('POST', '/api/note-images', image),
+  /** A notepad's earlier versions, newest first. */
+  noteHistory: (id: string) => req<NoteVersion[]>('GET', `/api/notes/${encodeURIComponent(id)}/history`),
+  /** Keep the notepad's saved text among its versions now, before an older one replaces it. */
+  keepNoteVersion: (id: string) => req<NoteVersion[]>('POST', `/api/notes/${encodeURIComponent(id)}/history`, {}),
   /** Start checking every bookmark for ones that no longer open; the result comes through the change stream. */
   checkLinks: () => req<LinkCheck>('POST', '/api/bookmarks/check', {}),
   /** Try a feed before following it; refused with the reason when it doesn't work. */

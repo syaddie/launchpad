@@ -17,7 +17,9 @@ export function validBookmarks(v: unknown): v is BookmarkGroup[] {
 }
 
 export function validNotes(v: unknown): v is Note[] {
-  return Array.isArray(v) && v.length > 0 && v.every((n) => n && isStr(n.id) && isStr(n.name) && isStr(n.text));
+  return Array.isArray(v) && v.length > 0 && v.every((n) => n && isStr(n.id) && isStr(n.name) && isStr(n.text)
+    && (n.tags === undefined || (Array.isArray(n.tags) && n.tags.length <= 20 && n.tags.every(isStr)))
+    && (n.pinned === undefined || typeof n.pinned === 'boolean'));
 }
 
 /** Most topics and feeds the News view follows. */

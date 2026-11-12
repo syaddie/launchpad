@@ -2,10 +2,10 @@
 // bundles, icons) so Launchpad still opens when the server or the tunnel is down:
 // the page paints from its own copy of the state (IndexedDB) and says the server can't be reached.
 // Nothing under /api/ is touched, so data always comes from the server, except bookmark
-// icons, kept so tiles have them offline too.
+// icons and the images in notes, kept so they show offline too.
 const CACHE = 'launchpad-v1';
 const FILES = 'launchpad-files-v1';
-/** Icons kept; the oldest go first. */
+/** Icons and note images kept; the oldest go first. */
 const MAX_FILES = 400;
 const SHELL = '/';
 /** Old bundles pile up across deploys; keep this many of the newest. */
@@ -80,7 +80,7 @@ async function other(req) {
   return hit || fresh;
 }
 
-/** Bookmark icons: the kept copy at once, refreshed for next time; a missing icon isn't kept. */
+/** Bookmark icons and note images: the kept copy at once, refreshed for next time; a missing icon isn't kept. */
 async function file(req) {
   const c = await caches.open(FILES);
   const hit = await c.match(req);
@@ -102,7 +102,7 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin || url.pathname === '/sw.js') return;
-  if (url.pathname === '/api/favicon') return e.respondWith(file(req));
+  if (url.pathname === '/api/favicon' || url.pathname.startsWith('/api/note-images/')) return e.respondWith(file(req));
   if (url.pathname.startsWith('/api/')) return;
   if (req.mode === 'navigate') e.respondWith(page(req));
   else if (url.pathname.startsWith('/assets/')) e.respondWith(asset(req));

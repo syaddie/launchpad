@@ -47,6 +47,17 @@ export interface Note {
   id: string;
   name: string;
   text: string;
+  /** Lower case, without "#" (shared/notes.ts); missing on notepads that never had any. */
+  tags?: string[];
+  /** Shown first among the tabs. */
+  pinned?: boolean;
+}
+
+/** An earlier version of a notepad, as it was until `at` (server/src/notes.ts keeps them). */
+export interface NoteVersion {
+  at: string;
+  name: string;
+  text: string;
 }
 
 export type ThemeMode = 'system' | 'light' | 'dark';
@@ -718,6 +729,8 @@ export interface Backup {
   newsLists?: NewsLists;
   /** How often each bookmark's been opened, for ranking. */
   bookmarkOpens?: BookmarkOpens;
+  /** Earlier versions of each notepad, by its id. The images notes show come in a .zip backup. */
+  noteHistory?: Record<string, NoteVersion[]>;
 }
 
 export type BackupPart = Exclude<keyof Backup, 'version' | 'exported'>;

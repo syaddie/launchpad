@@ -111,6 +111,7 @@ export function snapshotBackup(id: string): Backup {
       photos: get('photos', []),
       newsLists: cleanNewsLists(get('newsLists', null)),
       bookmarkOpens: get('bookmarkOpens', {}),
+      noteHistory: get('noteHistory', {}),
     };
   } finally {
     db.close();
