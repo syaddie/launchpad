@@ -2,13 +2,15 @@
 // These helpers are pure: how a new edit joins the queue, and how the queued edits are
 // laid over a fresh copy of the state so the page keeps showing them until they're saved.
 import { merge3, mergeNotes } from '../../shared/merge';
-import type { AppState, Countdown, Mood, Note, Prefs, SavedDoc } from '../../shared/types';
+import type { AppState, Countdown, Craving, Mood, Note, Prefs, SavedDoc } from '../../shared/types';
 
 /** A small save, replayed as the same request. */
 export type PendingCall =
   | { kind: 'addSmoke'; at: string }
   | { kind: 'removeSmoke'; at: string }
   | { kind: 'mood'; date: string; mood: Mood | null }
+  | { kind: 'craving'; value: Craving }
+  | { kind: 'removeCraving'; id: string }
   | { kind: 'weight'; date: string; kg: number | null }
   | { kind: 'completeTask'; listId: string; id: string }
   | { kind: 'countdowns'; value: Countdown[] }
@@ -29,8 +31,9 @@ export function mergeDoc(key: SavedDoc, base: unknown, mine: unknown, theirs: un
 
 /**
  * The queue with `item` added. Saves that set the same thing replace the one already waiting
- * (a day's mood, the countdowns, a document); a document edited in another tab is merged
- * with it. Cigarettes and ticked-off tasks are each their own entry, in order.
+ * (a day's mood, the countdowns, a craving's details, a document); a document edited in another
+ * tab is merged with it. Cigarettes and ticked-off tasks are each their own entry, in order.
+ * Removing a craving that's still waiting to be added drops both.
  */
 export function addPending(list: Pending[], item: Pending): Pending[] {
   const same = (p: Pending): boolean => {
@@ -45,10 +48,15 @@ export function addPending(list: Pending[], item: Pending): Pending[] {
         return p.kind === item.kind;
       case 'completeTask':
         return p.kind === 'completeTask' && p.id === item.id && p.listId === item.listId;
+      case 'craving':
+        return p.kind === 'craving' && p.value.id === item.value.id;
       default:
         return false;
     }
   };
+  if (item.kind === 'removeCraving' && list.some((p) => p.kind === 'craving' && p.value.id === item.id)) {
+    return list.filter((p) => !(p.kind === 'craving' && p.value.id === item.id));
+  }
   const i = list.findIndex(same);
   if (i < 0) return [...list, item];
   const old = list[i];
@@ -94,6 +102,12 @@ export function applyPending<S extends Partial<AppState>>(s: S, list: Pending[])
         out = { ...out, moods };
         break;
       }
+      case 'craving':
+        if (out.cravings) out = { ...out, cravings: [...out.cravings.filter((c) => c.id !== p.value.id), p.value].sort((a, b) => Date.parse(a.at) - Date.parse(b.at)) };
+        break;
+      case 'removeCraving':
+        if (out.cravings) out = { ...out, cravings: out.cravings.filter((c) => c.id !== p.id) };
+        break;
       case 'weight': {
         if (!out.weights) break;
         const weights = { ...out.weights };

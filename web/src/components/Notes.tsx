@@ -13,7 +13,7 @@ interface Props {
 }
 
 /** Light Markdown: "- [ ]" checkboxes, "- "/"* " bullets and **bold**. */
-function NoteLines({ text, onToggle }: { text: string; onToggle: (line: number, checked: boolean) => void }) {
+export function NoteLines({ text, onToggle }: { text: string; onToggle: (line: number, checked: boolean) => void }) {
   const segs = (s: string) =>
     s
       .split(/(\*\*[^*]+\*\*)/)

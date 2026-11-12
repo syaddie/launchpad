@@ -12,9 +12,10 @@ import type { StoredPhoto } from './photos';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
 import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
+import { cleanCravings } from '../../shared/trackers';
 import { cleanTraining } from '../../shared/training';
 import type {
-  BookmarkGroup, CalEvent, CalendarInfo, Countdown, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsTopic, Note, Package, Prefs, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
+  BookmarkGroup, CalEvent, CalendarInfo, Countdown, Craving, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsTopic, Note, Package, Prefs, ReviewNote, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
 } from '../../shared/types';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
@@ -166,6 +167,10 @@ export const store = {
   moods: () => get<Record<string, Mood>>('moods', {}),
   setMoods: (v: Record<string, Mood>) => set('moods', v),
 
+  /** Cravings not acted on, oldest first. */
+  cravings: (): Craving[] => cleanCravings(get<unknown>('cravings', [])),
+  setCravings: (v: Craving[]) => set('cravings', v),
+
   /** Body weight in kg by YYYY-MM-DD. */
   weights: () => get<Record<string, number>>('weights', {}),
   setWeights: (v: Record<string, number>) => set('weights', v),
@@ -185,6 +190,11 @@ export const store = {
   setLearn: (v: Learn) => set('learn', v),
   learnNote: () => get<{ note: LearnNote | null; error: string | null }>('learnNote', { note: null, error: null }),
   setLearnNote: (v: { note: LearnNote | null; error: string | null }) => set('learnNote', v),
+
+  /** Claude's weekly recaps by the week's Monday, the last two years of them. */
+  reviewNotes: () => get<{ notes: Record<string, ReviewNote>; error: string | null }>('reviewNotes', { notes: {}, error: null }),
+  setReviewNotes: (v: { notes: Record<string, ReviewNote>; error: string | null }) =>
+    set('reviewNotes', { ...v, notes: Object.fromEntries(Object.entries(v.notes).sort(([a], [b]) => (a < b ? -1 : 1)).slice(-104)) }),
 
   /** Oldest first, the last 30 days. */
   speedTests: () => get<SpeedTest[]>('speedTests', []),

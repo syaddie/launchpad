@@ -27,6 +27,8 @@ import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
 import { MAX_KG, MIN_KG, cleanKg, cleanTraining } from '../../shared/training';
 import { refreshLearnNote } from './learn';
+import { refreshReviewNote, startReviewNotes, tasksDoneIn } from './review';
+import { cleanCraving } from '../../shared/trackers';
 import { refreshTraining } from './training';
 import type { Mood, Package, Photo, Prefs, SavedDoc, SourceKey } from '../../shared/types';
 
@@ -230,6 +232,24 @@ app.put('/api/moods/:date', async (c) => {
   return c.json(moods);
 });
 
+/** Add a craving that wasn't acted on, or change one, by its id. Returns every craving. */
+app.put('/api/cravings/:id', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const craving = cleanCraving({ ...body, id: c.req.param('id') });
+  if (!craving) return c.json({ error: 'Expected a craving with a time that isn’t in the future' }, 400);
+  const list = store.cravings().filter((x) => x.id !== craving.id);
+  store.setCravings([...list, craving].sort((a, b) => Date.parse(a.at) - Date.parse(b.at)));
+  return c.json(store.cravings());
+});
+
+/** Remove a craving (undo). Returns every craving. */
+app.delete('/api/cravings/:id', (c) => {
+  const list = store.cravings();
+  const next = list.filter((x) => x.id !== c.req.param('id'));
+  if (next.length !== list.length) store.setCravings(next);
+  return c.json(next);
+});
+
 /** Log body weight for a day; `kg` of 0 or null removes it. Returns every entry. */
 app.put('/api/weights/:date', async (c) => {
   const date = c.req.param('date');
@@ -292,6 +312,24 @@ app.put('/api/learn', bodyLimit({ maxSize: 2 * 1024 * 1024, onError: (c) => c.js
 /** Write the note on the week ahead when today's isn't written yet (or again, with ?force=1), then send the whole state. */
 app.post('/api/learn/refresh', async (c) => {
   await refreshLearnNote(c.req.query('force') === '1');
+  return c.json(state());
+});
+
+// ---------- review ----------
+
+/** Google Tasks ticked off in the week starting ?week=YYYY-MM-DD (a Monday); null when Google isn't connected. */
+app.get('/api/review/tasks', async (c) => {
+  const week = c.req.query('week');
+  if (!isYmd(week)) return c.json({ error: 'Expected a YYYY-MM-DD week' }, 400);
+  return c.json({ done: await tasksDoneIn(week) });
+});
+
+/** Write Claude's recap of the week starting ?week=YYYY-MM-DD again, then send the whole state. */
+app.post('/api/review/refresh', async (c) => {
+  const week = c.req.query('week');
+  if (!isYmd(week)) return c.json({ error: 'Expected a YYYY-MM-DD week' }, 400);
+  // A failure is kept on the recap state, which the page shows.
+  await refreshReviewNote(week, true).catch(() => {});
   return c.json(state());
 });
 
@@ -624,6 +662,7 @@ server.on('upgrade', async (req, socket, head) => {
 });
 
 startScheduler();
+startReviewNotes();
 startSampler();
 startCleanup();
 startSnapshots();

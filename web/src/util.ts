@@ -130,7 +130,7 @@ export function fmtBytes(n: number): string {
   return `${n >= 100 || i === 0 ? Math.round(n) : n.toFixed(n >= 10 ? 1 : 2)} ${units[i]}`;
 }
 
-const HASH_VIEWS: ViewKey[] = ['news', 'inbox', 'you', 'training', 'learn', 'money', 'server'];
+const HASH_VIEWS: ViewKey[] = ['news', 'inbox', 'you', 'training', 'learn', 'money', 'server', 'review'];
 
 /** The view a URL's hash names ("#money"); home for none or one that isn't a view, so a new tab opens on home. */
 export function viewFromHash(hash: string): ViewKey {

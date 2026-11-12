@@ -1,4 +1,4 @@
-import type { AppState, Backup, BackupSnapshot, Countdown, DirListing, Mood, Package, Photo, Prefs, SavedDoc, ServerStats, ShellInfo, SourceKey, Task, Training } from '../../shared/types';
+import type { AppState, Backup, BackupSnapshot, Countdown, Craving, DirListing, Mood, Package, Photo, Prefs, SavedDoc, ServerStats, ShellInfo, SourceKey, Task, Training } from '../../shared/types';
 import { kvGet, kvSet } from './idb';
 
 /** Where the state was kept before it moved to IndexedDB; still used where IndexedDB isn't available. */
@@ -198,6 +198,11 @@ export const api = {
   refreshLearn: (force: boolean) => req<AppState>('POST', `/api/learn/refresh${force ? '?force=1' : ''}`, {}),
   putWeight: (date: string, kg: number | null) => req<Record<string, number>>('PUT', `/api/weights/${date}`, { kg }),
   putMood: (date: string, mood: Mood | { level: 0 }) => req<Record<string, Mood>>('PUT', `/api/moods/${date}`, mood),
+  putCraving: (c: Craving) => req<Craving[]>('PUT', `/api/cravings/${encodeURIComponent(c.id)}`, c),
+  deleteCraving: (id: string) => req<Craving[]>('DELETE', `/api/cravings/${encodeURIComponent(id)}`),
+  /** Google Tasks ticked off in the week starting `week` (a Monday); null without Google. */
+  reviewTasks: (week: string) => req<{ done: number | null }>('GET', `/api/review/tasks?week=${week}`),
+  refreshReview: (week: string) => req<AppState>('POST', `/api/review/refresh?week=${week}`, {}),
   server: (iface?: string) => req<ServerStats>('GET', `/api/server${iface ? `?iface=${encodeURIComponent(iface)}` : ''}`),
   speedTest: () => req<ServerStats['speed']>('POST', '/api/speedtest', {}),
   shell: () => req<ShellInfo>('GET', '/api/shell'),

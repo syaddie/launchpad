@@ -1,10 +1,10 @@
 // What ⌘K offers: actions, views, panels to show or hide, bookmarks, and for what's typed,
-// quick logs ("weight 72.4", "study 45 cs210") and web searches.
+// quick logs ("weight 72.4", "study 45 cs210", "craving stress") and web searches.
 import { ymd } from '../../shared/dates';
 import { fmtStudy, parseStudy, timerMinutes } from '../../shared/learn';
 import { fmtKg, parseWeight } from '../../shared/training';
-import { MOOD_WORDS, engineUrl, fmtDuration, parseSearch } from '../../shared/trackers';
-import type { AppState, DesignKey, Prefs, ViewKey } from '../../shared/types';
+import { STRENGTH_WORDS, cravingsOn, engineUrl, fmtDuration, moodWord, parseCraving, parseSearch, triggerName } from '../../shared/trackers';
+import type { AppState, CravingTrigger, DesignKey, Prefs, ViewKey } from '../../shared/types';
 import { DESIGNS, PANEL_ROWS } from './components/Drawers';
 import type { PaletteItem } from './components/Palette';
 import { VIEWS } from './components/Rail';
@@ -25,6 +25,7 @@ export interface PaletteContext {
   setPrefs: (p: Prefs) => void;
   setLocalDesign: (d: DesignKey | '') => void;
   logSmoke: () => void;
+  logCraving: (strength?: 1 | 2 | 3, trigger?: CravingTrigger | '') => void;
   openWeight: () => void;
   addCountdown: () => void;
   addWork: () => void;
@@ -54,11 +55,16 @@ export function paletteItems(c: PaletteContext): PaletteItem[] {
       run: c.logSmoke,
     },
     {
+      id: 'a:craving', group: 'Actions', label: 'Log a craving you didn’t act on', icon: 'ph-hand-palm', keys: ['Shift', 'C'], words: 'urge resist smoke cigarette',
+      sub: `${cravingsOn(data.cravings, now).length} resisted today · or type “craving 3 stress”`,
+      run: () => c.logCraving(),
+    },
+    {
       id: 'a:weight', group: 'Actions', label: 'Log your weight', icon: 'ph-scales', words: 'body weight kg scale',
       sub: data.weights[ymd(now)] ? `Today: ${fmtKg(data.weights[ymd(now)])} kg` : 'Or type “weight 72.4”',
       run: c.openWeight,
     },
-    { id: 'a:mood', group: 'Actions', label: 'Log today’s mood', icon: 'ph-smiley', keys: ['M'], sub: todayMood ? `Today: ${MOOD_WORDS[todayMood.level - 1]}` : 'Not logged yet today', run: () => setView('you') },
+    { id: 'a:mood', group: 'Actions', label: 'Log today’s mood', icon: 'ph-smiley', keys: ['M'], sub: moodWord(todayMood) ? `Today: ${moodWord(todayMood)}` : 'Not logged yet today', run: () => setView('you') },
     { id: 'a:countdown', group: 'Actions', label: 'Add a countdown', icon: 'ph-hourglass-medium', run: c.addCountdown },
     ...(data.learn.timer
       ? [{
@@ -134,6 +140,14 @@ export function paletteSearches(c: PaletteContext, q: string): PaletteItem[] {
     sub: data.weights[ymd(now)] ? `Replaces ${fmtKg(data.weights[ymd(now)])} kg` : 'Body weight, in Training',
     run: () => c.setWeight(ymd(now), kg, true),
   }];
+  const craving = parseCraving(q);
+  if (craving) {
+    log.push({
+      id: 'a:craving-now', group: 'Actions', label: `Log a ${STRENGTH_WORDS[craving.strength - 1].toLowerCase()} craving${craving.trigger ? `: ${triggerName(craving.trigger).toLowerCase()}` : ''}`, icon: 'ph-hand-palm', first: true,
+      sub: 'One you didn’t act on, in You',
+      run: () => c.logCraving(craving.strength, craving.trigger),
+    });
+  }
   const study = parseStudy(q, data.learn.courses);
   if (study) {
     log.push({

@@ -609,3 +609,96 @@ export function weightChange(series: WeightPoint[], days: number): { kg: number;
   if (!then || then === last) return null;
   return { kg: Math.round((last.avg - then.avg) * 100) / 100, since: then.date, full: !!before };
 }
+
+// ---------- body weight against training ----------
+
+/** The 7-day average on a day: of the entries in the 7 days up to and including it; null without any. */
+export function weightAvgOn(weights: Record<string, number>, date: string): number | null {
+  const from = ymd(addDays(new Date(date + 'T00:00:00'), -6));
+  const week = Object.keys(weights).filter((d) => d >= from && d <= date).map((d) => weights[d]);
+  return week.length ? Math.round((week.reduce((a, b) => a + b, 0) / week.length) * 100) / 100 : null;
+}
+
+/** Body weight around a day: its 7-day average, else the nearest entry within two weeks either side. */
+export function bodyweightOn(weights: Record<string, number>, date: string): number | null {
+  const avg = weightAvgOn(weights, date);
+  if (avg !== null) return avg;
+  const day = new Date(date + 'T00:00:00');
+  let best: { gap: number; kg: number } | null = null;
+  for (const [d, kg] of Object.entries(weights)) {
+    const gap = Math.abs(dayDiff(day, new Date(d + 'T00:00:00')));
+    if (gap <= 14 && (!best || gap < best.gap)) best = { gap, kg };
+  }
+  return best?.kg ?? null;
+}
+
+export interface TrainingWeek {
+  /** The Monday, YYYY-MM-DD. */
+  start: string;
+  sessions: number;
+  /** Kilograms lifted over the working sets. */
+  volume: number;
+  /** The 7-day average body weight at the end of the week (today, for this one); null without a weigh-in that week. */
+  weight: number | null;
+}
+
+/** The last `n` weeks, this one last: sessions, volume and body weight, to set side by side. */
+export function trainingWeeks(workouts: Workout[], weights: Record<string, number>, today: Date, n: number): TrainingWeek[] {
+  const first = addDays(weekStart(today), -7 * (n - 1));
+  const weeks = Array.from({ length: n }, (_, i) => {
+    const mon = addDays(first, i * 7);
+    const end = i === n - 1 ? startOfDay(today) : addDays(mon, 6);
+    return { start: ymd(mon), sessions: 0, volume: 0, weight: weightAvgOn(weights, ymd(end)) };
+  });
+  for (const w of workouts) {
+    const i = Math.floor(dayDiff(first, new Date(w.start)) / 7);
+    if (i < 0 || i >= n) continue;
+    weeks[i].sessions++;
+    weeks[i].volume += volumeKg(w);
+  }
+  return weeks.map((w) => ({ ...w, volume: Math.round(w.volume) }));
+}
+
+/** The big barbell lifts, shown first in Strength for your weight. */
+const MAIN_LIFT = /\b(squat|bench press|deadlift|overhead press|military press|shoulder press)\b/i;
+
+export interface StrengthRatio {
+  title: string;
+  /** One point per session in the window with a body weight near it, oldest first. */
+  points: { at: string; e1rm: number; kg: number; ratio: number }[];
+  /** The latest ratio less the first in the window; null with one point. */
+  change: number | null;
+  pinned: boolean;
+}
+
+/**
+ * Estimated 1RM ÷ body weight on the day, for the main lifts over the last `weeks` weeks: pinned
+ * ones first, then squats, presses and deadlifts, then whatever was done most, up to `n`.
+ * Only weighted lifts count, and only sessions with a weigh-in within two weeks.
+ */
+export function strengthRatios(
+  workouts: Workout[],
+  weights: Record<string, number>,
+  today: Date,
+  opts: { weeks?: number; n?: number; pinned?: string[]; muscles?: MuscleMap } = {},
+): StrengthRatio[] {
+  const { weeks = 12, n = 5, pinned = [], muscles } = opts;
+  if (!Object.keys(weights).length) return [];
+  const from = addDays(startOfDay(today), -7 * weeks + 1).getTime();
+  const rows: StrengthRatio[] = [];
+  for (const [title, list] of sessionsByExercise(workouts, muscles)) {
+    if (measureOf(list.flatMap((s) => s.sets)) !== 'e1rm') continue;
+    const points = list.filter((s) => Date.parse(s.at) >= from).flatMap((s) => {
+      const e1 = bestOf(s.sets, 'e1rm');
+      const kg = bodyweightOn(weights, ymd(new Date(s.at)));
+      return e1 === null || kg === null ? [] : [{ at: s.at, e1rm: Math.round(e1 * 10) / 10, kg, ratio: Math.round((e1 / kg) * 100) / 100 }];
+    });
+    if (!points.length) continue;
+    const change = points.length > 1 ? Math.round((points[points.length - 1].ratio - points[0].ratio) * 100) / 100 : null;
+    rows.push({ title, points, change, pinned: pinned.includes(title) });
+  }
+  const rank = (r: StrengthRatio) => (r.pinned ? 0 : MAIN_LIFT.test(r.title) ? 1 : 2);
+  return rows
+    .sort((a, b) => rank(a) - rank(b) || (a.pinned && b.pinned ? pinned.indexOf(a.title) - pinned.indexOf(b.title) : 0) || b.points.length - a.points.length || a.title.localeCompare(b.title))
+    .slice(0, n);
+}

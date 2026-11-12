@@ -102,6 +102,10 @@ function run(p: PendingCall, replay: boolean, keepalive = false): Promise<unknow
       return api.removeSmoke(p.at);
     case 'mood':
       return api.putMood(p.date, p.mood ?? { level: 0 });
+    case 'craving':
+      return api.putCraving(p.value);
+    case 'removeCraving':
+      return api.deleteCraving(p.id);
     case 'weight':
       return api.putWeight(p.date, p.kg);
     case 'completeTask':

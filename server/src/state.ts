@@ -4,6 +4,7 @@
 import { config, googleConfigured } from './config';
 import { claudeEnabled } from './claude';
 import { docVersion, store } from './store';
+import { smokeDaysFrom } from '../../shared/trackers';
 import type { AppState, NewsTopic, Photo, SavedDoc } from '../../shared/types';
 
 type Field = Exclude<keyof AppState, 'versions'>;
@@ -55,6 +56,8 @@ const FIELDS: { [F in Field]: () => AppState[F] } = {
   photos: () => store.photos().map(({ id, focus }): Photo => ({ id, focus })),
   countdowns: () => store.countdowns(),
   smokes: recentSmokes,
+  smokeDays: () => smokeDaysFrom(store.smokes(), new Date()),
+  cravings: () => store.cravings(),
   moods: () => store.moods(),
   money: () => store.money(),
   training: () => store.training(),
@@ -63,6 +66,11 @@ const FIELDS: { [F in Field]: () => AppState[F] } = {
   weights: () => store.weights(),
   learn: () => store.learn(),
   learnNote: () => (claudeEnabled() ? store.learnNote() : { note: null, error: null }),
+  reviewNotes: () => (claudeEnabled() ? store.reviewNotes() : { notes: {}, error: null }),
+  delivered: () => {
+    const since = Date.now() - 366 * 86_400_000;
+    return store.packages().flatMap((p) => (p.deliveredAt && Date.parse(p.deliveredAt) >= since ? [{ label: p.label || p.number, at: p.deliveredAt }] : []));
+  },
 };
 
 const SAVED: SavedDoc[] = ['bookmarks', 'notes', 'money', 'learn'];
@@ -81,13 +89,14 @@ export const KEY_FIELDS: Record<string, Field[]> = {
   googleSignedOut: ['google'],
   calendar: ['calendars', 'events', 'google'],
   tasks: ['taskLists', 'tasks', 'google'],
-  packages: ['packages'],
+  packages: ['packages', 'delivered'],
   news: ['news'],
   inbox: ['inbox', 'google'],
   weather: ['weather'],
   photos: ['photos'],
   countdowns: ['countdowns'],
-  smokes: ['smokes'],
+  smokes: ['smokes', 'smokeDays'],
+  cravings: ['cravings'],
   moods: ['moods'],
   weights: ['weights'],
   money: ['money'],
@@ -96,6 +105,7 @@ export const KEY_FIELDS: Record<string, Field[]> = {
   trainingNote: ['trainingNote'],
   learn: ['learn'],
   learnNote: ['learnNote'],
+  reviewNotes: ['reviewNotes'],
   sync: ['sync'],
   gmailSeen: [],
   registered17: [],

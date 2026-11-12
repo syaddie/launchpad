@@ -40,13 +40,15 @@ export const DEFAULT_PREFS: Prefs = {
   setsPerWeek: 10,
   pinnedLifts: [],
   gymMonthly: 0,
+  packPrice: 0,
+  packSize: 20,
 };
 
 /** Everything Settings › Panels can switch off. */
 export const HIDEABLE = {
   panel: ['today', 'tasks', 'notes', 'packages', 'photos', 'bookmarks'],
   top: ['weather', 'air', 'cig', 'training', 'countdown'],
-  view: ['news', 'inbox', 'you', 'training', 'learn', 'money', 'server'],
+  view: ['news', 'inbox', 'you', 'training', 'learn', 'money', 'server', 'review'],
 } as const;
 
 export const HIDEABLE_KEYS: string[] = Object.entries(HIDEABLE).flatMap(([k, v]) => v.map((x) => `${k}:${x}`));

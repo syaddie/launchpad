@@ -24,6 +24,8 @@ export const config = {
   trainingModel: env.TRAINING_MODEL || 'claude-haiku-5-5',
   /** Claude model that writes the note on the week ahead in Learn. */
   learnModel: env.LEARN_MODEL || 'claude-haiku-5-5',
+  /** Claude model that writes the weekly recap in Review. */
+  reviewModel: env.REVIEW_MODEL || 'claude-haiku-5-5',
   /** Optional: data.gov.sg API key for the weather. It works without one, at a lower rate limit. */
   dataGovKey: env.DATA_GOV_SG_API_KEY || '',
   /** Optional: where the host's /proc is mounted (e.g. /host/proc), so the Server view sees the host's network traffic. */
