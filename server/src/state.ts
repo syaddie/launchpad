@@ -4,6 +4,9 @@
 import { config, googleConfigured } from './config';
 import { claudeEnabled } from './claude';
 import { docVersion, store } from './store';
+import { driveStatus } from './drive';
+import { missingScopes } from './google';
+import { currentWarnings } from './health';
 import { sourceKey } from '../../shared/news';
 import { monthCost } from '../../shared/claudeUsage';
 import type { AppState, NewsTopic, Photo, SavedDoc } from '../../shared/types';
@@ -39,7 +42,7 @@ const FIELDS: { [F in Field]: () => AppState[F] } = {
   prefs: () => store.prefs(),
   google: () => {
     const g = store.google();
-    return { configured: googleConfigured(), connected: !!g, email: g?.email, name: g?.name, signedOut: g ? undefined : store.googleSignedOut() ?? undefined };
+    return { configured: googleConfigured(), connected: !!g, email: g?.email, name: g?.name, signedOut: g ? undefined : store.googleSignedOut() ?? undefined, missingScopes: g ? missingScopes() : undefined };
   },
   calendars: () => store.calendar().calendars,
   events: () => store.calendar().events,
@@ -75,6 +78,8 @@ const FIELDS: { [F in Field]: () => AppState[F] } = {
   learnNote: () => (claudeEnabled() ? store.learnNote() : { note: null, error: null }),
   briefing: () => (claudeEnabled() ? store.briefing() : { note: null, error: null }),
   claudeSpend: () => monthCost(store.claudeUsage(), new Date()),
+  drive: driveStatus,
+  health: currentWarnings,
 };
 
 const SAVED: SavedDoc[] = ['bookmarks', 'notes', 'money', 'learn'];
@@ -90,9 +95,10 @@ export const KEY_FIELDS: Record<string, Field[]> = {
   bookmarkOpens: ['bookmarkOpens'],
   linkCheck: ['linkCheck'],
   notes: ['notes'],
-  // News comes in the order of the topics in prefs.
-  prefs: ['prefs', 'news'],
-  google: ['google'],
+  // News comes in the order of the topics in prefs. The Drive switch is in prefs, and so are some syncs' switches and intervals.
+  prefs: ['prefs', 'news', 'drive', 'health'],
+  // Whether Google allows Drive.
+  google: ['google', 'drive', 'health'],
   googleSignedOut: ['google'],
   calendar: ['calendars', 'events', 'google'],
   tasks: ['taskLists', 'tasks', 'google'],
@@ -114,7 +120,8 @@ export const KEY_FIELDS: Record<string, Field[]> = {
   learnNote: ['learnNote'],
   briefing: ['briefing'],
   claudeUsage: ['claudeSpend'],
-  sync: ['sync'],
+  sync: ['sync', 'health'],
+  driveBackup: ['drive', 'health'],
   // Fetched when a notepad's history is opened.
   noteHistory: [],
   gmailSeen: [],

@@ -242,6 +242,8 @@ export const api = {
   addSnippet: (s: Omit<Snippet, 'id'>) => req<Snippet[]>('POST', '/api/shell/snippets', s),
   editSnippet: (s: Snippet) => req<Snippet[]>('PUT', `/api/shell/snippets/${encodeURIComponent(s.id)}`, { name: s.name, command: s.command }),
   deleteSnippet: (id: string) => req<Snippet[]>('DELETE', `/api/shell/snippets/${encodeURIComponent(id)}`),
+  /** Take a copy now and upload it to Google Drive; resolves once it's there (or failed, in `drive.lastError`). */
+  copyToDrive: () => req<AppState>('POST', '/api/backup/drive', {}),
 };
 
 /** Count an open of a bookmark (a tile, a search result, ⌘K, 1–9), for ranking results. Nothing waits on it. */
