@@ -37,6 +37,8 @@ export interface PaletteContext {
   addPackage: () => void;
   refreshNews: () => void;
   refreshInbox: () => void;
+  /** News › Reading list. */
+  openReading: () => void;
   showShortcuts: () => void;
   openSettings: () => void;
   toggleHidden: (key: string) => void;
@@ -81,6 +83,7 @@ export function paletteItems(c: PaletteContext): PaletteItem[] {
     { id: 'a:files', group: 'Actions', label: 'Browse the server’s files', icon: 'ph-folder-simple', words: 'file explorer sftp upload download folders', run: () => c.openServerTab('files') },
     { id: 'a:package', group: 'Actions', label: 'Add a package', icon: 'ph-package', words: 'tracking', run: c.addPackage },
     { id: 'a:news', group: 'Actions', label: 'Refresh the news', icon: 'ph-arrows-clockwise', run: () => (setView('news'), c.refreshNews()) },
+    ...readingItems(c),
     {
       id: 'a:inbox', group: 'Actions', label: 'Catch up on email', icon: 'ph-envelope-open', words: 'inbox gmail mail summary digest',
       sub: inboxCount ? `${inboxCount} need${inboxCount === 1 ? 's' : ''} you` : undefined,
@@ -122,6 +125,23 @@ export function paletteItems(c: PaletteContext): PaletteItem[] {
         run: () => window.open(b.url, '_blank', 'noopener'),
       })),
     ),
+  ];
+}
+
+/** The reading list, and each story on it (those once something's typed). */
+function readingItems(c: PaletteContext): PaletteItem[] {
+  const toRead = (c.data.newsLists?.saved ?? []).filter((s) => !s.readAt);
+  return [
+    {
+      id: 'a:reading', group: 'Actions', label: 'Open the reading list', icon: 'ph-bookmark-simple', words: 'news saved later read stories',
+      sub: toRead.length ? `${toRead.length} to read` : 'Nothing saved yet',
+      run: c.openReading,
+    },
+    ...toRead.map((s) => ({
+      id: 'r:' + s.id, group: 'Reading list', label: s.title, icon: 'ph-bookmark-simple', sub: s.source || host(s.url), words: `${s.url} saved read later`,
+      onlyWhenTyping: true,
+      run: () => window.open(s.url, '_blank', 'noopener'),
+    })),
   ];
 }
 

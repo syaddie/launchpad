@@ -11,10 +11,11 @@ import type { StoredEmail } from './gmail-parse';
 import type { StoredPhoto } from './photos';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
 import { cleanLearn } from '../../shared/learn';
+import { cleanNewsLists } from '../../shared/news';
 import { cleanMoney } from '../../shared/money';
 import { cleanTraining } from '../../shared/training';
 import type {
-  BookmarkGroup, CalEvent, CalendarInfo, Countdown, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsTopic, Note, Package, Prefs, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
+  BookmarkGroup, CalEvent, CalendarInfo, Countdown, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsLists, NewsTopic, Note, Package, Prefs, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
 } from '../../shared/types';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
@@ -143,6 +144,10 @@ export const store = {
 
   news: () => get<NewsCache>('news', {}),
   setNews: (v: NewsCache) => set('news', v),
+
+  /** The reading list, hidden headlines and muted sources. */
+  newsLists: (): NewsLists => cleanNewsLists(get<unknown>('newsLists', null)),
+  setNewsLists: (v: NewsLists) => set('newsLists', cleanNewsLists(v)),
 
   inbox: (): InboxCache => {
     const v = get<Partial<InboxCache>>('inbox', {});

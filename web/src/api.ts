@@ -1,4 +1,4 @@
-import type { AppState, Backup, BackupSnapshot, Countdown, DirListing, Mood, Package, Photo, Prefs, SavedDoc, ServerStats, ShellInfo, SourceKey, Task, Training } from '../../shared/types';
+import type { AppState, Backup, BackupSnapshot, Countdown, DirListing, Mood, NewsLists, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, SourceKey, Task, Training } from '../../shared/types';
 import { kvGet, kvSet } from './idb';
 
 /** Where the state was kept before it moved to IndexedDB; still used where IndexedDB isn't available. */
@@ -186,6 +186,13 @@ export const api = {
   sync: (source: SourceKey, ifOlderThanSec = 0) =>
     req<AppState>('POST', `/api/sync/${source}${ifOlderThanSec ? `?ifOlderThan=${ifOlderThanSec}` : ''}`, {}),
   disconnectGoogle: () => req<AppState>('POST', '/api/auth/google/disconnect', {}),
+  /** Try a feed before following it; refused with the reason when it doesn't work. */
+  checkNewsSource: (source: string) => req<{ source: string; title: string; count: number }>('POST', '/api/news/check', { source }),
+  saveStory: (s: Pick<SavedStory, 'title' | 'url' | 'source' | 'topic' | 'summary'>) => req<NewsLists>('POST', '/api/news/saved', s),
+  markStoryRead: (id: string, read: boolean) => req<NewsLists>('PATCH', `/api/news/saved/${encodeURIComponent(id)}`, { read }),
+  removeStory: (id: string) => req<NewsLists>('DELETE', `/api/news/saved/${encodeURIComponent(id)}`),
+  hideNews: (topic: string, urls: string[], hide: boolean) => req<NewsLists>('POST', '/api/news/hidden', { topic, urls, hide }),
+  muteSource: (source: string, muted: boolean) => req<NewsLists>('POST', '/api/news/muted', { source, muted }),
   addPhoto: (image: Blob) => req<Photo>('POST', '/api/photos', image),
   putPhotos: (v: Photo[]) => req('PUT', '/api/photos', v),
   deletePhoto: (id: string) => req('DELETE', `/api/photos/${encodeURIComponent(id)}`),

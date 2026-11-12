@@ -14,7 +14,9 @@ import { authUrl, completeTask, createTask, exchangeCode, GoogleError, revoke } 
 import { asTab, docVersion, store, updatePackages } from './store';
 import { dbSnapshot, describeRestored, exportBackup, readBackupUpload, restoreBackup, RestoreError, zipBackup } from './backup';
 import { listSnapshots, removeSnapshot, snapshotBackup, snapshotFile, startSnapshots, takeSnapshot } from './snapshots';
-import { cleanCountdowns, cleanMood, cleanPrefs, isStr, isYmd, validBookmarks, validNotes } from './clean';
+import { cleanCountdowns, cleanMood, cleanPrefs, cleanTopics, isStr, isYmd, validBookmarks, validNotes } from './clean';
+import { checkSource } from './news';
+import { sameUrl, sourceKey } from '../../shared/news';
 import { eventStream, tabOf } from './events';
 import { recentSmokes, state, stateFor } from './state';
 import { MAX_PHOTOS, MAX_PHOTO_BYTES, readPhoto, removePhotoFile, sniffImage, writePhoto } from './photos';
@@ -28,7 +30,7 @@ import { cleanMoney } from '../../shared/money';
 import { MAX_KG, MIN_KG, cleanKg, cleanTraining } from '../../shared/training';
 import { refreshLearnNote } from './learn';
 import { refreshTraining } from './training';
-import type { Mood, Package, Photo, Prefs, SavedDoc, SourceKey } from '../../shared/types';
+import type { Mood, NewsLists, Package, Photo, Prefs, SavedDoc, SourceKey } from '../../shared/types';
 
 const app = new Hono();
 
@@ -120,6 +122,78 @@ app.put('/api/prefs', async (c) => {
   // A new area should show straight away; the page refreshes after saving.
   if (next.weatherArea && next.weatherArea !== prev.weatherArea) await refreshWeather();
   return c.json(next);
+});
+
+// ---------- news: feeds, the reading list, hidden headlines, muted sources ----------
+
+/** Try a feed before following it; says what's wrong with one that doesn't work. */
+app.post('/api/news/check', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const [source] = isStr(body.source) ? cleanTopics([body.source]) : [];
+  if (!source) return c.json({ error: 'That isn’t a feed address, a subreddit or Hacker News.' }, 400);
+  try {
+    return c.json({ source, ...(await checkSource(source)) });
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
+const updateLists = (fn: (l: NewsLists) => NewsLists) => {
+  store.setNewsLists(fn(store.newsLists()));
+  return store.newsLists();
+};
+
+/** Keep a story or headline to read later. Saving one already there leaves it as it is. */
+app.post('/api/news/saved', async (c) => {
+  const b = await c.req.json().catch(() => ({}));
+  if (!isStr(b.url) || !/^https?:\/\//i.test(b.url) || !isStr(b.title)) return c.json({ error: 'A title and a web address are needed.' }, 400);
+  return c.json(
+    updateLists((l) => (l.saved.some((s) => sameUrl(s.url, b.url) && !s.readAt)
+      ? l
+      : {
+          ...l,
+          saved: [
+            { id: randomBytes(8).toString('hex'), title: b.title, url: b.url, source: isStr(b.source) ? b.source : '', topic: isStr(b.topic) ? b.topic : '', summary: isStr(b.summary) ? b.summary : '', savedAt: new Date().toISOString(), readAt: null },
+            ...l.saved.filter((s) => !sameUrl(s.url, b.url)),
+          ],
+        })),
+  );
+});
+
+/** Mark a saved story read, or not read again. */
+app.patch('/api/news/saved/:id', async (c) => {
+  const id = c.req.param('id');
+  const b = await c.req.json().catch(() => ({}));
+  const readAt = b.read === true ? new Date().toISOString() : null;
+  return c.json(updateLists((l) => ({ ...l, saved: l.saved.map((s) => (s.id === id ? { ...s, readAt } : s)) })));
+});
+
+app.delete('/api/news/saved/:id', (c) => {
+  const id = c.req.param('id');
+  return c.json(updateLists((l) => ({ ...l, saved: l.saved.filter((s) => s.id !== id) })));
+});
+
+/** Hide headlines (a story's, or one) from a topic; `hide: false` puts them back. */
+app.post('/api/news/hidden', async (c) => {
+  const b = await c.req.json().catch(() => ({}));
+  if (!isStr(b.topic) || !Array.isArray(b.urls)) return c.json({ error: 'A topic and the headlines to hide are needed.' }, 400);
+  const urls: string[] = b.urls.filter((u: unknown) => isStr(u) && /^https?:\/\//i.test(u)).slice(0, 50);
+  const key = sourceKey(b.topic);
+  const at = new Date().toISOString();
+  return c.json(
+    updateLists((l) => {
+      const rest = (l.hidden[key] ?? []).filter((h) => !urls.some((u) => sameUrl(u, h.url)));
+      return { ...l, hidden: { ...l.hidden, [key]: b.hide === false ? rest : [...rest, ...urls.map((url) => ({ url, at }))] } };
+    }),
+  );
+});
+
+/** Mute a source everywhere, or unmute it. */
+app.post('/api/news/muted', async (c) => {
+  const b = await c.req.json().catch(() => ({}));
+  if (!isStr(b.source) || !b.source.trim()) return c.json({ error: 'Which source?' }, 400);
+  const name = b.source.trim();
+  return c.json(updateLists((l) => ({ ...l, muted: [...l.muted.filter((m) => m.toLowerCase() !== name.toLowerCase()), ...(b.muted === false ? [] : [name])] })));
 });
 
 // ---------- tasks ----------

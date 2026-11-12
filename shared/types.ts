@@ -148,7 +148,10 @@ export interface NewsStory {
 }
 
 export interface NewsTopic {
+  /** What's followed, as in prefs.newsTopics (see shared/news.ts). */
   topic: string;
+  /** A feed's own title, once it's been fetched. */
+  title?: string;
   /** Newest first. */
   articles: NewsArticle[];
   /** Claude's digest of the headlines, or null before the first one (or without an API key). */
@@ -156,6 +159,30 @@ export interface NewsTopic {
   summarisedAt: string | null;
   fetchedAt: string | null;
   error: string | null;
+}
+
+/** A story or headline kept to read later. */
+export interface SavedStory {
+  id: string;
+  title: string;
+  url: string;
+  source: string;
+  /** What it was found under, as in prefs.newsTopics. */
+  topic: string;
+  /** Claude's summary, for a saved story; empty for a headline. */
+  summary: string;
+  savedAt: string;
+  /** Marked read: it stays a week in case you want it again. */
+  readAt: string | null;
+}
+
+/** The reading list, headlines hidden from a topic, and sources muted everywhere (shared/news.ts). */
+export interface NewsLists {
+  saved: SavedStory[];
+  /** Keyed by lower-cased topic. */
+  hidden: Record<string, { url: string; at: string }[]>;
+  /** Outlet names, as headlines give them. */
+  muted: string[];
 }
 
 /** How far back an inbox digest looks. */
@@ -602,6 +629,7 @@ export interface AppState {
   /** Carriers that get live status (SingPost always; others with a 17TRACK key). */
   tracking: { allCarriers: boolean };
   news: NewsTopic[];
+  newsLists: NewsLists;
   /** ANTHROPIC_API_KEY is set, so news topics and the inbox get summaries and not just lists. */
   newsSummaries: boolean;
   inbox: InboxState;
@@ -652,6 +680,8 @@ export interface Backup {
   packages?: Package[];
   /** The photo panels' order and focus points. The files come in a .zip backup; a JSON one only re-lists photos still on the server. */
   photos?: Photo[];
+  /** The reading list, hidden headlines and muted sources. */
+  newsLists?: NewsLists;
 }
 
 export type BackupPart = Exclude<keyof Backup, 'version' | 'exported'>;

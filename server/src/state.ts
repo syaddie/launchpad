@@ -4,6 +4,7 @@
 import { config, googleConfigured } from './config';
 import { claudeEnabled } from './claude';
 import { docVersion, store } from './store';
+import { sourceKey } from '../../shared/news';
 import type { AppState, NewsTopic, Photo, SavedDoc } from '../../shared/types';
 
 type Field = Exclude<keyof AppState, 'versions'>;
@@ -43,12 +44,13 @@ const FIELDS: { [F in Field]: () => AppState[F] } = {
   news: () => {
     const news = store.news();
     return store.prefs().newsTopics.map((topic): NewsTopic => {
-      const n = news[topic.toLowerCase()];
+      const n = news[sourceKey(topic)];
       return n
-        ? { topic, articles: n.articles, stories: n.stories, summarisedAt: n.summarisedAt, fetchedAt: n.fetchedAt, error: n.error }
+        ? { topic, title: n.title, articles: n.articles, stories: n.stories, summarisedAt: n.summarisedAt, fetchedAt: n.fetchedAt, error: n.error }
         : { topic, articles: [], stories: null, summarisedAt: null, fetchedAt: null, error: null };
     });
   },
+  newsLists: () => store.newsLists(),
   newsSummaries: () => claudeEnabled(),
   inbox: inboxState,
   weather: () => store.weather(),
@@ -83,6 +85,7 @@ export const KEY_FIELDS: Record<string, Field[]> = {
   tasks: ['taskLists', 'tasks', 'google'],
   packages: ['packages'],
   news: ['news'],
+  newsLists: ['newsLists'],
   inbox: ['inbox', 'google'],
   weather: ['weather'],
   photos: ['photos'],

@@ -11,6 +11,7 @@ import { snapshotDb, store } from './store';
 import { isZip, unzip, zipStream, type ZipEntry } from './zip';
 import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
+import { cleanNewsLists } from '../../shared/news';
 import { MUSCLES, cleanTraining } from '../../shared/training';
 import type { Backup, BackupPart, ExerciseMuscles, Muscle, Prefs } from '../../shared/types';
 
@@ -31,6 +32,7 @@ export function exportBackup(): Backup {
     exerciseMuscles: store.exerciseMuscles(),
     packages: store.packages(),
     photos: store.photos(),
+    newsLists: store.newsLists(),
   };
 }
 
@@ -49,6 +51,7 @@ export const PART_NAMES: Record<BackupPart, string> = {
   exerciseMuscles: 'exercise muscles',
   packages: 'packages',
   photos: 'photos',
+  newsLists: 'reading list',
 };
 
 function cleanMuscles(v: unknown): Record<string, ExerciseMuscles> | null {
@@ -120,6 +123,11 @@ export function restoreBackup(body: unknown): BackupPart[] {
   if (has('photos') && Array.isArray(b.photos)) {
     const v = cleanPhotos(b.photos);
     writes.push(['photos', () => store.setPhotos(v)]);
+  }
+
+  if (has('newsLists') && typeof b.newsLists === 'object') {
+    const v = cleanNewsLists(b.newsLists);
+    writes.push(['newsLists', () => store.setNewsLists(v)]);
   }
 
   if (!writes.length) throw new RestoreError('That file isn’t a Launchpad backup.');
@@ -210,6 +218,7 @@ export function describeRestored(parts: BackupPart[]): string[] {
       case 'training': return plural(store.training().workouts.length, 'workout');
       case 'packages': return plural(store.packages().length, 'package');
       case 'photos': return plural(store.photos().length, 'photo');
+      case 'newsLists': return `reading list (${plural(store.newsLists().saved.length, 'story', 'stories')})`;
       default: return PART_NAMES[p];
     }
   });

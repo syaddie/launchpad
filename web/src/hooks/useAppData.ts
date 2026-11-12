@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type Re
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../../shared/defaults';
 import { emptyLearn } from '../../../shared/learn';
 import { starterMoney } from '../../../shared/money';
+import { EMPTY_NEWS_LISTS } from '../../../shared/news';
 import { EMPTY_TRAINING } from '../../../shared/training';
 import type { AppState, SavedDoc } from '../../../shared/types';
 import { api, cacheState, ServerError, TAB_ID } from '../api';
@@ -32,6 +33,7 @@ const EMPTY: AppState = {
   },
   tracking: { allCarriers: false },
   news: [],
+  newsLists: EMPTY_NEWS_LISTS,
   newsSummaries: false,
   inbox: { emails: [], digests: { '2d': null, '7d': null }, fetchedAt: null, error: null },
   weather: { areas: [], now: null },
