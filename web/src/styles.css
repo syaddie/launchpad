@@ -1726,12 +1726,15 @@ button.m-stat { cursor: default; }
 .cu-table th:first-child { width: 34%; }
 
 /* ---------- Daily briefing (top of Today) ---------- */
-.briefing { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 10px; padding: 10px 10px 10px 12px; border-radius: 4px; background: var(--bg); }
+.briefing { display: flex; gap: 8px; align-items: stretch; flex: 0 1 auto; min-height: 0; max-height: 45%; margin: 0 0 10px; padding: 10px 10px 10px 12px; border-radius: 4px; background: var(--bg); }
+.briefing-body { flex: 1; min-width: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding-right: 4px; }
+.briefing.collapsed .briefing-body { overflow: hidden; }
+[data-layout='narrow'] .briefing { max-height: none; }
 .briefing-text { flex: 1; min-width: 0; margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--tx); text-wrap: pretty; }
 .briefing.collapsed .briefing-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--t2); cursor: pointer; }
 .briefing-meta { display: block; margin-top: 3px; font-size: 11.5px; color: var(--t3); }
 .briefing-error { color: var(--wn); }
-.briefing-btns { display: flex; gap: 2px; margin: -4px -4px 0 0; }
+.briefing-btns { display: flex; align-self: flex-start; gap: 2px; margin: -4px -4px 0 0; }
 .hz-col > .briefing { margin: 0; }
 
 /* ---------- Ask Launchpad (⌘K) ---------- */

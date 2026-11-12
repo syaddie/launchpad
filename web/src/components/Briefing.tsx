@@ -47,7 +47,7 @@ export function Briefing({ data, now }: { data: AppState; now: Date }) {
 
   return (
     <div className={'briefing' + (collapsed ? ' collapsed' : '')} aria-label="Today’s briefing" aria-busy={busy}>
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div className="briefing-body">
         {note ? (
           <p className="briefing-text" onClick={collapsed ? () => setCollapsed(false) : undefined} title={collapsed ? note.text : undefined}>
             {note.text}
