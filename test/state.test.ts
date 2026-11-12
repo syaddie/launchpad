@@ -33,7 +33,7 @@ describe('state for changed keys', () => {
     expect(st.fieldsFor(['sync'])).toEqual(['sync', 'health']);
     expect(st.fieldsFor(['prefs'])!.sort()).toEqual(['drive', 'health', 'news', 'prefs']);
     expect(st.fieldsFor(['driveBackup'])!.sort()).toEqual(['drive', 'health']);
-    expect(st.fieldsFor(['money', 'smokes'])!.sort()).toEqual(['money', 'smokes']);
+    expect(st.fieldsFor(['money', 'smokes'])!.sort()).toEqual(['money', 'smokeDays', 'smokes']);
     // Two keys feeding the same field send it once.
     expect(st.fieldsFor(['calendar', 'tasks'])!.filter((f) => f === 'google')).toHaveLength(1);
     // Keys the page doesn't show.

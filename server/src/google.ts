@@ -331,6 +331,25 @@ export async function completeTask(listId: string, taskId: string): Promise<void
   });
 }
 
+/** How many tasks, across every list, were ticked off between two times (ISO), for the weekly Review. */
+export async function countCompletedTasks(fromIso: string, toIso: string): Promise<number> {
+  const res = await gapi<{ items: any[] }>(`${TASKS}/users/@me/lists?maxResults=100`);
+  let n = 0;
+  await Promise.all(
+    (res.items || []).map(async (l) => {
+      let pageToken = '';
+      do {
+        const q = new URLSearchParams({ showCompleted: 'true', showHidden: 'true', completedMin: fromIso, completedMax: toIso, maxResults: '100' });
+        if (pageToken) q.set('pageToken', pageToken);
+        const page = await gapi<{ items?: any[]; nextPageToken?: string }>(`${TASKS}/lists/${encodeURIComponent(l.id)}/tasks?${q}`);
+        n += (page.items || []).filter((t) => t.status === 'completed' && !t.deleted).length;
+        pageToken = page.nextPageToken || '';
+      } while (pageToken);
+    }),
+  );
+  return n;
+}
+
 // ---------- Gmail ----------
 
 const GMAIL = 'https://gmail.googleapis.com/gmail/v1/users/me';

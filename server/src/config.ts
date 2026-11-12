@@ -28,6 +28,8 @@ export const config = {
   briefingModel: env.BRIEFING_MODEL || 'claude-haiku-5-5',
   /** Claude model that turns what's typed in ⌘K into an action ("Ask Launchpad"). */
   askModel: env.ASK_MODEL || 'claude-haiku-5-5',
+  /** Claude model that writes the weekly recap in Review. */
+  reviewModel: env.REVIEW_MODEL || 'claude-haiku-5-5',
   /** Optional: data.gov.sg API key for the weather. It works without one, at a lower rate limit. */
   dataGovKey: env.DATA_GOV_SG_API_KEY || '',
   /** Optional: where the host's /proc is mounted (e.g. /host/proc), so the Server view sees the host's network traffic. */

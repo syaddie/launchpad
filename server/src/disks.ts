@@ -93,7 +93,8 @@ export function parseSmart(json: Json, name = str(json?.device?.name) ?? '?'): D
 /** What went wrong running smartctl through sudo, as the status the page explains. */
 export function sudoProblem(stderr: string): { status: DisksReport['status']; message: string } | null {
   if (/command not found/i.test(stderr)) return { status: 'no-smartctl', message: 'smartctl isn’t installed on the server.' };
-  if (/password is required|not allowed to (execute|run)|may not run sudo|not in the sudoers|terminal is required/i.test(stderr)) {
+  // Classic sudo's wording, then sudo-rs's (Ubuntu's sudo from 25.10).
+  if (/password is required|not allowed to (execute|run)|may not run sudo|not in the sudoers|terminal is required|interactive authentication is required|afraid I can.t do that/i.test(stderr)) {
     return { status: 'no-sudo', message: 'The sudoers rule for smartctl isn’t there yet, so sudo asked for a password.' };
   }
   return null;

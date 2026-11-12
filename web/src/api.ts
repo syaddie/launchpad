@@ -1,4 +1,4 @@
-import type { AppState, Backup, BackupSnapshot, CalEvent, Countdown, DirListing, DisksReport, LinkCheck, LogLine, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
+import type { AppState, Backup, BackupSnapshot, CalEvent, Countdown, Craving, DirListing, DisksReport, LinkCheck, LogLine, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
 import type { AskResult } from '../../shared/ask';
 import type { UsageReport } from '../../shared/claudeUsage';
 import { kvGet, kvSet } from './idb';
@@ -228,6 +228,11 @@ export const api = {
   claudeUsage: () => req<UsageReport>('GET', '/api/claude/usage'),
   putWeight: (date: string, kg: number | null) => req<Record<string, number>>('PUT', `/api/weights/${date}`, { kg }),
   putMood: (date: string, mood: Mood | { level: 0 }) => req<Record<string, Mood>>('PUT', `/api/moods/${date}`, mood),
+  putCraving: (c: Craving) => req<Craving[]>('PUT', `/api/cravings/${encodeURIComponent(c.id)}`, c),
+  deleteCraving: (id: string) => req<Craving[]>('DELETE', `/api/cravings/${encodeURIComponent(id)}`),
+  /** Google Tasks ticked off in the week starting `week` (a Monday); null without Google. */
+  reviewTasks: (week: string) => req<{ done: number | null }>('GET', `/api/review/tasks?week=${week}`),
+  refreshReview: (week: string) => req<AppState>('POST', `/api/review/refresh?week=${week}`, {}),
   server: (iface?: string) => req<ServerStats>('GET', `/api/server${iface ? `?iface=${encodeURIComponent(iface)}` : ''}`),
   speedTest: () => req<ServerStats['speed']>('POST', '/api/speedtest', {}),
   shell: () => req<ShellInfo>('GET', '/api/shell'),

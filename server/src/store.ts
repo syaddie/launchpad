@@ -16,9 +16,10 @@ import { cleanLearn } from '../../shared/learn';
 import { cleanNewsLists } from '../../shared/news';
 import { cleanHistory } from '../../shared/notes';
 import { cleanMoney } from '../../shared/money';
+import { cleanCravings } from '../../shared/trackers';
 import { cleanTraining } from '../../shared/training';
 import type {
-  BillSuggestion, BookmarkGroup, BookmarkOpens, Briefing, CalEvent, LinkCheck, CalendarInfo, Countdown, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsLists, NewsTopic, Note, NoteVersion, Package, Prefs, Snippet, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
+  BillSuggestion, BookmarkGroup, BookmarkOpens, Briefing, CalEvent, LinkCheck, CalendarInfo, Countdown, Craving, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsLists, NewsTopic, Note, NoteVersion, Package, Prefs, ReviewNote, Snippet, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
 } from '../../shared/types';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
@@ -213,6 +214,10 @@ export const store = {
   moods: () => get<Record<string, Mood>>('moods', {}),
   setMoods: (v: Record<string, Mood>) => set('moods', v),
 
+  /** Cravings not acted on, oldest first. */
+  cravings: (): Craving[] => cleanCravings(get<unknown>('cravings', [])),
+  setCravings: (v: Craving[]) => set('cravings', v),
+
   /** Body weight in kg by YYYY-MM-DD. */
   weights: () => get<Record<string, number>>('weights', {}),
   setWeights: (v: Record<string, number>) => set('weights', v),
@@ -233,6 +238,10 @@ export const store = {
   learnNote: () => get<{ note: LearnNote | null; error: string | null }>('learnNote', { note: null, error: null }),
   setLearnNote: (v: { note: LearnNote | null; error: string | null }) => set('learnNote', v),
 
+  /** Claude's weekly recaps by the week's Monday, the last two years of them. */
+  reviewNotes: () => get<{ notes: Record<string, ReviewNote>; error: string | null }>('reviewNotes', { notes: {}, error: null }),
+  setReviewNotes: (v: { notes: Record<string, ReviewNote>; error: string | null }) =>
+    set('reviewNotes', { ...v, notes: Object.fromEntries(Object.entries(v.notes).sort(([a], [b]) => (a < b ? -1 : 1)).slice(-104)) }),
   /** Claude's paragraph at the top of Today, written each morning. */
   briefing: () => get<{ note: Briefing | null; error: string | null }>('briefing', { note: null, error: null }),
   setBriefing: (v: { note: Briefing | null; error: string | null }) => set('briefing', v),

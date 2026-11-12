@@ -66,7 +66,7 @@ export type AccentKey = 'sage' | 'slate' | 'terracotta';
 export type DesignKey = 'broadsheet' | 'console' | 'bento' | 'horizon';
 export type GoogleSource = 'calendar' | 'tasks' | 'gmail';
 export type SourceKey = GoogleSource | 'carriers' | 'news' | 'inbox' | 'weather' | 'speedtest';
-export type ViewKey = 'home' | 'news' | 'inbox' | 'you' | 'training' | 'learn' | 'money' | 'server';
+export type ViewKey = 'home' | 'news' | 'inbox' | 'you' | 'training' | 'learn' | 'money' | 'server' | 'review';
 
 /** One place to search: "yt lofi" opens url with %s replaced by "lofi". The first engine is the default. */
 export interface SearchEngine {
@@ -108,6 +108,10 @@ export interface Prefs {
   pinnedLifts: string[];
   /** What the gym costs a month, in dollars, for the cost of each session; 0 hides it. */
   gymMonthly: number;
+  /** What a pack of cigarettes costs, in dollars, for what they cost; 0 hides it. */
+  packPrice: number;
+  /** Cigarettes in a pack. */
+  packSize: number;
   /** A monthly budget for Claude in US dollars; going over it shows a warning. 0 means none. Missing in older saved prefs. */
   claudeBudget?: number;
   /** Copy the daily database copies to Google Drive, once the Google sign-in allows it. */
@@ -354,9 +358,38 @@ export interface Countdown {
 }
 
 export interface Mood {
-  /** 1 Rough · 2 Low · 3 Okay · 4 Good · 5 Great. */
+  /** 1 Rough · 2 Low · 3 Okay · 4 Good · 5 Great; 0 for a day with only a journal entry. */
   level: number;
+  /** The day's journal entry, in light Markdown (it began as a one-line note). */
   note: string;
+}
+
+/** What set off a craving. */
+export type CravingTrigger = 'stress' | 'coffee' | 'meal' | 'social' | 'boredom' | 'alcohol' | 'waking' | 'other';
+
+/** A craving for a cigarette that wasn't acted on. */
+export interface Craving {
+  id: string;
+  /** ISO date-time. */
+  at: string;
+  /** 1 mild · 2 medium · 3 strong. */
+  strength: 1 | 2 | 3;
+  /** Empty when not given. */
+  trigger: CravingTrigger | '';
+  note: string;
+}
+
+/** Cigarettes a day before `before` (YYYY-MM-DD), keyed by day; from that day on, count `smokes` instead. */
+export interface SmokeDays {
+  before: string;
+  counts: Record<string, number>;
+}
+
+/** Claude's short recap of a week, for the Review view. */
+export interface ReviewNote {
+  headline: string;
+  points: string[];
+  writtenAt: string;
 }
 
 export type MoneyCategory = 'Food' | 'Transport' | 'Shopping' | 'Bills' | 'Family' | 'Fun' | 'Travel' | 'Pay' | 'Other';
@@ -854,6 +887,10 @@ export interface AppState {
   countdowns: Countdown[];
   /** When each cigarette was logged (ISO), oldest first, for the last 60 days. */
   smokes: string[];
+  /** Cigarettes a day for the days `smokes` doesn't cover, for costs over the year and past weeks. */
+  smokeDays: SmokeDays;
+  /** Cravings not acted on, oldest first. */
+  cravings: Craving[];
   /** Keyed by YYYY-MM-DD. */
   moods: Record<string, Mood>;
   money: Money;
@@ -867,6 +904,10 @@ export interface AppState {
   learn: Learn;
   /** null before the first note, or without an Anthropic API key. */
   learnNote: { note: LearnNote | null; error: string | null };
+  /** Claude's weekly recaps, keyed by the week's Monday (YYYY-MM-DD); empty without an Anthropic API key. */
+  reviewNotes: { notes: Record<string, ReviewNote>; error: string | null };
+  /** Packages delivered in the last year, archived ones included, for the Review. */
+  delivered: { label: string; at: string }[];
   /** Claude's paragraph at the top of Today; null before the first one, or without an Anthropic API key. Missing in older cached copies. */
   briefing?: { note: Briefing | null; error: string | null };
   /** What Claude has cost this month so far, estimated in US dollars (Server › Claude usage). Missing in older cached copies. */
@@ -895,6 +936,7 @@ export interface Backup {
   /** Every cigarette logged, not just the last 60 days. */
   smokes?: string[];
   moods?: Record<string, Mood>;
+  cravings?: Craving[];
   weights?: Record<string, number>;
   money?: Money;
   learn?: Learn;

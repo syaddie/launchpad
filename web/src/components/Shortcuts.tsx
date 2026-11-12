@@ -8,11 +8,12 @@ export const SHORTCUT_GROUPS: { title: string; rows: Row[] }[] = [
   {
     title: 'Anywhere',
     rows: [
-      { keys: [['⌘', 'K'], ['Ctrl', 'K']], what: 'Command palette: views, actions, bookmarks, “weight 72.4”, “study 45 …”' },
+      { keys: [['⌘', 'K'], ['Ctrl', 'K']], what: 'Command palette: views, actions, bookmarks, “weight 72.4”, “study 45 …”, “craving stress”' },
       { keys: [['/']], what: 'Search bookmarks and the web' },
       { keys: [['?']], what: 'This list' },
       { keys: [['Esc']], what: 'Close what’s open, then back to Home' },
       { keys: [['C']], what: 'Log a cigarette (with undo)' },
+      { keys: [['Shift', 'C']], what: 'Log a craving you didn’t act on (with undo)' },
       { keys: [['M']], what: 'You: today’s mood' },
       { keys: [['N']], what: 'News, and back' },
     ],
@@ -21,8 +22,8 @@ export const SHORTCUT_GROUPS: { title: string; rows: Row[] }[] = [
     title: 'Go to a view',
     rows: [
       ...VIEWS.map((v) => ({ keys: [['G', v.letter]], what: v.name })),
-      { keys: [['F1'], ['F8']], what: 'Console layout: the views in rail order, F1 to F8' },
-      { keys: [['F9']], what: 'Console layout: Settings' },
+      { keys: [['F1'], ['F9']], what: 'Console layout: the views in rail order, F1 to F9' },
+      { keys: [['F10']], what: 'Console layout: Settings' },
     ],
   },
   {

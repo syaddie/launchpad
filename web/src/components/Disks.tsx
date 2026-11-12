@@ -6,7 +6,7 @@ import { Copyable } from './Copyable';
 
 /** Checked against visudo before it goes in, since a broken file in sudoers.d stops sudo working at all. */
 export const SUDOERS_LINE =
-  'echo "$USER ALL=(root) NOPASSWD: /usr/sbin/smartctl --scan -j, /usr/sbin/smartctl -j -a -d * /dev/*" | sudo tee /tmp/launchpad-smartctl >/dev/null && sudo chmod 440 /tmp/launchpad-smartctl && sudo visudo -cf /tmp/launchpad-smartctl && sudo mv /tmp/launchpad-smartctl /etc/sudoers.d/launchpad-smartctl';
+  'echo "$USER ALL=(root) NOPASSWD: /usr/sbin/smartctl --scan -j, /usr/sbin/smartctl -j -a -d *" | sudo tee /tmp/launchpad-smartctl >/dev/null && sudo chmod 440 /tmp/launchpad-smartctl && sudo visudo -cf /tmp/launchpad-smartctl && sudo mv /tmp/launchpad-smartctl /etc/sudoers.d/launchpad-smartctl';
 
 const LEVEL: Record<DiskHealth['level'], { chip: string; text: string; dot: string }> = {
   good: { chip: 'chip-accent', text: 'Healthy', dot: 'var(--ac)' },
