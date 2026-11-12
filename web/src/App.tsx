@@ -513,7 +513,8 @@ export function App({ cached }: { cached: AppState | null }) {
   const notesPanel = (
     <Notes notes={notes} activeId={activeId} onActive={pickNote} onChange={setNotes} saved={saved} onOpenFocus={() => setFocus(true)} onEditing={onNoteEditing} />
   );
-  const bookmarksPanel = <Bookmarks groups={data.bookmarks} onChange={setBookmarks} search={search} edit={editBookmarks} setEdit={setEditBookmarks} />;
+  const checkLinks = () => api.checkLinks().then((linkCheck) => update((d) => ({ ...d, linkCheck }))).catch((e) => showToast(`Couldn’t start the link check: ${e.message}`));
+  const bookmarksPanel = <Bookmarks groups={data.bookmarks} onChange={setBookmarks} search={search} edit={editBookmarks} setEdit={setEditBookmarks} linkCheck={data.linkCheck} onCheckLinks={checkLinks} notify={showToast} />;
 
   // ---------- command palette ----------
 

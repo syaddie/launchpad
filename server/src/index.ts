@@ -16,6 +16,8 @@ import { dbSnapshot, describeRestored, exportBackup, readBackupUpload, restoreBa
 import { listSnapshots, removeSnapshot, snapshotBackup, snapshotFile, startSnapshots, takeSnapshot } from './snapshots';
 import { cleanCountdowns, cleanMood, cleanPrefs, cleanTopics, isStr, isYmd, validBookmarks, validNotes } from './clean';
 import { checkSource } from './news';
+import { checkLinks, favicon, startLinkChecks } from './bookmarks';
+import { bumpOpen, cleanOpens } from '../../shared/bookmarks';
 import { sameUrl, sourceKey } from '../../shared/news';
 import { eventStream, tabOf } from './events';
 import { recentSmokes, state, stateFor } from './state';
@@ -97,6 +99,37 @@ app.put('/api/bookmarks', async (c) => {
   if (stale) return stale;
   store.setBookmarks(body);
   return saved(c, 'bookmarks');
+});
+
+/** A bookmark was opened (from a tile, the search box, ⌘K or 1–9): counted for ranking results. */
+app.post('/api/bookmarks/:id/opened', (c) => {
+  const id = c.req.param('id');
+  const ids = new Set(store.bookmarks().flatMap((g) => g.items.map((b) => b.id)));
+  if (!ids.has(id)) return c.json({ error: 'Not found' }, 404);
+  const opens = cleanOpens(store.bookmarkOpens(), ids);
+  opens[id] = bumpOpen(opens[id]);
+  store.setBookmarkOpens(opens);
+  return c.json({ ok: true });
+});
+
+/** Check every bookmark for ones that no longer open. Runs in the background; the page hears when it's done. */
+app.post('/api/bookmarks/check', (c) => {
+  checkLinks();
+  return c.json({ ...store.linkCheck(), running: true });
+});
+
+/** A bookmarked site's icon, kept on the server (see bookmarks.ts). */
+app.get('/api/favicon', async (c) => {
+  const host = c.req.query('host') ?? '';
+  const icon = /^[a-z0-9.\-[\]:]{1,260}$/i.test(host) ? await favicon(host) : null;
+  if (!icon) return c.body(null, 404, { 'Cache-Control': 'private, max-age=86400' });
+  return c.body(new Uint8Array(icon.bytes), 200, {
+    'Content-Type': icon.mime,
+    'Cache-Control': 'private, max-age=604800',
+    'X-Content-Type-Options': 'nosniff',
+    // An SVG opened on its own can't run anything.
+    'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+  });
 });
 
 app.put('/api/notes', async (c) => {
@@ -701,3 +734,4 @@ startScheduler();
 startSampler();
 startCleanup();
 startSnapshots();
+startLinkChecks();

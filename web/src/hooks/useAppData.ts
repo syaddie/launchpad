@@ -13,6 +13,8 @@ import { SAVED_DOCS, useSavers } from './useSavers';
 
 const EMPTY: AppState = {
   bookmarks: STARTER_BOOKMARKS,
+  bookmarkOpens: {},
+  linkCheck: { checkedAt: null, running: false, problems: {} },
   notes: STARTER_NOTES,
   prefs: DEFAULT_PREFS,
   google: { configured: false, connected: false },

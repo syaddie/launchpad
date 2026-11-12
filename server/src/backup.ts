@@ -12,6 +12,7 @@ import { isZip, unzip, zipStream, type ZipEntry } from './zip';
 import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
 import { cleanNewsLists } from '../../shared/news';
+import { cleanOpens } from '../../shared/bookmarks';
 import { MUSCLES, cleanTraining } from '../../shared/training';
 import type { Backup, BackupPart, ExerciseMuscles, Muscle, Prefs } from '../../shared/types';
 
@@ -33,6 +34,7 @@ export function exportBackup(): Backup {
     packages: store.packages(),
     photos: store.photos(),
     newsLists: store.newsLists(),
+    bookmarkOpens: store.bookmarkOpens(),
   };
 }
 
@@ -52,6 +54,7 @@ export const PART_NAMES: Record<BackupPart, string> = {
   packages: 'packages',
   photos: 'photos',
   newsLists: 'reading list',
+  bookmarkOpens: 'bookmark ranking',
 };
 
 function cleanMuscles(v: unknown): Record<string, ExerciseMuscles> | null {
@@ -128,6 +131,11 @@ export function restoreBackup(body: unknown): BackupPart[] {
   if (has('newsLists') && typeof b.newsLists === 'object') {
     const v = cleanNewsLists(b.newsLists);
     writes.push(['newsLists', () => store.setNewsLists(v)]);
+  }
+
+  if (has('bookmarkOpens') && typeof b.bookmarkOpens === 'object') {
+    const v = cleanOpens(b.bookmarkOpens);
+    writes.push(['bookmarkOpens', () => store.setBookmarkOpens(v)]);
   }
 
   if (!writes.length) throw new RestoreError('That file isn’t a Launchpad backup.');

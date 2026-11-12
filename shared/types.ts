@@ -12,6 +12,35 @@ export interface BookmarkGroup {
   items: Bookmark[];
 }
 
+/** How often and how lately a bookmark's been opened (shared/bookmarks.ts). */
+export interface OpenCount {
+  /** Each open adds 1, and the total halves every two weeks since `last`. */
+  score: number;
+  last: string;
+  /** Opens ever. */
+  n: number;
+}
+
+/** Keyed by bookmark id. */
+export type BookmarkOpens = Record<string, OpenCount>;
+
+/** A bookmark the link check couldn't open. */
+export interface LinkProblem {
+  /** gone: not found, or the address doesn't resolve · failing: errors or doesn't answer. */
+  kind: 'gone' | 'failing';
+  /** What happened, e.g. "Not found (404)". */
+  why: string;
+  at: string;
+}
+
+/** The weekly check of every bookmark (server/src/bookmarks.ts). */
+export interface LinkCheck {
+  checkedAt: string | null;
+  running: boolean;
+  /** Keyed by the bookmark's address; ones that opened fine aren't listed. */
+  problems: Record<string, LinkProblem>;
+}
+
 export interface Note {
   id: string;
   name: string;
@@ -617,6 +646,9 @@ export interface GoogleInfo {
 
 export interface AppState {
   bookmarks: BookmarkGroup[];
+  /** For ranking search and ⌘K results. */
+  bookmarkOpens: BookmarkOpens;
+  linkCheck: LinkCheck;
   notes: Note[];
   prefs: Prefs;
   google: GoogleInfo;
@@ -682,6 +714,8 @@ export interface Backup {
   photos?: Photo[];
   /** The reading list, hidden headlines and muted sources. */
   newsLists?: NewsLists;
+  /** How often each bookmark's been opened, for ranking. */
+  bookmarkOpens?: BookmarkOpens;
 }
 
 export type BackupPart = Exclude<keyof Backup, 'version' | 'exported'>;

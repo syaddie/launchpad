@@ -1,5 +1,7 @@
-// Housekeeping that runs in the background: photo files nothing uses, and the part
-// files of uploads that were given up on without the page saying so.
+// Housekeeping that runs in the background: photo files nothing uses, icons of sites
+// no longer bookmarked, and the part files of uploads that were given up on without
+// the page saying so.
+import { sweepFavicons } from './bookmarks';
 import { sweepPhotos } from './photos';
 import { sweepUploads } from './shell';
 import { store } from './store';
@@ -17,6 +19,15 @@ function photos() {
   }
 }
 
+function favicons() {
+  try {
+    const n = sweepFavicons();
+    if (n) console.log(`[cleanup] removed ${n} icon(s) of sites no longer bookmarked`);
+  } catch (e) {
+    console.error('[cleanup] favicons:', (e as Error).message);
+  }
+}
+
 async function uploads() {
   try {
     const n = await sweepUploads();
@@ -30,8 +41,10 @@ async function uploads() {
 export function startCleanup(): void {
   setTimeout(() => {
     photos();
+    favicons();
     uploads();
   }, 60_000);
   setInterval(photos, 24 * HOUR);
+  setInterval(favicons, 24 * HOUR);
   setInterval(uploads, 6 * HOUR);
 }

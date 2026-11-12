@@ -1,4 +1,4 @@
-import type { AppState, Backup, BackupSnapshot, Countdown, DirListing, Mood, NewsLists, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, SourceKey, Task, Training } from '../../shared/types';
+import type { AppState, Backup, BackupSnapshot, Countdown, DirListing, LinkCheck, Mood, NewsLists, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, SourceKey, Task, Training } from '../../shared/types';
 import { kvGet, kvSet } from './idb';
 
 /** Where the state was kept before it moved to IndexedDB; still used where IndexedDB isn't available. */
@@ -186,6 +186,8 @@ export const api = {
   sync: (source: SourceKey, ifOlderThanSec = 0) =>
     req<AppState>('POST', `/api/sync/${source}${ifOlderThanSec ? `?ifOlderThan=${ifOlderThanSec}` : ''}`, {}),
   disconnectGoogle: () => req<AppState>('POST', '/api/auth/google/disconnect', {}),
+  /** Start checking every bookmark for ones that no longer open; the result comes through the change stream. */
+  checkLinks: () => req<LinkCheck>('POST', '/api/bookmarks/check', {}),
   /** Try a feed before following it; refused with the reason when it doesn't work. */
   checkNewsSource: (source: string) => req<{ source: string; title: string; count: number }>('POST', '/api/news/check', { source }),
   saveStory: (s: Pick<SavedStory, 'title' | 'url' | 'source' | 'topic' | 'summary'>) => req<NewsLists>('POST', '/api/news/saved', s),
@@ -221,6 +223,11 @@ export const api = {
   takeSnapshot: () => req<BackupSnapshot[]>('POST', '/api/backup/snapshots', {}),
   restoreSnapshot: (id: string) => req<RestoreResult>('POST', `/api/backup/snapshots/${encodeURIComponent(id)}/restore`, {}),
 };
+
+/** Count an open of a bookmark (a tile, a search result, ⌘K, 1–9), for ranking results. Nothing waits on it. */
+export function bookmarkOpened(id: string): void {
+  req('POST', `/api/bookmarks/${encodeURIComponent(id)}/opened`, {}, true).catch(() => {});
+}
 
 /** Everything you've entered, as JSON. */
 export const BACKUP_URL = '/api/backup';

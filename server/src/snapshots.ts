@@ -110,6 +110,7 @@ export function snapshotBackup(id: string): Backup {
       packages: get('packages', []),
       photos: get('photos', []),
       newsLists: cleanNewsLists(get('newsLists', null)),
+      bookmarkOpens: get('bookmarkOpens', {}),
     };
   } finally {
     db.close();

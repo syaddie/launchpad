@@ -27,6 +27,13 @@ export const recentSmokes = () => store.smokes().filter((s) => Date.now() - Date
 /** How each part of the page's state is made. */
 const FIELDS: { [F in Field]: () => AppState[F] } = {
   bookmarks: () => store.bookmarks(),
+  bookmarkOpens: () => store.bookmarkOpens(),
+  // Only for addresses still bookmarked.
+  linkCheck: () => {
+    const c = store.linkCheck();
+    const urls = new Set(store.bookmarks().flatMap((g) => g.items.map((b) => b.url)));
+    return { ...c, problems: Object.fromEntries(Object.entries(c.problems).filter(([u]) => urls.has(u))) };
+  },
   notes: () => store.notes(),
   prefs: () => store.prefs(),
   google: () => {
@@ -75,7 +82,10 @@ const SAVED: SavedDoc[] = ['bookmarks', 'notes', 'money', 'learn'];
  * connection is cheap and changes along with what it syncs, so it comes with those.
  */
 export const KEY_FIELDS: Record<string, Field[]> = {
-  bookmarks: ['bookmarks'],
+  // The link check lists problems only for addresses still bookmarked.
+  bookmarks: ['bookmarks', 'linkCheck'],
+  bookmarkOpens: ['bookmarkOpens'],
+  linkCheck: ['linkCheck'],
   notes: ['notes'],
   // News comes in the order of the topics in prefs.
   prefs: ['prefs', 'news'],

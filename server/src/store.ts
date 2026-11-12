@@ -10,12 +10,13 @@ import { config } from './config';
 import type { StoredEmail } from './gmail-parse';
 import type { StoredPhoto } from './photos';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
+import { cleanOpens } from '../../shared/bookmarks';
 import { cleanLearn } from '../../shared/learn';
 import { cleanNewsLists } from '../../shared/news';
 import { cleanMoney } from '../../shared/money';
 import { cleanTraining } from '../../shared/training';
 import type {
-  BookmarkGroup, CalEvent, CalendarInfo, Countdown, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsLists, NewsTopic, Note, Package, Prefs, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
+  BookmarkGroup, BookmarkOpens, CalEvent, LinkCheck, CalendarInfo, Countdown, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsLists, NewsTopic, Note, Package, Prefs, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
 } from '../../shared/types';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
@@ -108,6 +109,12 @@ export function docVersion(key: string): string {
 export const store = {
   bookmarks: () => get<BookmarkGroup[]>('bookmarks', STARTER_BOOKMARKS),
   setBookmarks: (v: BookmarkGroup[]) => set('bookmarks', v),
+  /** How often each bookmark's been opened, by id, for ranking search results. */
+  bookmarkOpens: (): BookmarkOpens => cleanOpens(get<unknown>('bookmarkOpens', null)),
+  setBookmarkOpens: (v: BookmarkOpens) => set('bookmarkOpens', v),
+  /** The last check for bookmarks that no longer open. */
+  linkCheck: () => get<LinkCheck>('linkCheck', { checkedAt: null, running: false, problems: {} }),
+  setLinkCheck: (v: LinkCheck) => set('linkCheck', v),
 
   notes: () => get<Note[]>('notes', STARTER_NOTES),
   setNotes: (v: Note[]) => set('notes', v),

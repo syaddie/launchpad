@@ -1,5 +1,6 @@
 // What ⌘K offers: actions, views, panels to show or hide, bookmarks, and for what's typed,
 // quick logs ("weight 72.4", "study 45 cs210") and web searches.
+import { rankBookmarks } from '../../shared/bookmarks';
 import { ymd } from '../../shared/dates';
 import { fmtStudy, parseStudy, timerMinutes } from '../../shared/learn';
 import { fmtKg, parseWeight } from '../../shared/training';
@@ -9,6 +10,7 @@ import { DESIGNS, PANEL_ROWS } from './components/Drawers';
 import type { PaletteItem } from './components/Palette';
 import { VIEWS } from './components/Rail';
 import type { ServerTab } from './components/Server';
+import { bookmarkOpened } from './api';
 import { host } from './util';
 
 export interface PaletteContext {
@@ -112,8 +114,8 @@ export function paletteItems(c: PaletteContext): PaletteItem[] {
         run: () => c.toggleHidden(r.key),
       })),
     ),
-    ...data.bookmarks.flatMap((g) =>
-      g.items.map((b, i) => ({
+    // The most opened first, so they lead once something's typed.
+    ...rankBookmarks(data.bookmarks.flatMap((g) => g.items.map((b, i) => ({ ...b, g, i }))), data.bookmarkOpens).map(({ g, i, ...b }) => ({
         id: 'b:' + b.id,
         group: 'Bookmarks',
         label: b.name,
@@ -122,9 +124,11 @@ export function paletteItems(c: PaletteContext): PaletteItem[] {
         keys: g.name === 'Daily' && i < 9 ? [String(i + 1)] : undefined,
         words: b.url,
         onlyWhenTyping: true,
-        run: () => window.open(b.url, '_blank', 'noopener'),
+        run: () => {
+          bookmarkOpened(b.id);
+          window.open(b.url, '_blank', 'noopener');
+        },
       })),
-    ),
   ];
 }
 

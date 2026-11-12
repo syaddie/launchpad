@@ -70,7 +70,7 @@ function fetchFailure(e: unknown): FetchError {
   if (code === 'ECONNREFUSED' || code === 'ECONNRESET' || code === 'EHOSTUNREACH' || code === 'ENETUNREACH') return new FetchError('refused', 'The server refused the connection.');
   if (code.includes('TIMEOUT')) return new FetchError('timeout', 'Didn’t answer in time.');
   if (/CERT|SSL|TLS/i.test(code)) return new FetchError('tls', 'Its HTTPS certificate isn’t valid.');
-  return new FetchError('other', err.message || 'Couldn’t fetch it.');
+  return new FetchError('other', !err.message || err.message === 'fetch failed' ? `Couldn’t connect${code ? ` (${code})` : ''}.` : err.message);
 }
 
 export interface Fetched {

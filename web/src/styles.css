@@ -553,6 +553,14 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .edit-mode .tile-num { display: none; }
 .tile-x { position: absolute; top: -2px; right: 2px; width: 18px; height: 18px; padding: 0; border: none; border-radius: 50%; background: var(--rz); box-shadow: 0 0 0 1px var(--ln); color: var(--t2); display: grid; place-items: center; font-size: 10px; cursor: pointer; }
 .tile-x:hover { color: var(--wn); }
+.tile.broken { outline-color: var(--wn) !important; }
+.tile-broken { position: absolute; top: 4px; left: 6px; font-size: 13px; color: var(--wn); }
+.tile-wrap .tile { position: relative; }
+.import-list { display: flex; flex-direction: column; gap: 1px; max-height: 55vh; overflow: auto; border: 1px solid var(--ln); border-radius: 4px; padding: 4px 0; }
+.import-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 13px; color: var(--tx); cursor: pointer; }
+.import-row:hover { background: var(--hv); }
+.import-row input { flex: none; accent-color: var(--ac); }
+.import-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tile-add .fav { background: transparent; border: 1px dashed var(--t3); color: var(--t3); font-size: 14px; }
 .tile-editor { position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 30; width: 260px; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
 .edit-toggle { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border: none; border-radius: 3px; background: transparent; color: var(--t2); font-size: 12px; font-weight: 600; cursor: pointer; }
