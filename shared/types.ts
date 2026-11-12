@@ -66,6 +66,8 @@ export interface Prefs {
   pinnedLifts: string[];
   /** What the gym costs a month, in dollars, for the cost of each session; 0 hides it. */
   gymMonthly: number;
+  /** A monthly budget for Claude in US dollars; going over it shows a warning. 0 means none. Missing in older saved prefs. */
+  claudeBudget?: number;
 }
 
 export interface CalendarInfo {
@@ -492,6 +494,12 @@ export interface Learn {
   calendarId: string;
 }
 
+/** Claude's paragraph at the top of Today: the day ahead in two to four sentences. */
+export interface Briefing {
+  text: string;
+  writtenAt: string;
+}
+
 /** Claude's short note on the week ahead in Learn. */
 export interface LearnNote {
   headline: string;
@@ -625,6 +633,10 @@ export interface AppState {
   learn: Learn;
   /** null before the first note, or without an Anthropic API key. */
   learnNote: { note: LearnNote | null; error: string | null };
+  /** Claude's paragraph at the top of Today; null before the first one, or without an Anthropic API key. Missing in older cached copies. */
+  briefing?: { note: Briefing | null; error: string | null };
+  /** What Claude has cost this month so far, estimated in US dollars (Server › Claude usage). Missing in older cached copies. */
+  claudeSpend?: number;
   /** The version of each document the page saves whole; missing in copies cached by older versions. */
   versions?: Partial<Record<SavedDoc, string>>;
 }

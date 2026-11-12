@@ -84,6 +84,7 @@ export function refreshLearnNote(force = false): Promise<void> {
     try {
       const res = await askJson<{ headline: string; points: string[] }>({
         model: config.learnModel,
+        feature: 'learn',
         system: NOTE_SYSTEM,
         user: learnInput(learn, new Date()),
         schema: NOTE_SCHEMA,

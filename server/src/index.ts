@@ -28,6 +28,10 @@ import { cleanMoney } from '../../shared/money';
 import { MAX_KG, MIN_KG, cleanKg, cleanTraining } from '../../shared/training';
 import { refreshLearnNote } from './learn';
 import { refreshTraining } from './training';
+import { ask, MAX_ASK } from './ask';
+import { refreshBriefing, startBriefing } from './briefing';
+import { claudeEnabled } from './claude';
+import { summariseUsage } from '../../shared/claudeUsage';
 import type { Mood, Package, Photo, Prefs, SavedDoc, SourceKey } from '../../shared/types';
 
 const app = new Hono();
@@ -294,6 +298,27 @@ app.post('/api/learn/refresh', async (c) => {
   await refreshLearnNote(c.req.query('force') === '1');
   return c.json(state());
 });
+
+// ---------- Claude: the briefing, ⌘K's Ask Launchpad, the usage meter ----------
+
+/** Write the briefing when this morning's isn't written yet (or again, with ?force=1), then send it. */
+app.post('/api/briefing/refresh', async (c) => {
+  await refreshBriefing(c.req.query('force') === '1');
+  return c.json(stateFor(['briefing']));
+});
+
+/** What's typed in ⌘K → one checked action and how to say it. Nothing is done until the page sends it. */
+app.post('/api/ask', async (c) => {
+  if (!claudeEnabled()) return c.json({ error: 'Add an Anthropic API key on the server to use Ask Launchpad.' }, 400);
+  const body = await c.req.json().catch(() => null);
+  const typed = isStr(body?.text) ? body.text.trim() : '';
+  if (!typed) return c.json({ error: 'Type what you want to do.' }, 400);
+  if (typed.length > MAX_ASK) return c.json({ error: `That’s over ${MAX_ASK} characters.` }, 400);
+  return c.json(await ask(typed));
+});
+
+/** This month and last month per feature, the last 30 days, and the budget. */
+app.get('/api/claude/usage', (c) => c.json({ enabled: claudeEnabled(), budget: store.prefs().claudeBudget ?? 0, ...summariseUsage(store.claudeUsage(), new Date()) }));
 
 // ---------- server health ----------
 
@@ -627,3 +652,4 @@ startScheduler();
 startSampler();
 startCleanup();
 startSnapshots();
+startBriefing();

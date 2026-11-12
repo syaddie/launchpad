@@ -4,6 +4,7 @@ import { fmtDuration } from '../../../shared/trackers';
 import type { AppState, ServerStats, ShellInfo, SourceKey, SpeedTest } from '../../../shared/types';
 import { api, cachedServer, cacheServer, localGet, localSet } from '../api';
 import { ago, fmtBytes, hm, niceMax } from '../util';
+import { ClaudeUsagePanel } from './ClaudeUsage';
 import { authorizeLine, Copyable } from './Copyable';
 import { FilesPanel } from './Files';
 
@@ -264,6 +265,7 @@ function Overview({ data, now, onOpenSettings }: { data: AppState; now: Date; on
         <SpeedPanel speed={stats.speed} plan={data.prefs.speedPlanMbps} every={data.prefs.speedTestHours} now={now} lastError={data.sync.speedtest.lastError} onTest={testNow} onOpenSettings={onOpenSettings} />
         <ServicesPanel s={stats} data={data} now={now} />
       </div>
+      <div className="server-row"><ClaudeUsagePanel data={data} onOpenSettings={onOpenSettings} /></div>
     </>
   );
 }
