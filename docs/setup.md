@@ -191,9 +191,9 @@ Reading SMART needs root, so Launchpad runs `sudo -n /usr/sbin/smartctl` over th
    ```
 2. Let your SSH user run smartctl as root without a password, and nothing else. As that user, run this. It writes the rule to a file in `/tmp`, has `visudo` check it, and only then moves it into `/etc/sudoers.d` (a broken file there would stop `sudo` working at all):
    ```bash
-   echo "$USER ALL=(root) NOPASSWD: /usr/sbin/smartctl --scan -j, /usr/sbin/smartctl -j -a -d * /dev/*" | sudo tee /tmp/launchpad-smartctl >/dev/null && sudo chmod 440 /tmp/launchpad-smartctl && sudo visudo -cf /tmp/launchpad-smartctl && sudo mv /tmp/launchpad-smartctl /etc/sudoers.d/launchpad-smartctl
+   echo "$USER ALL=(root) NOPASSWD: /usr/sbin/smartctl --scan -j, /usr/sbin/smartctl -j -a -d *" | sudo tee /tmp/launchpad-smartctl >/dev/null && sudo chmod 440 /tmp/launchpad-smartctl && sudo visudo -cf /tmp/launchpad-smartctl && sudo mv /tmp/launchpad-smartctl /etc/sudoers.d/launchpad-smartctl
    ```
-   The rule allows exactly the two commands Launchpad uses: listing the disks (`--scan -j`) and reading one (`-j -a -d <type> /dev/<disk>`).
+   The rule allows exactly the two commands Launchpad uses: listing the disks (`--scan -j`) and reading one (`-j -a -d <type> /dev/<disk>`). The single `*` at the end means "any further arguments", which both classic sudo and sudo-rs (Ubuntu's sudo from 25.10 on) accept; sudo-rs refuses a wildcard anywhere else.
 3. Press refresh on the Disks panel.
 
 Until both are done the panel says which step is missing instead of showing an error. Disks behind a hardware RAID card or some USB enclosures may not show up, or show without figures. To undo it: `sudo rm /etc/sudoers.d/launchpad-smartctl`.

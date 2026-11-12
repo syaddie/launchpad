@@ -273,6 +273,10 @@ describe('disks: SMART', () => {
     expect(sudoProblem('sudo: a password is required\n')?.status).toBe('no-sudo');
     expect(sudoProblem('Sorry, user syaddy is not allowed to execute \'/usr/sbin/smartctl --scan -j\' as root on box.\n')?.status).toBe('no-sudo');
     expect(sudoProblem('sudo: /usr/sbin/smartctl: command not found\n')?.status).toBe('no-smartctl');
+    // sudo-rs, Ubuntu's sudo from 25.10.
+    expect(sudoProblem('sudo: interactive authentication is required\n')?.status).toBe('no-sudo');
+    expect(sudoProblem("sudo: I'm sorry syaddy. I'm afraid I can't do that\n")?.status).toBe('no-sudo');
+    expect(sudoProblem("sudo: '/usr/sbin/smartctl': command not found\n")?.status).toBe('no-smartctl');
     expect(sudoProblem('')).toBeNull();
   });
 
