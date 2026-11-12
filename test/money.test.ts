@@ -1,7 +1,7 @@
 import { deflateRawSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import {
-  accountBalance, affordableFrom, balanceOn, byCategory, calcMonths, calcTotals, cleanMoney, fmtMoney, goalPerMonth, invoiceEntry, invoiceRows, lowestAhead, monthKeys,
+  accountBalance, accountGoals, affordableFrom, goalRows, previewAdd, balanceOn, byCategory, calcMonths, calcTotals, cleanMoney, fmtMoney, goalPerMonth, invoiceEntry, invoiceRows, lowestAhead, monthKeys,
   moneyFromWorkbook, newAccount, nextInvoiceNum, parseMoney, repeatDates, starterAccounts, syncInvoices, toReview, wishStats,
 } from '../shared/money';
 import type { Invoice, Money, MoneyEntry } from '../shared/types';
@@ -18,6 +18,8 @@ const money = (): Money => ({
   entries: [e('2026-10-01', 'out', 150, false, 'Food'), e('2026-10-10', 'in', 200), e('2026-10-27', 'out', 30, true), e('2026-11-05', 'out', 0.1, true), e('2026-11-05', 'in', 0.2, true)],
   wishlist: [],
   invoices: [],
+  subs: [],
+  goals: [],
 });
 
 describe('money formulas', () => {
@@ -273,5 +275,63 @@ describe('importing the workbook', () => {
   });
   it('says so when the file isn’t a workbook', async () => {
     await expect(readXlsx(new TextEncoder().encode('hello').buffer as ArrayBuffer)).rejects.toThrow(/isn’t an Excel/);
+  });
+});
+
+describe('savings goals', () => {
+  // Today is 28 Oct: 120 in POSB through November, with 150 done so far.
+  const today = '2026-10-28';
+  const goal = (p: Partial<import('../shared/types').SavingsGoal>) => ({ id: 'g', name: 'Laptop', target: 100, by: '', account: '', saved: 0, ...p });
+  const rows = (m: Money) => goalRows(m, calcMonths(m, monthKeys(m, today)), today);
+
+  it('fits what’s left of a goal kept elsewhere into the day-to-day forecast', () => {
+    const [r] = rows({ ...money(), goals: [goal({ target: 150, saved: 30, by: '2026-12' })] });
+    expect(r).toMatchObject({ have: 30, left: 120, reachOn: '2026-10-28', how: 'forecast', perMonth: 60, late: false });
+    const [far] = rows({ ...money(), goals: [goal({ target: 500, by: '2026-11' })] });
+    expect(far).toMatchObject({ left: 500, reachOn: null, how: null, perMonth: 500, late: true });
+    expect(rows({ ...money(), goals: [goal({ target: 20, saved: 25 })] })[0]).toMatchObject({ left: 0, how: 'done', perMonth: null });
+    expect(rows({ ...money(), goals: [goal({ target: null })] })).toEqual([]);
+  });
+  it('follows a pot’s planned moves, then the forecast for the rest', () => {
+    const pot = { ...newAccount('pot', 'Japan', 'pot'), goal: 60, goalBy: '2026-11' };
+    const m: Money = { ...money(), accounts: [...money().accounts, pot], entries: [...money().entries, move('2026-10-20', 'posb', 'pot', 20), move('2026-11-02', 'posb', 'pot', 20, true), move('2026-11-20', 'posb', 'pot', 20, true)] };
+    expect(accountGoals(m).map((g) => [g.id, g.target, g.account])).toEqual([['acct-pot', 60, 'pot']]);
+    const [r] = rows(m);
+    expect(r).toMatchObject({ fromAccount: true, have: 20, left: 40, reachOn: '2026-11-20', how: 'planned', late: false });
+    // 100 needs 40 more after the planned moves; the day-to-day forecast can spare that from today.
+    const [more] = rows({ ...m, goals: [goal({ target: 100, account: 'pot' })] });
+    expect(more).toMatchObject({ have: 20, how: 'forecast', reachOn: '2026-10-28' });
+    expect(rows({ ...m, goals: [goal({ target: 200, account: 'pot' })] })[0]).toMatchObject({ how: null, reachOn: null });
+  });
+});
+
+describe('what if', () => {
+  const today = '2026-10-28';
+  const out = (date: string, amount: number, account = 'posb'): MoneyEntry => ({ id: 'new', date, kind: 'out', amount, note: '', category: '', planned: true, account, to: '' });
+  it('shows the new lowest balance, the month-end and days going below $0', () => {
+    const p = previewAdd(money(), [out('2026-10-30', 130)], today);
+    expect(p.changes).toBe(true);
+    expect(p.month).toBe('2026-10');
+    expect(p.monthEnd).toEqual({ before: 120, after: -10 });
+    expect(p.low.before).toEqual({ balance: 120, date: '2026-10-28' });
+    expect(p.low.after).toEqual({ balance: -10, date: '2026-10-30' });
+    // 30–31 Oct and all 30 days of November.
+    expect(p.below).toEqual({ before: 0, after: 32, first: '2026-10-30' });
+  });
+  it('says when nothing day to day changes', () => {
+    expect(previewAdd(money(), [out('2026-11-03', 50, 'syfe')], today)).toMatchObject({ changes: false, month: '2026-11', below: { after: 0, first: null } });
+  });
+  it('keeps goals and series through cleaning, dropping what doesn’t hold up', () => {
+    const m = cleanMoney({
+      start: '2026-10-01',
+      entries: [{ id: 'a', date: '2026-10-02', kind: 'out', amount: 10, series: 's1' }],
+      subs: [{ id: 's1', every: 'month', review: 1, since: '2025-03' }, { id: 's1', every: 'week' }, { id: 'gone', every: 'month' }, { id: 'x', every: 'daily' }],
+      goals: [{ id: 'g', name: 'Bike', target: -300, by: '2027-13', account: 'nope', saved: 'x' }, {}],
+    });
+    expect(m.entries[0].series).toBe('s1');
+    expect(m.subs).toEqual([{ id: 's1', every: 'month', review: false, since: '2025-03' }]);
+    expect(m.goals[0]).toEqual({ id: 'g', name: 'Bike', target: 300, by: '', account: '', saved: 0 });
+    expect(m.goals).toHaveLength(2);
+    expect(cleanMoney({}).subs).toEqual([]);
   });
 });

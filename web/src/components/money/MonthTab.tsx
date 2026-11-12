@@ -1,10 +1,12 @@
 import { Fragment, useState } from 'react';
 import { accountBalance, addMonths, balanceOn, calcMonths, fmtMoney, MAX_ENTRIES, monthKeys, monthName, type Repeat, repeatDates, sortEntries, toReview } from '../../../../shared/money';
+import { looksLikeSub, markSub, seriesByEntry, unmarkSub } from '../../../../shared/subscriptions';
 import type { Money, MoneyCategory, MoneyEntry } from '../../../../shared/types';
 import { localGet, localSet } from '../../api';
 import { newId } from '../../util';
 import { EntryRow } from './EntryRow';
 import { MonthCalendar, TodayLine } from './MonthCalendar';
+import { WhatIf } from './WhatIf';
 import { AccountSelect, Calc, CategoryCell, entryTitle, type Kind, KindSwitch, lastAccount, namesOf, NumCell, otherAccount, shortDate, signed } from './shared';
 
 export const REPEATS: { key: Repeat; name: string }[] = [
@@ -14,7 +16,8 @@ export const REPEATS: { key: Repeat; name: string }[] = [
   { key: 'month', name: 'Every month' },
 ];
 
-type Draft = { date: string; note: string; category: MoneyCategory | ''; kind: Kind; amount: number | null; account: string; to: string; repeat: Repeat; until: string };
+/** `sub`: a repeat that's a subscription; null goes by whether the note looks like one. */
+type Draft = { date: string; note: string; category: MoneyCategory | ''; kind: Kind; amount: number | null; account: string; to: string; repeat: Repeat; until: string; sub: boolean | null };
 
 export function MonthTab({ money, today, month, onMonth, onChange, onOpenOwed, together }: {
   money: Money;
@@ -34,7 +37,7 @@ export function MonthTab({ money, today, month, onMonth, onChange, onOpenOwed, t
   const isNow = today.slice(0, 7) === month;
   const blank = (): Draft => {
     const account = lastAccount(money);
-    return { date: isNow ? today : `${month}-01`, note: '', category: '', kind: 'out', amount: null, account, to: otherAccount(money, account), repeat: 'once', until: month };
+    return { date: isNow ? today : `${month}-01`, note: '', category: '', kind: 'out', amount: null, account, to: otherAccount(money, account), repeat: 'once', until: month, sub: null };
   };
   const [draft, setDraft] = useState<Draft>(blank);
   const [draftMonth, setDraftMonth] = useState(month);
@@ -78,22 +81,28 @@ export function MonthTab({ money, today, month, onMonth, onChange, onOpenOwed, t
   const repeats = repeatDates(draft.date || today, draft.repeat, draft.until);
   const move = draft.kind === 'move';
   const canAdd = !!draft.date && draft.amount !== null && money.entries.length < MAX_ENTRIES && (!move || (!!draft.to && draft.to !== draft.account));
+  const canSub = draft.kind === 'out' && draft.repeat !== 'once';
+  const isSub = canSub && (draft.sub ?? looksLikeSub(draft.note));
+  /** The entries the add row would add; repeats share a series. */
+  const drafted = (series = ''): MoneyEntry[] =>
+    repeats.slice(0, MAX_ENTRIES - money.entries.length).map((date): MoneyEntry => ({
+      id: newId('e'),
+      date,
+      kind: draft.kind,
+      amount: Math.abs(draft.amount ?? 0),
+      note: draft.note.trim(),
+      category: move ? '' : draft.category,
+      planned: date > today,
+      account: draft.account,
+      to: move ? draft.to : '',
+      ...(series ? { series } : {}),
+    }));
   const add = () => {
     if (!canAdd) return;
-    setEntries([
-      ...money.entries,
-      ...repeats.slice(0, MAX_ENTRIES - money.entries.length).map((date): MoneyEntry => ({
-        id: newId('e'),
-        date,
-        kind: draft.kind,
-        amount: Math.abs(draft.amount!),
-        note: draft.note.trim(),
-        category: move ? '' : draft.category,
-        planned: date > today,
-        account: draft.account,
-        to: move ? draft.to : '',
-      })),
-    ]);
+    const series = draft.repeat !== 'once' ? newId('s') : '';
+    const entries = sortEntries([...money.entries, ...drafted(series)]);
+    const every = draft.repeat === 'once' ? null : draft.repeat;
+    onChange({ ...money, entries, subs: isSub && every ? [...money.subs, { id: series, every, review: false, since: '' }] : money.subs });
     localSet('moneyAccount', draft.account);
     setDraft({ ...blank(), date: draft.date, kind: draft.kind, account: draft.account, to: draft.to });
   };
@@ -109,6 +118,8 @@ export function MonthTab({ money, today, month, onMonth, onChange, onOpenOwed, t
   const lowIndex = calc.balances.indexOf(calc.lowest);
   const lowDate = `${month}-${String(lowIndex + 1).padStart(2, '0')}`;
   const balanceAt = (date: string) => (shown ? accountBalance(money, shown.id, date) : calc.balances[Number(date.slice(8)) - 1]);
+  const series = seriesByEntry(money);
+  const subIds = new Set(money.subs.map((x) => x.id));
   const pickAccount = (account: string) => setDraft({ ...draft, account, to: draft.to === account ? otherAccount(money, account) : draft.to });
 
   const listPart = (
@@ -183,8 +194,15 @@ export function MonthTab({ money, today, month, onMonth, onChange, onOpenOwed, t
                   Gig pay? Add it as an invoice in Owed
                 </button>
               )}
+              {canSub && (
+                <label className="meta composer-sub" title="List it in Subscriptions, with what it costs a month and a year">
+                  <input type="checkbox" checked={isSub} onChange={(e) => setDraft({ ...draft, sub: e.target.checked })} />
+                  Subscription
+                </label>
+              )}
               <span className="meta composer-hint">{draft.date > today ? 'Goes in as planned: tick it once it’s happened' : 'Goes in as done'}</span>
             </div>
+            {canAdd && draft.kind !== 'in' && !!draft.amount && <WhatIf money={money} add={drafted()} today={today} label={repeats.length > 1 ? `If you add these ${repeats.length}` : 'If you add this'} />}
           </div>
 
           {money.accounts.length > 1 && (
@@ -230,6 +248,12 @@ export function MonthTab({ money, today, month, onMonth, onChange, onOpenOwed, t
                     <EntryRow
                       key={e.id}
                       e={e}
+                      series={series.get(e.id)}
+                      isSub={!!e.series && subIds.has(e.series)}
+                      onSub={(on) => {
+                        const s = series.get(e.id);
+                        if (s) onChange(on ? markSub(money, s, newId('s')) : unmarkSub(money, s.id));
+                      }}
                       money={money}
                       today={today}
                       open={editing === e.id}
