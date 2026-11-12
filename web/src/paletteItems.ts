@@ -1,5 +1,6 @@
 // What ⌘K offers: actions, views, panels to show or hide, bookmarks, and for what's typed,
 // quick logs ("weight 72.4", "study 45 cs210") and web searches.
+import { rankBookmarks } from '../../shared/bookmarks';
 import { askable, type AskAction } from '../../shared/ask';
 import { ymd } from '../../shared/dates';
 import { fmtStudy, parseStudy, timerMinutes } from '../../shared/learn';
@@ -11,6 +12,7 @@ import { DESIGNS, PANEL_ROWS } from './components/Drawers';
 import type { PaletteAsk, PaletteItem } from './components/Palette';
 import { VIEWS } from './components/Rail';
 import type { ServerTab } from './components/Server';
+import { bookmarkOpened } from './api';
 import { host, newId } from './util';
 
 export interface PaletteContext {
@@ -39,6 +41,10 @@ export interface PaletteContext {
   addPackage: () => void;
   refreshNews: () => void;
   refreshInbox: () => void;
+  /** News › Reading list. */
+  openReading: () => void;
+  /** Show a notepad on home. */
+  openNote: (id: string) => void;
   showShortcuts: () => void;
   openSettings: () => void;
   toggleHidden: (key: string) => void;
@@ -94,6 +100,14 @@ export function paletteItems(c: PaletteContext): PaletteItem[] {
     { id: 'a:files', group: 'Actions', label: 'Browse the server’s files', icon: 'ph-folder-simple', words: 'file explorer sftp upload download folders', run: () => c.openServerTab('files') },
     { id: 'a:package', group: 'Actions', label: 'Add a package', icon: 'ph-package', words: 'tracking', run: c.addPackage },
     { id: 'a:news', group: 'Actions', label: 'Refresh the news', icon: 'ph-arrows-clockwise', run: () => (setView('news'), c.refreshNews()) },
+    ...readingItems(c),
+    // Notepads by name, tag or anything in them, once something's typed.
+    ...data.notes.map((n) => ({
+      id: 'n:' + n.id, group: 'Notes', label: n.name || 'Untitled', icon: 'ph-notebook', onlyWhenTyping: true,
+      sub: n.tags?.length ? n.tags.map((t) => '#' + t).join(' ') : undefined,
+      words: `notepad note ${n.text.slice(0, 5000)}`,
+      run: () => c.openNote(n.id),
+    })),
     {
       id: 'a:inbox', group: 'Actions', label: 'Catch up on email', icon: 'ph-envelope-open', words: 'inbox gmail mail summary digest',
       sub: inboxCount ? `${inboxCount} need${inboxCount === 1 ? 's' : ''} you` : undefined,
@@ -122,8 +136,8 @@ export function paletteItems(c: PaletteContext): PaletteItem[] {
         run: () => c.toggleHidden(r.key),
       })),
     ),
-    ...data.bookmarks.flatMap((g) =>
-      g.items.map((b, i) => ({
+    // The most opened first, so they lead once something's typed.
+    ...rankBookmarks(data.bookmarks.flatMap((g) => g.items.map((b, i) => ({ ...b, g, i }))), data.bookmarkOpens).map(({ g, i, ...b }) => ({
         id: 'b:' + b.id,
         group: 'Bookmarks',
         label: b.name,
@@ -132,9 +146,28 @@ export function paletteItems(c: PaletteContext): PaletteItem[] {
         keys: g.name === 'Daily' && i < 9 ? [String(i + 1)] : undefined,
         words: b.url,
         onlyWhenTyping: true,
-        run: () => window.open(b.url, '_blank', 'noopener'),
+        run: () => {
+          bookmarkOpened(b.id);
+          window.open(b.url, '_blank', 'noopener');
+        },
       })),
-    ),
+  ];
+}
+
+/** The reading list, and each story on it (those once something's typed). */
+function readingItems(c: PaletteContext): PaletteItem[] {
+  const toRead = (c.data.newsLists?.saved ?? []).filter((s) => !s.readAt);
+  return [
+    {
+      id: 'a:reading', group: 'Actions', label: 'Open the reading list', icon: 'ph-bookmark-simple', words: 'news saved later read stories',
+      sub: toRead.length ? `${toRead.length} to read` : 'Nothing saved yet',
+      run: c.openReading,
+    },
+    ...toRead.map((s) => ({
+      id: 'r:' + s.id, group: 'Reading list', label: s.title, icon: 'ph-bookmark-simple', sub: s.source || host(s.url), words: `${s.url} saved read later`,
+      onlyWhenTyping: true,
+      run: () => window.open(s.url, '_blank', 'noopener'),
+    })),
   ];
 }
 

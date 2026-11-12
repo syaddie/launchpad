@@ -66,6 +66,7 @@ export function App({ cached }: { cached: AppState | null }) {
   const [addCountdown, setAddCountdown] = useState(0);
   const [weightSignal, setWeightSignal] = useState(0);
   const [addWorkSignal, setAddWorkSignal] = useState(0);
+  const [readingSignal, setReadingSignal] = useState(0);
   const [serverTab, setServerTab] = useState<{ tab: ServerTab; n: number } | null>(null);
   const [learnNoteBusy, setLearnNoteBusy] = useState(false);
   const [newsBusy, setNewsBusy] = useState(false);
@@ -522,9 +523,10 @@ export function App({ cached }: { cached: AppState | null }) {
     api.patchPackage(id, { isNew: false }).catch(onSaveError);
   };
   const notesPanel = (
-    <Notes notes={notes} activeId={activeId} onActive={pickNote} onChange={setNotes} saved={saved} onOpenFocus={() => setFocus(true)} onEditing={onNoteEditing} />
+    <Notes notes={notes} activeId={activeId} onActive={pickNote} onChange={setNotes} saved={saved} onOpenFocus={() => setFocus(true)} onEditing={onNoteEditing} notify={showToast} />
   );
-  const bookmarksPanel = <Bookmarks groups={data.bookmarks} onChange={setBookmarks} search={search} edit={editBookmarks} setEdit={setEditBookmarks} />;
+  const checkLinks = () => api.checkLinks().then((linkCheck) => update((d) => ({ ...d, linkCheck }))).catch((e) => showToast(`Couldn’t start the link check: ${e.message}`));
+  const bookmarksPanel = <Bookmarks groups={data.bookmarks} onChange={setBookmarks} search={search} edit={editBookmarks} setEdit={setEditBookmarks} linkCheck={data.linkCheck} onCheckLinks={checkLinks} notify={showToast} />;
 
   // ---------- command palette ----------
 
@@ -565,6 +567,8 @@ export function App({ cached }: { cached: AppState | null }) {
     startStudy, stopStudy, logStudy, setWeight, runSpeedTest, openServerTab,
     addPackage: () => setDrawer({ type: 'add' }),
     refreshNews, refreshInbox,
+    openReading: () => (setView('news'), setReadingSignal((n) => n + 1)),
+    openNote: (id: string) => (pickNote(id), setView('home')),
     showShortcuts: () => setShortcuts(true),
     openSettings: () => setDrawer({ type: 'settings' }),
     toggleHidden,
@@ -583,7 +587,7 @@ export function App({ cached }: { cached: AppState | null }) {
         {serverIssue && <ServerBanner issue={serverIssue} waiting={waiting} onRetry={() => refresh()} />}
         <Suspense fallback={<main className="view-loading" aria-busy="true" />}>
         {view === 'news' ? (
-          <News data={data} now={now} busy={newsBusy} onRefresh={refreshNews} onTopics={setNewsTopics} />
+          <News data={data} now={now} busy={newsBusy} onRefresh={refreshNews} onTopics={setNewsTopics} onLists={(newsLists) => update((d) => ({ ...d, newsLists }))} notify={showToast} readingSignal={readingSignal} />
         ) : view === 'inbox' ? (
           <Inbox data={data} now={now} busy={inboxBusy} onRefresh={refreshInbox} onConnect={connect} onOpenSettings={() => setDrawer({ type: 'settings' })} />
         ) : view === 'you' ? (
@@ -724,7 +728,7 @@ export function App({ cached }: { cached: AppState | null }) {
         </Drawer>
       )}
 
-      {focus && <FocusView notes={notes} activeId={activeId} onActive={pickNote} onChange={setNotes} saved={saved} onClose={() => setFocus(false)} />}
+      {focus && <FocusView notes={notes} activeId={activeId} onActive={pickNote} onChange={setNotes} saved={saved} onClose={() => setFocus(false)} notify={showToast} />}
 
       {shortcuts && <Shortcuts onClose={() => setShortcuts(false)} />}
 

@@ -1,5 +1,8 @@
-// Housekeeping that runs in the background: photo files nothing uses, and the part
-// files of uploads that were given up on without the page saying so.
+// Housekeeping that runs in the background: photo files nothing uses, images no note
+// has shown for a week, icons of sites no longer bookmarked, and the part files of
+// uploads that were given up on without the page saying so.
+import { sweepFavicons } from './bookmarks';
+import { sweepNoteImages, usedImages } from './notes';
 import { sweepPhotos } from './photos';
 import { sweepUploads } from './shell';
 import { store } from './store';
@@ -17,6 +20,24 @@ function photos() {
   }
 }
 
+function noteImages() {
+  try {
+    const n = sweepNoteImages(usedImages());
+    if (n) console.log(`[cleanup] removed ${n} note image(s) no note has shown for a week`);
+  } catch (e) {
+    console.error('[cleanup] note images:', (e as Error).message);
+  }
+}
+
+function favicons() {
+  try {
+    const n = sweepFavicons();
+    if (n) console.log(`[cleanup] removed ${n} icon(s) of sites no longer bookmarked`);
+  } catch (e) {
+    console.error('[cleanup] favicons:', (e as Error).message);
+  }
+}
+
 async function uploads() {
   try {
     const n = await sweepUploads();
@@ -30,8 +51,12 @@ async function uploads() {
 export function startCleanup(): void {
   setTimeout(() => {
     photos();
+    noteImages();
+    favicons();
     uploads();
   }, 60_000);
   setInterval(photos, 24 * HOUR);
+  setInterval(noteImages, 24 * HOUR);
+  setInterval(favicons, 24 * HOUR);
   setInterval(uploads, 6 * HOUR);
 }
