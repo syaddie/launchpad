@@ -122,7 +122,7 @@ app.post('/api/bookmarks/check', (c) => {
 app.get('/api/favicon', async (c) => {
   const host = c.req.query('host') ?? '';
   const icon = /^[a-z0-9.\-[\]:]{1,260}$/i.test(host) ? await favicon(host) : null;
-  if (!icon) return c.body(null, 404, { 'Cache-Control': 'private, max-age=86400' });
+  if (!icon) return c.body(null, 404, { 'Cache-Control': 'private, max-age=3600' });
   return c.body(new Uint8Array(icon.bytes), 200, {
     'Content-Type': icon.mime,
     'Cache-Control': 'private, max-age=604800',

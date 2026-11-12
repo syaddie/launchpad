@@ -112,7 +112,9 @@ export function Bookmarks({ groups, onChange, search, edit, setEdit, linkCheck, 
             <span className="meta" title={linkCheck.checkedAt ? `Every bookmark is opened once a week; last checked ${new Date(linkCheck.checkedAt).toLocaleString()}` : 'Every bookmark is opened once a week'}>
               {linkCheck.running
                 ? 'Checking links…'
-                : broken
+                : linkCheck.error
+                  ? <span style={{ color: 'var(--wn)' }} title={linkCheck.error}>Couldn’t check links</span>
+                  : broken
                   ? <span style={{ color: 'var(--wn)' }}>{broken} link{broken === 1 ? '' : 's'} look{broken === 1 ? 's' : ''} broken</span>
                   : linkCheck.checkedAt ? `Links checked ${ago(linkCheck.checkedAt, new Date())}` : ''}
             </span>

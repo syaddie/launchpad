@@ -39,6 +39,8 @@ export interface LinkCheck {
   running: boolean;
   /** Keyed by the bookmark's address; ones that opened fine aren't listed. */
   problems: Record<string, LinkProblem>;
+  /** Why the last check didn't count (the server couldn't reach anything); its results are the ones before. */
+  error?: string;
 }
 
 export interface Note {

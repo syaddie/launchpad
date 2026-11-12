@@ -232,7 +232,7 @@ function TopicPanel({ n, now, lists, savedUrls, on }: { n: NewsTopic; now: Date;
       <div className="scroll" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {n.error && (
           <div className="news-note" style={{ color: 'var(--wn)' }}>
-            {n.fetchedAt ? `Couldn’t update (${n.error}); these are from ${ago(n.fetchedAt, now)}.` : n.error}
+            {n.fetchedAt && n.articles.length ? `${n.error.replace(/\.$/, '')}. Showing the headlines from ${ago(n.fetchedAt, now)}.` : n.error}
           </div>
         )}
         {loading && <div className="news-note">Fetching headlines…</div>}

@@ -74,8 +74,15 @@ export function checkLinks(): Promise<void> {
     };
     try {
       await Promise.all(Array.from({ length: 6 }, worker));
+      const found = Object.values(problems);
+      // Every one failing alike is the server's own connection (or its certificates), not the bookmarks.
+      if (urls.length >= 3 && found.length === urls.length && found.every((p) => p.kind === 'failing' && p.why === found[0].why)) {
+        store.setLinkCheck({ ...prev, running: false, error: `Couldn’t check: every link failed with “${found[0].why}”, so it’s probably the server’s connection.` });
+        console.warn(`[bookmarks] link check: every link failed (${found[0].why}); kept the last results`);
+        return;
+      }
       store.setLinkCheck({ checkedAt: new Date().toISOString(), running: false, problems });
-      console.log(`[bookmarks] checked ${urls.length} link(s), ${Object.keys(problems).length} look broken`);
+      console.log(`[bookmarks] checked ${urls.length} link(s), ${found.length} look broken`);
     } catch (e) {
       console.error('[bookmarks] link check failed:', (e as Error).message);
       store.setLinkCheck({ ...store.linkCheck(), running: false });
@@ -102,9 +109,9 @@ export function startLinkChecks(): void {
 const iconDir = path.join(config.dataDir, 'favicons');
 fs.mkdirSync(iconDir, { recursive: true });
 
-/** Icons are fetched again after a month; a site without one is asked again after a week. */
+/** Icons are fetched again after a month; a site without one (or that couldn't be reached) is asked again the next day. */
 const ICON_FRESH = 30 * DAY;
-const MISS_FRESH = 7 * DAY;
+const MISS_FRESH = DAY;
 const MAX_ICON = 300 * 1024;
 
 const iconFile = (host: string) => path.join(iconDir, createHash('sha256').update(host.toLowerCase()).digest('hex').slice(0, 32));
