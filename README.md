@@ -58,7 +58,7 @@ Bookmarks, notes, packages, news topics, photos, countdowns, the cigarette, mood
 ```
 
 - **Deploys:** pushing to `main` builds `ghcr.io/syaddie/launchpad:latest` in GitHub Actions. A cron job on the server runs `deploy/update.sh`, which pulls the new image and restarts the container only if it changed.
-- **Instant paint:** the page renders from a localStorage copy first, then refreshes from the server, so a new tab never waits on the network.
+- **Instant paint:** the page renders from a copy kept in the browser (IndexedDB) first, then refreshes from the server, so a new tab never waits on the network. Only the theme, accent and layout are in localStorage, so the colours are right before anything else loads.
 - **Inbox digests:** the last 7 days of mail (up to 150 emails) are checked every 15 minutes; only new emails are downloaded. A digest goes to Claude again only when new mail has arrived in its range, at most every 90 minutes for two days and every 6 hours for the week.
 - **Gmail detection:** scans recent shipping and order emails for tracking-number formats (SingPost, Ninja Van, J&T, UPS, Qxpress, plus DHL/FedEx numbers next to the word "tracking"). New finds appear with a "Keep / Dismiss" prompt.
 - **Delivered** packages move to a collapsed section and archive after 3 days.

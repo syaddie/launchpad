@@ -1,11 +1,18 @@
 import type { AppState, Backup, BackupSnapshot, Countdown, DirListing, Mood, Package, Photo, Prefs, SavedDoc, ServerStats, ShellInfo, SourceKey, Task, Training } from '../../shared/types';
+import { kvGet, kvSet } from './idb';
 
+/** Where the state was kept before it moved to IndexedDB; still used where IndexedDB isn't available. */
 const STATE_KEY = 'launchpad:state';
+/** Theme, accent and layout: tiny, and read by index.html before first paint so the colours never flash. */
 const PREFS_KEY = 'launchpad:prefs';
 const SERVER_KEY = 'launchpad:server';
 
-// localStorage mirrors: paint instantly from cache, then refresh from the server.
-export function cachedState(): AppState | null {
+// The page paints at once from its own copy of the state, kept in IndexedDB, then refreshes from the server.
+
+/** IndexedDB works here; when it doesn't (blocked, or a very old browser), the copy stays in localStorage. */
+let idbOk = true;
+
+function readLocal(): AppState | null {
   try {
     const raw = localStorage.getItem(STATE_KEY);
     return raw ? (JSON.parse(raw) as AppState) : null;
@@ -14,13 +21,70 @@ export function cachedState(): AppState | null {
   }
 }
 
-export function cacheState(s: AppState): void {
+/** The page's copy of the state, read once before the first paint. Waits at most a second. */
+export async function loadCachedState(): Promise<AppState | null> {
+  const read = (async () => {
+    try {
+      const s = await kvGet<AppState>('state');
+      if (s) {
+        // A copy from before the move that's still there: IndexedDB has one now.
+        if (localStorage.getItem(STATE_KEY) !== null) localStorage.removeItem(STATE_KEY);
+        return s;
+      }
+    } catch {
+      idbOk = false;
+      return readLocal();
+    }
+    // The first run since the move: copy the localStorage copy across, and only remove it once that's stored.
+    const old = readLocal();
+    if (old) {
+      kvSet('state', old)
+        .then(() => localStorage.removeItem(STATE_KEY))
+        .catch(() => {});
+    }
+    return old;
+  })().catch(() => null);
+  return Promise.race([read, new Promise<null>((r) => setTimeout(() => r(null), 1000))]);
+}
+
+let pending: AppState | null = null;
+let pendingTimer = 0;
+
+/** Write the latest copy now (the page is being hidden or closed). */
+function flushState(): void {
+  clearTimeout(pendingTimer);
+  const s = pending;
+  pending = null;
+  if (!s) return;
+  if (!idbOk) return writeLocal(s);
+  kvSet('state', s).catch(() => {
+    // Storage full or blocked: the page still works, it just paints from the network.
+  });
+}
+
+function writeLocal(s: AppState): void {
   try {
     localStorage.setItem(STATE_KEY, JSON.stringify(s));
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: s.prefs.theme, accent: s.prefs.accent, design: s.prefs.design }));
   } catch {
     // Storage full or blocked: the page still works, it just paints from the network.
   }
+}
+
+/** Keep a copy of the state. Typing changes it on every key, so the write waits for a pause. */
+export function cacheState(s: AppState): void {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: s.prefs.theme, accent: s.prefs.accent, design: s.prefs.design }));
+  } catch {
+    // ignore
+  }
+  pending = s;
+  clearTimeout(pendingTimer);
+  pendingTimer = window.setTimeout(flushState, 300);
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', flushState);
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && flushState());
 }
 
 /** The Server view's last reading, so it opens on that instead of a blank page. */

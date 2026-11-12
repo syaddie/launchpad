@@ -4,7 +4,7 @@ import { ymd } from '../../shared/dates';
 import { fmtStudy, timerMinutes } from '../../shared/learn';
 import { fmtKg } from '../../shared/training';
 import { nearestCountdown, smokesOn } from '../../shared/trackers';
-import type { Backup, BookmarkGroup, DesignKey, Countdown, Learn, Money, Mood, Note, Package, Photo, Prefs, Task, Training } from '../../shared/types';
+import type { AppState, Backup, BookmarkGroup, DesignKey, Countdown, Learn, Money, Mood, Note, Package, Photo, Prefs, Task, Training } from '../../shared/types';
 import { api, localGet, localSet, type RestoreResult } from './api';
 import { Bookmarks } from './components/Bookmarks';
 import { AddPackageDrawer, DESIGNS, Drawer, PackageDrawer, SettingsDrawer } from './components/Drawers';
@@ -56,7 +56,7 @@ function preloadViews() {
 
 type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings' } | { type: 'exercise'; title: string } | { type: 'course'; id: string; item?: string } | null;
 
-export function App() {
+export function App({ cached }: { cached: AppState | null }) {
   const [view, setView] = useHashView();
   const [palette, setPalette] = useState(false);
   const [shortcuts, setShortcuts] = useState(false);
@@ -92,7 +92,7 @@ export function App() {
 
   // ---------- data ----------
 
-  const { data, update, savers, merge, replace, refresh, serverIssue } = useAppData({ notify: showToast, onSaveError, onNotesSaved: flashSaved, onMoneySaved: flashMoneySaved, noteEditing });
+  const { data, update, savers, merge, replace, refresh, serverIssue } = useAppData({ cached, notify: showToast, onSaveError, onNotesSaved: flashSaved, onMoneySaved: flashMoneySaved, noteEditing });
   const photoSlots = usePhotoSlots(data.photos.length);
 
   useEffect(() => {

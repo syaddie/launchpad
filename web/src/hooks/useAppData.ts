@@ -4,7 +4,7 @@ import { emptyLearn } from '../../../shared/learn';
 import { starterMoney } from '../../../shared/money';
 import { EMPTY_TRAINING } from '../../../shared/training';
 import type { AppState, SavedDoc } from '../../../shared/types';
-import { api, cachedState, cacheState, ServerError, TAB_ID } from '../api';
+import { api, cacheState, ServerError, TAB_ID } from '../api';
 import type { ServerIssue } from '../components/ServerBanner';
 import { SAVED_DOCS, useSavers } from './useSavers';
 
@@ -58,7 +58,9 @@ export function fromCache(c: AppState | null): AppState {
  * or a sync changes something, and from a slow poll as a backstop. Edits are kept in the
  * local copy at once and saved in the background (see useSavers).
  */
-export function useAppData({ notify, onSaveError, onNotesSaved, onMoneySaved, noteEditing }: {
+export function useAppData({ cached, notify, onSaveError, onNotesSaved, onMoneySaved, noteEditing }: {
+  /** The copy kept in the browser, to paint from before the server answers. */
+  cached: AppState | null;
   notify: (msg: string) => void;
   onSaveError: (e: Error) => void;
   onNotesSaved: () => void;
@@ -66,7 +68,7 @@ export function useAppData({ notify, onSaveError, onNotesSaved, onMoneySaved, no
   /** Notes are being typed in, so a refresh shouldn't swap them out yet. */
   noteEditing: RefObject<boolean>;
 }) {
-  const [data, setData] = useState<AppState>(() => fromCache(cachedState()));
+  const [data, setData] = useState<AppState>(() => fromCache(cached));
   const [serverIssue, setServerIssue] = useState<ServerIssue | null>(null);
 
   const update = useCallback((fn: (d: AppState) => AppState) => {

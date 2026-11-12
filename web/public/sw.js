@@ -1,6 +1,6 @@
 // Launchpad's service worker. It keeps the page itself (index.html, the hashed
 // bundles, icons) so Launchpad still opens when the server or the tunnel is down:
-// the page paints from its localStorage copy and says the server can't be reached.
+// the page paints from its own copy of the state (IndexedDB) and says the server can't be reached.
 // Nothing under /api/ is ever touched, so data always comes from the server.
 const CACHE = 'launchpad-v1';
 const SHELL = '/';
