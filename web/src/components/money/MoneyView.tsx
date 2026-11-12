@@ -2,20 +2,24 @@ import { useRef, useState } from 'react';
 import { ymd } from '../../../../shared/dates';
 import { fmtMoney, invoiceRows, moneyFromWorkbook, monthName, sortEntries, syncInvoices } from '../../../../shared/money';
 import type { Money, MoneyEntry } from '../../../../shared/types';
+import { unmarked } from '../../../../shared/subscriptions';
 import { readXlsx } from '../../../../shared/xlsx';
 import { localGet, localSet } from '../../api';
 import { newId } from '../../util';
 import { MonthTab } from './MonthTab';
 import { Overview } from './Overview';
+import { Goals } from './Goals';
 import { Owed } from './Owed';
+import { Subscriptions } from './Subscriptions';
 import { Wishlist } from './Wishlist';
 import { lastAccount, type Notify } from './shared';
 
-type Tab = 'overview' | 'month' | 'wishlist' | 'owed';
+type Tab = 'overview' | 'month' | 'wishlist' | 'subs' | 'owed';
 const TABS: { key: Tab; name: string }[] = [
   { key: 'overview', name: 'Overview' },
   { key: 'month', name: 'Month' },
-  { key: 'wishlist', name: 'Wishlist' },
+  { key: 'wishlist', name: 'Goals & wishlist' },
+  { key: 'subs', name: 'Subscriptions' },
   { key: 'owed', name: 'Owed' },
 ];
 
@@ -37,10 +41,13 @@ interface Props {
  * monthly summary and the charts are worked out from the entries (shared/money.ts).
  * Invoices in Owed each have their money as an entry, kept in step on every change.
  */
-export function MoneyView({ money, now, saved, onChange: save, onImport, notify, together }: Props) {
+export function MoneyView({ money: given, now, saved, onChange: save, onImport, notify, together }: Props) {
+  // A copy kept by the page before subscriptions and goals (or an edit queued then) has neither.
+  const money: Money = given.subs && given.goals ? given : { ...given, subs: given.subs ?? [], goals: given.goals ?? [] };
   const today = ymd(now);
   const onChange = (m: Money) => save(syncInvoices(m));
   const lateInvoices = invoiceRows(money, today).filter((r) => !r.paidOn && r.daysLeft < 0).length;
+  const likelySubs = unmarked(money, today).likely.length;
   const [tab, setTabState] = useState<Tab>(() => (TABS.some((t) => t.key === localGet('moneyTab')) ? (localGet('moneyTab') as Tab) : 'month'));
   const [month, setMonth] = useState(today.slice(0, 7));
   const [importing, setImporting] = useState(false);
@@ -66,8 +73,8 @@ export function MoneyView({ money, now, saved, onChange: save, onImport, notify,
       const read = moneyFromWorkbook(await readXlsx(await f.arrayBuffer()), importMonth, today, money.accounts);
       if (!read.entries.length && !read.wishlist.length) throw new Error('no Tracker or Wishlist sheet found');
       const planned = read.entries.filter((e) => e.planned).length;
-      // The workbook has no invoices: keep the ones here, with their money.
-      const m = { ...read, invoices: money.invoices, entries: sortEntries([...read.entries, ...money.entries.filter((e) => e.invoice)]) };
+      // The workbook has no invoices or goals: keep the ones here, with the invoices' money.
+      const m = { ...read, invoices: money.invoices, goals: money.goals, entries: sortEntries([...read.entries, ...money.entries.filter((e) => e.invoice)]) };
       onImport(m, `Imported ${read.entries.length} entries from ${monthName(importMonth)} on (${planned} still planned) and ${m.wishlist.length} wishlist item${m.wishlist.length === 1 ? '' : 's'}`);
       setImporting(false);
       setMonth(importMonth);
@@ -84,6 +91,11 @@ export function MoneyView({ money, now, saved, onChange: save, onImport, notify,
             <button key={t.key} role="tab" aria-selected={tab === t.key} className={'tab' + (tab === t.key ? ' active' : '')} onClick={() => setTab(t.key)}>
               {t.name}
               {t.key === 'owed' && lateInvoices > 0 && <span className="chip chip-warn tab-chip">{lateInvoices} late</span>}
+              {t.key === 'subs' && likelySubs > 0 && (
+                <span className="chip chip-muted tab-chip" title="Repeating money out that looks like a subscription but isn’t marked">
+                  {likelySubs} to check
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -126,9 +138,11 @@ export function MoneyView({ money, now, saved, onChange: save, onImport, notify,
       </div>
       {tab === 'overview' && <Overview money={money} today={today} onOpenMonth={openMonth} onChange={onChange} />}
       {tab === 'month' && <MonthTab money={money} today={today} month={month} onMonth={setMonth} onChange={onChange} onOpenOwed={() => setTab('owed')} together={together} />}
+      {tab === 'subs' && <Subscriptions money={money} today={today} onChange={onChange} onOpenMonth={openMonth} notify={notify} />}
       {tab === 'owed' && <Owed money={money} today={today} onChange={onChange} onOpenMonth={openMonth} notify={notify} />}
       {tab === 'wishlist' && (
         <Wishlist
+          top={<Goals money={money} today={today} onChange={onChange} />}
           money={money}
           today={today}
           onChange={(wishlist) => onChange({ ...money, wishlist })}

@@ -381,6 +381,34 @@ export interface MoneyEntry {
   to: string;
   /** The invoice this is the money for (Owed); absent for everything else. */
   invoice?: string;
+  /** Entries added together on repeat share this (and a subscription is one); absent for one-offs. */
+  series?: string;
+}
+
+export type Every = 'week' | 'fortnight' | 'month';
+
+/** A repeating money-out entry marked as a subscription. Its name, amount and account come from the entries. */
+export interface Subscription {
+  /** The `series` of its entries. */
+  id: string;
+  every: Every;
+  /** Marked to reconsider. */
+  review: boolean;
+  /** YYYY-MM it started, if before the first entry here; empty to go by the first entry. */
+  since: string;
+}
+
+/** Something to save up for, kept in an account or set aside somewhere Money doesn't track. */
+export interface SavingsGoal {
+  id: string;
+  name: string;
+  target: number | null;
+  /** YYYY-MM to reach it by; empty when there's no date. */
+  by: string;
+  /** The account it's kept in; empty when it's somewhere else. */
+  account: string;
+  /** What's set aside so far, when it isn't in an account. */
+  saved: number;
 }
 
 /**
@@ -470,6 +498,9 @@ export interface Money {
   wishlist: WishItem[];
   /** What people owe you, each with its money as an entry. */
   invoices: Invoice[];
+  /** Repeating money out marked as subscriptions. */
+  subs: Subscription[];
+  goals: SavingsGoal[];
 }
 
 export type SetType = 'normal' | 'warmup' | 'dropset' | 'failure';
@@ -546,6 +577,8 @@ export interface Assessment {
   status: AssessmentStatus;
   /** Percent scored, once marked. */
   score: number | null;
+  /** A what-if score kept as what you're aiming for; absent when there's none. */
+  aim?: number;
 }
 
 export interface Course {
