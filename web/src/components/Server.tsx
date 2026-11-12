@@ -676,15 +676,25 @@ function ServicesPanel({ s, data, now }: { s: ServerStats; data: AppState; now: 
         </div>
         {SYNCS.map((x) => {
           const st = data.sync[x.key];
+          const h = data.health?.find((w) => w.key === x.key);
           return (
             <div key={x.key} className="split sync-row">
               <span style={{ color: 'var(--t2)' }}>{x.name}</span>
-              <span className="meta" style={st.lastError ? { color: 'var(--wn)' } : undefined} title={st.lastError || undefined}>
-                {st.lastError ? `Failing · ${ago(st.lastSuccess, now)}` : st.lastSuccess ? ago(st.lastSuccess, now) : 'Not yet'}
+              <span className="meta" style={h || st.lastError ? { color: 'var(--wn)' } : undefined} title={h?.detail || st.lastError || undefined}>
+                {h ? h.text : st.lastError ? `Failing · ${ago(st.lastSuccess, now)}` : st.lastSuccess ? ago(st.lastSuccess, now) : 'Not yet'}
               </span>
             </div>
           );
         })}
+        {/* The database, the daily copy and Drive, from the server's health check. */}
+        {data.health?.filter((w) => !SYNCS.some((x) => x.key === w.key)).map((w) => (
+          <div key={w.key} className="split sync-row">
+            <span style={{ color: 'var(--t2)' }}>{w.name}</span>
+            <span className="meta" style={{ color: 'var(--wn)' }} title={w.detail}>
+              {w.text}
+            </span>
+          </div>
+        ))}
       </div>
     </section>
   );

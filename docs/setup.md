@@ -4,13 +4,13 @@ This assumes the same setup as `streamlit-portfolio`: Ubuntu + CasaOS with Docke
 
 You only do this once. After that, pushing to `main` deploys by itself (step 5), and bookmarks and notes are edited in the page.
 
-## 1. Google Cloud: an OAuth client for Calendar, Tasks and Gmail
+## 1. Google Cloud: an OAuth client for Calendar, Tasks, Gmail and Drive
 
 1. Go to <https://console.cloud.google.com/> → project picker → **New project** → name it `launchpad`.
-2. **APIs & Services → Library**. Enable all three: **Google Calendar API**, **Google Tasks API**, **Gmail API**.
+2. **APIs & Services → Library**. Enable all four: **Google Calendar API**, **Google Tasks API**, **Gmail API**, **Google Drive API** (Drive holds the off-server copies of the database; see [Backups](#backups)).
 3. **APIs & Services → OAuth consent screen** (called **Google Auth Platform** in newer consoles):
    - User type **External**. App name `Launchpad`, your email as support and developer contact.
-   - **Data access / Scopes**: add `.../auth/calendar.readonly`, `.../auth/tasks`, `.../auth/gmail.readonly`.
+   - **Data access / Scopes**: add `.../auth/calendar.readonly`, `.../auth/calendar.events`, `.../auth/tasks`, `.../auth/gmail.modify`, `.../auth/drive.file`. `calendar.events` is for adding events, `gmail.modify` for archiving and marking mail read (it covers reading too), and `drive.file` only lets Launchpad see files it made itself. `calendar.readonly` stays because listing your calendars needs it.
    - **Audience / Test users**: add your Gmail address.
    - **Publish the app** (Audience → *Publish app*, status *In production*). Leave it in *Testing* and Google expires the sign-in every 7 days. You do **not** need to submit for verification. Google will show a "Google hasn't verified this app" warning when you connect; click **Advanced → Go to Launchpad**. That's expected for a personal app.
 4. **APIs & Services → Credentials → Create credentials → OAuth client ID**:
@@ -180,6 +180,12 @@ Everything is in one SQLite file inside the `launchpad-data` volume, with photos
 - **Database (.db)**: a consistent copy of the whole SQLite database, safe to take while Launchpad runs. It includes the Google sign-in, so keep it private. To put it back by hand, stop the container, replace `launchpad.db` in the volume (and delete any `launchpad.db-wal` and `launchpad.db-shm` beside it), then start it.
 
 **Automatic copies.** Launchpad also keeps copies of the database by itself, in a `backups` folder beside it: one a day (the last 14), one just before every restore (the last 10), and any you take with **Take a copy now** (the last 10). Settings lists them; **Put back** restores what you'd entered from one, and each can be downloaded as a `.db`.
+
+**Copies in Google Drive.** Those copies are on the same disk as the database, so a dead disk takes both. With Google connected, each daily copy also goes to a **Launchpad backups** folder in your Google Drive, within the hour after it's taken, and the last 14 are kept there; older ones go to Drive's bin, which empties itself after 30 days. **Copy to Drive now** takes a copy and uploads it straight away (the last 10 of those are kept as well). Settings › General › Backup has the switch, when the last copy reached Drive, and the error if it didn't; a failed upload is tried again an hour later. Launchpad uses Drive's `drive.file` permission, so it can only see the files and folder it made itself, and it only ever removes copies it uploaded. The Google sign-in is taken out of the copies in Drive, so a file shared by mistake can't be used to read your mail; after putting one back, connect Google again. To put one back, download it from Drive and replace `launchpad.db` as described for **Database (.db)** above.
+
+If you connected Google before Drive copies existed, Settings › General says **Reconnect Google to allow backups to Drive, creating events and inbox actions**. Everything else keeps working until you do. Before reconnecting, enable the **Google Drive API** in your Google Cloud project (step 1.2) and add the new scopes to the consent screen (step 1.3); then press **Reconnect Google** and leave every box ticked on Google's permission screen.
+
+**Health check.** `/healthz`, which Docker's `HEALTHCHECK` calls every minute, reads the database and answers 503 only when that fails, so Docker restarts Launchpad when the database is unreadable but not when a Google sync is having a bad day. `/api/health` (behind Cloudflare Access like the rest) has the details: whether the database reads, how old the last daily copy is, the last Drive upload or its error, and every sync with its last success and failures in a row. A sync that has failed three times in a row, or last worked more than three of its intervals ago (and at least half an hour), a daily copy over 36 hours old, or a failed Drive upload shows in orange in the Server view's sync list and turns the sync dot in the top bar orange.
 
 **Undo.** Every restore, from a file or a copy, is preceded by a copy, so the message afterwards has **Undo**, and the copy stays in the list if you change your mind later.
 

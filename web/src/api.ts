@@ -146,6 +146,8 @@ export const api = {
   snapshots: () => req<BackupSnapshot[]>('GET', '/api/backup/snapshots'),
   takeSnapshot: () => req<BackupSnapshot[]>('POST', '/api/backup/snapshots', {}),
   restoreSnapshot: (id: string) => req<RestoreResult>('POST', `/api/backup/snapshots/${encodeURIComponent(id)}/restore`, {}),
+  /** Take a copy now and upload it to Google Drive; resolves once it's there (or failed, in `drive.lastError`). */
+  copyToDrive: () => req<AppState>('POST', '/api/backup/drive', {}),
 };
 
 /** Everything you've entered, as JSON. */

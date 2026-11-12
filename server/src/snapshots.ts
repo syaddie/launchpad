@@ -14,7 +14,7 @@ import { cleanTraining } from '../../shared/training';
 import type { Backup, BackupSnapshot } from '../../shared/types';
 
 const dir = path.join(config.dataDir, 'backups');
-const KEEP: Record<BackupSnapshot['reason'], number> = { daily: 14, 'before-restore': 10, manual: 10 };
+export const KEEP: Record<BackupSnapshot['reason'], number> = { daily: 14, 'before-restore': 10, manual: 10 };
 const ID = /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z-(daily|before-restore|manual)$/;
 const DAY = 86_400_000;
 
@@ -120,7 +120,8 @@ export function dailySnapshotDue(list: BackupSnapshot[], now = Date.now()): bool
   return !last || now - Date.parse(last.at) > DAY - 4 * 3_600_000;
 }
 
-export function startSnapshots(): void {
+/** `after` runs after every hourly check, whether or not a copy was due (Drive uses it to retry a failed upload). */
+export function startSnapshots(after?: () => unknown): void {
   const check = () => {
     try {
       if (dailySnapshotDue(listSnapshots())) {
@@ -130,6 +131,7 @@ export function startSnapshots(): void {
     } catch (e) {
       console.error('[backup] couldn’t take the daily copy:', (e as Error).message);
     }
+    after?.();
   };
   setTimeout(check, 2 * 60_000);
   setInterval(check, 3_600_000);

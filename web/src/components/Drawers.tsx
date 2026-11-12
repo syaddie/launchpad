@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CARRIERS, detectCarrier, trackUrl } from '../../../shared/carriers';
 import { startOfDay } from '../../../shared/dates';
 import { DEFAULT_ENGINES } from '../../../shared/defaults';
-import type { AccentKey, AppState, Backup, BackupSnapshot, DesignKey, GoogleSource, Package, Photo, Prefs, SearchEngine, ThemeMode } from '../../../shared/types';
+import type { AccentKey, AppState, Backup, BackupSnapshot, DesignKey, DriveStatus, GoogleSource, Package, Photo, Prefs, SearchEngine, ThemeMode } from '../../../shared/types';
 import { api, BACKUP_URL, DB_BACKUP_URL, snapshotUrl, ZIP_BACKUP_URL } from '../api';
 import { PhotoSettings } from './Photos';
 import { STEP_LABELS, ago, chipOf, fmtStamp, hm, segColor, statusText } from '../util';
@@ -336,6 +336,15 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
                 Disconnect
               </button>
             </div>
+            {!!g.missingScopes?.length && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 13, color: 'var(--wn)', flex: '1 1 220px' }}>Reconnect Google to allow backups to Drive, creating events and inbox actions. Everything else keeps working until you do.</span>
+                <button className="btn btn-secondary" style={{ padding: '6px 12px', gap: 5, fontWeight: 400 }} onClick={onConnect}>
+                  <i className="ph-duotone ph-google-logo" />
+                  Reconnect Google
+                </button>
+              </div>
+            )}
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {sourceRows.map((r) => {
                 const on = p.sources[r.key];
@@ -519,6 +528,7 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
       </div>
 
       <AutoCopies now={now} onRestore={onRestoreSnapshot} />
+      {g.connected && <DriveCopies drive={data.drive} needsReconnect={!!g.missingScopes?.length} prefs={p} onPrefs={onPrefs} now={now} />}
       </>
       )}
     </>
@@ -593,6 +603,56 @@ function AutoCopies({ now, onRestore }: { now: Date; onRestore: (id: string) => 
         )}
       </div>
       {msg && <div style={{ fontSize: 12, color: 'var(--t3)' }}>{msg}</div>}
+    </div>
+  );
+}
+
+/** Copying the daily copies to Google Drive. Its status arrives with the page's state, which refreshes when an upload finishes. */
+function DriveCopies({ drive, needsReconnect, prefs, onPrefs, now }: { drive?: DriveStatus; needsReconnect: boolean; prefs: Prefs; onPrefs: (p: Prefs) => void; now: Date }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  if (!drive) return null;
+  const copyNow = () => {
+    setBusy(true);
+    setMsg('');
+    api
+      .copyToDrive()
+      .then((s) => setMsg(s.drive?.lastError ? `Couldn’t copy it: ${s.drive.lastError}` : 'Copied to Drive.'))
+      .catch((e) => setMsg(`Couldn’t copy it: ${e.message}`))
+      .finally(() => setBusy(false));
+  };
+  const status = !drive.allowed
+    ? needsReconnect
+      ? 'Reconnect Google above to allow this.'
+      : 'Waiting to hear from Google which permissions it gave.'
+    : !drive.on
+      ? 'Off.'
+      : drive.lastError
+        ? `Couldn’t copy the last one: ${drive.lastError} Last reached Drive ${ago(drive.lastSuccess, now)}.`
+        : drive.lastSuccess
+          ? `Last copy reached Drive ${ago(drive.lastSuccess, now)}.`
+          : 'The next daily copy goes up within the hour.';
+  return (
+    <div className="drawer-section">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="drawer-label" style={{ flex: 1 }}>Copy to Google Drive</div>
+        <button role="switch" aria-checked={prefs.driveBackup} aria-label="Copy to Google Drive" className={'switch' + (prefs.driveBackup ? ' on' : '')} onClick={() => onPrefs({ ...prefs, driveBackup: !prefs.driveBackup })}>
+          <span />
+        </button>
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--t3)' }}>
+        Each daily copy also goes to a <b style={{ fontWeight: 500 }}>Launchpad backups</b> folder in your Drive, off this server, and the last 14 are kept there. Launchpad can only see files it put there itself. The Google sign-in is taken out of those copies, so after putting one back you connect Google again.
+      </div>
+      <div style={{ fontSize: 12, color: drive.on && drive.allowed && drive.lastError ? 'var(--wn)' : 'var(--t2)' }}>{status}</div>
+      {drive.on && drive.allowed && (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button className="btn btn-secondary" style={{ padding: '7px 12px', gap: 5, fontWeight: 400 }} disabled={busy || drive.running} onClick={copyNow}>
+            <i className="ph-duotone ph-cloud-arrow-up" />
+            {busy || drive.running ? 'Copying to Drive…' : 'Copy to Drive now'}
+          </button>
+          {msg && <span style={{ fontSize: 12, color: 'var(--t3)' }}>{msg}</span>}
+        </div>
+      )}
     </div>
   );
 }

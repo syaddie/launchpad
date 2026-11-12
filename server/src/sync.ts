@@ -41,6 +41,14 @@ export function signOutGoogle(reason: string): void {
   store.setGoogleSignedOut(reason);
 }
 
+/** Whether a source is switched on at all; the speed test counts as on when it runs on a schedule. */
+export function sourceOn(key: SourceKey): boolean {
+  return key === 'speedtest' ? store.prefs().speedTestHours > 0 : enabled(key, false);
+}
+
+/** How often a source runs, in ms. */
+export const intervalOf = (key: SourceKey): number => (key === 'speedtest' ? store.prefs().speedTestHours * 60 * MIN : EVERY[key]);
+
 function enabled(key: SourceKey, force: boolean): boolean {
   if (key === 'carriers') return true;
   if (key === 'speedtest') {
@@ -194,11 +202,11 @@ export function runSource(key: SourceKey, force = false): Promise<void> {
     const at = new Date().toISOString();
     try {
       await JOBS[key](force);
-      store.setSync(key, { lastSuccess: new Date().toISOString(), lastAttempt: at, lastError: null });
+      store.setSync(key, { lastSuccess: new Date().toISOString(), lastAttempt: at, lastError: null, failures: 0 });
     } catch (e) {
       const err = e as Error;
       console.error(`[sync] ${key} failed:`, err.message);
-      store.setSync(key, { ...prev, lastAttempt: at, lastError: err.message });
+      store.setSync(key, { ...prev, lastAttempt: at, lastError: err.message, failures: (prev.failures ?? 0) + 1 });
       if (err instanceof GoogleError && err.authExpired) signOutGoogle(err.message);
     } finally {
       running.delete(key);
