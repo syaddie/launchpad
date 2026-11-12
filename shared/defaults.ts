@@ -40,11 +40,13 @@ export const DEFAULT_PREFS: Prefs = {
   setsPerWeek: 10,
   pinnedLifts: [],
   gymMonthly: 0,
+  claudeBudget: 0,
+  driveBackup: true,
 };
 
 /** Everything Settings › Panels can switch off. */
 export const HIDEABLE = {
-  panel: ['today', 'tasks', 'notes', 'packages', 'photos', 'bookmarks'],
+  panel: ['today', 'briefing', 'tasks', 'notes', 'packages', 'photos', 'bookmarks'],
   top: ['weather', 'air', 'cig', 'training', 'countdown'],
   view: ['news', 'inbox', 'you', 'training', 'learn', 'money', 'server'],
 } as const;

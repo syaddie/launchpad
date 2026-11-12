@@ -1,15 +1,19 @@
 // What ⌘K offers: actions, views, panels to show or hide, bookmarks, and for what's typed,
 // quick logs ("weight 72.4", "study 45 cs210") and web searches.
+import { rankBookmarks } from '../../shared/bookmarks';
+import { askable, type AskAction } from '../../shared/ask';
 import { ymd } from '../../shared/dates';
 import { fmtStudy, parseStudy, timerMinutes } from '../../shared/learn';
 import { fmtKg, parseWeight } from '../../shared/training';
 import { MOOD_WORDS, engineUrl, fmtDuration, parseSearch } from '../../shared/trackers';
-import type { AppState, DesignKey, Prefs, ViewKey } from '../../shared/types';
+import type { AppState, Countdown, DesignKey, Mood, MoneyEntry, Prefs, ViewKey } from '../../shared/types';
+import { api } from './api';
 import { DESIGNS, PANEL_ROWS } from './components/Drawers';
-import type { PaletteItem } from './components/Palette';
+import type { PaletteAsk, PaletteItem } from './components/Palette';
 import { VIEWS } from './components/Rail';
 import type { ServerTab } from './components/Server';
-import { host } from './util';
+import { bookmarkOpened } from './api';
+import { host, newId } from './util';
 
 export interface PaletteContext {
   data: AppState;
@@ -37,9 +41,24 @@ export interface PaletteContext {
   addPackage: () => void;
   refreshNews: () => void;
   refreshInbox: () => void;
+  /** News › Reading list. */
+  openReading: () => void;
+  /** Show a notepad on home. */
+  openNote: (id: string) => void;
   showShortcuts: () => void;
   openSettings: () => void;
   toggleHidden: (key: string) => void;
+  /** What Ask Launchpad's actions save through (the same calls the views make). */
+  ask: AskHandlers;
+}
+
+export interface AskHandlers {
+  addTask: (listId: string, title: string, due: string | null) => void;
+  addMoney: (entry: MoneyEntry) => void;
+  addCountdown: (c: Countdown) => void;
+  addBookmark: (groupId: string, name: string, url: string) => void;
+  setMood: (date: string, mood: Mood) => void;
+  notify: (msg: string) => void;
 }
 
 export function paletteItems(c: PaletteContext): PaletteItem[] {
@@ -81,6 +100,14 @@ export function paletteItems(c: PaletteContext): PaletteItem[] {
     { id: 'a:files', group: 'Actions', label: 'Browse the server’s files', icon: 'ph-folder-simple', words: 'file explorer sftp upload download folders', run: () => c.openServerTab('files') },
     { id: 'a:package', group: 'Actions', label: 'Add a package', icon: 'ph-package', words: 'tracking', run: c.addPackage },
     { id: 'a:news', group: 'Actions', label: 'Refresh the news', icon: 'ph-arrows-clockwise', run: () => (setView('news'), c.refreshNews()) },
+    ...readingItems(c),
+    // Notepads by name, tag or anything in them, once something's typed.
+    ...data.notes.map((n) => ({
+      id: 'n:' + n.id, group: 'Notes', label: n.name || 'Untitled', icon: 'ph-notebook', onlyWhenTyping: true,
+      sub: n.tags?.length ? n.tags.map((t) => '#' + t).join(' ') : undefined,
+      words: `notepad note ${n.text.slice(0, 5000)}`,
+      run: () => c.openNote(n.id),
+    })),
     {
       id: 'a:inbox', group: 'Actions', label: 'Catch up on email', icon: 'ph-envelope-open', words: 'inbox gmail mail summary digest',
       sub: inboxCount ? `${inboxCount} need${inboxCount === 1 ? 's' : ''} you` : undefined,
@@ -109,8 +136,8 @@ export function paletteItems(c: PaletteContext): PaletteItem[] {
         run: () => c.toggleHidden(r.key),
       })),
     ),
-    ...data.bookmarks.flatMap((g) =>
-      g.items.map((b, i) => ({
+    // The most opened first, so they lead once something's typed.
+    ...rankBookmarks(data.bookmarks.flatMap((g) => g.items.map((b, i) => ({ ...b, g, i }))), data.bookmarkOpens).map(({ g, i, ...b }) => ({
         id: 'b:' + b.id,
         group: 'Bookmarks',
         label: b.name,
@@ -119,9 +146,28 @@ export function paletteItems(c: PaletteContext): PaletteItem[] {
         keys: g.name === 'Daily' && i < 9 ? [String(i + 1)] : undefined,
         words: b.url,
         onlyWhenTyping: true,
-        run: () => window.open(b.url, '_blank', 'noopener'),
+        run: () => {
+          bookmarkOpened(b.id);
+          window.open(b.url, '_blank', 'noopener');
+        },
       })),
-    ),
+  ];
+}
+
+/** The reading list, and each story on it (those once something's typed). */
+function readingItems(c: PaletteContext): PaletteItem[] {
+  const toRead = (c.data.newsLists?.saved ?? []).filter((s) => !s.readAt);
+  return [
+    {
+      id: 'a:reading', group: 'Actions', label: 'Open the reading list', icon: 'ph-bookmark-simple', words: 'news saved later read stories',
+      sub: toRead.length ? `${toRead.length} to read` : 'Nothing saved yet',
+      run: c.openReading,
+    },
+    ...toRead.map((s) => ({
+      id: 'r:' + s.id, group: 'Reading list', label: s.title, icon: 'ph-bookmark-simple', sub: s.source || host(s.url), words: `${s.url} saved read later`,
+      onlyWhenTyping: true,
+      run: () => window.open(s.url, '_blank', 'noopener'),
+    })),
   ];
 }
 
@@ -152,4 +198,44 @@ export function paletteSearches(c: PaletteContext, q: string): PaletteItem[] {
     keys: [e.prefix],
     run: () => window.open(engineUrl(e, term), '_blank', 'noopener'),
   }))];
+}
+
+// ---------- Ask Launchpad ----------
+
+/** Do what the preview said. The server checked the action; this checks it still fits what's here. */
+export function runAskAction(c: PaletteContext, a: AskAction): void {
+  const { data } = c;
+  const gone = (what: string) => c.ask.notify(`Couldn’t do that: the ${what} isn’t there any more.`);
+  switch (a.type) {
+    case 'money':
+      if (!data.money.accounts.some((x) => x.id === a.account)) return gone('account');
+      return c.ask.addMoney({ id: newId('e'), date: a.date, kind: a.kind, amount: a.amount, note: a.note, category: a.category, planned: a.date > ymd(new Date()), account: a.account, to: '' });
+    case 'task':
+      if (!data.taskLists.some((l) => l.id === a.listId)) return gone('task list');
+      return c.ask.addTask(a.listId, a.title, a.due);
+    case 'weight':
+      return c.setWeight(a.date, a.kg, true);
+    case 'smoke':
+      return c.logSmoke();
+    case 'study':
+      if (!data.learn.courses.some((x) => x.id === a.courseId)) return gone('course');
+      return c.logStudy(a.minutes, a.courseId);
+    case 'countdown':
+      return c.ask.addCountdown({ id: newId('c'), title: a.title, date: a.date, yearly: a.yearly, createdAt: new Date().toISOString() });
+    case 'bookmark':
+      if (!data.bookmarks.some((g) => g.id === a.groupId)) return gone('bookmark group');
+      return c.ask.addBookmark(a.groupId, a.name, a.url);
+    case 'mood':
+      return c.ask.setMood(a.date, { level: a.level, note: a.note || data.moods[a.date]?.note || '' });
+  }
+}
+
+/** ⌘K's Ask Launchpad, or nothing without an Anthropic API key (or while the server can't be reached). */
+export function paletteAsk(c: PaletteContext, online: boolean): PaletteAsk | undefined {
+  if (!c.data.newsSummaries || !online) return undefined;
+  return {
+    // Not for a web search with its prefix ("yt lofi").
+    when: (q) => askable(q) && !parseSearch(q, c.data.prefs.searchEngines).engine,
+    ask: (q) => api.ask(q).then((r) => ('error' in r ? r : { label: r.label, sub: r.sub, run: () => runAskAction(c, r.action) })),
+  };
 }

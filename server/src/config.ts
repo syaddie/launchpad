@@ -14,7 +14,7 @@ export const config = {
   },
   /** Optional: 17TRACK API key for carriers other than SingPost. */
   seventeenTrackKey: env.SEVENTEEN_TRACK_API_KEY || '',
-  /** Optional: Anthropic API key for the News and Inbox summaries and the Training and Learn notes. Without it they show plain lists. */
+  /** Optional: Anthropic API key for the News and Inbox summaries, the Training and Learn notes, the daily briefing and ⌘K's Ask Launchpad. Without it they show plain lists or nothing. */
   anthropicKey: env.ANTHROPIC_API_KEY || '',
   /** Claude model that writes the news summaries. */
   newsModel: env.NEWS_MODEL || 'claude-haiku-5-5',
@@ -24,12 +24,18 @@ export const config = {
   trainingModel: env.TRAINING_MODEL || 'claude-haiku-5-5',
   /** Claude model that writes the note on the week ahead in Learn. */
   learnModel: env.LEARN_MODEL || 'claude-haiku-5-5',
+  /** Claude model that writes the daily briefing at the top of Today. */
+  briefingModel: env.BRIEFING_MODEL || 'claude-haiku-5-5',
+  /** Claude model that turns what's typed in ⌘K into an action ("Ask Launchpad"). */
+  askModel: env.ASK_MODEL || 'claude-haiku-5-5',
   /** Optional: data.gov.sg API key for the weather. It works without one, at a lower rate limit. */
   dataGovKey: env.DATA_GOV_SG_API_KEY || '',
   /** Optional: where the host's /proc is mounted (e.g. /host/proc), so the Server view sees the host's network traffic. */
   hostProc: env.HOST_PROC || '',
   /** Optional: Docker API for the container list, e.g. tcp://docker-proxy:2375 or unix:///var/run/docker.sock. */
   dockerHost: env.DOCKER_HOST || '',
+  /** Optional: a second Docker proxy that allows restarts, e.g. tcp://docker-restart:2375. Launchpad sends it nothing but restarts. */
+  dockerRestartHost: env.DOCKER_RESTART_HOST || '',
   /** Optional: SSH login on the host for the Server view's terminal and file explorer. Both host and user must be set. */
   ssh: {
     host: env.SSH_HOST || '',

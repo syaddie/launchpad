@@ -46,10 +46,9 @@ export function host(url: string): string {
   }
 }
 
-const isLocal = (url: string) => /^(\d+\.){3}\d+$|\.local$|^localhost$/.test(host(url).split(':')[0]);
-
+/** The bookmark's icon, kept by the Launchpad server, so nothing is fetched from another site as tiles paint. */
 export function favicon(b: Bookmark): string {
-  return isLocal(b.url) ? '' : `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host(b.url))}&sz=64`;
+  return /^https?:\/\//i.test(b.url) ? `/api/favicon?host=${encodeURIComponent(host(b.url).toLowerCase())}` : '';
 }
 
 export const STEP_LABELS = ['Info received', 'In transit', 'Out for delivery', 'Delivered'];

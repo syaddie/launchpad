@@ -1,8 +1,12 @@
 // Launchpad's service worker. It keeps the page itself (index.html, the hashed
 // bundles, icons) so Launchpad still opens when the server or the tunnel is down:
 // the page paints from its own copy of the state (IndexedDB) and says the server can't be reached.
-// Nothing under /api/ is ever touched, so data always comes from the server.
+// Nothing under /api/ is touched, so data always comes from the server, except bookmark
+// icons and the images in notes, kept so they show offline too.
 const CACHE = 'launchpad-v1';
+const FILES = 'launchpad-files-v1';
+/** Icons and note images kept; the oldest go first. */
+const MAX_FILES = 400;
 const SHELL = '/';
 /** Old bundles pile up across deploys; keep this many of the newest. */
 const MAX_ASSETS = 80;
@@ -22,7 +26,7 @@ self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== FILES).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
@@ -76,11 +80,30 @@ async function other(req) {
   return hit || fresh;
 }
 
+/** Bookmark icons and note images: the kept copy at once, refreshed for next time; a missing icon isn't kept. */
+async function file(req) {
+  const c = await caches.open(FILES);
+  const hit = await c.match(req);
+  const fresh = fetch(req)
+    .then(async (res) => {
+      if (keepable(res)) {
+        await c.put(req, res.clone());
+        const keys = await c.keys();
+        for (const old of keys.slice(0, Math.max(0, keys.length - MAX_FILES))) await c.delete(old);
+      } else if (res.status === 404) await c.delete(req);
+      return res;
+    })
+    .catch(() => hit || Response.error());
+  return hit || fresh;
+}
+
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  if (url.origin !== self.location.origin || url.pathname.startsWith('/api/') || url.pathname === '/sw.js') return;
+  if (url.origin !== self.location.origin || url.pathname === '/sw.js') return;
+  if (url.pathname === '/api/favicon' || url.pathname.startsWith('/api/note-images/')) return e.respondWith(file(req));
+  if (url.pathname.startsWith('/api/')) return;
   if (req.mode === 'navigate') e.respondWith(page(req));
   else if (url.pathname.startsWith('/assets/')) e.respondWith(asset(req));
   else e.respondWith(other(req));

@@ -1,8 +1,9 @@
 // Checks for what the page sends, shared by the save routes and backup restore,
 // so a restored file can't put anything in the store a normal save couldn't.
 import { DEFAULT_ENGINES, HIDEABLE_KEYS } from '../../shared/defaults';
+import { parseNewsSource } from '../../shared/news';
 import { cleanKg } from '../../shared/training';
-import type { BookmarkGroup, Countdown, Mood, Note, Package, Prefs, SearchEngine } from '../../shared/types';
+import type { BookmarkGroup, Countdown, Mood, Note, Package, Prefs, SearchEngine, Snippet } from '../../shared/types';
 
 export const isStr = (v: unknown): v is string => typeof v === 'string';
 
@@ -16,17 +17,31 @@ export function validBookmarks(v: unknown): v is BookmarkGroup[] {
 }
 
 export function validNotes(v: unknown): v is Note[] {
-  return Array.isArray(v) && v.length > 0 && v.every((n) => n && isStr(n.id) && isStr(n.name) && isStr(n.text));
+  return Array.isArray(v) && v.length > 0 && v.every((n) => n && isStr(n.id) && isStr(n.name) && isStr(n.text)
+    && (n.tags === undefined || (Array.isArray(n.tags) && n.tags.length <= 20 && n.tags.every(isStr)))
+    && (n.pinned === undefined || typeof n.pinned === 'boolean'));
 }
 
-/** Trimmed, de-duplicated (ignoring case), at most 8 topics of 60 characters. */
+/** Most topics and feeds the News view follows. */
+export const MAX_TOPICS = 12;
+
+/**
+ * Trimmed, de-duplicated (ignoring case), at most 12. Topics are up to 60 characters; a feed
+ * (shared/news.ts) must be an http(s) address with a dotted host or a port, Hacker News or a subreddit.
+ */
 export function cleanTopics(v: unknown[]): string[] {
   const seen = new Set<string>();
   return v
     .filter(isStr)
-    .map((t) => t.trim().replace(/\s+/g, ' ').slice(0, 60))
+    .map((t) => t.trim().replace(/\s+/g, ' '))
+    .flatMap((t) => {
+      const s = parseNewsSource(t);
+      if (s.kind === 'rss') return t.length <= 500 && /^https?:\/\/([^\s/:]+\.[^\s/:]+|[^\s/:]+:\d+)(\/\S*)?$/i.test(s.value) ? [t] : [];
+      if (/^(hn|rss):/.test(t) && s.kind === 'topic') return [];
+      return [s.kind === 'topic' ? t.slice(0, 60) : t];
+    })
     .filter((t) => t && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()))
-    .slice(0, 8);
+    .slice(0, MAX_TOPICS);
 }
 
 /** Prefixes are single words, unique ignoring case; URLs must be http(s). At most 12. */
@@ -63,6 +78,8 @@ export function cleanPrefs(body: Partial<Prefs>, prev: Prefs): Prefs {
     speedPlanMbps: num(body.speedPlanMbps, 0, 100_000, prev.speedPlanMbps),
     setsPerWeek: num(body.setsPerWeek, 1, 40, prev.setsPerWeek),
     gymMonthly: typeof body.gymMonthly === 'number' && Number.isFinite(body.gymMonthly) ? Math.min(10_000, Math.max(0, Math.round(body.gymMonthly * 100) / 100)) : prev.gymMonthly,
+    claudeBudget: typeof body.claudeBudget === 'number' && Number.isFinite(body.claudeBudget) ? Math.min(10_000, Math.max(0, Math.round(body.claudeBudget * 100) / 100)) : prev.claudeBudget ?? 0,
+    driveBackup: typeof body.driveBackup === 'boolean' ? body.driveBackup : prev.driveBackup ?? true,
     pinnedLifts: Array.isArray(body.pinnedLifts) ? [...new Set(body.pinnedLifts.filter(isStr).map((t) => t.slice(0, 120)))].slice(0, 12) : prev.pinnedLifts,
   };
   if (!next.searchEngines.length) next.searchEngines = DEFAULT_ENGINES;
@@ -152,4 +169,28 @@ export function cleanPackages(v: unknown): Package[] {
     lastChecked: isStr(p.lastChecked) ? p.lastChecked : null,
     trackingError: isStr(p.trackingError) ? p.trackingError : null,
   }));
+}
+
+export const MAX_SNIPPETS = 200;
+
+/** One terminal snippet: a name up to 80 characters and a command up to 4,000. Null when either is empty. */
+export function cleanSnippet(v: unknown, id: string): Snippet | null {
+  const s = v as Partial<Snippet> | null;
+  if (!s || !isStr(s.name) || !isStr(s.command)) return null;
+  const name = s.name.trim().slice(0, 80);
+  const command = s.command.replace(/\r\n?/g, '\n').replace(/\s+$/, '').slice(0, 4000);
+  return name && command.trim() ? { id, name, command } : null;
+}
+
+/** Snippets as the store keeps them; ones without a name, a command or an id of their own are dropped. */
+export function cleanSnippets(v: unknown): Snippet[] {
+  if (!Array.isArray(v)) return [];
+  const ids = new Set<string>();
+  return v.flatMap((s) => {
+    const id = s && isStr(s.id) && /^[A-Za-z0-9_-]{1,64}$/.test(s.id) && !ids.has(s.id) ? s.id : null;
+    const c = id && cleanSnippet(s, id);
+    if (!c) return [];
+    ids.add(c.id);
+    return [c];
+  }).slice(0, MAX_SNIPPETS);
 }
