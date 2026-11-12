@@ -16,7 +16,7 @@ import { dbSnapshot, describeRestored, exportBackup, readBackupUpload, restoreBa
 import { listSnapshots, removeSnapshot, snapshotBackup, snapshotFile, startSnapshots, takeSnapshot } from './snapshots';
 import { cleanCountdowns, cleanMood, cleanPrefs, isStr, isYmd, validBookmarks, validNotes } from './clean';
 import { eventStream, tabOf } from './events';
-import { claudeEnabled } from './claude';
+import { recentSmokes, state, stateFor } from './state';
 import { MAX_PHOTOS, MAX_PHOTO_BYTES, readPhoto, removePhotoFile, sniffImage, writePhoto } from './photos';
 import { isRunning, newPackage, refreshPackage, refreshSummaries, refreshWeather, runAllGoogle, runIfStale, runSource, signOutGoogle, startScheduler } from './sync';
 import { attachTerminal, FileError, listDir, makeDir, MAX_TEXT, readFileStream, readText, remove, rename, shellInfo, trustHostKey, abandonUpload, uploadPiece, UPLOAD_CHUNK, writeText } from './shell';
@@ -28,7 +28,7 @@ import { cleanMoney } from '../../shared/money';
 import { MAX_KG, MIN_KG, cleanKg, cleanTraining } from '../../shared/training';
 import { refreshLearnNote } from './learn';
 import { refreshTraining } from './training';
-import type { AppState, Mood, NewsTopic, Package, Photo, Prefs, SavedDoc, SourceKey } from '../../shared/types';
+import type { Mood, Package, Photo, Prefs, SavedDoc, SourceKey } from '../../shared/types';
 
 const app = new Hono();
 
@@ -67,65 +67,11 @@ app.get('/api/events', (c) => eventStream(c));
 
 // ---------- state ----------
 
-function state(): AppState {
-  const g = store.google();
-  const cal = store.calendar();
-  const tasks = store.tasks();
-  const prefs = store.prefs();
-  const news = store.news();
-  return {
-    bookmarks: store.bookmarks(),
-    notes: store.notes(),
-    prefs,
-    google: { configured: googleConfigured(), connected: !!g, email: g?.email, name: g?.name, signedOut: g ? undefined : store.googleSignedOut() ?? undefined },
-    calendars: cal.calendars,
-    events: cal.events,
-    taskLists: tasks.lists,
-    tasks: tasks.tasks,
-    packages: store.packages().filter((p) => !p.archived),
-    sync: store.sync(),
-    tracking: { allCarriers: !!config.seventeenTrackKey },
-    // In the order of the topics in prefs; ones not fetched yet show as loading.
-    news: prefs.newsTopics.map((topic): NewsTopic => {
-      const n = news[topic.toLowerCase()];
-      return n
-        ? { topic, articles: n.articles, stories: n.stories, summarisedAt: n.summarisedAt, fetchedAt: n.fetchedAt, error: n.error }
-        : { topic, articles: [], stories: null, summarisedAt: null, fetchedAt: null, error: null };
-    }),
-    newsSummaries: claudeEnabled(),
-    inbox: inboxState(),
-    weather: store.weather(),
-    photos: store.photos().map(({ id, focus }): Photo => ({ id, focus })),
-    countdowns: store.countdowns(),
-    smokes: recentSmokes(),
-    moods: store.moods(),
-    money: store.money(),
-    training: store.training(),
-    exerciseMuscles: claudeEnabled() ? store.exerciseMuscles() : {},
-    trainingNote: claudeEnabled() ? store.trainingNote() : { note: null, error: null },
-    weights: store.weights(),
-    learn: store.learn(),
-    learnNote: claudeEnabled() ? store.learnNote() : { note: null, error: null },
-    versions: { bookmarks: docVersion('bookmarks'), notes: docVersion('notes'), money: docVersion('money'), learn: docVersion('learn') },
-  };
-}
-
-/** Bodies and the ids behind each digest stay on the server. */
-function inboxState(): AppState['inbox'] {
-  const { emails, digests, fetchedAt, error } = store.inbox();
-  const digest = (d: (typeof digests)['2d']) => d && { overview: d.overview, items: d.items, skimmed: d.skimmed, emailCount: d.emailCount, summarisedAt: d.summarisedAt };
-  return {
-    emails: emails.map(({ body: _, ...e }) => e),
-    digests: { '2d': digest(digests['2d']), '7d': digest(digests['7d']) },
-    fetchedAt,
-    error,
-  };
-}
-
-const SMOKES_IN_STATE = 60 * 86_400_000;
-const recentSmokes = () => store.smokes().filter((s) => Date.now() - Date.parse(s) < SMOKES_IN_STATE);
-
-app.get('/api/state', (c) => c.json(state()));
+/** Everything, or with `keys` (store keys the change stream named) just the parts they feed. */
+app.get('/api/state', (c) => {
+  const keys = c.req.query('keys');
+  return c.json(keys ? stateFor(keys.split(',').filter(Boolean)) : state());
+});
 
 // ---------- bookmarks, notes, prefs ----------
 

@@ -1,6 +1,7 @@
 // Tells open tabs when something they show has changed, so a second tab, a phone, or
 // a sync that just finished shows up straight away rather than at the next poll.
-// The message only names what changed; tabs fetch /api/state themselves.
+// The message only names the store keys that changed; tabs fetch the parts of the state
+// those keys feed themselves (GET /api/state?keys=…, see state.ts).
 import type { Context } from 'hono';
 import { streamSSE, type SSEStreamingApi } from 'hono/streaming';
 import { changes } from './store';

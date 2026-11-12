@@ -112,3 +112,12 @@ export function engineUrl(e: SearchEngine, term: string): string {
   const t = encodeURIComponent(term);
   return e.url.includes('%s') ? e.url.replace('%s', t) : e.url + t;
 }
+
+/** Nearest upcoming countdown for the line under the greeting: "Japan in 23 days". */
+export function nearestCountdown(list: Countdown[], now: Date): string {
+  const today = startOfDay(now);
+  const next = sortCountdowns(list, today)[0];
+  if (!next) return '';
+  const { days } = countdownNext(next, today);
+  return days >= 0 ? `${next.title} ${countdownPhrase(days)}` : '';
+}

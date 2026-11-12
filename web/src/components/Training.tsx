@@ -7,8 +7,7 @@ import {
 } from '../../../shared/training';
 import type { AppState, ExerciseMuscles, Training, Workout } from '../../../shared/types';
 import { localGet, localSet } from '../api';
-import { ago, fmtDay, hm } from '../util';
-import { niceMax } from './Server';
+import { ago, fmtDay, hm, niceMax } from '../util';
 
 type Muscles = Record<string, ExerciseMuscles>;
 
