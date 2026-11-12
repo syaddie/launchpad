@@ -221,6 +221,7 @@ export async function summariseHeadlines(topic: string, articles: NewsArticle[],
   const what = s.kind === 'topic' ? `Topic: ${s.value}` : `Feed: ${title || s.label}`;
   const parsed = await askJson<{ stories: { headline: string; summary: string; articles: number[] }[] }>({
     model: config.newsModel,
+    feature: 'news',
     system: SYSTEM,
     user: `${what}\n\nHeadlines, newest first:\n${list}`,
     schema: SCHEMA,

@@ -1558,3 +1558,29 @@ button.m-stat { cursor: default; }
 .snap-row + .snap-row { border-top: 1px solid var(--ln); }
 .snap-when { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 13px; }
 .snap-meta { font-size: 12px; color: var(--t3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- Claude usage (Server) ---------- */
+.server-row > .cu { flex: 1 1 100%; min-height: 0; gap: 14px; }
+.cu-chart { display: flex; flex-direction: column; gap: 6px; }
+.cu-readout { min-height: 16px; }
+.cu-bars { height: 72px; display: flex; align-items: flex-end; gap: 2px; }
+.cu-col { flex: 1; height: 100%; display: flex; align-items: flex-end; justify-content: center; cursor: default; }
+.cu-bar { width: 100%; max-width: 18px; min-height: 2px; border-radius: 4px 4px 0 0; background: var(--ac); opacity: 0.8; }
+.cu-col.on .cu-bar { opacity: 1; box-shadow: 0 0 0 2px var(--sf); }
+.cu-bars:hover .cu-col:not(.on) .cu-bar { opacity: 0.45; }
+.cu-table td.cu-name { padding: 0 8px; }
+.cu-table th:first-child { width: 34%; }
+
+/* ---------- Daily briefing (top of Today) ---------- */
+.briefing { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 10px; padding: 10px 10px 10px 12px; border-radius: 4px; background: var(--bg); }
+.briefing-text { flex: 1; min-width: 0; margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--tx); text-wrap: pretty; }
+.briefing.collapsed .briefing-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--t2); cursor: pointer; }
+.briefing-meta { display: block; margin-top: 3px; font-size: 11.5px; color: var(--t3); }
+.briefing-error { color: var(--wn); }
+.briefing-btns { display: flex; gap: 2px; margin: -4px -4px 0 0; }
+.hz-col > .briefing { margin: 0; }
+
+/* ---------- Ask Launchpad (⌘K) ---------- */
+.palette-row.ask:not(.sel) .palette-icon { color: var(--acd); }
+.palette-row.ask.ready .palette-label { font-weight: 600; }
+.palette-row.ask.failed .palette-sub { color: var(--wn); }

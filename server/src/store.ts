@@ -11,13 +11,14 @@ import type { StoredEmail } from './gmail-parse';
 import type { StoredPhoto } from './photos';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
 import { cleanOpens } from '../../shared/bookmarks';
+import type { UsageLog } from '../../shared/claudeUsage';
 import { cleanLearn } from '../../shared/learn';
 import { cleanNewsLists } from '../../shared/news';
 import { cleanHistory } from '../../shared/notes';
 import { cleanMoney } from '../../shared/money';
 import { cleanTraining } from '../../shared/training';
 import type {
-  BookmarkGroup, BookmarkOpens, CalEvent, LinkCheck, CalendarInfo, Countdown, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsLists, NewsTopic, Note, NoteVersion, Package, Prefs, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
+  BookmarkGroup, BookmarkOpens, Briefing, CalEvent, LinkCheck, CalendarInfo, Countdown, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsLists, NewsTopic, Note, NoteVersion, Package, Prefs, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
 } from '../../shared/types';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
@@ -201,6 +202,14 @@ export const store = {
   setLearn: (v: Learn) => set('learn', v),
   learnNote: () => get<{ note: LearnNote | null; error: string | null }>('learnNote', { note: null, error: null }),
   setLearnNote: (v: { note: LearnNote | null; error: string | null }) => set('learnNote', v),
+
+  /** Claude's paragraph at the top of Today, written each morning. */
+  briefing: () => get<{ note: Briefing | null; error: string | null }>('briefing', { note: null, error: null }),
+  setBriefing: (v: { note: Briefing | null; error: string | null }) => set('briefing', v),
+
+  /** Tokens every Claude call used, by day, feature and model (see shared/claudeUsage.ts). */
+  claudeUsage: () => get<UsageLog>('claudeUsage', {}),
+  setClaudeUsage: (v: UsageLog) => set('claudeUsage', v),
 
   /** Oldest first, the last 30 days. */
   speedTests: () => get<SpeedTest[]>('speedTests', []),
