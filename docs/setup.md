@@ -116,7 +116,7 @@ The News view (in the rail on the left, or press `N`) works without this and lis
    ```
    ANTHROPIC_API_KEY=sk-ant-...
    ```
-3. Optional: `NEWS_MODEL`, `INBOX_MODEL`, `TRAINING_MODEL`, `LEARN_MODEL`, `BRIEFING_MODEL` (the daily briefing in Today) and `ASK_MODEL` (⌘K’s Ask Launchpad) pick the models. The default for all of them, `claude-haiku-5-5`, costs a few cents a month for news, training, the briefing and ⌘K and at most a dollar or two for the inbox (Server › Claude usage shows the real numbers); `claude-opus-5-5` writes richer summaries at about 40 times the price.
+3. Optional: `NEWS_MODEL`, `INBOX_MODEL`, `TRAINING_MODEL`, `LEARN_MODEL`, `BRIEFING_MODEL` (the daily briefing in Today), `ASK_MODEL` (⌘K’s Ask Launchpad) and `REVIEW_MODEL` (the weekly recap in Review) pick the models. The default for all of them, `claude-haiku-5-5`, costs a few cents a month for news, training, the briefing and ⌘K and at most a dollar or two for the inbox (Server › Claude usage shows the real numbers); `claude-opus-5-5` writes richer summaries at about 40 times the price.
 
 News summaries are written from headlines only, at most every 3 hours per topic and only when new headlines have appeared.
 

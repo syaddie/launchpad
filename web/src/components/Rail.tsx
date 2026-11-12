@@ -9,6 +9,7 @@ export const VIEWS: { key: ViewKey; name: string; icon: string; letter: string }
   { key: 'learn', name: 'Learn', icon: 'ph-graduation-cap', letter: 'L' },
   { key: 'money', name: 'Money', icon: 'ph-wallet', letter: 'M' },
   { key: 'server', name: 'Server', icon: 'ph-hard-drives', letter: 'S' },
+  { key: 'review', name: 'Review', icon: 'ph-calendar-check', letter: 'R' },
 ];
 
 /** The view switcher down the left edge (across the top on a phone). Hidden views stay reachable from ⌘K.
@@ -48,7 +49,7 @@ export function Rail({ view, hidden, badges, onView, onPalette, onSettings }: {
       </button>
       <button className="rail-btn rail-settings" title="Settings" onClick={onSettings}>
         <i className="ph-duotone ph-gear-six" aria-hidden="true" />
-        <kbd className="rail-fkey" aria-hidden="true">F9</kbd>
+        <kbd className="rail-fkey" aria-hidden="true">F{VIEWS.length + 1}</kbd>
         <span>Settings</span>
       </button>
     </nav>

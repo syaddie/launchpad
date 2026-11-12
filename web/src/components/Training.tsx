@@ -3,7 +3,7 @@ import { DOW, MON, addDays, dayDiff, parseYmd, startOfDay, ymd } from '../../../
 import { fmtMoney, monthName } from '../../../shared/money';
 import {
   MUSCLE_NAMES, SECONDARY_SHARE, cleanKg, exerciseHistory, fmtKg, fmtMinutes, fmtSet, gymPerSession, liftTrends, minutes, musclesOf, prsByWorkout, setsPerMuscle,
-  topSet, volumeKg, weekStart, weekStreak, weekSummary, weeklyCounts, weightChange, weightSeries, workingSets, workoutLabel, workoutsFromHevyCsv, type LiftMeasure, type WeightPoint,
+  strengthRatios, topSet, trainingWeeks, volumeKg, weekStart, weekStreak, weekSummary, weeklyCounts, weightChange, weightSeries, workingSets, workoutLabel, workoutsFromHevyCsv, type LiftMeasure, type TrainingWeek, type WeightPoint,
 } from '../../../shared/training';
 import type { AppState, ExerciseMuscles, Training, Workout } from '../../../shared/types';
 import { localGet, localSet } from '../api';
@@ -35,6 +35,7 @@ const fmtSets = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 /** The Training view: workouts from Hevy's CSV export, by week, muscle and lift, beside the other logs. */
 export function TrainingView({ data, now, noteBusy, onImport, onRefreshNote, onOpenExercise, onOpenSettings, onWeight, weightSignal }: Props) {
   const [error, setError] = useState('');
+  const [bwWeeks, setBwWeeks] = useState(() => BW_RANGES.find((r) => String(r.weeks) === localGet('bwRange'))?.weeks ?? 12);
   const fileRef = useRef<HTMLInputElement>(null);
   const today = startOfDay(now);
   const ws = data.training.workouts;
@@ -98,6 +99,10 @@ export function TrainingView({ data, now, noteBusy, onImport, onRefreshNote, onO
           <div className="you-row">
             <Lifts workouts={ws} today={today} muscles={muscles} pinned={data.prefs.pinnedLifts} onOpen={onOpenExercise} />
             <BodyWeight weights={data.weights} today={today} focusSignal={weightSignal} onSave={onWeight} />
+          </div>
+          <div className="you-row">
+            <WeightAndTraining workouts={ws} weights={data.weights} today={today} weeks={bwWeeks} onWeeks={(n) => (setBwWeeks(n), localSet('bwRange', String(n)))} />
+            <StrengthForWeight workouts={ws} weights={data.weights} today={today} weeks={bwWeeks} pinned={data.prefs.pinnedLifts} muscles={muscles} onOpen={onOpenExercise} />
           </div>
           <Recent workouts={ws} muscles={muscles} onOpen={onOpenExercise} />
         </>
@@ -709,5 +714,214 @@ export function ExerciseDrawer({ title, data, pinned, onPin }: { title: string; 
         {!h.sessions.length && <p className="meta">No sessions of this exercise in the imported workouts.</p>}
       </div>
     </>
+  );
+}
+
+// ---------- body weight against training ----------
+
+const BW_RANGES = [
+  { weeks: 12, name: '12 weeks' },
+  { weeks: 26, name: '6 months' },
+  { weeks: 52, name: '1 year' },
+];
+
+/** Follows its container's width, for the SVG charts. */
+function useWidth(initial = 600) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [w, setW] = useState(initial);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => el.clientWidth && setW(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, w] as const;
+}
+
+const signedKg = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : '±'}${fmtKg(Math.abs(n))} kg`;
+
+/** Weekly volume as bars, sessions over them, and the 7-day average body weight as a line. */
+function WeightAndTraining({ workouts, weights, today, weeks, onWeeks }: {
+  workouts: Workout[];
+  weights: Record<string, number>;
+  today: Date;
+  weeks: number;
+  onWeeks: (n: number) => void;
+}) {
+  const rows = useMemo(() => trainingWeeks(workouts, weights, today, weeks), [workouts, weights, today, weeks]);
+  const [ref, W] = useWidth();
+  const H = W < 420 ? 170 : 200;
+  const L = 44;
+  const R = 40;
+  const T = 18;
+  const B = 22;
+  const vmax = niceMax(Math.max(1000, ...rows.map((r) => r.volume)));
+  const kgs = rows.flatMap((r) => (r.weight === null ? [] : [r.weight]));
+  const span = kgs.length ? Math.max(1, Math.max(...kgs) - Math.min(...kgs)) : 1;
+  const lo = kgs.length ? Math.floor(Math.min(...kgs) - span * 0.4) : 0;
+  const hi = kgs.length ? Math.ceil(Math.max(...kgs) + span * 0.4) : 1;
+  const slot = (W - L - R) / rows.length;
+  const x = (i: number) => L + slot * (i + 0.5);
+  const yv = (v: number) => H - B - (v / vmax) * (H - T - B);
+  const yw = (k: number) => T + ((hi - k) / (hi - lo)) * (H - T - B);
+  const line = rows.flatMap((r, i) => (r.weight === null ? [] : [`${x(i).toFixed(1)},${yw(r.weight).toFixed(1)}`])).join(' ');
+  const bar = Math.min(26, slot * 0.6);
+  const sessions = rows.reduce((a, r) => a + r.sessions, 0);
+  const volume = rows.reduce((a, r) => a + r.volume, 0);
+  const firstKg = rows.find((r) => r.weight !== null)?.weight ?? null;
+  const lastKg = [...rows].reverse().find((r) => r.weight !== null)?.weight ?? null;
+  const change = firstKg !== null && lastKg !== null && kgs.length > 1 ? Math.round((lastKg - firstKg) * 10) / 10 : null;
+  const label = (r: TrainingWeek) =>
+    `Week of ${fmtDay(parseYmd(r.start))}: ${r.sessions} session${r.sessions === 1 ? '' : 's'}, ${kg(r.volume)}${r.weight !== null ? `, ${fmtKg(r.weight)} kg average` : ''}`;
+  const first = parseYmd(rows[0].start);
+
+  return (
+    <section className="panel you-panel tr-bvt" aria-label="Body weight against training">
+      <div className="panel-head">
+        <h2 className="panel-title">Weight and training</h2>
+        <div className="segmented" role="group" aria-label="Range">
+          {BW_RANGES.map((r) => (
+            <button key={r.weeks} className={weeks === r.weeks ? 'on' : ''} aria-pressed={weeks === r.weeks} onClick={() => onWeeks(r.weeks)}>
+              {r.name}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div ref={ref}>
+        <svg className="tr-wt-chart" width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Weekly volume and body weight. ${rows.map(label).join('; ')}`}>
+          {[0, 0.5, 1].map((f) => (
+            <g key={f}>
+              <line x1={L} x2={W - R} y1={yv(vmax * f)} y2={yv(vmax * f)} stroke="var(--ln)" />
+              <text x={L - 6} y={yv(vmax * f) + 3.5} textAnchor="end">
+                {f ? `${fmtKg(Math.round((vmax * f) / 100) / 10)} t` : '0'}
+              </text>
+            </g>
+          ))}
+          {kgs.length > 0 &&
+            [lo, (lo + hi) / 2, hi].map((t) => (
+              <text key={t} x={W - R + 6} y={yw(t) + 3.5} textAnchor="start">
+                {fmtKg(Math.round(t * 10) / 10)}
+              </text>
+            ))}
+          {rows.map((r, i) => (
+            <g key={r.start}>
+              <rect
+                x={x(i) - bar / 2}
+                y={yv(r.volume)}
+                width={bar}
+                height={Math.max(r.volume ? 2 : 0, H - B - yv(r.volume))}
+                rx="2"
+                fill="var(--t3)"
+                opacity={i === rows.length - 1 ? 0.8 : 0.4}
+              >
+                <title>{label(r)}</title>
+              </rect>
+              {weeks <= 26 && r.sessions > 0 && (
+                <text x={x(i)} y={yv(r.volume) - 4} textAnchor="middle">
+                  {r.sessions}
+                </text>
+              )}
+            </g>
+          ))}
+          {kgs.length > 1 && <polyline points={line} fill="none" stroke="var(--ac)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />}
+          {rows.map((r, i) =>
+            r.weight === null ? null : (
+              <circle key={r.start} cx={x(i)} cy={yw(r.weight)} r={i === rows.length - 1 ? 3.4 : 2.2} fill={i === rows.length - 1 ? 'var(--acd)' : 'var(--ac)'}>
+                <title>{label(r)}</title>
+              </circle>
+            ),
+          )}
+          <text x={x(0) - bar / 2} y={H - 5} textAnchor="start">
+            {`${first.getDate()} ${MON[first.getMonth()]}`}
+          </text>
+          <text x={x(rows.length - 1) + bar / 2} y={H - 5} textAnchor="end">
+            This week
+          </text>
+        </svg>
+      </div>
+      <span className="legend">
+        <span className="legend-swatch" style={{ background: 'var(--t3)', opacity: 0.5 }} />
+        Lifted a week{weeks <= 26 ? ', sessions on top' : ''}
+        <span className="legend-line" style={{ marginLeft: 8 }} />
+        Body weight, 7-day average
+      </span>
+      <div className="you-foot" style={{ marginTop: 'auto' }}>
+        <span>
+          <b>{sessions}</b> sessions · {(sessions / weeks).toFixed(1)} a week
+        </span>
+        <span>
+          <b>{kg(volume)}</b> lifted
+        </span>
+        {change !== null ? (
+          <span>
+            Weight <b>{signedKg(change)}</b>
+          </span>
+        ) : (
+          <span>{kgs.length ? 'One week with a weigh-in so far' : 'Log your weight in Body weight to see it here'}</span>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** Each main lift's estimated 1RM against body weight on the day, and how it's moving. */
+function StrengthForWeight({ workouts, weights, today, weeks, pinned, muscles, onOpen }: {
+  workouts: Workout[];
+  weights: Record<string, number>;
+  today: Date;
+  weeks: number;
+  pinned: string[];
+  muscles: Muscles;
+  onOpen: (title: string) => void;
+}) {
+  const rows = useMemo(() => strengthRatios(workouts, weights, today, { weeks, pinned, muscles }), [workouts, weights, today, weeks, pinned, muscles]);
+  const range = BW_RANGES.find((r) => r.weeks === weeks)?.name ?? `${weeks} weeks`;
+  return (
+    <section className="panel you-panel tr-ratio" aria-label="Strength for your weight">
+      <div className="panel-head">
+        <h2 className="panel-title">Strength for your weight</h2>
+        <span className="meta">Est. 1RM ÷ body weight, {range}</span>
+      </div>
+      {rows.length ? (
+        <div className="tr-list">
+          {rows.map((r) => {
+            const last = r.points[r.points.length - 1];
+            return (
+              <button key={r.title} className="tr-lift" title={`${r.title}: every session`} onClick={() => onOpen(r.title)}>
+                <div style={{ minWidth: 0 }}>
+                  <div className="tr-ln">
+                    {r.pinned && <i className="ph-duotone ph-push-pin" aria-label="Pinned" />}
+                    <span className="tr-ln-text">{r.title}</span>
+                  </div>
+                  <div className="meta tnum">
+                    {fmtKg(last.e1rm)} kg at {fmtKg(last.kg)} kg body weight
+                  </div>
+                </div>
+                {r.points.length > 1 ? <Spark values={r.points.map((p) => p.ratio)} /> : <span className="meta tr-spark-none">One session</span>}
+                <div className="tr-lv" title="Times your body weight">
+                  <span className="tnum">{last.ratio.toFixed(2)}×</span>
+                  {r.change !== null && (
+                    <span className={'tr-ld tnum' + (r.change > 0 ? ' up' : '')}>
+                      {r.change > 0 ? '+' : r.change < 0 ? '−' : '±'}
+                      {Math.abs(r.change).toFixed(2)}
+                    </span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="meta">
+          {Object.keys(weights).length
+            ? `No weighted lifts in the last ${range} with a weigh-in within two weeks of them.`
+            : 'Log your body weight to see each lift against it: estimated 1-rep max divided by what you weighed that week.'}
+        </p>
+      )}
+      <span className="meta" style={{ marginTop: 'auto' }}>
+        Pinned lifts first, then squats, presses and deadlifts. Body weight is the 7-day average on the day, or the nearest weigh-in within two weeks.
+      </span>
+    </section>
   );
 }

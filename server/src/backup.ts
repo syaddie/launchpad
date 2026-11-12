@@ -11,6 +11,7 @@ import { snapshotDb, store } from './store';
 import { isZip, unzip, zipStream, type ZipEntry } from './zip';
 import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
+import { cleanCravings } from '../../shared/trackers';
 import { cleanNewsLists } from '../../shared/news';
 import { cleanOpens } from '../../shared/bookmarks';
 import { cleanHistory } from '../../shared/notes';
@@ -28,6 +29,7 @@ export function exportBackup(): Backup {
     countdowns: store.countdowns(),
     smokes: store.smokes(),
     moods: store.moods(),
+    cravings: store.cravings(),
     weights: store.weights(),
     money: store.money(),
     learn: store.learn(),
@@ -49,7 +51,8 @@ export const PART_NAMES: Record<BackupPart, string> = {
   prefs: 'settings',
   countdowns: 'countdowns',
   smokes: 'cigarette log',
-  moods: 'moods',
+  moods: 'moods and journal',
+  cravings: 'cravings',
   weights: 'weights',
   money: 'money tracker',
   learn: 'courses and study time',
@@ -108,6 +111,10 @@ export function restoreBackup(body: unknown): BackupPart[] {
   if (has('moods') && typeof b.moods === 'object') {
     const v = cleanMoods(b.moods);
     writes.push(['moods', () => store.setMoods(v)]);
+  }
+  if (has('cravings') && Array.isArray(b.cravings)) {
+    const v = cleanCravings(b.cravings);
+    writes.push(['cravings', () => store.setCravings(v)]);
   }
   if (has('weights') && typeof b.weights === 'object') {
     const v = cleanWeights(b.weights);

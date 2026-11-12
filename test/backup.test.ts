@@ -44,11 +44,12 @@ describe('backup', () => {
     store.setSmokes(['2025-01-01T01:00:00.000Z', '2026-11-01T02:00:00.000Z']);
     store.setMoods({ '2026-11-01': { level: 4, note: 'good' } });
     store.setWeights({ '2026-11-01': 72.4 });
+    store.setCravings([{ id: 'k1', at: '2026-11-01T03:00:00.000Z', strength: 3, trigger: 'coffee', note: 'after lunch' }]);
     store.setPrefs({ ...DEFAULT_PREFS, name: 'Sam', cigaretteLimit: 5 });
     store.setSnippets([{ id: 's1', name: 'Disk usage', command: 'df -h' }]);
     const b = backup.exportBackup();
     expect(b.version).toBe(2);
-    for (const k of ['bookmarks', 'notes', 'prefs', 'countdowns', 'smokes', 'moods', 'weights', 'money', 'learn', 'training', 'exerciseMuscles', 'packages', 'snippets'] as const) expect(b).toHaveProperty(k);
+    for (const k of ['bookmarks', 'notes', 'prefs', 'countdowns', 'smokes', 'moods', 'cravings', 'weights', 'money', 'learn', 'training', 'exerciseMuscles', 'packages', 'snippets'] as const) expect(b).toHaveProperty(k);
     // Every cigarette, not just the 60 days the page gets.
     expect(b.smokes).toHaveLength(2);
     expect(JSON.stringify(b)).not.toMatch(/refreshToken/);
@@ -57,6 +58,7 @@ describe('backup', () => {
     store.setSmokes([]);
     store.setMoods({});
     store.setWeights({});
+    store.setCravings([]);
     store.setPrefs({ ...DEFAULT_PREFS });
     store.setSnippets([]);
     const restored = backup.restoreBackup(JSON.parse(JSON.stringify(b)));
@@ -65,6 +67,8 @@ describe('backup', () => {
     expect(store.smokes()).toEqual(b.smokes);
     expect(store.moods()).toEqual(b.moods);
     expect(store.weights()).toEqual(b.weights);
+    expect(store.cravings()).toEqual(b.cravings);
+    expect(store.cravings()).toHaveLength(1);
     expect(store.prefs().name).toBe('Sam');
     expect(store.prefs().cigaretteLimit).toBe(5);
     expect(store.snippets()).toEqual([{ id: 's1', name: 'Disk usage', command: 'df -h' }]);

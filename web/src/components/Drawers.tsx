@@ -251,8 +251,8 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
       if (!res.ok) throw new Error();
       blob = await res.blob();
     } catch {
-      const { bookmarks, notes, prefs, countdowns, smokes, moods, weights, money, learn, training, exerciseMuscles, packages } = data;
-      const local: Backup = { version: 2, exported: new Date().toISOString(), bookmarks, notes, prefs, countdowns, smokes, moods, weights, money, learn, training, exerciseMuscles, packages };
+      const { bookmarks, notes, prefs, countdowns, smokes, moods, cravings, weights, money, learn, training, exerciseMuscles, packages } = data;
+      const local: Backup = { version: 2, exported: new Date().toISOString(), bookmarks, notes, prefs, countdowns, smokes, moods, cravings, weights, money, learn, training, exerciseMuscles, packages };
       blob = new Blob([JSON.stringify(local, null, 2)], { type: 'application/json' });
       note = 'The server couldn’t be reached, so this is the copy this page had: cigarettes from the last 60 days, and no archived packages.';
     }
@@ -781,11 +781,12 @@ export const PANEL_ROWS: { section: string; hint?: string; rows: { key: string; 
     rows: [
       { key: 'view:news', name: 'News' },
       { key: 'view:inbox', name: 'Inbox', meta: 'Claude’s digest of your Gmail' },
-      { key: 'view:you', name: 'You', meta: 'Countdowns, cigarettes, mood' },
+      { key: 'view:you', name: 'You', meta: 'Countdowns, cigarettes and cravings, mood and journal' },
       { key: 'view:training', name: 'Training', meta: 'Workouts from your Hevy export' },
       { key: 'view:learn', name: 'Learn', meta: 'Courses, what’s due, grades and study time' },
       { key: 'view:money', name: 'Money', meta: 'Money in and out, month by month, a wishlist and what you’re owed' },
       { key: 'view:server', name: 'Server', meta: 'Health, internet speed, services' },
+      { key: 'view:review', name: 'Review', meta: 'Your week across everything, with Claude’s recap' },
     ],
   },
 ];
@@ -916,6 +917,9 @@ function TrackerSettings({ prefs, onPrefs }: { prefs: Prefs; onPrefs: (p: Prefs)
         <div className="drawer-label">Cigarettes</div>
         <NumberField label="Daily limit" value={prefs.cigaretteLimit} min={0} max={99} suffix="a day at most" onSave={(n) => onPrefs({ ...prefs, cigaretteLimit: n })} />
         <div className="meta">Drawn as a line on the chart in You. Leave it empty for no limit.</div>
+        <NumberField label="Pack price" value={prefs.packPrice} min={0} max={1000} decimals={2} suffix="dollars a pack" onSave={(n) => onPrefs({ ...prefs, packPrice: n })} />
+        <NumberField label="Pack size" value={prefs.packSize} min={1} max={200} suffix="cigarettes in a pack" onSave={(n) => onPrefs({ ...prefs, packSize: n || 20 })} />
+        <div className="meta">For what they cost in You and Review, and what staying under the limit has saved. Leave the price empty to hide it.</div>
       </div>
       <div className="drawer-section">
         <div className="drawer-label">Training</div>

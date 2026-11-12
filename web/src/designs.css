@@ -317,6 +317,7 @@ a.hz-row:hover .hz-grow { text-decoration: underline; }
 .lp-root[data-design='bento'][data-view='learn'] { --tint: var(--t-peri); --ink: var(--i-peri); }
 .lp-root[data-design='bento'][data-view='money'] { --tint: var(--t-mint); --ink: var(--i-mint); }
 .lp-root[data-design='bento'][data-view='server'] { --tint: var(--t-slate); --ink: var(--i-slate); }
+.lp-root[data-design='bento'][data-view='review'] { --tint: var(--t-lilac); --ink: var(--i-lilac); }
 /* Each view's accents take its colour. */
 .lp-root[data-design='bento']:not([data-view='home']) { --act: var(--tint); --acd: var(--ink); }
 
@@ -381,6 +382,7 @@ a.hz-row:hover .hz-grow { text-decoration: underline; }
 [data-design='bento'] .rail-btn[data-view='learn'] .rail-dot { background: #a9b0ff; }
 [data-design='bento'] .rail-btn[data-view='money'] .rail-dot { background: #7fdba6; }
 [data-design='bento'] .rail-btn[data-view='server'] .rail-dot { background: #b7c3d0; }
+[data-design='bento'] .rail-btn[data-view='review'] .rail-dot { background: #d9c4ff; }
 [data-design='bento'] .rail-badge { position: static; order: 3; background: var(--wn); color: #fff; }
 [data-design='bento'] .rail-sep { width: 1px; height: auto; margin: 8px 4px; background: #3a3d45; }
 [data-design='bento'] .lp-inner, [data-design='bento'] .lp-shell > .lp-inner { height: 100%; padding: 18px 24px 84px; gap: 12px; }

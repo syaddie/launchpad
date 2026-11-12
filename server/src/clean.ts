@@ -1,6 +1,7 @@
 // Checks for what the page sends, shared by the save routes and backup restore,
 // so a restored file can't put anything in the store a normal save couldn't.
 import { DEFAULT_ENGINES, HIDEABLE_KEYS } from '../../shared/defaults';
+import { MAX_JOURNAL } from '../../shared/trackers';
 import { parseNewsSource } from '../../shared/news';
 import { cleanKg } from '../../shared/training';
 import type { BookmarkGroup, Countdown, Mood, Note, Package, Prefs, SearchEngine, Snippet } from '../../shared/types';
@@ -78,6 +79,8 @@ export function cleanPrefs(body: Partial<Prefs>, prev: Prefs): Prefs {
     speedPlanMbps: num(body.speedPlanMbps, 0, 100_000, prev.speedPlanMbps),
     setsPerWeek: num(body.setsPerWeek, 1, 40, prev.setsPerWeek),
     gymMonthly: typeof body.gymMonthly === 'number' && Number.isFinite(body.gymMonthly) ? Math.min(10_000, Math.max(0, Math.round(body.gymMonthly * 100) / 100)) : prev.gymMonthly,
+    packPrice: typeof body.packPrice === 'number' && Number.isFinite(body.packPrice) ? Math.min(1000, Math.max(0, Math.round(body.packPrice * 100) / 100)) : prev.packPrice,
+    packSize: num(body.packSize, 1, 200, prev.packSize),
     claudeBudget: typeof body.claudeBudget === 'number' && Number.isFinite(body.claudeBudget) ? Math.min(10_000, Math.max(0, Math.round(body.claudeBudget * 100) / 100)) : prev.claudeBudget ?? 0,
     driveBackup: typeof body.driveBackup === 'boolean' ? body.driveBackup : prev.driveBackup ?? true,
     pinnedLifts: Array.isArray(body.pinnedLifts) ? [...new Set(body.pinnedLifts.filter(isStr).map((t) => t.slice(0, 120)))].slice(0, 12) : prev.pinnedLifts,
@@ -107,11 +110,15 @@ export function cleanCountdowns(body: unknown[]): Countdown[] {
     }));
 }
 
-/** A day's mood; null when the level isn't 1–5. */
+/**
+ * A day's mood and journal entry. Level 0 is a day with only an entry; null when there's
+ * neither. A note that isn't sent keeps `prevNote` (the day's entry so far) when a mood is set.
+ */
 export function cleanMood(v: Partial<Mood> | null | undefined, prevNote = ''): Mood | null {
   const level = num(v?.level, 0, 5, 0);
-  if (!level) return null;
-  return { level, note: isStr(v?.note) ? v.note.trim().slice(0, 280) : prevNote };
+  const note = isStr(v?.note) ? v.note.trimEnd().slice(0, MAX_JOURNAL) : level ? prevNote : '';
+  if (!level && !note.trim()) return null;
+  return { level, note: note.trim() ? note : '' };
 }
 
 export function cleanMoods(v: unknown): Record<string, Mood> {

@@ -5,8 +5,8 @@ import { fmtStudy, timerMinutes } from '../../shared/learn';
 import { fmtKg } from '../../shared/training';
 import { fmtUsd } from '../../shared/claudeUsage';
 import { fmtMoney, sortEntries } from '../../shared/money';
-import { MOOD_WORDS, nearestCountdown, smokesOn } from '../../shared/trackers';
-import type { AppState, Backup, BookmarkGroup, DesignKey, Countdown, Learn, Money, Mood, Note, Package, Photo, Prefs, Task, Training } from '../../shared/types';
+import { MOOD_WORDS, cravingsOn, nearestCountdown, smokesOn } from '../../shared/trackers';
+import type { AppState, Backup, BookmarkGroup, Craving, CravingTrigger, DesignKey, Countdown, Learn, Money, Mood, Note, Package, Photo, Prefs, Task, Training } from '../../shared/types';
 import { api, localGet, localSet, type RestoreResult } from './api';
 import { Bookmarks } from './components/Bookmarks';
 import { AddPackageDrawer, DESIGNS, Drawer, PackageDrawer, SettingsDrawer } from './components/Drawers';
@@ -30,6 +30,7 @@ import { useFlash, useToast } from './hooks/useToast';
 import { gridLayout, type Area } from './layout';
 import { send } from './outbox';
 import { paletteAsk, paletteItems, paletteSearches, type AskHandlers, type PaletteContext } from './paletteItems';
+import type { PendingCall } from './pending';
 import { dayDiff, hm, inboxBadge, inMinutes, newId, parseYmd } from './util';
 
 // The views off the home page load the first time they're opened, so a new tab downloads
@@ -40,6 +41,7 @@ const loadInbox = () => import('./components/Inbox');
 const loadLearn = () => import('./components/Learn');
 const loadMoney = () => import('./components/money/MoneyView');
 const loadNews = () => import('./components/News');
+const loadReview = () => import('./components/Review');
 const loadServer = () => import('./components/Server');
 const loadTraining = () => import('./components/Training');
 const loadYou = () => import('./components/You');
@@ -48,13 +50,14 @@ const LearnView = lazy(() => loadLearn().then((m) => ({ default: m.LearnView }))
 const CourseDrawer = lazy(() => loadLearn().then((m) => ({ default: m.CourseDrawer })));
 const MoneyView = lazy(() => loadMoney().then((m) => ({ default: m.MoneyView })));
 const News = lazy(() => loadNews().then((m) => ({ default: m.News })));
+const ReviewView = lazy(() => loadReview().then((m) => ({ default: m.ReviewView })));
 const Server = lazy(() => loadServer().then((m) => ({ default: m.Server })));
 const TrainingView = lazy(() => loadTraining().then((m) => ({ default: m.TrainingView })));
 const ExerciseDrawer = lazy(() => loadTraining().then((m) => ({ default: m.ExerciseDrawer })));
 const You = lazy(() => loadYou().then((m) => ({ default: m.You })));
 
 function preloadViews() {
-  for (const load of [loadInbox, loadLearn, loadMoney, loadNews, loadServer, loadTraining, loadYou]) load().catch(() => {});
+  for (const load of [loadInbox, loadLearn, loadMoney, loadNews, loadReview, loadServer, loadTraining, loadYou]) load().catch(() => {});
 }
 
 type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings' } | { type: 'exercise'; title: string } | { type: 'course'; id: string; item?: string } | null;
@@ -71,6 +74,7 @@ export function App({ cached }: { cached: AppState | null }) {
   const [learnNoteBusy, setLearnNoteBusy] = useState(false);
   const [newsBusy, setNewsBusy] = useState(false);
   const [noteBusy, setNoteBusy] = useState(false);
+  const [reviewBusy, setReviewBusy] = useState(false);
   const [inboxBusy, setInboxBusy] = useState(false);
   const [search, setSearch] = useState('');
   const [drawer, setDrawer] = useState<DrawerState>(null);
@@ -284,6 +288,37 @@ export function App({ cached }: { cached: AppState | null }) {
     showToast(`Logged · ${count} today${limit ? ` of ${limit}` : ''}`, { label: 'Undo', run: () => undoSmoke(at) });
   };
 
+  const cravingSaver = useRef(Promise.resolve());
+  /** Server calls for cravings run in order, and the server's list replaces the optimistic one (none when queued). */
+  const cravingCall = (p: PendingCall) => {
+    cravingSaver.current = cravingSaver.current
+      .then(() => send<Craving[]>(p))
+      .then((cravings) => cravings && update((d) => ({ ...d, cravings })))
+      .catch((e) => {
+        showToast(`Couldn’t save: ${e.message}`);
+        refresh();
+      });
+  };
+
+  /** Add a craving or change one. */
+  const saveCraving = (c: Craving) => {
+    update((d) => ({ ...d, cravings: [...d.cravings.filter((x) => x.id !== c.id), c].sort((a, b) => Date.parse(a.at) - Date.parse(b.at)) }));
+    cravingCall({ kind: 'craving', value: c });
+  };
+
+  const removeCraving = (id: string) => {
+    update((d) => ({ ...d, cravings: d.cravings.filter((x) => x.id !== id) }));
+    cravingCall({ kind: 'removeCraving', id });
+  };
+
+  /** A craving that wasn't acted on, logged now; its strength, trigger and note can be changed in You. */
+  const logCraving = (strength: 1 | 2 | 3 = 2, trigger: CravingTrigger | '' = '') => {
+    const c: Craving = { id: newId('cr'), at: new Date().toISOString(), strength, trigger, note: '' };
+    const count = cravingsOn([...data.cravings, c], new Date()).length;
+    saveCraving(c);
+    showToast(`Craving logged · ${count} resisted today`, { label: 'Undo', run: () => removeCraving(c.id) });
+  };
+
   /** Log body weight for a day (null removes it); `undo` offers to put back what was there. */
   const setWeight = (date: string, kg: number | null, undo = false) => {
     const before = data.weights[date];
@@ -417,6 +452,15 @@ export function App({ cached }: { cached: AppState | null }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, data.newsSummaries, hasCourses]);
 
+  /** Claude's recap of the week starting `week`, written again. */
+  const refreshReview = (week: string) => {
+    setReviewBusy(true);
+    api
+      .refreshReview(week)
+      .then(merge)
+      .catch((e) => showToast(`Couldn’t write the recap: ${e.message}`))
+      .finally(() => setReviewBusy(false));
+  };
   // Over the Claude budget (Settings › General): say so once a month in each browser.
   const claudeOver = !!data.prefs.claudeBudget && (data.claudeSpend ?? 0) > data.prefs.claudeBudget;
   useEffect(() => {
@@ -465,7 +509,7 @@ export function App({ cached }: { cached: AppState | null }) {
     view, setView, design, palette, setPalette, shortcuts, setShortcuts,
     drawer: !!drawer, closeDrawer: () => setDrawer(null), openSettings: () => setDrawer({ type: 'settings' }),
     focus, closeFocus: () => setFocus(false),
-    search, searchRef, editBookmarks, bookmarks: data.bookmarks, logSmoke,
+    search, searchRef, editBookmarks, bookmarks: data.bookmarks, logSmoke, logCraving: () => logCraving(),
   });
 
   // ---------- derived ----------
@@ -560,7 +604,7 @@ export function App({ cached }: { cached: AppState | null }) {
   };
 
   const paletteCtx: PaletteContext = {
-    data, now, view, dark, design, localDesign, smokesToday, inboxCount, courseName, setView, setPrefs, setLocalDesign, logSmoke,
+    data, now, view, dark, design, localDesign, smokesToday, inboxCount, courseName, setView, setPrefs, setLocalDesign, logSmoke, logCraving,
     openWeight: () => (setView('training'), setWeightSignal((n) => n + 1)),
     addCountdown: () => (setView('you'), setAddCountdown((n) => n + 1)),
     addWork: () => (setView('learn'), setAddWorkSignal((n) => n + 1)),
@@ -591,7 +635,21 @@ export function App({ cached }: { cached: AppState | null }) {
         ) : view === 'inbox' ? (
           <Inbox data={data} now={now} busy={inboxBusy} onRefresh={refreshInbox} onConnect={connect} onOpenSettings={() => setDrawer({ type: 'settings' })} />
         ) : view === 'you' ? (
-          <You data={data} now={now} addSignal={addCountdown} onCountdowns={setCountdowns} onLogSmoke={logSmoke} onUndoSmoke={undoSmoke} onMood={setMood} />
+          <You
+            data={data}
+            now={now}
+            addSignal={addCountdown}
+            onCountdowns={setCountdowns}
+            onLogSmoke={logSmoke}
+            onUndoSmoke={undoSmoke}
+            onMood={setMood}
+            onLogCraving={() => logCraving()}
+            onCraving={saveCraving}
+            onRemoveCraving={removeCraving}
+            onOpenSettings={() => setDrawer({ type: 'settings' })}
+          />
+        ) : view === 'review' ? (
+          <ReviewView data={data} now={now} busy={reviewBusy} onRefresh={refreshReview} onView={setView} />
         ) : view === 'training' ? (
           <TrainingView
             data={data}

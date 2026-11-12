@@ -22,9 +22,10 @@ export interface ShortcutState {
   editBookmarks: boolean;
   bookmarks: BookmarkGroup[];
   logSmoke: () => void;
+  logCraving: () => void;
 }
 
-/** Every key on the `?` page: ⌘K, Esc, G then a letter, /, ?, N, C, M, 1–9 and Console's F1–F9. */
+/** Every key on the `?` page: ⌘K, Esc, G then a letter, /, ?, N, C, Shift C, M, 1–9 and Console's F1–F10. */
 export function useShortcuts(state: ShortcutState) {
   const s = useRef(state);
   s.current = state;
@@ -48,11 +49,11 @@ export function useShortcuts(state: ShortcutState) {
         else if (view !== 'home') setView('home');
         return;
       }
-      // Console: F1–F8 open the views in rail order, F9 Settings.
-      if (s.current.design === 'console' && /^F[1-9]$/.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+      // Console: F1–F9 open the views in rail order, F10 Settings.
+      if (s.current.design === 'console' && /^F([1-9]|10)$/.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
         e.preventDefault();
         const n = Number(e.key.slice(1));
-        if (n === 9) s.current.openSettings();
+        if (n === VIEWS.length + 1) s.current.openSettings();
         else if (VIEWS[n - 1]) {
           setPalette(false);
           s.current.closeDrawer();
@@ -92,8 +93,9 @@ export function useShortcuts(state: ShortcutState) {
         setView((v) => (v === 'news' ? 'home' : 'news'));
         return;
       }
-      if (key === 'c' && !e.shiftKey) {
-        s.current.logSmoke();
+      if (key === 'c') {
+        if (e.shiftKey) s.current.logCraving();
+        else s.current.logSmoke();
         return;
       }
       if (key === 'm' && !e.shiftKey) {
