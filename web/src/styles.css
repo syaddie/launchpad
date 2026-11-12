@@ -1490,6 +1490,37 @@ button.m-stat { cursor: default; }
 .sheet.wish .fits { padding: 0 8px; font-size: 13px; color: var(--t2); white-space: nowrap; }
 .sheet.wish .fits .ok { color: var(--acd); font-weight: 600; }
 .cell.wish-name { font-weight: 500; }
+.sheet.wish .icon-btn.on { background: var(--hv); color: var(--tx); }
+.sheet.wish tr.wish-whatif td { padding: 8px 10px 10px; background: var(--bg); }
+.wish-whatif-body { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.wish-whatif-body .cell { width: auto; }
+.wish-whatif-body .whatif { flex-basis: 100%; }
+.sheet.goals tr.pot-goal td { border-top-style: dotted; }
+.goal-progress { display: flex; flex-direction: column; gap: 3px; padding: 0 8px; }
+
+/* What adding an entry does to the forecast, before it's saved. */
+.whatif { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin: 0; padding: 8px 10px; border-radius: 4px; background: var(--bg); font-size: 13px; }
+.whatif-label { font-weight: 600; }
+.whatif .neg { color: var(--wn); }
+.whatif .neg i { margin-right: 4px; }
+.whatif .ok { color: var(--acd); }
+.composer-sub { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+
+.subs-sheet { min-width: 960px; }
+.subs-sheet td { height: 38px; }
+.subs-sheet td.txt, .sheet.goals td.txt { padding: 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sheet.goals span.txt { display: block; padding: 0 8px; }
+.subs-sheet td.sub-name { font-weight: 500; color: var(--tx); }
+.subs-sheet tr.review td { background: var(--wnt); }
+.subs-sheet .cell { width: auto; }
+.sub-out { display: inline-flex; flex-direction: column; gap: 0; line-height: 1.25; }
+.sub-flag { border: none; cursor: pointer; font: inherit; font-size: 12px; }
+.sub-list { display: flex; flex-direction: column; }
+.sub-item { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 9px 0; border-top: 1px solid var(--ln); }
+.sub-item:first-child { border-top: none; }
+.sub-what { flex: 1 1 260px; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.sub-suggest.accent { box-shadow: inset 3px 0 0 var(--ac); }
+
 /* An empty month input shows "--------- ----"; keep it blank until it's used. */
 .cell.unset:not(:focus) { color: transparent; }
 
@@ -1592,6 +1623,16 @@ button.m-stat { cursor: default; }
 .ln-link { display: inline-flex; align-items: center; }
 .ln-need { margin: 0; padding: 12px 14px; border-radius: 4px; background: var(--bg); font-size: 13px; line-height: 1.5; color: var(--t2); }
 .ln-need b { color: var(--tx); }
+.ln-range { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.ln-range b { color: var(--tx); }
+.ln-aim { font-size: 12px; color: var(--t3); font-style: italic; font-weight: 400; }
+.ln-whatif { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 4px; background: var(--bg); }
+.ln-whatif-sum { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.ln-whatif-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(90px, 160px) 64px auto; gap: 10px; align-items: center; font-size: 13px; }
+.ln-whatif-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ln-whatif-row input[type='range'] { width: 100%; accent-color: var(--ac); }
+.ln-whatif-row input[type='range'].unset { opacity: 0.35; }
+.ln-whatif-btns { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .ln-arow { display: grid; grid-template-columns: minmax(0, 1fr) 46px 52px 92px; gap: 10px; align-items: center; width: 100%; padding: 9px 0; border: none; border-top: 1px solid var(--ln); background: none; color: var(--tx); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
 .ln-arow:hover { background: var(--hv); }
 .ln-edit { margin: 4px 0; }

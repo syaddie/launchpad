@@ -81,6 +81,7 @@ function cleanAssessment(a: Partial<Assessment>, courses: Set<string>): Assessme
     time: isStr(a.time) && /^([01]\d|2[0-3]):[0-5]\d$/.test(a.time) ? a.time : '',
     status: (['todo', 'doing', 'done'] as const).includes(a.status as AssessmentStatus) ? a.status! : 'todo',
     score: typeof a.score === 'number' && Number.isFinite(a.score) ? round1(Math.min(200, Math.max(0, a.score))) : null,
+    ...(typeof a.aim === 'number' && Number.isFinite(a.aim) ? { aim: round1(Math.min(100, Math.max(0, a.aim))) } : {}),
   };
 }
 
@@ -145,6 +146,32 @@ export function neededFor(g: Grade, target: number): number | null {
   const left = 100 - g.marked;
   if (left <= 0) return null;
   return Math.max(0, round1(((target - g.earned) / left) * 100));
+}
+
+export interface WhatIf {
+  /** The final grade in percent, when every part of the course has a score (real or what-if); null while some is still open. */
+  final: number | null;
+  /** The final grade with what's still open at zero, and at full marks. */
+  worst: number;
+  best: number;
+  /** Percent of the course with a what-if score. */
+  filled: number;
+  /** Percent of the course with neither a mark nor a what-if score. */
+  open: number;
+}
+
+/**
+ * The final grade if the unmarked work scored `scores` (percent, by assessment id;
+ * marked work keeps its mark). Like neededFor, the course counts as 100%, so what
+ * isn't listed yet is open too. With no scores it's the best and worst still possible.
+ */
+export function whatIf(assessments: Assessment[], courseId: string, scores: Record<string, number | null | undefined> = {}): WhatIf {
+  const g = courseGrade(assessments, courseId);
+  const guessed = assessments.filter((a) => a.courseId === courseId && a.score === null && a.weight > 0 && typeof scores[a.id] === 'number');
+  const filled = guessed.reduce((s, a) => s + a.weight, 0);
+  const points = g.earned + guessed.reduce((s, a) => s + (a.weight * Math.min(200, Math.max(0, scores[a.id]!))) / 100, 0);
+  const open = Math.max(0, 100 - g.marked - filled);
+  return { final: open > 0 ? null : round1(points), worst: round1(points), best: round1(points + open), filled: round1(filled), open: round1(open) };
 }
 
 // ---------- what's due ----------

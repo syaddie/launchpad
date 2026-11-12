@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { DOW, addDays, dayDiff, parseYmd, startOfDay, ymd } from '../../../shared/dates';
 import {
   COURSE_COLORS, DUE_GROUPS, GRADES, KINDS, SIDE_STALE_DAYS, STATUS_NAMES, classesOn, courseGrade, dueGroup, fmtStudy, letterOf, neededFor, nextUp, openWork,
-  studyStreak, studyWeek, timerMinutes, upcomingExams, weekByCourse, weeklyStudy,
+  studyStreak, studyWeek, timerMinutes, upcomingExams, weekByCourse, weeklyStudy, whatIf,
 } from '../../../shared/learn';
 import type { AppState, Assessment, AssessmentKind, AssessmentStatus, Course, Learn, SideLearning } from '../../../shared/types';
 import { ago, fmtDay, hm, inMinutes, newId, shortDay } from '../util';
@@ -868,6 +868,123 @@ function SideForm({ draft, onDraft, onSave, onCancel, onDelete }: { draft: SideD
   );
 }
 
+// ---------- what if ----------
+
+/** The best and worst final grade still possible, with the way in to trying out scores. */
+function PossibleRange({ assessments, courseId, onTry }: { assessments: Assessment[]; courseId: string; onTry: () => void }) {
+  const w = whatIf(assessments, courseId);
+  const canTry = assessments.some((a) => a.courseId === courseId && a.score === null && a.weight > 0);
+  if (w.final !== null && !canTry) return null;
+  return (
+    <div className="ln-range">
+      {w.final === null && (
+        <span className="meta">
+          Final grade still possible: <b className="tnum">{w.worst}%</b> ({letterOf(w.worst)}) to <b className="tnum">{w.best}%</b> ({letterOf(w.best)})
+        </span>
+      )}
+      {canTry && (
+        <button className="btn btn-secondary btn-small" onClick={onTry} title="Type scores for what isn’t marked yet and see the final grade. Nothing is saved unless you keep them as aims">
+          <i className="ph-duotone ph-sliders-horizontal" />
+          What if…
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Try out scores for the unmarked work: the final grade, its letter and the range update as you type or drag. */
+function WhatIfGrades({ course, items, all, scores, onScores, onKeep, onClose }: {
+  course: Course;
+  items: Assessment[];
+  all: Assessment[];
+  scores: Record<string, number | null>;
+  onScores: (s: Record<string, number | null>) => void;
+  onKeep: () => void;
+  onClose: () => void;
+}) {
+  const open = items.filter((a) => a.score === null && a.weight > 0);
+  const w = whatIf(all, course.id, scores);
+  const set = (id: string, v: number | null) => onScores({ ...scores, [id]: v === null || Number.isNaN(v) ? null : Math.min(100, Math.max(0, Math.round(v))) });
+  const need = course.target && w.open > 0 ? Math.max(0, Math.round(((course.target - w.worst) / w.open) * 1000) / 10) : null;
+  const changed = open.some((a) => (scores[a.id] ?? undefined) !== a.aim);
+  return (
+    <div className="ln-whatif" role="group" aria-label="What if">
+      <div className="ln-whatif-sum" aria-live="polite">
+        <span className="meta">Final grade</span>
+        {w.final !== null ? (
+          <>
+            <span className="serif tnum" style={{ fontSize: 30 }}>{w.final}%</span>
+            <span className={'chip ' + (course.target && w.final >= course.target ? 'chip-accent' : 'chip-neutral')}>{letterOf(w.final)}</span>
+          </>
+        ) : (
+          <>
+            <span className="serif tnum" style={{ fontSize: 26 }}>
+              {w.worst}–{w.best}%
+            </span>
+            <span className="chip chip-neutral">
+              {letterOf(w.worst)}
+              {letterOf(w.best) !== letterOf(w.worst) && ` to ${letterOf(w.best)}`}
+            </span>
+            <span className="meta">with {w.open}% of the grade still blank</span>
+          </>
+        )}
+      </div>
+      {need !== null && (
+        <p className="meta" style={{ margin: 0 }}>
+          {need === 0
+            ? `That’s ${letterOf(course.target)} whatever you get on the rest.`
+            : need > 100
+              ? `${letterOf(course.target)} would be out of reach: it would take ${need}% on the blank ${w.open}%.`
+              : `For ${letterOf(course.target)}, you’d need ${need}% on average on the blank ${w.open}%.`}
+        </p>
+      )}
+      {open.map((a) => {
+        const v = scores[a.id] ?? null;
+        return (
+          <div key={a.id} className="ln-whatif-row">
+            <span className="ln-whatif-name" title={a.title}>
+              {a.title} <span className="meta">· {a.weight}%</span>
+            </span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              className={v === null ? 'unset' : undefined}
+              aria-label={`What-if score for ${a.title}`}
+              value={v ?? 0}
+              onChange={(e) => set(a.id, Number(e.target.value))}
+            />
+            <input
+              className="input sm tnum"
+              type="number"
+              min={0}
+              max={100}
+              placeholder="–"
+              aria-label={`What-if score for ${a.title}, in percent`}
+              value={v ?? ''}
+              onChange={(e) => set(a.id, e.target.value === '' ? null : Number(e.target.value))}
+            />
+            <span className="meta">%</span>
+          </div>
+        );
+      })}
+      <div className="ln-whatif-btns">
+        <button className="btn btn-ghost btn-small" onClick={() => onScores(Object.fromEntries(open.map((a) => [a.id, null])))}>
+          Reset
+        </button>
+        <span className="meta" style={{ marginRight: 'auto' }}>Nothing’s saved unless you keep them</span>
+        <button className="btn btn-ghost btn-small" onClick={onClose}>
+          Close
+        </button>
+        <button className="btn btn-primary btn-small" disabled={!changed} title="Save these as what you’re aiming for: they show beside each piece of work until it’s marked" onClick={onKeep}>
+          Keep as aims
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ---------- course drawer ----------
 
 export function CourseDrawer({ learn, courseId, focusItem, now, onChange, onClose, notify }: {
@@ -884,6 +1001,8 @@ export function CourseDrawer({ learn, courseId, focusItem, now, onChange, onClos
   const [adding, setAdding] = useState(false);
   const [topic, setTopic] = useState('');
   const [link, setLink] = useState({ name: '', url: '' });
+  /** What-if scores for the unmarked work, while trying them out; null when that's closed. */
+  const [guess, setGuess] = useState<{ courseId: string; scores: Record<string, number | null> } | null>(null);
   const today = startOfDay(now);
   const items = useMemo(
     () => learn.assessments.filter((a) => a.courseId === courseId).sort((x, y) => ((x.due || '9999') + x.time < (y.due || '9999') + y.time ? -1 : 1)),
@@ -1004,6 +1123,38 @@ export function CourseDrawer({ learn, courseId, focusItem, now, onChange, onClos
         {g.totalWeight !== 100 && items.length > 0 && (
           <p className="meta" style={{ margin: 0 }}>The weights below add up to {g.totalWeight}%. The grade maths counts the course as 100%.</p>
         )}
+        {guess?.courseId === course.id ? (
+          <WhatIfGrades
+            course={course}
+            items={items}
+            all={learn.assessments}
+            scores={guess.scores}
+            onScores={(scores) => setGuess({ courseId: course.id, scores })}
+            onKeep={() => {
+              const before = learn;
+              const kept = Object.values(guess.scores).filter((v) => v !== null).length;
+              onChange({
+                ...learn,
+                assessments: learn.assessments.map((a) => {
+                  if (a.courseId !== course.id || a.score !== null || !(a.id in guess.scores)) return a;
+                  const v = guess.scores[a.id];
+                  const rest = { ...a };
+                  delete rest.aim;
+                  return v === null ? rest : { ...rest, aim: v };
+                }),
+              });
+              setGuess(null);
+              notify(kept ? `Kept ${kept} aim${kept === 1 ? '' : 's'}` : 'Cleared the aims', { label: 'Undo', run: () => onChange(before) });
+            }}
+            onClose={() => setGuess(null)}
+          />
+        ) : (
+          <PossibleRange
+            assessments={learn.assessments}
+            courseId={course.id}
+            onTry={() => setGuess({ courseId: course.id, scores: Object.fromEntries(items.filter((a) => a.score === null && a.weight > 0).map((a) => [a.id, a.aim ?? null])) })}
+          />
+        )}
       </div>
 
       <div className="drawer-section" style={{ gap: 0 }}>
@@ -1035,8 +1186,8 @@ export function CourseDrawer({ learn, courseId, focusItem, now, onChange, onClos
                 </span>
               </span>
               <span className="tnum" style={{ color: 'var(--t2)', textAlign: 'right' }}>{a.weight}%</span>
-              <span className="tnum" style={{ textAlign: 'right', fontWeight: a.score !== null ? 600 : 400, color: a.score !== null ? 'var(--tx)' : 'var(--t3)' }}>
-                {a.score !== null ? `${a.score}%` : '–'}
+              <span className="tnum" style={{ textAlign: 'right', fontWeight: a.score !== null ? 600 : 400, color: a.score !== null ? 'var(--tx)' : 'var(--t3)' }} title={a.score === null && a.aim !== undefined ? `Aiming for ${a.aim}%` : undefined}>
+                {a.score !== null ? `${a.score}%` : a.aim !== undefined ? <span className="ln-aim">aim {a.aim}%</span> : '–'}
               </span>
               <span style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <span className={'chip ' + (a.score !== null ? 'chip-accent' : a.status !== 'done' && a.due && dayDiff(today, parseYmd(a.due)) < 0 ? 'chip-warn' : 'chip-neutral')}>

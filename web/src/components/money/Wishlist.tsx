@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { affordableFrom, calcMonths, fmtMoney, isDone, MAX_WISHES, monthKeys, monthName, PRIORITIES, STATUSES, wishStats } from '../../../../shared/money';
 import type { Money, WishItem } from '../../../../shared/types';
 import { newId } from '../../util';
-import { cellKeys, NumCell, shortDate, TextCell } from './shared';
+import { AccountSelect, cellKeys, lastAccount, NumCell, shortDate, TextCell } from './shared';
+import { WhatIf } from './WhatIf';
 
 const blankWish = (id: string): WishItem => ({ id, name: '', category: '', priority: '', status: '', price: null, target: '', notes: '' });
 
-export function Wishlist({ money, today, onChange, onPurchased }: { money: Money; today: string; onChange: (l: WishItem[]) => void; onPurchased: (w: WishItem) => void }) {
+/** `top` goes above it, in the same scrolling body: the savings goals. */
+export function Wishlist({ money, today, onChange, onPurchased, top }: { money: Money; today: string; onChange: (l: WishItem[]) => void; onPurchased: (w: WishItem) => void; top?: React.ReactNode }) {
   const list = money.wishlist;
   // The empty row at the end becomes a real item as soon as something is typed in it.
   // Its id is made up front, so the row keeps its key (and focus) when that happens.
@@ -15,6 +17,8 @@ export function Wishlist({ money, today, onChange, onPurchased }: { money: Money
   const rows = list.length < MAX_WISHES ? [...list, blankWish(ghostId)] : list;
   const months = calcMonths(money, monthKeys(money, today));
   const lastKey = months[months.length - 1].key;
+  /** The item whose purchase is being tried out against the forecast: on which day, from which account. */
+  const [trying, setTrying] = useState<{ id: string; date: string; account: string } | null>(null);
 
   const set = (item: WishItem, patch: Partial<WishItem>) => {
     const next = { ...item, ...patch };
@@ -27,6 +31,7 @@ export function Wishlist({ money, today, onChange, onPurchased }: { money: Money
 
   return (
     <div className="money-body">
+      {top}
       <div className="m-stats">
         <div className="m-stat">
           <span className="meta">Items</span>
@@ -61,7 +66,7 @@ export function Wishlist({ money, today, onChange, onPurchased }: { money: Money
               <col style={{ width: 150 }} />
               <col style={{ width: 96 }} />
               <col />
-              <col style={{ width: 34 }} />
+              <col style={{ width: 64 }} />
             </colgroup>
             <thead>
               <tr>
@@ -81,8 +86,10 @@ export function Wishlist({ money, today, onChange, onPurchased }: { money: Money
                 const ghost = w.id === ghostId;
                 const fits = !ghost && !isDone(w) && w.price ? affordableFrom(w.price, months, today) : undefined;
                 const late = !!fits && !!w.target && fits.slice(0, 7) > w.target;
+                const open = trying?.id === w.id && !!w.price;
                 return (
-                  <tr key={w.id} className={(isDone(w) ? 'done' : '') + (ghost ? ' ghost' : '')}>
+                  <Fragment key={w.id}>
+                  <tr className={(isDone(w) ? 'done' : '') + (ghost ? ' ghost' : '')}>
                     <td>
                       <TextCell value={w.name} label="Name" r={r} c={0} max={80} placeholder={ghost ? 'Add an item…' : undefined} className="wish-name" onChange={(v) => set(w, { name: v })} />
                     </td>
@@ -125,6 +132,17 @@ export function Wishlist({ money, today, onChange, onPurchased }: { money: Money
                       <TextCell value={w.notes} label="Notes" r={r} c={7} max={200} onChange={(v) => set(w, { notes: v })} />
                     </td>
                     <td className="c">
+                      {!ghost && !isDone(w) && !!w.price && (
+                        <button
+                          className={'icon-btn row-x' + (open ? ' on' : '')}
+                          title="What if you bought it? See the forecast before and after"
+                          aria-label={`What if you bought ${w.name || 'this item'}`}
+                          aria-expanded={open}
+                          onClick={() => setTrying(open ? null : { id: w.id, date: fits && fits > today ? fits : today, account: lastAccount(money) })}
+                        >
+                          <i className="ph-duotone ph-question" />
+                        </button>
+                      )}
                       {!ghost && (
                         <button className="icon-btn row-x" title={`Remove ${w.name || 'this item'}`} aria-label={`Remove ${w.name || 'this item'}`} onClick={() => onChange(list.filter((x) => x.id !== w.id))}>
                           <i className="ph-duotone ph-x" />
@@ -132,6 +150,25 @@ export function Wishlist({ money, today, onChange, onPurchased }: { money: Money
                       )}
                     </td>
                   </tr>
+                  {open && trying && (
+                    <tr className="wish-whatif">
+                      <td colSpan={9}>
+                        <div className="wish-whatif-body">
+                          <span className="meta">Buy it on</span>
+                          <input className="cell tnum" type="date" aria-label="Buy it on" min={today} value={trying.date} onChange={(e) => e.target.value && setTrying({ ...trying, date: e.target.value })} />
+                          <span className="meta">from</span>
+                          <AccountSelect money={money} value={trying.account} label="Pay from" onChange={(account) => setTrying({ ...trying, account })} />
+                          <WhatIf
+                            money={money}
+                            today={today}
+                            label={`If you buy it for ${fmtMoney(w.price!)}`}
+                            add={[{ id: 'what-if', date: trying.date, kind: 'out', amount: w.price!, note: w.name, category: 'Shopping', planned: true, account: trying.account, to: '' }]}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>
