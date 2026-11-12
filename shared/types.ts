@@ -540,12 +540,68 @@ export interface DirListing {
 }
 
 export interface ContainerInfo {
+  /** Docker's full 64-character id. */
+  id: string;
   name: string;
   image: string;
   /** running, exited, restarting… */
   state: string;
   /** Docker's own wording, e.g. "Up 3 days (healthy)". */
   status: string;
+  /** Launchpad's own container, which the page won't restart. */
+  self: boolean;
+}
+
+/** A line of a container's log. */
+export interface LogLine {
+  /** Docker's timestamp, with the fraction padded to 9 digits so later lines sort after earlier ones. */
+  at: string | null;
+  stream: 'out' | 'err';
+  text: string;
+}
+
+/** A disk's SMART health, read with smartctl over SSH. */
+export interface DiskHealth {
+  /** e.g. /dev/sda or /dev/nvme0. */
+  name: string;
+  model: string | null;
+  serial: string | null;
+  capacityBytes: number | null;
+  kind: 'nvme' | 'ssd' | 'hdd' | 'unknown';
+  /** SMART's overall verdict; null when the disk didn't give one. */
+  passed: boolean | null;
+  tempC: number | null;
+  powerOnHours: number | null;
+  /** ATA and SATA disks. */
+  reallocated: number | null;
+  pending: number | null;
+  uncorrectable: number | null;
+  /** NVMe drives: how much of the rated write endurance is used, errors on the media, spare blocks left (%). */
+  percentUsed: number | null;
+  mediaErrors: number | null;
+  availableSpare: number | null;
+  /** good, worth a look (warn), or failing (bad). */
+  level: 'good' | 'warn' | 'bad' | 'unknown';
+  /** What's worrying, in plain words. */
+  problems: string[];
+  /** smartctl couldn't read this disk. */
+  error: string | null;
+}
+
+export interface DisksReport {
+  /** When the disks were last read; null before the first time. */
+  at: string | null;
+  /** ok, or what's missing: SSH off, the sudoers rule, or smartmontools itself. */
+  status: 'ok' | 'no-ssh' | 'no-sudo' | 'no-smartctl' | 'error';
+  message: string | null;
+  disks: DiskHealth[];
+}
+
+/** A saved command for the terminal. */
+export interface Snippet {
+  id: string;
+  name: string;
+  command: string;
 }
 
 export interface ServerStats {
@@ -563,6 +619,8 @@ export interface ServerStats {
   /** null when Docker isn't connected (DOCKER_HOST). */
   containers: ContainerInfo[] | null;
   containersError: string | null;
+  /** The restart-only Docker proxy is connected (DOCKER_RESTART_HOST), so containers can be restarted from the page. */
+  canRestart: boolean;
   speed: { tests: SpeedTest[]; running: boolean };
 }
 
@@ -652,6 +710,8 @@ export interface Backup {
   packages?: Package[];
   /** The photo panels' order and focus points. The files come in a .zip backup; a JSON one only re-lists photos still on the server. */
   photos?: Photo[];
+  /** The terminal's saved commands. */
+  snippets?: Snippet[];
 }
 
 export type BackupPart = Exclude<keyof Backup, 'version' | 'exported'>;

@@ -14,13 +14,15 @@ import { authUrl, completeTask, createTask, exchangeCode, GoogleError, revoke } 
 import { asTab, docVersion, store, updatePackages } from './store';
 import { dbSnapshot, describeRestored, exportBackup, readBackupUpload, restoreBackup, RestoreError, zipBackup } from './backup';
 import { listSnapshots, removeSnapshot, snapshotBackup, snapshotFile, startSnapshots, takeSnapshot } from './snapshots';
-import { cleanCountdowns, cleanMood, cleanPrefs, isStr, isYmd, validBookmarks, validNotes } from './clean';
+import { cleanCountdowns, cleanMood, cleanPrefs, cleanSnippet, isStr, isYmd, MAX_SNIPPETS, validBookmarks, validNotes } from './clean';
 import { eventStream, tabOf } from './events';
 import { claudeEnabled } from './claude';
 import { MAX_PHOTOS, MAX_PHOTO_BYTES, readPhoto, removePhotoFile, sniffImage, writePhoto } from './photos';
 import { isRunning, newPackage, refreshPackage, refreshSummaries, refreshWeather, runAllGoogle, runIfStale, runSource, signOutGoogle, startScheduler } from './sync';
 import { attachTerminal, FileError, listDir, makeDir, MAX_TEXT, readFileStream, readText, remove, rename, shellInfo, trustHostKey, abandonUpload, uploadPiece, UPLOAD_CHUNK, writeText } from './shell';
 import { serverStats, startSampler } from './system';
+import { containerLogs, DockerError, restartContainer } from './docker';
+import { diskHealth } from './disks';
 import { startCleanup } from './cleanup';
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
 import { cleanLearn } from '../../shared/learn';
@@ -355,6 +357,22 @@ const speedInfo = () => ({ tests: store.speedTests(), running: isRunning('speedt
 
 app.get('/api/server', async (c) => c.json(await serverStats(c.req.query('iface'), speedInfo())));
 
+// Restarts and SMART reads act on the server, so a page from another site can't ask for them.
+app.use('/api/server/*', async (c, next) => (foreignOrigin(c.req.header('origin'), c.req.header('host')) ? c.json({ error: 'Cross-site request refused' }, 403) : next()));
+
+/** A container's last lines (?tail=), or only those since a line's timestamp (?since=), for following along. */
+app.get('/api/server/containers/:id/logs', async (c) => c.json(await containerLogs(c.req.param('id'), c.req.query('tail'), c.req.query('since'))));
+
+/** The only change Launchpad makes to Docker; see docker.ts. */
+app.post('/api/server/containers/:id/restart', async (c) => {
+  await restartContainer(c.req.param('id'));
+  return c.json({ ok: true });
+});
+
+/** The disks' SMART health, read at most every 30 minutes, or now with /refresh. */
+app.get('/api/server/disks', async (c) => c.json(await diskHealth()));
+app.post('/api/server/disks/refresh', async (c) => c.json(await diskHealth(true)));
+
 /** Start a speed test now; it takes 10–30 s, so this returns at once and the page polls. */
 app.post('/api/speedtest', (c) => {
   runSource('speedtest', true);
@@ -382,6 +400,33 @@ app.get('/api/shell', (c) => c.json(shellInfo(accessOn)));
 app.post('/api/shell/trust', (c) => {
   trustHostKey();
   return c.json(shellInfo(accessOn));
+});
+
+// The terminal's saved commands, changed one at a time so two pages can't overwrite each other's.
+app.get('/api/shell/snippets', (c) => c.json(store.snippets()));
+
+app.post('/api/shell/snippets', async (c) => {
+  const list = store.snippets();
+  if (list.length >= MAX_SNIPPETS) return c.json({ error: `That’s ${MAX_SNIPPETS} snippets already.` }, 400);
+  const s = cleanSnippet(await c.req.json(), randomBytes(9).toString('base64url'));
+  if (!s) return c.json({ error: 'A snippet needs a name and a command.' }, 400);
+  store.setSnippets([...list, s]);
+  return c.json(store.snippets());
+});
+
+app.put('/api/shell/snippets/:id', async (c) => {
+  const id = c.req.param('id');
+  const list = store.snippets();
+  if (!list.some((x) => x.id === id)) return c.json({ error: 'That snippet was deleted, maybe on another device.' }, 404);
+  const s = cleanSnippet(await c.req.json(), id);
+  if (!s) return c.json({ error: 'A snippet needs a name and a command.' }, 400);
+  store.setSnippets(list.map((x) => (x.id === id ? s : x)));
+  return c.json(store.snippets());
+});
+
+app.delete('/api/shell/snippets/:id', (c) => {
+  store.setSnippets(store.snippets().filter((x) => x.id !== c.req.param('id')));
+  return c.json(store.snippets());
 });
 
 app.get('/api/files/list', async (c) => c.json(await listDir(c.req.query('path'))));
@@ -635,7 +680,7 @@ app.get('/api/carriers', (c) => c.json(CARRIERS));
 // ---------- errors ----------
 
 app.onError((err, c) => {
-  if (err instanceof FileError) return c.json({ error: err.message }, err.status);
+  if (err instanceof FileError || err instanceof DockerError) return c.json({ error: err.message }, err.status);
   console.error(`[api] ${c.req.method} ${c.req.path}:`, err.message);
   if (err instanceof GoogleError && err.authExpired) signOutGoogle(err.message);
   return c.json({ error: err.message }, 500);

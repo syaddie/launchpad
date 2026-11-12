@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { cleanCountdowns, cleanMoods, cleanPackages, cleanPrefs, cleanSmokes, cleanWeights, validBookmarks, validNotes } from './clean';
+import { cleanCountdowns, cleanMoods, cleanPackages, cleanPrefs, cleanSmokes, cleanSnippets, cleanWeights, validBookmarks, validNotes } from './clean';
 import { MAX_PHOTOS, photoExists, readPhoto, restorePhotoFile, sniffImage, type StoredPhoto } from './photos';
 import { snapshotDb, store } from './store';
 import { isZip, unzip, zipStream, type ZipEntry } from './zip';
@@ -31,6 +31,7 @@ export function exportBackup(): Backup {
     exerciseMuscles: store.exerciseMuscles(),
     packages: store.packages(),
     photos: store.photos(),
+    snippets: store.snippets(),
   };
 }
 
@@ -49,6 +50,7 @@ export const PART_NAMES: Record<BackupPart, string> = {
   exerciseMuscles: 'exercise muscles',
   packages: 'packages',
   photos: 'photos',
+  snippets: 'terminal snippets',
 };
 
 function cleanMuscles(v: unknown): Record<string, ExerciseMuscles> | null {
@@ -120,6 +122,11 @@ export function restoreBackup(body: unknown): BackupPart[] {
   if (has('photos') && Array.isArray(b.photos)) {
     const v = cleanPhotos(b.photos);
     writes.push(['photos', () => store.setPhotos(v)]);
+  }
+
+  if (has('snippets') && Array.isArray(b.snippets)) {
+    const v = cleanSnippets(b.snippets);
+    writes.push(['snippets', () => store.setSnippets(v)]);
   }
 
   if (!writes.length) throw new RestoreError('That file isn’t a Launchpad backup.');
@@ -210,6 +217,7 @@ export function describeRestored(parts: BackupPart[]): string[] {
       case 'training': return plural(store.training().workouts.length, 'workout');
       case 'packages': return plural(store.packages().length, 'package');
       case 'photos': return plural(store.photos().length, 'photo');
+      case 'snippets': return plural(store.snippets().length, 'terminal snippet');
       default: return PART_NAMES[p];
     }
   });

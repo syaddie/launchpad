@@ -1,4 +1,4 @@
-import type { AppState, Backup, BackupSnapshot, Countdown, DirListing, Mood, Package, Photo, Prefs, SavedDoc, ServerStats, ShellInfo, SourceKey, Task, Training } from '../../shared/types';
+import type { AppState, Backup, BackupSnapshot, Countdown, DirListing, DisksReport, LogLine, Mood, Package, Photo, Prefs, SavedDoc, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
 
 const STATE_KEY = 'launchpad:state';
 const PREFS_KEY = 'launchpad:prefs';
@@ -146,6 +146,14 @@ export const api = {
   snapshots: () => req<BackupSnapshot[]>('GET', '/api/backup/snapshots'),
   takeSnapshot: () => req<BackupSnapshot[]>('POST', '/api/backup/snapshots', {}),
   restoreSnapshot: (id: string) => req<RestoreResult>('POST', `/api/backup/snapshots/${encodeURIComponent(id)}/restore`, {}),
+  containerLogs: (id: string, tail: number, since?: string) =>
+    req<LogLine[]>('GET', `/api/server/containers/${encodeURIComponent(id)}/logs?tail=${tail}${since ? `&since=${encodeURIComponent(since)}` : ''}`),
+  restartContainer: (id: string) => req('POST', `/api/server/containers/${encodeURIComponent(id)}/restart`, {}),
+  disks: (refresh = false) => req<DisksReport>(refresh ? 'POST' : 'GET', refresh ? '/api/server/disks/refresh' : '/api/server/disks', refresh ? {} : undefined),
+  snippets: () => req<Snippet[]>('GET', '/api/shell/snippets'),
+  addSnippet: (s: Omit<Snippet, 'id'>) => req<Snippet[]>('POST', '/api/shell/snippets', s),
+  editSnippet: (s: Snippet) => req<Snippet[]>('PUT', `/api/shell/snippets/${encodeURIComponent(s.id)}`, { name: s.name, command: s.command }),
+  deleteSnippet: (id: string) => req<Snippet[]>('DELETE', `/api/shell/snippets/${encodeURIComponent(id)}`),
 };
 
 /** Everything you've entered, as JSON. */

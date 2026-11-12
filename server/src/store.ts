@@ -14,7 +14,7 @@ import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
 import { cleanTraining } from '../../shared/training';
 import type {
-  BookmarkGroup, CalEvent, CalendarInfo, Countdown, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsTopic, Note, Package, Prefs, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
+  BookmarkGroup, CalEvent, CalendarInfo, Countdown, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsTopic, Note, Package, Prefs, Snippet, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
 } from '../../shared/types';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
@@ -216,6 +216,10 @@ export const store = {
   },
   setSync: (key: SourceKey, v: SyncStatus) => set('sync', { ...store.sync(), [key]: v }),
   resetSync: () => del('sync'),
+
+  /** The terminal's saved commands, in the order they were added. */
+  snippets: () => get<Snippet[]>('snippets', []),
+  setSnippets: (v: Snippet[]) => set('snippets', v),
 
   /** Folders that uploads went into, with when the last one started, so abandoned part files there can be swept. */
   uploadDirs: () => get<Record<string, string>>('uploadDirs', {}),

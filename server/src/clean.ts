@@ -2,7 +2,7 @@
 // so a restored file can't put anything in the store a normal save couldn't.
 import { DEFAULT_ENGINES, HIDEABLE_KEYS } from '../../shared/defaults';
 import { cleanKg } from '../../shared/training';
-import type { BookmarkGroup, Countdown, Mood, Note, Package, Prefs, SearchEngine } from '../../shared/types';
+import type { BookmarkGroup, Countdown, Mood, Note, Package, Prefs, SearchEngine, Snippet } from '../../shared/types';
 
 export const isStr = (v: unknown): v is string => typeof v === 'string';
 
@@ -152,4 +152,28 @@ export function cleanPackages(v: unknown): Package[] {
     lastChecked: isStr(p.lastChecked) ? p.lastChecked : null,
     trackingError: isStr(p.trackingError) ? p.trackingError : null,
   }));
+}
+
+export const MAX_SNIPPETS = 200;
+
+/** One terminal snippet: a name up to 80 characters and a command up to 4,000. Null when either is empty. */
+export function cleanSnippet(v: unknown, id: string): Snippet | null {
+  const s = v as Partial<Snippet> | null;
+  if (!s || !isStr(s.name) || !isStr(s.command)) return null;
+  const name = s.name.trim().slice(0, 80);
+  const command = s.command.replace(/\r\n?/g, '\n').replace(/\s+$/, '').slice(0, 4000);
+  return name && command.trim() ? { id, name, command } : null;
+}
+
+/** Snippets as the store keeps them; ones without a name, a command or an id of their own are dropped. */
+export function cleanSnippets(v: unknown): Snippet[] {
+  if (!Array.isArray(v)) return [];
+  const ids = new Set<string>();
+  return v.flatMap((s) => {
+    const id = s && isStr(s.id) && /^[A-Za-z0-9_-]{1,64}$/.test(s.id) && !ids.has(s.id) ? s.id : null;
+    const c = id && cleanSnippet(s, id);
+    if (!c) return [];
+    ids.add(c.id);
+    return [c];
+  }).slice(0, MAX_SNIPPETS);
 }

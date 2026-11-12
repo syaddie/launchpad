@@ -108,6 +108,7 @@ export function snapshotBackup(id: string): Backup {
       exerciseMuscles: get('exerciseMuscles', {}),
       packages: get('packages', []),
       photos: get('photos', []),
+      snippets: get('snippets', []),
     };
   } finally {
     db.close();

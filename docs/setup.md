@@ -126,10 +126,11 @@ The inbox digest is written from each email's sender, subject and the first 1,00
 
 ## 8. Server view: network traffic and containers
 
-The Server view (rail on the left, or `G` then `S`) shows CPU, memory, disk, network traffic, internet speed tests and your containers. CPU, memory, disk and speed tests work with no setup. Two parts need the extras that `docker-compose.yml` already includes:
+The Server view (rail on the left, or `G` then `S`) shows CPU, memory, disk, network traffic, internet speed tests and your containers. CPU, memory, disk and speed tests work with no setup. Three parts need the extras that `docker-compose.yml` already includes:
 
 - **Network traffic for the whole machine.** The host's `/proc` is mounted read-only at `/host/proc` and `HOST_PROC` points at it. Without it, the chart shows only the container's own traffic and says so.
-- **The container list.** The `docker-proxy` service gives Launchpad a read-only view of Docker: it answers questions about containers and refuses anything that would change them. `DOCKER_HOST` points Launchpad at it.
+- **The container list and logs.** The `docker-proxy` service gives Launchpad a read-only view of Docker: it answers questions about containers and refuses anything that would change them. `DOCKER_HOST` points Launchpad at it.
+- **Restart.** The `docker-restart` service is a second copy of the same proxy that lets through restarts and nothing else, and `DOCKER_RESTART_HOST` points Launchpad at it. It's a separate service so the first one stays read-only. The proxy's own `ALLOW_RESTARTS` setting only takes effect together with `POST=1` (a known bug in the proxy), so this one has `POST=1` but every other part of Docker's API switched off: of all the changes Docker allows, it passes only stop, restart and kill on a container. Launchpad narrows that again: the only change it ever sends is a restart of a container in the list, and never of Launchpad's own container (restart that one on the server with `docker compose restart launchpad`). Starting, stopping, exec, removing and everything else stay out of reach.
 
 If your server copy of the repo is older than this, pick them up once:
 
@@ -139,7 +140,11 @@ git pull
 docker compose up -d
 ```
 
-To leave either out, delete its lines from `docker-compose.yml` (the `/proc` volume and `HOST_PROC`, or the `docker-proxy` service and `DOCKER_HOST`); that part of the view then explains what's missing.
+To leave any of them out, delete its lines from `docker-compose.yml` (the `/proc` volume and `HOST_PROC`; the `docker-proxy` service and `DOCKER_HOST`; or the `docker-restart` service and `DOCKER_RESTART_HOST`); that part of the view then explains what's missing, or the Restart buttons don't appear.
+
+**Logs.** The scroll icon on a container opens its log: the last 500 lines by default (100 to 5,000), stdout and stderr together with stderr in orange, each line with its time. **Following** adds new lines every few seconds and stays at the bottom unless you scroll up. The search box filters to matching lines; Esc clears it, then closes the log.
+
+**Restart.** The arrow on a container (or **Restart** in its log) asks once more, then restarts it. Docker gives it 10 seconds to stop before it's killed and started again.
 
 **Speed tests** run from the server against Cloudflare's speed test (the one behind speed.cloudflare.com) every 3 hours by default. Each moves about 130 MB. Change the interval, turn them off or add your plan's speed in Settings › Trackers; the view's **Test now** runs one straight away.
 
@@ -168,13 +173,36 @@ The Server view's **Terminal** and **Files** tabs give you a shell on the server
 - *Nothing is answering SSH*: sshd isn't running, or a firewall drops connections from Docker's network. With ufw: `sudo ufw allow from 172.16.0.0/12 to any port 22`.
 - *Didn't accept Launchpad's key*: the line from step 3 went into a different user's home, or `~/.ssh` has loose permissions (`chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys`).
 
-A shell keeps running for 15 minutes after you leave the tab or close the page, so coming back (or reloading) picks it up where it was. **Restart** ends it and starts a fresh one. In the terminal, `Ctrl Shift C` and `Ctrl Shift V` copy and paste; Esc and `Ctrl K` go to the shell, not to Launchpad. Text files up to 1 MB open in the editor (`Ctrl S` saves); anything else downloads. Uploads have no size limit of their own: Cloudflare refuses any single request over 100 MB, so the page sends files in 32 MB pieces into a hidden `.launchpad-upload-….part` file next to the destination, which takes the real name when the last piece lands (and is removed if the upload fails, or swept away a day later if the tab closed before it could say so). A piece that's cut off by a dropped connection is retried a few times before the upload gives up. To turn the tabs off again, empty `SSH_USER` and remove Launchpad's line from `authorized_keys`.
+A shell keeps running for 15 minutes after you leave the tab or close the page, so coming back (or reloading) picks it up where it was. **Restart** ends the open tab's shell and starts a fresh one.
+
+**Tabs.** The **+** beside the tabs opens another shell, up to eight per page (and 16 on the server at once, across pages and devices). Each keeps running the same way. Double-click a tab's name to rename it; its **×** (or a middle click) closes it and ends that shell. **Open in terminal** from Files goes to the open tab.
+
+**Snippets.** **Snippets** opens a list of saved commands beside the terminal. **Insert** types one at the prompt so you can change it before pressing Enter; **Run** types it and presses Enter. Add one with **+**, and edit or delete it from its row. They're kept on the server, so every device sees the same list, and they're part of the backup. In the terminal, `Ctrl Shift C` and `Ctrl Shift V` copy and paste; Esc and `Ctrl K` go to the shell, not to Launchpad. Text files up to 1 MB open in the editor (`Ctrl S` saves); anything else downloads. Uploads have no size limit of their own: Cloudflare refuses any single request over 100 MB, so the page sends files in 32 MB pieces into a hidden `.launchpad-upload-….part` file next to the destination, which takes the real name when the last piece lands (and is removed if the upload fails, or swept away a day later if the tab closed before it could say so). A piece that's cut off by a dropped connection is retried a few times before the upload gives up. To turn the tabs off again, empty `SSH_USER` and remove Launchpad's line from `authorized_keys`.
+
+## 10. Optional: disk health (SMART)
+
+The **Disks** panel at the bottom of Server › Overview shows each disk's overall SMART verdict, temperature, how long it has been powered on, and either its reallocated and pending sectors (SATA and SAS disks) or how much of its rated wear is used, media errors and spare blocks (NVMe drives). A disk is flagged when SMART says it's failing, when sectors have been reallocated or are waiting to be, when an NVMe drive is past 80% of its rated wear or reports a critical warning, or when it runs hot (55 °C and up for disks, 70 °C for NVMe).
+
+Reading SMART needs root, so Launchpad runs `sudo -n /usr/sbin/smartctl` over the terminal's SSH connection, which needs step 9 first. It reads the disks at most every 30 minutes; the panel's refresh button reads them again now.
+
+1. Install smartmontools on the server (version 7.0 or later, for its JSON output; Ubuntu 20.04, Debian 11 and anything newer have it):
+   ```bash
+   sudo apt install smartmontools
+   ```
+2. Let your SSH user run smartctl as root without a password, and nothing else. As that user, run this. It writes the rule to a file in `/tmp`, has `visudo` check it, and only then moves it into `/etc/sudoers.d` (a broken file there would stop `sudo` working at all):
+   ```bash
+   echo "$USER ALL=(root) NOPASSWD: /usr/sbin/smartctl --scan -j, /usr/sbin/smartctl -j -a -d * /dev/*" | sudo tee /tmp/launchpad-smartctl >/dev/null && sudo chmod 440 /tmp/launchpad-smartctl && sudo visudo -cf /tmp/launchpad-smartctl && sudo mv /tmp/launchpad-smartctl /etc/sudoers.d/launchpad-smartctl
+   ```
+   The rule allows exactly the two commands Launchpad uses: listing the disks (`--scan -j`) and reading one (`-j -a -d <type> /dev/<disk>`).
+3. Press refresh on the Disks panel.
+
+Until both are done the panel says which step is missing instead of showing an error. Disks behind a hardware RAID card or some USB enclosures may not show up, or show without figures. To undo it: `sudo rm /etc/sudoers.d/launchpad-smartctl`.
 
 ## Backups
 
 Everything is in one SQLite file inside the `launchpad-data` volume, with photos in a `photos` folder beside it. Settings → General → **Backup** has:
 
-- **Download backup**: one JSON file with everything you've entered (bookmarks, notes, settings, countdowns, the cigarette, mood and weight logs, the money tracker, courses and study time, workouts, exercise muscles, packages and the photo list). It leaves out what sync fetches again (calendar, tasks, mail, news, weather) and the Google sign-in.
+- **Download backup**: one JSON file with everything you've entered (bookmarks, notes, settings, countdowns, the cigarette, mood and weight logs, the money tracker, courses and study time, workouts, exercise muscles, packages, the photo list and terminal snippets). It leaves out what sync fetches again (calendar, tasks, mail, news, weather) and the Google sign-in.
 - **With photos (.zip)**: the same backup plus every photo file, in one .zip.
 - **Restore…** takes either file (and the older bookmarks-and-notes files from **Export JSON**). Each part it holds replaces what's there; parts it doesn't hold are kept. From a .zip, photos missing here are put back. Cloudflare refuses uploads over 100 MB, so a bigger .zip has to be restored over the LAN address.
 - **Database (.db)**: a consistent copy of the whole SQLite database, safe to take while Launchpad runs. It includes the Google sign-in, so keep it private. To put it back by hand, stop the container, replace `launchpad.db` in the volume (and delete any `launchpad.db-wal` and `launchpad.db-shm` beside it), then start it.

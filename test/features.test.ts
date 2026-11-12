@@ -5,7 +5,8 @@ import {
 } from '../shared/trackers';
 import type { Countdown } from '../shared/types';
 import { latencyStats, mbps } from '../server/src/speedtest';
-import { isPhysical, parseNetDev, toContainers } from '../server/src/system';
+import { toContainers } from '../server/src/docker';
+import { isPhysical, parseNetDev } from '../server/src/system';
 import { pickAir, pickOutlook, pickRain, pickUv } from '../server/src/weather';
 import { gridLayout, type Area } from '../web/src/layout';
 import { niceMax, slowTests } from '../web/src/components/Server';
