@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../../shared/defaults';
 import { emptyLearn } from '../../../shared/learn';
 import { starterMoney } from '../../../shared/money';
@@ -6,6 +6,8 @@ import { EMPTY_TRAINING } from '../../../shared/training';
 import type { AppState, SavedDoc } from '../../../shared/types';
 import { api, cacheState, ServerError, TAB_ID } from '../api';
 import type { ServerIssue } from '../components/ServerBanner';
+import { flush, pendingCount, pendingItems, setOutboxHandlers, subscribeOutbox } from '../outbox';
+import { applyPending, pendingDocs } from '../pending';
 import { SAVED_DOCS, useSavers } from './useSavers';
 
 const EMPTY: AppState = {
@@ -68,7 +70,9 @@ export function useAppData({ cached, notify, onSaveError, onNotesSaved, onMoneyS
   /** Notes are being typed in, so a refresh shouldn't swap them out yet. */
   noteEditing: RefObject<boolean>;
 }) {
-  const [data, setData] = useState<AppState>(() => fromCache(cached));
+  // Edits still waiting in the queue (made offline, maybe before a reload) are on screen too.
+  const [data, setData] = useState<AppState>(() => applyPending(fromCache(cached), pendingItems()));
+  const waiting = useSyncExternalStore(subscribeOutbox, pendingCount);
   const [serverIssue, setServerIssue] = useState<ServerIssue | null>(null);
 
   const update = useCallback((fn: (d: AppState) => AppState) => {
@@ -87,13 +91,17 @@ export function useAppData({ cached, notify, onSaveError, onNotesSaved, onMoneyS
 
   /** Take fresh server state, all of it or some parts, but keep local edits that haven't been saved yet. */
   const merge = useCallback(
-    (s: Partial<AppState>) => {
+    (fresh: Partial<AppState>) => {
+      const queued = pendingItems();
+      const docs = pendingDocs(queued);
       const keep: Record<SavedDoc, boolean> = {
-        bookmarks: savers.bookmarks.busy(),
-        notes: savers.notes.busy() || noteEditing.current,
-        money: savers.money.busy(),
-        learn: savers.learn.busy(),
+        bookmarks: savers.bookmarks.busy() || docs.has('bookmarks'),
+        notes: savers.notes.busy() || noteEditing.current || docs.has('notes'),
+        money: savers.money.busy() || docs.has('money'),
+        learn: savers.learn.busy() || docs.has('learn'),
       };
+      // Small saves still waiting (a cigarette, a mood...) stay on screen until they reach the server.
+      const s = applyPending(fresh, queued.filter((p) => p.kind !== 'doc'));
       // A document taken from the server is the new starting point for the next save; one kept keeps its old one.
       for (const k of SAVED_DOCS) if (s[k] !== undefined && !keep[k]) setBase(k, s[k], s.versions?.[k]);
       update((prev) => {
@@ -125,6 +133,9 @@ export function useAppData({ cached, notify, onSaveError, onNotesSaved, onMoneyS
           merge(s);
           setServerIssue(null);
           if (!Array.isArray(keys)) lastRefresh.current = Date.now();
+          // The server answers again: send what was saved while it didn't. A full fetch also
+          // looks for edits another tab left in the queue; a partial one only for this tab's.
+          if (!Array.isArray(keys) || pendingCount()) void flush();
         })
         .catch((e) => {
           console.warn('refresh failed', e);
@@ -143,14 +154,30 @@ export function useAppData({ cached, notify, onSaveError, onNotesSaved, onMoneyS
       // Tasks sync "on focus", throttled server-side to once every 30 s.
       api.sync('tasks', 30).then(merge).catch(() => refresh());
     };
+    const onOnline = () => refresh();
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', onVisible);
+    window.addEventListener('online', onOnline);
     return () => {
       clearInterval(iv);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onVisible);
+      window.removeEventListener('online', onOnline);
     };
   }, [refresh, merge]);
+
+  useEffect(() => {
+    setOutboxHandlers({
+      // Fetching shows the banner straight away if the server really is unreachable.
+      queued: () => refresh(),
+      sent: () => refresh(),
+      dropped: (_, e) => notify(`Couldn’t save a change made while the server was unreachable: ${e.message}`),
+      docSaved: (key, value, version) => {
+        if (!savers[key].busy()) setBase(key, value, version);
+      },
+      docConflict: (key) => (savers[key] as { schedule: (v: unknown) => void }).schedule(dataRef.current[key]),
+    });
+  }, [refresh, notify, savers, setBase]);
 
   // Live updates: the server says which store keys changed (another tab, a phone, a sync that
   // finished) and this tab fetches just the parts of the state those feed. Only a visible tab
@@ -221,5 +248,5 @@ export function useAppData({ cached, notify, onSaveError, onNotesSaved, onMoneyS
     };
   }, [refresh]);
 
-  return { data, update, savers, merge, replace, refresh, serverIssue };
+  return { data, update, savers, merge, replace, refresh, serverIssue, waiting };
 }

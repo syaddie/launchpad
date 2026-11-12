@@ -2,6 +2,8 @@ import { useCallback, useMemo, useRef, type RefObject } from 'react';
 import { merge3, mergeNotes } from '../../../shared/merge';
 import type { AppState, Note, SavedDoc } from '../../../shared/types';
 import { api, ConflictError } from '../api';
+import { dropOwnDoc, isOffline, pendingItems, queueDoc } from '../outbox';
+import { pendingDocs } from '../pending';
 import { useSaver, type Saver } from './useSaver';
 
 export const SAVED_DOCS = ['bookmarks', 'notes', 'money', 'learn'] as const satisfies readonly SavedDoc[];
@@ -26,12 +28,14 @@ export function useSavers({ data, dataRef, update, notify, onError, onNotesSaved
 }) {
   /** For each document saved whole, the server's copy this page's edits started from, and its version. */
   const bases = useRef<Record<SavedDoc, Base> | null>(null);
-  bases.current ??= Object.fromEntries(SAVED_DOCS.map((k) => [k, { value: data[k], version: data.versions?.[k] }])) as Record<SavedDoc, Base>;
+  // A document still waiting in the queue (edited offline) starts from where those edits did.
+  bases.current ??= Object.fromEntries(SAVED_DOCS.map((k) => [k, pendingDocs(pendingItems()).get(k)?.base ?? { value: data[k], version: data.versions?.[k] }])) as Record<SavedDoc, Base>;
 
   /**
    * Save one document. If another tab or device saved it first, merge this page's edits
    * (all of them, including any made while the save was out) into their copy, show the
-   * result, and hand it back to be saved on top of theirs.
+   * result, and hand it back to be saved on top of theirs. When the server can't be reached,
+   * it's kept in the queue (outbox.ts) and sent when it answers again.
    */
   const saveDoc = useCallback(
     <K extends SavedDoc>(key: K) =>
@@ -40,7 +44,9 @@ export function useSavers({ data, dataRef, update, notify, onError, onNotesSaved
         try {
           const { version } = await api.putDoc(key, v, unchecked ? undefined : base?.version, keepalive);
           bases.current![key] = { value: v, version };
+          dropOwnDoc(key);
         } catch (e) {
+          if (isOffline(e)) queueDoc(key, v, base);
           if (!(e instanceof ConflictError)) throw e;
           const mine = dataRef.current[key];
           const theirs = e.value as AppState[K];
@@ -61,10 +67,12 @@ export function useSavers({ data, dataRef, update, notify, onError, onNotesSaved
   const saveNotes = useMemo(() => saveDoc('notes'), [saveDoc]);
   const saveMoney = useMemo(() => saveDoc('money'), [saveDoc]);
   const saveLearn = useMemo(() => saveDoc('learn'), [saveDoc]);
-  const bookmarks = useSaver(saveBookmarks, 400, undefined, onError);
-  const money = useSaver(saveMoney, 500, onMoneySaved, onError);
-  const notes = useSaver(saveNotes, 500, onNotesSaved, onError);
-  const learn = useSaver(saveLearn, 400, undefined, onError);
+  // A save kept for later isn't an error: the server banner says how many are waiting.
+  const failed = useCallback((e: Error) => isOffline(e) || onError(e), [onError]);
+  const bookmarks = useSaver(saveBookmarks, 400, undefined, failed);
+  const money = useSaver(saveMoney, 500, onMoneySaved, failed);
+  const notes = useSaver(saveNotes, 500, onNotesSaved, failed);
+  const learn = useSaver(saveLearn, 400, undefined, failed);
   const savers: Savers = useMemo(() => ({ bookmarks, notes, money, learn }), [bookmarks, notes, money, learn]);
 
   /** The server's copy of a document is now where the next save of it starts. */

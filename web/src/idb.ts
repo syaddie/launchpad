@@ -1,5 +1,6 @@
 // A small IndexedDB wrapper for what the page keeps in the browser: its copy of the state
-// (too big for localStorage's ~5 MB once the workout history grows).
+// (too big for localStorage's ~5 MB once the workout history grows) and the edits waiting
+// to be saved while the server can't be reached (outbox.ts).
 
 const NAME = 'launchpad';
 const VERSION = 1;
@@ -46,3 +47,21 @@ export async function idb<T>(store: string, mode: IDBTransactionMode, fn: (s: ID
 
 export const kvGet = <T>(key: string) => idb<T | undefined>('kv', 'readonly', (s) => s.get(key));
 export const kvSet = (key: string, value: unknown) => idb('kv', 'readwrite', (s) => s.put(value, key)).then(() => {});
+
+/** Read `key`, change it with `fn` and write it back, all in one transaction, so two tabs can't interleave. */
+export async function kvUpdate<T>(key: string, fn: (v: T | undefined) => T): Promise<T> {
+  const db = await open();
+  return new Promise<T>((resolve, reject) => {
+    const tx = db.transaction('kv', 'readwrite');
+    const store = tx.objectStore('kv');
+    let next: T;
+    const get = store.get(key);
+    get.onsuccess = () => {
+      next = fn(get.result as T | undefined);
+      store.put(next, key);
+    };
+    tx.oncomplete = () => resolve(next);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+  });
+}

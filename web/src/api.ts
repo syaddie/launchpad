@@ -190,7 +190,8 @@ export const api = {
   putPhotos: (v: Photo[]) => req('PUT', '/api/photos', v),
   deletePhoto: (id: string) => req('DELETE', `/api/photos/${encodeURIComponent(id)}`),
   putCountdowns: (v: Countdown[]) => req<Countdown[]>('PUT', '/api/countdowns', v),
-  addSmoke: () => req<string[]>('POST', '/api/smokes', {}),
+  /** `at` for one logged earlier (a queued one); otherwise the server's time. */
+  addSmoke: (at?: string) => req<string[]>('POST', '/api/smokes', at ? { at } : {}),
   removeSmoke: (at?: string) => req<string[]>('DELETE', `/api/smokes${at ? `?at=${encodeURIComponent(at)}` : ''}`),
   putTraining: (v: Training) => req<Training>('PUT', '/api/training', v),
   refreshTraining: (force: boolean) => req<AppState>('POST', `/api/training/refresh${force ? '?force=1' : ''}`, {}),

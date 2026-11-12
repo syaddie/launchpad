@@ -26,6 +26,7 @@ import { useHashView, useLayout, useMinuteNow, useSystemDark } from './hooks/use
 import { useShortcuts } from './hooks/useShortcuts';
 import { useFlash, useToast } from './hooks/useToast';
 import { gridLayout, type Area } from './layout';
+import { send } from './outbox';
 import { paletteItems, paletteSearches, type PaletteContext } from './paletteItems';
 import { dayDiff, hm, inboxBadge, inMinutes, parseYmd } from './util';
 
@@ -92,7 +93,7 @@ export function App({ cached }: { cached: AppState | null }) {
 
   // ---------- data ----------
 
-  const { data, update, savers, merge, replace, refresh, serverIssue } = useAppData({ cached, notify: showToast, onSaveError, onNotesSaved: flashSaved, onMoneySaved: flashMoneySaved, noteEditing });
+  const { data, update, savers, merge, replace, refresh, serverIssue, waiting } = useAppData({ cached, notify: showToast, onSaveError, onNotesSaved: flashSaved, onMoneySaved: flashMoneySaved, noteEditing });
   const photoSlots = usePhotoSlots(data.photos.length);
 
   useEffect(() => {
@@ -149,7 +150,8 @@ export function App({ cached }: { cached: AppState | null }) {
 
   const setPrefs = (prefs: Prefs) => {
     update((d) => ({ ...d, prefs }));
-    api.putPrefs(prefs).then(() => refresh()).catch(onSaveError);
+    // Queued when the server can't be reached; otherwise fetch what the change set off (a new weather area).
+    send({ kind: 'prefs', value: prefs }).then((saved) => saved && refresh()).catch(onSaveError);
   };
 
   const refreshNews = () => {
@@ -178,9 +180,8 @@ export function App({ cached }: { cached: AppState | null }) {
       prefs,
       news: newsTopics.map((t) => d.news.find((n) => n.topic.toLowerCase() === t.toLowerCase()) ?? { topic: t, articles: [], stories: null, summarisedAt: null, fetchedAt: null, error: null }),
     }));
-    api
-      .putPrefs(prefs)
-      .then(() => (added ? refreshNews() : refresh()))
+    send({ kind: 'prefs', value: prefs })
+      .then((saved) => saved && (added ? refreshNews() : refresh()))
       .catch(onSaveError);
   };
 
@@ -198,7 +199,7 @@ export function App({ cached }: { cached: AppState | null }) {
 
   const completeTask = (t: Task, keepalive?: boolean) => {
     update((d) => ({ ...d, tasks: d.tasks.filter((x) => x.id !== t.id) }));
-    api.completeTask(t, keepalive).catch((e) => {
+    send({ kind: 'completeTask', listId: t.listId, id: t.id }, keepalive).catch((e) => {
       showToast(`Couldn’t complete task: ${e.message}`);
       refresh();
     });
@@ -255,11 +256,11 @@ export function App({ cached }: { cached: AppState | null }) {
   // ---------- trackers ----------
 
   const smokeSaver = useRef(Promise.resolve());
-  /** Server calls for the cigarette log run in order, and the server's list replaces the optimistic one. */
-  const smokeCall = (call: () => Promise<string[]>) => {
+  /** Server calls for the cigarette log run in order, and the server's list replaces the optimistic one (none when queued). */
+  const smokeCall = (call: () => Promise<string[] | undefined>) => {
     smokeSaver.current = smokeSaver.current
       .then(call)
-      .then((smokes) => update((d) => ({ ...d, smokes })))
+      .then((smokes) => smokes && update((d) => ({ ...d, smokes })))
       .catch((e) => {
         showToast(`Couldn’t save: ${e.message}`);
         refresh();
@@ -268,14 +269,14 @@ export function App({ cached }: { cached: AppState | null }) {
 
   const undoSmoke = (at: string) => {
     update((d) => ({ ...d, smokes: d.smokes.filter((x) => x !== at) }));
-    smokeCall(() => api.removeSmoke(at));
+    smokeCall(() => send({ kind: 'removeSmoke', at }));
   };
 
   const logSmoke = () => {
     const at = new Date().toISOString();
     const count = smokesOn([...data.smokes, at], new Date()).length;
     update((d) => ({ ...d, smokes: [...d.smokes, at] }));
-    smokeCall(() => api.addSmoke());
+    smokeCall(() => send({ kind: 'addSmoke', at }));
     const limit = data.prefs.cigaretteLimit;
     showToast(`Logged · ${count} today${limit ? ` of ${limit}` : ''}`, { label: 'Undo', run: () => undoSmoke(at) });
   };
@@ -289,10 +290,9 @@ export function App({ cached }: { cached: AppState | null }) {
       else weights[date] = kg;
       return { ...d, weights };
     });
-    api
-      .putWeight(date, kg)
+    send<Record<string, number>>({ kind: 'weight', date, kg })
       .then((weights) => {
-        update((d) => ({ ...d, weights }));
+        if (weights) update((d) => ({ ...d, weights }));
         if (undo && kg !== null) showToast(`Logged ${fmtKg(kg)} kg for today`, { label: 'Undo', run: () => setWeight(date, before ?? null) });
       })
       .catch(onSaveError);
@@ -305,15 +305,14 @@ export function App({ cached }: { cached: AppState | null }) {
       else delete moods[date];
       return { ...d, moods };
     });
-    api
-      .putMood(date, mood ?? { level: 0 })
-      .then((moods) => update((d) => ({ ...d, moods })))
+    send<Record<string, Mood>>({ kind: 'mood', date, mood })
+      .then((moods) => moods && update((d) => ({ ...d, moods })))
       .catch(onSaveError);
   };
 
   const setCountdowns = (countdowns: Countdown[]) => {
     update((d) => ({ ...d, countdowns }));
-    api.putCountdowns(countdowns).catch(onSaveError);
+    send({ kind: 'countdowns', value: countdowns }).catch(onSaveError);
   };
 
   const setMoney = (money: Money) => {
@@ -539,7 +538,7 @@ export function App({ cached }: { cached: AppState | null }) {
       <Rail view={view} hidden={data.prefs.hidden} badges={{ inbox: inboxCount }} onView={setView} onPalette={() => setPalette(true)} onSettings={() => setDrawer({ type: 'settings' })} />
       <div className="lp-inner">
         <TopBar data={data} now={now} subline={subline} search={search} onSearch={setSearch} searchRef={searchRef} smokesToday={smokesToday} onLogSmoke={logSmoke} onOpenTraining={() => setView('training')} onOpenLearn={() => setView('learn')} />
-        {serverIssue && <ServerBanner issue={serverIssue} onRetry={() => refresh()} />}
+        {serverIssue && <ServerBanner issue={serverIssue} waiting={waiting} onRetry={() => refresh()} />}
         <Suspense fallback={<main className="view-loading" aria-busy="true" />}>
         {view === 'news' ? (
           <News data={data} now={now} busy={newsBusy} onRefresh={refreshNews} onTopics={setNewsTopics} />
