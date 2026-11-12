@@ -464,6 +464,26 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .task:hover { background: var(--hv); }
 .task-title { flex: 1; min-width: 0; font-size: 14px; line-height: 20px; text-wrap: pretty; }
 .task-due { font-size: 12px; line-height: 20px; color: var(--t3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.task-title.editable { cursor: pointer; }
+.task-subcount { margin-left: 8px; font-size: 12px; color: var(--t3); }
+.task-subs { margin-left: 26px; }
+.task-sub .task { padding-top: 3px; padding-bottom: 3px; }
+.task-sub .task-title { font-size: 13px; }
+.task.open { background: var(--hv); }
+.task-edit { display: flex; flex-direction: column; gap: 6px; margin: 2px 0 6px 26px; padding: 8px 10px; border-left: 2px solid var(--ln); animation: lpFade 0.15s; }
+.task-edit-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.task-edit-row > i { color: var(--t3); font-size: 15px; flex: none; }
+.task-edit-row .input { flex: 1; min-width: 0; }
+.task-edit-hint { font-size: 12px; color: var(--t3); white-space: nowrap; }
+.task-delete { display: inline-flex; align-items: center; gap: 5px; color: var(--wn); }
+/* Adding an event, under Today's agenda. */
+.ev-add-wrap { margin-top: 6px; }
+.ev-add { margin-bottom: 0; }
+.ev-reconnect { font-size: 13px; color: var(--t3); }
+.ev-draft { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 10px 6px 36px; font-size: 13px; animation: lpFade 0.15s; }
+.ev-draft-what { display: flex; flex-direction: column; flex: 1 1 140px; min-width: 0; }
+.ev-draft-what b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ev-draft-what span { color: var(--acd); font-variant-numeric: tabular-nums; }
 .undo { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 8px 10px; border-radius: 4px; background: var(--hv); font-size: 13px; animation: lpRise 0.2s ease-out; }
 
 /* ---------- notes ---------- */
@@ -657,6 +677,22 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .email-from { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--t2); }
 .email-row.unread .email-from, .email-row.unread .headline-title { font-weight: 600; color: var(--tx); }
 .email-snippet { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+/* Archive, Mark read and Make a task, on digest items and emails. */
+.inbox-acts { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 2px; font-size: 12px; }
+.inbox-acts button { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: none; background: none; color: var(--t3); font: inherit; cursor: pointer; }
+.inbox-acts button:hover { color: var(--tx); }
+.email-wrap { position: relative; }
+.email-wrap .inbox-acts { position: absolute; top: 6px; right: 8px; margin: 0; padding: 1px 4px; border-radius: 3px; background: var(--rz); opacity: 0; transition: opacity 0.12s; }
+.email-wrap:hover .inbox-acts, .email-wrap:focus-within .inbox-acts { opacity: 1; }
+.inbox-acts .icon-only { font-size: 15px; }
+.inbox-reconnect { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; flex: none; font-size: 13px; color: var(--t3); }
+/* Bills and receipts found in Gmail, waiting for Keep or Dismiss. */
+.inbox-bills { flex: none; }
+.bill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 7px 10px; border-radius: 4px; font-size: 13px; }
+.bill-row + .bill-row { border-top: 1px solid var(--ln); border-radius: 0; }
+.bill-row .bill-what { flex: 1 1 260px; min-width: 0; }
+.bill-row .bill-what a { display: block; font-size: 12px; color: var(--t3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bill-row .pkg-new { flex: none; }
 
 /* ---------- shared bits for the new views ---------- */
 

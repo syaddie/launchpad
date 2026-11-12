@@ -3,7 +3,8 @@
 import { randomUUID } from 'node:crypto';
 import { googleConfigured } from './config';
 import { claudeEnabled } from './claude';
-import { fetchCalendar, fetchInbox, fetchTasks, GoogleError, scanGmail } from './google';
+import { addFinds, CLAUDE_BATCH, readBill, readBillsWithClaude, withoutDueDate, type BillMail, type FoundBill } from './bills';
+import { fetchBillMail, fetchCalendar, fetchInbox, fetchTasks, GoogleError, scanGmail } from './google';
 import { inRange, summariseInbox } from './inbox';
 import { fetchHeadlines, summariseHeadlines } from './news';
 import { asServer, store, updatePackages, type NewsCache } from './store';
@@ -73,6 +74,11 @@ async function runTasks() {
 }
 
 async function runGmail() {
+  await runPackages();
+  await runBills();
+}
+
+async function runPackages() {
   const finds = await scanGmail();
   if (!finds.length) return;
   const added: Package[] = [];
@@ -86,6 +92,47 @@ async function runGmail() {
     return [...added, ...pkgs];
   });
   for (const p of added) await refreshPackage(p.id).catch(() => {});
+}
+
+/**
+ * Bills, due notices and receipts in recent mail become suggestions in the Inbox view. Each
+ * email is read once: by the rules, or by Claude when the rules can't and there's an API key.
+ */
+async function runBills() {
+  const seen = store.billSeen();
+  const mails = await fetchBillMail(new Set(seen));
+  if (!mails.length) return;
+  const found: FoundBill[] = [];
+  const unsure: BillMail[] = [];
+  const read: string[] = [];
+  for (const m of mails) {
+    const r = readBill(m);
+    if (r.kind === 'unsure' && claudeEnabled()) {
+      unsure.push(m);
+      continue;
+    }
+    if (r.kind === 'bill') found.push(r.bill);
+    else if (r.kind === 'unsure') {
+      const b = withoutDueDate(m);
+      if (b) found.push(b);
+    }
+    read.push(m.id);
+  }
+  // A failed Claude call leaves its emails unread, to try again on the next run.
+  const batch = unsure.slice(0, CLAUDE_BATCH);
+  let claudeError: Error | null = null;
+  if (batch.length) {
+    try {
+      found.push(...(await readBillsWithClaude(batch)));
+      read.push(...batch.map((m) => m.id));
+    } catch (e) {
+      claudeError = e as Error;
+    }
+  }
+  const next = addFinds(store.bills(), store.billSeen(), found);
+  if (found.length) store.setBills(next.pending);
+  store.setBillSeen([...next.seen, ...read]);
+  if (claudeError) throw new Error(`Reading bills: ${claudeError.message}`);
 }
 
 async function runCarriers() {
@@ -145,6 +192,7 @@ async function runNews(force: boolean) {
 }
 
 async function runInbox(force: boolean) {
+  const startedAt = new Date().toISOString();
   const prev = store.inbox();
   const emails = await fetchInbox(prev.emails);
   const next = { ...prev, emails, digests: { ...prev.digests }, fetchedAt: new Date().toISOString(), error: null as string | null };
@@ -168,6 +216,13 @@ async function runInbox(force: boolean) {
       }),
     );
   }
+  // Archived or marked read here while this ran: keep that, not what Gmail said before it.
+  const latest = store.inbox();
+  const ids = new Set(emails.map((e) => e.id));
+  const marks = Object.fromEntries(Object.entries(latest.marks).filter(([id, m]) => ids.has(id) && Date.now() - Date.parse(m.at) < 3_600_000));
+  next.emails = emails.map((e) => (marks[e.id] && marks[e.id].at >= startedAt ? { ...e, unread: marks[e.id].unread } : e));
+  next.archived = latest.archived.filter((id) => ids.has(id));
+  next.marks = marks;
   store.setInbox(next);
   if (next.error) throw new Error(`Summary: ${next.error}`);
 }

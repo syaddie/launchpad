@@ -10,7 +10,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { WebSocketServer } from 'ws';
 import { config, googleConfigured } from './config';
-import { authUrl, completeTask, createTask, exchangeCode, GoogleError, missingScopes, revoke } from './google';
+import { authUrl, completeTask, createEvent, createTask, deleteTask, exchangeCode, GoogleError, missingScopes, modifyEmails, moveTask, revoke, updateTask } from './google';
 import { asTab, checkDb, docVersion, store, updatePackages } from './store';
 import { copyDailyToDrive, copyToDriveNow, driveOn, driveStatus } from './drive';
 import { currentWarnings, health } from './health';
@@ -130,9 +130,12 @@ app.put('/api/prefs', async (c) => {
 // ---------- tasks ----------
 
 app.post('/api/tasks', async (c) => {
-  const { listId, title, due } = await c.req.json();
+  const { listId, title, due, notes, parent } = await c.req.json();
   if (!isStr(listId) || !isStr(title) || !title.trim()) return c.json({ error: 'listId and title are required' }, 400);
-  const task = await createTask(listId, title.trim(), isStr(due) ? due : null);
+  const task = await createTask(listId, title.trim().slice(0, 1000), isYmd(due) ? due : null, {
+    notes: isStr(notes) ? notes.slice(0, 8000) : undefined,
+    parent: isStr(parent) && parent ? parent : undefined,
+  });
   const cache = store.tasks();
   store.setTasks({ ...cache, tasks: [task, ...cache.tasks] });
   return c.json(task);
@@ -143,6 +146,103 @@ app.post('/api/tasks/:listId/:taskId/complete', async (c) => {
   await completeTask(listId, taskId);
   const cache = store.tasks();
   store.setTasks({ ...cache, tasks: cache.tasks.filter((t) => t.id !== taskId) });
+  return c.json({ ok: true });
+});
+
+/** A new title or due date (null clears it). */
+app.patch('/api/tasks/:listId/:taskId', async (c) => {
+  const { listId, taskId } = c.req.param();
+  const { title, due } = await c.req.json();
+  const patch: { title?: string; due?: string | null } = {};
+  if (isStr(title) && title.trim()) patch.title = title.trim().slice(0, 1000);
+  if (due === null || isYmd(due)) patch.due = due;
+  if (!Object.keys(patch).length) return c.json({ error: 'Nothing to change' }, 400);
+  const task = await updateTask(listId, taskId, patch);
+  const cache = store.tasks();
+  store.setTasks({ ...cache, tasks: cache.tasks.map((t) => (t.id === taskId ? { ...t, ...task, parent: t.parent } : t)) });
+  return c.json(task);
+});
+
+/** To another list, subtasks and all. A sync afterwards picks up what Google made of them. */
+app.post('/api/tasks/:listId/:taskId/move', async (c) => {
+  const { listId, taskId } = c.req.param();
+  const { toList } = await c.req.json();
+  if (!isStr(toList) || !store.tasks().lists.some((l) => l.id === toList)) return c.json({ error: 'Unknown list' }, 400);
+  const task = await moveTask(listId, taskId, toList);
+  const cache = store.tasks();
+  store.setTasks({
+    ...cache,
+    tasks: cache.tasks.map((t) => (t.id === taskId ? { ...task, parent: undefined } : t.parent === taskId ? { ...t, listId: toList } : t)),
+  });
+  runSource('tasks');
+  return c.json(task);
+});
+
+/** The task and its subtasks. The page waits out its undo before calling this. */
+app.delete('/api/tasks/:listId/:taskId', async (c) => {
+  const { listId, taskId } = c.req.param();
+  const subtasks = store.tasks().tasks.filter((t) => t.parent === taskId);
+  for (const t of subtasks) await deleteTask(listId, t.id).catch(() => {});
+  await deleteTask(listId, taskId);
+  const cache = store.tasks();
+  store.setTasks({ ...cache, tasks: cache.tasks.filter((t) => t.id !== taskId && t.parent !== taskId) });
+  return c.json({ ok: true });
+});
+
+// ---------- calendar ----------
+
+/** A new event: all day with YYYY-MM-DD dates (end exclusive), or timed with ISO date-times. */
+app.post('/api/calendar/events', async (c) => {
+  const { calendarId, title, allDay, start, end } = await c.req.json();
+  const cal = store.calendar();
+  if (!isStr(calendarId) || !cal.calendars.some((x) => x.id === calendarId)) return c.json({ error: 'Pick a calendar.' }, 400);
+  if (!isStr(title) || !title.trim()) return c.json({ error: 'The event needs a title.' }, 400);
+  const ok = allDay === true ? isYmd(start) && isYmd(end) && start < end : isStr(start) && isStr(end) && !Number.isNaN(Date.parse(start)) && Date.parse(start) < Date.parse(end);
+  if (!ok) return c.json({ error: 'That start and end don’t make sense.' }, 400);
+  const ev = await createEvent(calendarId, { title: title.trim().slice(0, 500), allDay: allDay === true, start, end });
+  const fresh = store.calendar();
+  store.setCalendar({ ...fresh, events: [...fresh.events, ev].sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)) });
+  return c.json(ev);
+});
+
+// ---------- inbox actions ----------
+
+const INBOX_CHANGES = {
+  archive: { remove: ['INBOX'] },
+  unarchive: { add: ['INBOX'] },
+  read: { remove: ['UNREAD'] },
+  unread: { add: ['UNREAD'] },
+} as const;
+
+/** Archive or mark read (and their undos) in Gmail, then in the cached inbox so the digest and counts change at once. */
+app.post('/api/inbox/modify', async (c) => {
+  const { ids, action } = await c.req.json();
+  if (!Array.isArray(ids) || !ids.length || ids.length > 500 || !ids.every(isStr) || !Object.hasOwn(INBOX_CHANGES, action)) return c.json({ error: 'ids and action are required' }, 400);
+  const change = INBOX_CHANGES[action as keyof typeof INBOX_CHANGES];
+  await modifyEmails(ids, { add: 'add' in change ? [...change.add] : [], remove: 'remove' in change ? [...change.remove] : [] });
+  const inbox = store.inbox();
+  const set = new Set<string>(ids);
+  const at = new Date().toISOString();
+  if (action === 'read' || action === 'unread') {
+    const unread = action === 'unread';
+    store.setInbox({
+      ...inbox,
+      emails: inbox.emails.map((e) => (set.has(e.id) ? { ...e, unread } : e)),
+      marks: { ...inbox.marks, ...Object.fromEntries(ids.map((id: string) => [id, { unread, at }])) },
+    });
+  } else {
+    const archived = inbox.archived.filter((id) => !set.has(id));
+    store.setInbox({ ...inbox, archived: action === 'archive' ? [...archived, ...ids] : archived });
+  }
+  return c.json({ ok: true });
+});
+
+// ---------- bills from email ----------
+
+/** Keep (the page has already added it to Money) or Dismiss: either way it's not suggested again. */
+app.delete('/api/bills/:id', (c) => {
+  const id = c.req.param('id');
+  store.setBills(store.bills().filter((b) => b.id !== id));
   return c.json({ ok: true });
 });
 

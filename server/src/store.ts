@@ -14,7 +14,7 @@ import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
 import { cleanTraining } from '../../shared/training';
 import type {
-  BookmarkGroup, CalEvent, CalendarInfo, Countdown, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsTopic, Note, Package, Prefs, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
+  BillSuggestion, BookmarkGroup, CalEvent, CalendarInfo, Countdown, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsTopic, Note, Package, Prefs, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
 } from '../../shared/types';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
@@ -112,14 +112,20 @@ export interface TasksCache { lists: TaskList[]; tasks: Task[] }
 /** Keyed by lower-cased topic. `summarisedUrls` are the headlines the current stories came from. */
 export type NewsCache = Record<string, NewsTopic & { summarisedUrls: string[] }>;
 
-/** `emailIds` are the emails each digest was written from. */
+/**
+ * `emailIds` are the emails each digest was written from. `archived` are emails archived from
+ * Launchpad. `marks` are read/unread changes made here, with when, so a sync that was already
+ * under way doesn't put back what it read before them.
+ */
 export interface InboxCache {
   emails: StoredEmail[];
   digests: Record<InboxRange, (InboxDigest & { emailIds: string[] }) | null>;
   fetchedAt: string | null;
   error: string | null;
+  archived: string[];
+  marks: Record<string, { unread: boolean; at: string }>;
 }
-const EMPTY_INBOX: InboxCache = { emails: [], digests: { '2d': null, '7d': null }, fetchedAt: null, error: null };
+const EMPTY_INBOX: InboxCache = { emails: [], digests: { '2d': null, '7d': null }, fetchedAt: null, error: null, archived: [], marks: {} };
 
 const EMPTY_SYNC: SyncStatus = { lastSuccess: null, lastAttempt: null, lastError: null };
 
@@ -220,6 +226,13 @@ export const store = {
   /** Gmail message ids already scanned for tracking numbers. */
   gmailSeen: () => get<string[]>('gmailSeen', []),
   setGmailSeen: (v: string[]) => set('gmailSeen', v.slice(-1000)),
+
+  /** Bills and receipts found in Gmail, waiting for Keep or Dismiss. */
+  bills: () => get<BillSuggestion[]>('bills', []),
+  setBills: (v: BillSuggestion[]) => set('bills', v),
+  /** Gmail message ids already read for bills, and fingerprints of bills already suggested. */
+  billSeen: () => get<string[]>('billSeen', []),
+  setBillSeen: (v: string[]) => set('billSeen', v.slice(-2000)),
 
   /** Numbers already registered with 17TRACK (registration uses quota). */
   registered17: () => get<string[]>('registered17', []),

@@ -13,10 +13,11 @@ type Field = Exclude<keyof AppState, 'versions'>;
 
 /** Bodies and the ids behind each digest stay on the server. */
 function inboxState(): AppState['inbox'] {
-  const { emails, digests, fetchedAt, error } = store.inbox();
+  const { emails, digests, fetchedAt, error, archived } = store.inbox();
+  const gone = new Set(archived);
   const digest = (d: (typeof digests)['2d']) => d && { overview: d.overview, items: d.items, skimmed: d.skimmed, emailCount: d.emailCount, summarisedAt: d.summarisedAt };
   return {
-    emails: emails.map(({ body: _, ...e }) => e),
+    emails: emails.map(({ body: _, ...e }) => (gone.has(e.id) ? { ...e, archived: true } : e)),
     digests: { '2d': digest(digests['2d']), '7d': digest(digests['7d']) },
     fetchedAt,
     error,
@@ -66,6 +67,7 @@ const FIELDS: { [F in Field]: () => AppState[F] } = {
   weights: () => store.weights(),
   learn: () => store.learn(),
   learnNote: () => (claudeEnabled() ? store.learnNote() : { note: null, error: null }),
+  bills: () => store.bills(),
   drive: driveStatus,
   health: currentWarnings,
 };
@@ -103,7 +105,9 @@ export const KEY_FIELDS: Record<string, Field[]> = {
   learnNote: ['learnNote'],
   sync: ['sync', 'health'],
   driveBackup: ['drive', 'health'],
+  bills: ['bills'],
   gmailSeen: [],
+  billSeen: [],
   registered17: [],
   speedTests: [],
   uploadDirs: [],

@@ -1,4 +1,4 @@
-import type { AppState, Backup, BackupSnapshot, Countdown, DirListing, Mood, Package, Photo, Prefs, SavedDoc, ServerStats, ShellInfo, SourceKey, Task, Training } from '../../shared/types';
+import type { AppState, Backup, BackupSnapshot, CalEvent, Countdown, DirListing, Mood, Package, Photo, Prefs, SavedDoc, ServerStats, ShellInfo, SourceKey, Task, Training } from '../../shared/types';
 import { kvGet, kvSet } from './idb';
 
 /** Where the state was kept before it moved to IndexedDB; still used where IndexedDB isn't available. */
@@ -176,9 +176,18 @@ export const api = {
   putDoc: <K extends SavedDoc>(key: K, v: AppState[K], base?: string, keepalive?: boolean) =>
     req<{ ok: true; version: string }>('PUT', `/api/${key}`, v, keepalive, base === undefined ? undefined : { 'X-Base-Version': base }),
   putPrefs: (v: Prefs) => req<Prefs>('PUT', '/api/prefs', v),
-  addTask: (listId: string, title: string, due: string | null) => req<Task>('POST', '/api/tasks', { listId, title, due }),
+  /** A task, or with `parent` a subtask; `notes` go in the task's details. */
+  addTask: (listId: string, title: string, due: string | null, opts: { notes?: string; parent?: string } = {}) => req<Task>('POST', '/api/tasks', { listId, title, due, ...opts }),
   completeTask: (t: Task, keepalive?: boolean) =>
     req('POST', `/api/tasks/${encodeURIComponent(t.listId)}/${encodeURIComponent(t.id)}/complete`, {}, keepalive),
+  patchTask: (t: Task, patch: { title?: string; due?: string | null }) => req<Task>('PATCH', `/api/tasks/${encodeURIComponent(t.listId)}/${encodeURIComponent(t.id)}`, patch),
+  moveTask: (t: Task, toList: string) => req<Task>('POST', `/api/tasks/${encodeURIComponent(t.listId)}/${encodeURIComponent(t.id)}/move`, { toList }),
+  deleteTask: (t: Task, keepalive?: boolean) => req('DELETE', `/api/tasks/${encodeURIComponent(t.listId)}/${encodeURIComponent(t.id)}`, undefined, keepalive),
+  /** All day: YYYY-MM-DD dates, the end the day after. Timed: ISO date-times. */
+  addEvent: (e: { calendarId: string; title: string; allDay: boolean; start: string; end: string }) => req<CalEvent>('POST', '/api/calendar/events', e),
+  modifyInbox: (ids: string[], action: 'archive' | 'unarchive' | 'read' | 'unread') => req('POST', '/api/inbox/modify', { ids, action }),
+  /** Done with a bill suggestion (kept or dismissed). */
+  dropBill: (id: string) => req('DELETE', `/api/bills/${encodeURIComponent(id)}`),
   addPackage: (number: string, label: string, carrier: string) => req<Package>('POST', '/api/packages', { number, label, carrier }),
   patchPackage: (id: string, patch: Partial<Pick<Package, 'label' | 'isNew' | 'archived'>>) =>
     req<Package>('PATCH', `/api/packages/${encodeURIComponent(id)}`, patch),

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { DOW, addDays, dayDiff, parseYmd, startOfDay } from '../../../shared/dates';
 import { fmtMinutes, gymWorkout, minutes, workingSets, workoutLabel } from '../../../shared/training';
 import type { AppState, CalEvent } from '../../../shared/types';
@@ -12,6 +12,8 @@ interface Props {
   compact: boolean;
   onConnect: () => void;
   onRetry: () => Promise<void>;
+  /** The add-an-event field (AddEvent.tsx), under the agenda. */
+  addEvent?: ReactNode;
 }
 
 export interface TimedEvent extends CalEvent {
@@ -33,7 +35,7 @@ export function todayAgenda(data: AppState, now: Date) {
   return { timed, todays, cur, next, hidden };
 }
 
-export function Today({ data, now, wide, compact, onConnect, onRetry }: Props) {
+export function Today({ data, now, wide, compact, onConnect, onRetry, addEvent }: Props) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [weekOpen, setWeekOpen] = useState(false);
   const [tomorrowOpen, setTomorrowOpen] = useState(false);
@@ -219,6 +221,7 @@ export function Today({ data, now, wide, compact, onConnect, onRetry }: Props) {
           </button>
         </div>
       )}
+      {connected && calOn && addEvent}
     </section>
   );
 }
