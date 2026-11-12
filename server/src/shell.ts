@@ -106,6 +106,8 @@ function connect(): Promise<Client> {
 
 const KEEP_DETACHED = 15 * 60_000;
 const SCROLLBACK = 256 * 1024;
+/** Shells open at once, across every page and tab; the page itself allows 8 tabs. */
+export const MAX_SHELLS = 16;
 
 interface Session {
   id: string;
@@ -139,6 +141,7 @@ function openShell(conn: Client, cols: number, rows: number): Promise<ClientChan
 async function newSession(ws: WebSocket, cols: number, rows: number): Promise<Session | null> {
   let conn: Client | null = null;
   try {
+    if (sessions.size >= MAX_SHELLS) throw new Error(`${MAX_SHELLS} shells are open already. Close one in this page or another before opening more.`);
     conn = await connect();
     const stream = await openShell(conn, cols, rows);
     const s: Session = { id: crypto.randomUUID(), conn, stream, out: [], outBytes: 0, ws };
@@ -516,6 +519,30 @@ export async function rename(from: unknown, to: unknown): Promise<void> {
   const { sftp } = await sftpSession();
   if (await stat(sftp, b).catch(() => null)) throw new FileError(`${path.posix.basename(b)} is already there.`, 409);
   await call<void>(a, (cb) => sftp.rename(a, b, cb));
+}
+
+const MAX_OUTPUT = 4 * 1024 * 1024;
+
+/** Run one command on the server, over the file explorer's connection, and collect what it prints. */
+export async function runCommand(cmd: string, timeout = 30_000): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  const { conn } = await sftpSession();
+  return new Promise((resolve, reject) =>
+    conn.exec(cmd, (e, stream) => {
+      if (e) return reject(e);
+      let stdout = '';
+      let stderr = '';
+      const timer = setTimeout(() => {
+        stream.close();
+        reject(new Error('The command took too long to answer.'));
+      }, timeout);
+      stream.on('data', (d: Buffer) => stdout.length < MAX_OUTPUT && (stdout += d));
+      stream.stderr.on('data', (d: Buffer) => stderr.length < MAX_OUTPUT && (stderr += d));
+      stream.on('close', (code: number | null) => {
+        clearTimeout(timer);
+        resolve({ code, stdout, stderr });
+      });
+    }),
+  );
 }
 
 export const shellQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;

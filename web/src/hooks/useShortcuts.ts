@@ -1,5 +1,6 @@
 import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import type { BookmarkGroup, DesignKey, ViewKey } from '../../../shared/types';
+import { bookmarkOpened } from '../api';
 import { VIEWS } from '../components/Rail';
 
 export interface ShortcutState {
@@ -104,7 +105,10 @@ export function useShortcuts(state: ShortcutState) {
       if (/^[1-9]$/.test(e.key) && !s.current.search && !s.current.editBookmarks && view === 'home') {
         const daily = s.current.bookmarks.find((g) => g.name === 'Daily');
         const b = daily?.items[Number(e.key) - 1];
-        if (b) window.open(b.url, '_blank', 'noopener');
+        if (b) {
+          bookmarkOpened(b.id);
+          window.open(b.url, '_blank', 'noopener');
+        }
       }
     };
     window.addEventListener('keydown', onKey);

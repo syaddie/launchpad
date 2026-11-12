@@ -1,18 +1,44 @@
-// Google OAuth plus the Calendar, Tasks and Gmail calls, using plain REST.
+// Google OAuth plus the Calendar, Tasks, Gmail and Drive calls, using plain REST.
 import { config } from './config';
 import { store } from './store';
 import { addDays, startOfDay } from '../../shared/dates';
 import { extractTrackingNumbers, htmlToText, labelFor, parseInboxMessage, type Candidate, type StoredEmail } from './gmail-parse';
 import type { CalEvent, CalendarInfo, Task, TaskList } from '../../shared/types';
 
-const SCOPES = [
-  'openid',
-  'email',
-  'profile',
-  'https://www.googleapis.com/auth/calendar.readonly',
-  'https://www.googleapis.com/auth/tasks',
-  'https://www.googleapis.com/auth/gmail.readonly',
-];
+const AUTH = 'https://www.googleapis.com/auth/';
+
+/**
+ * What Launchpad asks for. calendar.readonly stays beside calendar.events because listing
+ * your calendars needs it; gmail.modify covers reading mail too. drive.file only lets
+ * Launchpad see files it created itself.
+ */
+const SCOPES = ['openid', 'email', 'profile', ...['calendar.readonly', 'calendar.events', 'tasks', 'gmail.modify', 'drive.file'].map((s) => AUTH + s)];
+
+/** Added after the first version; a sign-in from before them is asked to reconnect, and keeps working meanwhile. */
+export const NEW_SCOPES = ['drive.file', 'calendar.events', 'gmail.modify'] as const;
+export type ScopeName = (typeof NEW_SCOPES)[number] | 'calendar.readonly' | 'tasks' | 'gmail.readonly';
+
+/** Whether `granted` (the space-separated or listed scopes Google returned) includes `name`. */
+export function grantHas(granted: string[] | string | undefined, name: ScopeName): boolean {
+  const list = typeof granted === 'string' ? granted.split(/\s+/) : granted || [];
+  return list.includes(AUTH + name);
+}
+
+/** Whether the saved Google sign-in allows `name`, e.g. hasScope('gmail.modify'). False when Google isn't connected or the grant isn't known yet. */
+export function hasScope(name: ScopeName): boolean {
+  return grantHas(store.google()?.scopes, name);
+}
+
+/**
+ * The new scopes the saved sign-in lacks. Empty when it has them all, or when it isn't
+ * known yet: a sign-in from before scopes were saved learns them on its next token
+ * refresh, within the hour.
+ */
+export function missingScopes(): string[] {
+  const g = store.google();
+  if (!g?.scopes) return [];
+  return NEW_SCOPES.filter((s) => !grantHas(g.scopes, s));
+}
 
 const redirectUri = () => `${config.publicUrl}/api/auth/google/callback`;
 
@@ -73,7 +99,7 @@ async function tokenRequest(body: Record<string, string>) {
     }
     throw new GoogleError(`Google token error: ${json.error_description || json.error || res.status}`, res.status);
   }
-  return json as { access_token: string; expires_in: number; refresh_token?: string };
+  return json as { access_token: string; expires_in: number; refresh_token?: string; scope?: string };
 }
 
 export async function exchangeCode(code: string): Promise<void> {
@@ -93,6 +119,7 @@ export async function exchangeCode(code: string): Promise<void> {
     expiresAt: Date.now() + (t.expires_in - 60) * 1000,
     email: profile.email,
     name: profile.name,
+    scopes: t.scope ? t.scope.split(/\s+/) : prev?.scopes,
   });
 }
 
@@ -101,7 +128,7 @@ async function accessToken(fresh = false): Promise<string> {
   if (!g) throw new GoogleError('Google is not connected.');
   if (!fresh && g.accessToken && g.expiresAt && g.expiresAt > Date.now()) return g.accessToken;
   const t = await tokenRequest({ refresh_token: g.refreshToken, grant_type: 'refresh_token' });
-  store.setGoogle({ ...g, accessToken: t.access_token, expiresAt: Date.now() + (t.expires_in - 60) * 1000 });
+  store.setGoogle({ ...g, accessToken: t.access_token, expiresAt: Date.now() + (t.expires_in - 60) * 1000, scopes: t.scope ? t.scope.split(/\s+/) : g.scopes });
   return t.access_token;
 }
 
@@ -123,15 +150,21 @@ export function googleApiError(status: number, error: { message?: string; status
   return new GoogleError(`${status} ${msg}`, status);
 }
 
-async function gapi<T = any>(url: string, init: RequestInit = {}): Promise<T> {
+/** A signed request, its response as it came. */
+async function authed(url: string, init: RequestInit = {}, timeout = 20000): Promise<Response> {
   const call = async (token: string) =>
-    googleFetch(url, { ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...init.headers } });
+    googleFetch(url, { signal: AbortSignal.timeout(timeout), ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...init.headers } });
   let res = await call(await accessToken());
   // A saved token Google has stopped accepting (revoked, or the clock drifted): get a new one once.
   if (res.status === 401) {
     await res.body?.cancel();
     res = await call(await accessToken(true));
   }
+  return res;
+}
+
+async function gapi<T = any>(url: string, init: RequestInit = {}): Promise<T> {
+  const res = await authed(url, init);
   if (res.status === 204) return undefined as T;
   const json = (await res.json().catch(() => ({}))) as any;
   if (!res.ok) throw googleApiError(res.status, json?.error);
@@ -358,4 +391,77 @@ export async function fetchInbox(cached: StoredEmail[]): Promise<StoredEmail[]> 
     .map((id) => known.get(id)!)
     .map((e) => ({ ...e, unread: unread.has(e.id) }))
     .sort((a, b) => b.at.localeCompare(a.at));
+}
+
+// ---------- Drive ----------
+// With drive.file, Google only shows Launchpad the files and folders it created itself.
+
+const DRIVE = 'https://www.googleapis.com/drive/v3/files';
+const FOLDER_MIME = 'application/vnd.google-apps.folder';
+
+export interface DriveFile {
+  id: string;
+  name: string;
+  createdTime?: string;
+  appProperties?: Record<string, string>;
+}
+
+/** A Drive query string literal. */
+export const driveLiteral = (s: string) => `'${s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+const lit = driveLiteral;
+
+/** The id of the folder named `name` that Launchpad made with `tag` in its private properties, made now if there isn't one. */
+export async function driveFolder(name: string, tag: Record<string, string>): Promise<string> {
+  const [k, v] = Object.entries(tag)[0];
+  const q = `mimeType = ${lit(FOLDER_MIME)} and trashed = false and appProperties has { key=${lit(k)} and value=${lit(v)} }`;
+  const found = await gapi<{ files?: DriveFile[] }>(`${DRIVE}?${new URLSearchParams({ q, fields: 'files(id,name)', pageSize: '10', spaces: 'drive' })}`);
+  if (found.files?.[0]) return found.files[0].id;
+  const made = await gapi<DriveFile>(`${DRIVE}?fields=id`, { method: 'POST', body: JSON.stringify({ name, mimeType: FOLDER_MIME, appProperties: tag }) });
+  return made.id;
+}
+
+/** Files in `folderId` that Launchpad made with `tag` in their private properties, not in the bin. */
+export async function driveFiles(folderId: string, tag: Record<string, string>): Promise<DriveFile[]> {
+  const [k, v] = Object.entries(tag)[0];
+  const q = `${lit(folderId)} in parents and trashed = false and appProperties has { key=${lit(k)} and value=${lit(v)} }`;
+  const out: DriveFile[] = [];
+  let pageToken = '';
+  do {
+    const p = new URLSearchParams({ q, fields: 'nextPageToken,files(id,name,createdTime,appProperties)', pageSize: '100', spaces: 'drive' });
+    if (pageToken) p.set('pageToken', pageToken);
+    const page = await gapi<{ files?: DriveFile[]; nextPageToken?: string }>(`${DRIVE}?${p}`);
+    out.push(...(page.files || []));
+    pageToken = page.nextPageToken || '';
+  } while (pageToken);
+  return out;
+}
+
+/** Upload `bytes` as a new file in `folderId`. Resumable, so a large database goes up in one request without the multipart size limit. */
+export async function driveUpload(folderId: string, name: string, bytes: Buffer, appProperties: Record<string, string>): Promise<DriveFile> {
+  const start = await authed('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name', {
+    method: 'POST',
+    headers: { 'X-Upload-Content-Type': 'application/octet-stream', 'X-Upload-Content-Length': String(bytes.length) },
+    body: JSON.stringify({ name, parents: [folderId], mimeType: 'application/octet-stream', appProperties }),
+  });
+  const session = start.headers.get('location');
+  if (!start.ok || !session) {
+    const json = (await start.json().catch(() => ({}))) as any;
+    throw googleApiError(start.status, json?.error);
+  }
+  await start.body?.cancel();
+  // The session address is the permission for this one upload, so it needs no sign-in of its own.
+  const res = await googleFetch(session, {
+    method: 'PUT',
+    signal: AbortSignal.timeout(10 * 60_000),
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: new Uint8Array(bytes),
+  });
+  const json = (await res.json().catch(() => ({}))) as any;
+  if (!res.ok) throw googleApiError(res.status, json?.error);
+  return json as DriveFile;
+}
+
+/** Move a file Launchpad made to the bin, where Google keeps it 30 days before deleting it. */
+export async function driveTrash(fileId: string): Promise<void> {
+  await gapi(`${DRIVE}/${encodeURIComponent(fileId)}?fields=id`, { method: 'PATCH', body: JSON.stringify({ trashed: true }) });
 }

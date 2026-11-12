@@ -5,6 +5,11 @@ import { config, googleConfigured } from './config';
 import { claudeEnabled } from './claude';
 import { docVersion, store } from './store';
 import { smokeDaysFrom } from '../../shared/trackers';
+import { driveStatus } from './drive';
+import { missingScopes } from './google';
+import { currentWarnings } from './health';
+import { sourceKey } from '../../shared/news';
+import { monthCost } from '../../shared/claudeUsage';
 import type { AppState, NewsTopic, Photo, SavedDoc } from '../../shared/types';
 
 type Field = Exclude<keyof AppState, 'versions'>;
@@ -27,11 +32,18 @@ export const recentSmokes = () => store.smokes().filter((s) => Date.now() - Date
 /** How each part of the page's state is made. */
 const FIELDS: { [F in Field]: () => AppState[F] } = {
   bookmarks: () => store.bookmarks(),
+  bookmarkOpens: () => store.bookmarkOpens(),
+  // Only for addresses still bookmarked.
+  linkCheck: () => {
+    const c = store.linkCheck();
+    const urls = new Set(store.bookmarks().flatMap((g) => g.items.map((b) => b.url)));
+    return { ...c, problems: Object.fromEntries(Object.entries(c.problems).filter(([u]) => urls.has(u))) };
+  },
   notes: () => store.notes(),
   prefs: () => store.prefs(),
   google: () => {
     const g = store.google();
-    return { configured: googleConfigured(), connected: !!g, email: g?.email, name: g?.name, signedOut: g ? undefined : store.googleSignedOut() ?? undefined };
+    return { configured: googleConfigured(), connected: !!g, email: g?.email, name: g?.name, signedOut: g ? undefined : store.googleSignedOut() ?? undefined, missingScopes: g ? missingScopes() : undefined };
   },
   calendars: () => store.calendar().calendars,
   events: () => store.calendar().events,
@@ -44,12 +56,13 @@ const FIELDS: { [F in Field]: () => AppState[F] } = {
   news: () => {
     const news = store.news();
     return store.prefs().newsTopics.map((topic): NewsTopic => {
-      const n = news[topic.toLowerCase()];
+      const n = news[sourceKey(topic)];
       return n
-        ? { topic, articles: n.articles, stories: n.stories, summarisedAt: n.summarisedAt, fetchedAt: n.fetchedAt, error: n.error }
+        ? { topic, title: n.title, articles: n.articles, stories: n.stories, summarisedAt: n.summarisedAt, fetchedAt: n.fetchedAt, error: n.error }
         : { topic, articles: [], stories: null, summarisedAt: null, fetchedAt: null, error: null };
     });
   },
+  newsLists: () => store.newsLists(),
   newsSummaries: () => claudeEnabled(),
   inbox: inboxState,
   weather: () => store.weather(),
@@ -71,6 +84,10 @@ const FIELDS: { [F in Field]: () => AppState[F] } = {
     const since = Date.now() - 366 * 86_400_000;
     return store.packages().flatMap((p) => (p.deliveredAt && Date.parse(p.deliveredAt) >= since ? [{ label: p.label || p.number, at: p.deliveredAt }] : []));
   },
+  briefing: () => (claudeEnabled() ? store.briefing() : { note: null, error: null }),
+  claudeSpend: () => monthCost(store.claudeUsage(), new Date()),
+  drive: driveStatus,
+  health: currentWarnings,
 };
 
 const SAVED: SavedDoc[] = ['bookmarks', 'notes', 'money', 'learn'];
@@ -81,16 +98,21 @@ const SAVED: SavedDoc[] = ['bookmarks', 'notes', 'money', 'learn'];
  * connection is cheap and changes along with what it syncs, so it comes with those.
  */
 export const KEY_FIELDS: Record<string, Field[]> = {
-  bookmarks: ['bookmarks'],
+  // The link check lists problems only for addresses still bookmarked.
+  bookmarks: ['bookmarks', 'linkCheck'],
+  bookmarkOpens: ['bookmarkOpens'],
+  linkCheck: ['linkCheck'],
   notes: ['notes'],
-  // News comes in the order of the topics in prefs.
-  prefs: ['prefs', 'news'],
-  google: ['google'],
+  // News comes in the order of the topics in prefs. The Drive switch is in prefs, and so are some syncs' switches and intervals.
+  prefs: ['prefs', 'news', 'drive', 'health'],
+  // Whether Google allows Drive.
+  google: ['google', 'drive', 'health'],
   googleSignedOut: ['google'],
   calendar: ['calendars', 'events', 'google'],
   tasks: ['taskLists', 'tasks', 'google'],
   packages: ['packages', 'delivered'],
   news: ['news'],
+  newsLists: ['newsLists'],
   inbox: ['inbox', 'google'],
   weather: ['weather'],
   photos: ['photos'],
@@ -106,11 +128,18 @@ export const KEY_FIELDS: Record<string, Field[]> = {
   learn: ['learn'],
   learnNote: ['learnNote'],
   reviewNotes: ['reviewNotes'],
-  sync: ['sync'],
+  briefing: ['briefing'],
+  claudeUsage: ['claudeSpend'],
+  sync: ['sync', 'health'],
+  driveBackup: ['drive', 'health'],
+  // Fetched when a notepad's history is opened.
+  noteHistory: [],
   gmailSeen: [],
   registered17: [],
   speedTests: [],
   uploadDirs: [],
+  // The terminal fetches its snippets itself.
+  snippets: [],
 };
 
 /** The fields changed store keys feed, or null when one isn't known (then send everything). */

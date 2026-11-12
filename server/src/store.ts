@@ -10,12 +10,16 @@ import { config } from './config';
 import type { StoredEmail } from './gmail-parse';
 import type { StoredPhoto } from './photos';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
+import { cleanOpens } from '../../shared/bookmarks';
+import type { UsageLog } from '../../shared/claudeUsage';
 import { cleanLearn } from '../../shared/learn';
+import { cleanNewsLists } from '../../shared/news';
+import { cleanHistory } from '../../shared/notes';
 import { cleanMoney } from '../../shared/money';
 import { cleanCravings } from '../../shared/trackers';
 import { cleanTraining } from '../../shared/training';
 import type {
-  BookmarkGroup, CalEvent, CalendarInfo, Countdown, Craving, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsTopic, Note, Package, Prefs, ReviewNote, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
+  BookmarkGroup, BookmarkOpens, Briefing, CalEvent, LinkCheck, CalendarInfo, Countdown, Craving, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsLists, NewsTopic, Note, NoteVersion, Package, Prefs, ReviewNote, Snippet, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
 } from '../../shared/types';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
@@ -76,13 +80,37 @@ export function snapshotDb(dest: string): void {
   db.prepare('VACUUM INTO ?').run(dest);
 }
 
+/**
+ * Whether the database can be read: null when it can, else what went wrong. A fresh
+ * statement each time, so it really goes to the file.
+ */
+export function checkDb(): string | null {
+  try {
+    db.prepare('SELECT count(*) AS n FROM docs').get();
+    return null;
+  } catch (e) {
+    return (e as Error).message;
+  }
+}
+
 export interface GoogleTokens {
   refreshToken: string;
   accessToken?: string;
   expiresAt?: number;
   email?: string;
   name?: string;
+  /** What Google granted, as full scope URLs. Missing for sign-ins saved before this was kept, until the next token refresh. */
+  scopes?: string[];
 }
+
+/** How copying the daily copies to Google Drive is going. `uploadedDaily` is the last daily copy that reached Drive. */
+export interface DriveBackupState {
+  lastSuccess: string | null;
+  lastAttempt: string | null;
+  lastError: string | null;
+  uploadedDaily: string | null;
+}
+const EMPTY_DRIVE: DriveBackupState = { lastSuccess: null, lastAttempt: null, lastError: null, uploadedDaily: null };
 
 export interface CalendarCache { calendars: CalendarInfo[]; events: CalEvent[] }
 export interface TasksCache { lists: TaskList[]; tasks: Task[] }
@@ -108,9 +136,18 @@ export function docVersion(key: string): string {
 export const store = {
   bookmarks: () => get<BookmarkGroup[]>('bookmarks', STARTER_BOOKMARKS),
   setBookmarks: (v: BookmarkGroup[]) => set('bookmarks', v),
+  /** How often each bookmark's been opened, by id, for ranking search results. */
+  bookmarkOpens: (): BookmarkOpens => cleanOpens(get<unknown>('bookmarkOpens', null)),
+  setBookmarkOpens: (v: BookmarkOpens) => set('bookmarkOpens', v),
+  /** The last check for bookmarks that no longer open. */
+  linkCheck: () => get<LinkCheck>('linkCheck', { checkedAt: null, running: false, problems: {} }),
+  setLinkCheck: (v: LinkCheck) => set('linkCheck', v),
 
   notes: () => get<Note[]>('notes', STARTER_NOTES),
   setNotes: (v: Note[]) => set('notes', v),
+  /** Earlier versions of each notepad, newest first (server/src/notes.ts). */
+  noteHistory: (): Record<string, NoteVersion[]> => cleanHistory(get<unknown>('noteHistory', null)),
+  setNoteHistory: (v: Record<string, NoteVersion[]>) => set('noteHistory', v),
 
   prefs: (): Prefs => {
     const p = get<Partial<Prefs>>('prefs', {});
@@ -144,6 +181,10 @@ export const store = {
 
   news: () => get<NewsCache>('news', {}),
   setNews: (v: NewsCache) => set('news', v),
+
+  /** The reading list, hidden headlines and muted sources. */
+  newsLists: (): NewsLists => cleanNewsLists(get<unknown>('newsLists', null)),
+  setNewsLists: (v: NewsLists) => set('newsLists', cleanNewsLists(v)),
 
   inbox: (): InboxCache => {
     const v = get<Partial<InboxCache>>('inbox', {});
@@ -195,6 +236,13 @@ export const store = {
   reviewNotes: () => get<{ notes: Record<string, ReviewNote>; error: string | null }>('reviewNotes', { notes: {}, error: null }),
   setReviewNotes: (v: { notes: Record<string, ReviewNote>; error: string | null }) =>
     set('reviewNotes', { ...v, notes: Object.fromEntries(Object.entries(v.notes).sort(([a], [b]) => (a < b ? -1 : 1)).slice(-104)) }),
+  /** Claude's paragraph at the top of Today, written each morning. */
+  briefing: () => get<{ note: Briefing | null; error: string | null }>('briefing', { note: null, error: null }),
+  setBriefing: (v: { note: Briefing | null; error: string | null }) => set('briefing', v),
+
+  /** Tokens every Claude call used, by day, feature and model (see shared/claudeUsage.ts). */
+  claudeUsage: () => get<UsageLog>('claudeUsage', {}),
+  setClaudeUsage: (v: UsageLog) => set('claudeUsage', v),
 
   /** Oldest first, the last 30 days. */
   speedTests: () => get<SpeedTest[]>('speedTests', []),
@@ -226,6 +274,12 @@ export const store = {
   },
   setSync: (key: SourceKey, v: SyncStatus) => set('sync', { ...store.sync(), [key]: v }),
   resetSync: () => del('sync'),
+
+  driveBackup: (): DriveBackupState => ({ ...EMPTY_DRIVE, ...get<Partial<DriveBackupState>>('driveBackup', {}) }),
+  setDriveBackup: (v: DriveBackupState) => set('driveBackup', v),
+  /** The terminal's saved commands, in the order they were added. */
+  snippets: () => get<Snippet[]>('snippets', []),
+  setSnippets: (v: Snippet[]) => set('snippets', v),
 
   /** Folders that uploads went into, with when the last one started, so abandoned part files there can be swept. */
   uploadDirs: () => get<Record<string, string>>('uploadDirs', {}),

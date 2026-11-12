@@ -1,4 +1,5 @@
 import { fmtMoney } from '../../../../shared/money';
+import { EVERY_NAMES, type Series } from '../../../../shared/subscriptions';
 import type { Money, MoneyEntry } from '../../../../shared/types';
 import { AccountSelect, CategoryCell, DateCell, entryTitle, type Kind, KindSwitch, namesOf, NumCell, otherAccount, shortDate, signed, TextCell } from './shared';
 
@@ -7,8 +8,12 @@ import { AccountSelect, CategoryCell, DateCell, entryTitle, type Kind, KindSwitc
  * An invoice's money is tagged with the invoice; its amount, and its date while it's
  * planned, follow the invoice, so those are changed in Owed.
  */
-export function EntryRow({ e, money, today, open, onOpen, onClose, onPatch, onDelete, onOpenOwed }: {
+export function EntryRow({ e, series, isSub, onSub, money, today, open, onOpen, onClose, onPatch, onDelete, onOpenOwed }: {
   e: MoneyEntry;
+  /** The repeat it's part of, if any: one that's money out can be marked as a subscription. */
+  series?: Series;
+  isSub: boolean;
+  onSub: (on: boolean) => void;
   money: Money;
   today: string;
   open: boolean;
@@ -97,6 +102,15 @@ export function EntryRow({ e, money, today, open, onOpen, onClose, onPatch, onDe
             Done
           </button>
           {del}
+          {series?.every && e.kind === 'out' && (
+            <span className="ent-linked">
+              <i className="ph-duotone ph-repeat" aria-hidden="true" />
+              {isSub ? 'A subscription' : `Repeats ${EVERY_NAMES[series.every].toLowerCase()}`}, {series.entries.length} in all.
+              <button className="btn-link" onClick={() => onSub(!isSub)}>
+                {isSub ? 'Not a subscription' : 'Mark as a subscription'}
+              </button>
+            </span>
+          )}
           {inv && (
             <span className="ent-linked">
               <i className="ph-duotone ph-link-simple" aria-hidden="true" />
@@ -122,6 +136,12 @@ export function EntryRow({ e, money, today, open, onOpen, onClose, onPatch, onDe
         <span className="ent-meta">
           {e.kind === 'move' ? e.note || 'Moved between accounts' : e.category || 'No category'}
           {e.kind !== 'move' && money.accounts.length > 1 && <span className="ent-acct">{names.get(e.account)}</span>}
+          {isSub && (
+            <span className="ent-inv" title="Listed in Subscriptions">
+              <i className="ph-bold ph-repeat" aria-hidden="true" />
+              Subscription
+            </span>
+          )}
           {inv && (
             <span className="ent-inv" title="From an invoice in Owed">
               <i className="ph-bold ph-link-simple" aria-hidden="true" />

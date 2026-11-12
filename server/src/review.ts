@@ -127,6 +127,7 @@ export function refreshReviewNote(monday: string, force = false): Promise<void> 
     try {
       const res = await askJson<{ headline: string; points: string[] }>({
         model: config.reviewModel,
+        feature: 'review',
         system: NOTE_SYSTEM,
         user: reviewInput(r),
         schema: NOTE_SCHEMA,

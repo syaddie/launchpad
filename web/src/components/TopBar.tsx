@@ -2,7 +2,9 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { DOW, startOfDay } from '../../../shared/dates';
 import { fmtStudy, timerMinutes } from '../../../shared/learn';
 import { engineUrl, parseSearch } from '../../../shared/trackers';
-import type { AppState, Bookmark, SearchEngine, SourceKey, Weather } from '../../../shared/types';
+import { rankBookmarks } from '../../../shared/bookmarks';
+import type { AppState, Bookmark, BookmarkOpens, SearchEngine, SourceKey, Weather } from '../../../shared/types';
+import { bookmarkOpened } from '../api';
 import { fmtMinutes, lastTrained, minutes, workoutLabel } from '../../../shared/training';
 import { ago, favicon, fmtDay, hm, host, psiBand, uvBand, weatherIcon, weatherLabel } from '../util';
 
@@ -258,13 +260,13 @@ function failing(s: { lastSuccess: string | null; lastError: string | null }) {
 
 type Row = { key: string; url: string; bookmark?: Bookmark; engine?: SearchEngine; term?: string };
 
-/** Search rows: a prefixed search goes straight to its engine; otherwise bookmarks, then every engine. */
-export function searchRows(q: string, bookmarks: Bookmark[], engines: SearchEngine[]): Row[] {
+/** Search rows: a prefixed search goes straight to its engine; otherwise bookmarks (the most opened first), then every engine. */
+export function searchRows(q: string, bookmarks: Bookmark[], engines: SearchEngine[], opens?: BookmarkOpens): Row[] {
   const { engine, term } = parseSearch(q, engines);
   if (!term) return [];
   if (engine) return [{ key: 'e:' + engine.prefix, url: engineUrl(engine, term), engine, term }];
   const lq = term.toLowerCase();
-  const hits = bookmarks.filter((b) => matchBookmark(b, lq)).slice(0, 6);
+  const hits = rankBookmarks(bookmarks.filter((b) => matchBookmark(b, lq)), opens, lq).slice(0, 6);
   return [
     ...hits.map((b) => ({ key: 'b:' + b.id, url: b.url, bookmark: b })),
     ...engines.map((e) => ({ key: 'e:' + e.prefix, url: engineUrl(e, term), engine: e, term })),
@@ -283,7 +285,7 @@ export function TopBar({ data, now, subline, search, onSearch, searchRef, smokes
   const hidden = data.prefs.hidden;
   const trained = lastTrained(data.training.workouts, startOfDay(now));
   const engines = data.prefs.searchEngines;
-  const rows = searchRows(search, data.bookmarks.flatMap((g) => g.items), engines);
+  const rows = searchRows(search, data.bookmarks.flatMap((g) => g.items), engines, data.bookmarkOpens);
   const prefixed = rows.length === 1 && !!rows[0].engine && parseSearch(search, engines).engine !== null;
   const firstEngine = rows.findIndex((r) => r.engine);
   const cur = Math.min(sel, Math.max(0, rows.length - 1));
@@ -304,6 +306,7 @@ export function TopBar({ data, now, subline, search, onSearch, searchRef, smokes
       onSearch('');
       e.currentTarget.blur();
     } else if (e.key === 'Enter' && rows[cur]) {
+      if (rows[cur].bookmark) bookmarkOpened(rows[cur].bookmark!.id);
       open(rows[cur].url);
     }
   };
@@ -321,9 +324,11 @@ export function TopBar({ data, now, subline, search, onSearch, searchRef, smokes
   ];
   const needsGoogle = (k: SourceKey) => k === 'calendar' || k === 'tasks' || k === 'gmail' || k === 'inbox';
   const connected = data.google.connected;
+  const health = data.health ?? [];
   const lines = sources
     .filter((s) => connected || !needsGoogle(s.key))
     .map((s) => {
+      const h = health.find((w) => w.key === s.key);
       const st = data.sync[s.key];
       const off =
         s.key === 'news'
@@ -336,11 +341,15 @@ export function TopBar({ data, now, subline, search, onSearch, searchRef, smokes
                 ? !data.prefs.speedTestHours
                 : needsGoogle(s.key) && !data.prefs.sources[s.key as 'calendar'];
       if (off) return { name: s.name, text: 'Off', warn: false };
+      if (h) return { name: s.name, text: h.text, warn: true, why: h.detail ?? st.lastError };
       if (failing(st)) return { name: s.name, text: `Couldn’t sync · last synced ${ago(st.lastSuccess, now)}`, warn: true, why: st.lastError };
       return { name: s.name, text: st.lastSuccess ? `${s.ok} ${ago(st.lastSuccess, now)}` : 'Waiting for first sync', warn: false };
     });
   if (data.google.signedOut) lines.unshift({ name: 'Google', text: 'Signed out · reconnect in Settings', warn: true, why: data.google.signedOut.reason });
   else if (!connected) lines.unshift({ name: 'Google', text: 'Not connected', warn: false });
+  else if (data.google.missingScopes?.length) lines.unshift({ name: 'Google', text: 'Reconnect in Settings to allow backups to Drive, creating events and inbox actions', warn: false });
+  // The database, the daily copy and Drive, from the server's health check.
+  for (const w of health) if (!sources.some((s) => s.key === w.key)) lines.push({ name: w.name, text: w.text, warn: true, why: w.detail ?? null });
   const anyFail = lines.some((l) => l.warn);
   const dot = anyFail ? 'var(--wn)' : connected ? 'var(--t3)' : 'var(--ln)';
 
@@ -392,7 +401,10 @@ export function TopBar({ data, now, subline, search, onSearch, searchRef, smokes
                         role="option"
                         aria-selected={i === cur}
                         className={'search-row' + (i === cur ? ' sel' : '')}
-                        onMouseDown={() => onSearch('')}
+                        onMouseDown={() => {
+                          bookmarkOpened(r.bookmark!.id);
+                          onSearch('');
+                        }}
                       >
                         <Fav b={r.bookmark} small />
                         <span style={{ color: 'var(--tx)' }}>{r.bookmark.name}</span>
