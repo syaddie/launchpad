@@ -961,7 +961,9 @@ if (fs.existsSync(config.webDir)) {
   });
   app.use('*', serveStatic({ root }));
   const index = fs.readFileSync(path.join(config.webDir, 'index.html'), 'utf8');
-  app.get('*', (c) => c.html(index));
+  // A bundle that's gone (renamed by a deploy a tab opened before) is a 404, not the page: a script that
+  // turns out to be HTML fails to load and, with the service worker, would be kept in its place.
+  app.get('*', (c) => (c.req.path.startsWith('/assets/') ? c.notFound() : c.html(index)));
 }
 
 const server = serve({ fetch: app.fetch, port: config.port }, (info) => {

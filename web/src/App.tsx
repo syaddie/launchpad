@@ -29,6 +29,7 @@ import { useGoogleActions } from './hooks/useGoogleActions';
 import { useHashView, useLayout, useMinuteNow, useSystemDark } from './hooks/useDevice';
 import { useShortcuts } from './hooks/useShortcuts';
 import { useFlash, useToast } from './hooks/useToast';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { gridLayout, type Area } from './layout';
 import { send } from './outbox';
 import { paletteAsk, paletteItems, paletteSearches, type AskHandlers, type PaletteContext } from './paletteItems';
@@ -45,6 +46,8 @@ const loadMoney = () => import('./components/money/MoneyView');
 const loadNews = () => import('./components/News');
 const loadReview = () => import('./components/Review');
 const loadServer = () => import('./components/Server');
+// The terminal is the one file the Server view fetches on its own, so it's kept up to date with the rest.
+const loadTerminal = () => import('./components/Terminal');
 const loadTraining = () => import('./components/Training');
 const loadYou = () => import('./components/You');
 const Inbox = lazy(() => loadInbox().then((m) => ({ default: m.Inbox })));
@@ -59,7 +62,7 @@ const ExerciseDrawer = lazy(() => loadTraining().then((m) => ({ default: m.Exerc
 const You = lazy(() => loadYou().then((m) => ({ default: m.You })));
 
 function preloadViews() {
-  for (const load of [loadInbox, loadLearn, loadMoney, loadNews, loadReview, loadServer, loadTraining, loadYou]) load().catch(() => {});
+  for (const load of [loadInbox, loadLearn, loadMoney, loadNews, loadReview, loadServer, loadTerminal, loadTraining, loadYou]) load().catch(() => {});
 }
 
 type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings' } | { type: 'exercise'; title: string } | { type: 'course'; id: string; item?: string } | null;
@@ -637,6 +640,7 @@ export function App({ cached }: { cached: AppState | null }) {
       <div className="lp-inner">
         <TopBar data={data} now={now} subline={subline} search={search} onSearch={setSearch} searchRef={searchRef} smokesToday={smokesToday} onLogSmoke={logSmoke} onOpenTraining={() => setView('training')} onOpenLearn={() => setView('learn')} />
         {serverIssue && <ServerBanner issue={serverIssue} waiting={waiting} onRetry={() => refresh()} />}
+        <ErrorBoundary resetKey={view}>
         <Suspense fallback={<main className="view-loading" aria-busy="true" />}>
         {view === 'news' ? (
           <News data={data} now={now} busy={newsBusy} onRefresh={refreshNews} onTopics={setNewsTopics} onLists={(newsLists) => update((d) => ({ ...d, newsLists }))} notify={showToast} readingSignal={readingSignal} />
@@ -770,6 +774,7 @@ export function App({ cached }: { cached: AppState | null }) {
           )
         )}
         </Suspense>
+        </ErrorBoundary>
       </div>
       </div>
 
