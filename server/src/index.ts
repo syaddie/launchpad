@@ -11,7 +11,9 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { WebSocketServer } from 'ws';
 import { config, googleConfigured } from './config';
 import { authUrl, completeTask, createTask, exchangeCode, GoogleError, revoke } from './google';
-import { asTab, docVersion, store, updatePackages } from './store';
+import { asTab, checkDb, docVersion, store, updatePackages } from './store';
+import { copyDailyToDrive, copyToDriveNow, driveOn } from './drive';
+import { health } from './health';
 import { dbSnapshot, describeRestored, exportBackup, readBackupUpload, restoreBackup, RestoreError, zipBackup } from './backup';
 import { listSnapshots, removeSnapshot, snapshotBackup, snapshotFile, startSnapshots, takeSnapshot } from './snapshots';
 import { cleanCountdowns, cleanMood, cleanPrefs, cleanTopics, isStr, isYmd, validBookmarks, validNotes } from './clean';
@@ -66,7 +68,9 @@ if (accessOn) {
   });
 }
 
-app.get('/healthz', (c) => c.text('ok'));
+// Docker's HEALTHCHECK restarts the container when this fails, so it only checks what a restart could fix: the database.
+// It skips Cloudflare Access, so it says nothing about what went wrong; /api/health does.
+app.get('/healthz', (c) => (checkDb() ? c.text('database unavailable', 503) : c.text('ok')));
 
 // Writes are credited to the tab that sent them, so /api/events doesn't send that tab its own change back.
 app.use('/api/*', (c, next) => asTab(tabOf(c.req.header('x-launchpad-tab')), next));
@@ -186,6 +190,7 @@ app.put('/api/prefs', async (c) => {
   }
   const inboxOn = (p: Prefs) => p.sources.gmail && !p.hidden.includes('view:inbox');
   if (inboxOn(next) && !inboxOn(prev)) runSource('inbox');
+  if (next.driveBackup && !prev.driveBackup) copyDailyToDrive();
   // A new area should show straight away; the page refreshes after saving.
   if (next.weatherArea && next.weatherArea !== prev.weatherArea) await refreshWeather();
   return c.json(next);
@@ -459,6 +464,9 @@ app.get('/api/claude/usage', (c) => c.json({ enabled: claudeEnabled(), budget: s
 
 // ---------- server health ----------
 
+/** The database, the daily copies, Drive and every sync, with what's wrong. */
+app.get('/api/health', (c) => c.json(health()));
+
 const speedInfo = () => ({ tests: store.speedTests(), running: isRunning('speedtest') });
 
 app.get('/api/server', async (c) => c.json(await serverStats(c.req.query('iface'), speedInfo())));
@@ -618,6 +626,13 @@ app.post('/api/backup/snapshots/:id/restore', (c) => {
   return restoreWithUndo(c, () => snapshotBackup(id));
 });
 
+/** "Copy to Drive now": a copy of how things are now, kept here too, uploaded to Google Drive. Waits for the upload. */
+app.post('/api/backup/drive', async (c) => {
+  if (!driveOn()) return c.json({ error: 'Switch on copying to Drive first. It needs Google connected with the Drive permission.' }, 400);
+  await copyToDriveNow();
+  return c.json(state());
+});
+
 /** The whole SQLite database, Google sign-in and caches included. Photos are files beside it, so aren't in it. */
 app.get('/api/backup/db', (c) => {
   const snap = dbSnapshot();
@@ -727,6 +742,8 @@ app.get('/api/auth/google/callback', async (c) => {
   store.setGoogleSignedOut(null);
   store.resetSync();
   await runAllGoogle();
+  // A reconnect that added the Drive permission copies today's copy straight away.
+  copyDailyToDrive();
   return c.redirect('/');
 });
 
@@ -788,6 +805,6 @@ server.on('upgrade', async (req, socket, head) => {
 startScheduler();
 startSampler();
 startCleanup();
-startSnapshots();
+startSnapshots(copyDailyToDrive);
 startLinkChecks();
 startBriefing();

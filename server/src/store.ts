@@ -79,13 +79,37 @@ export function snapshotDb(dest: string): void {
   db.prepare('VACUUM INTO ?').run(dest);
 }
 
+/**
+ * Whether the database can be read: null when it can, else what went wrong. A fresh
+ * statement each time, so it really goes to the file.
+ */
+export function checkDb(): string | null {
+  try {
+    db.prepare('SELECT count(*) AS n FROM docs').get();
+    return null;
+  } catch (e) {
+    return (e as Error).message;
+  }
+}
+
 export interface GoogleTokens {
   refreshToken: string;
   accessToken?: string;
   expiresAt?: number;
   email?: string;
   name?: string;
+  /** What Google granted, as full scope URLs. Missing for sign-ins saved before this was kept, until the next token refresh. */
+  scopes?: string[];
 }
+
+/** How copying the daily copies to Google Drive is going. `uploadedDaily` is the last daily copy that reached Drive. */
+export interface DriveBackupState {
+  lastSuccess: string | null;
+  lastAttempt: string | null;
+  lastError: string | null;
+  uploadedDaily: string | null;
+}
+const EMPTY_DRIVE: DriveBackupState = { lastSuccess: null, lastAttempt: null, lastError: null, uploadedDaily: null };
 
 export interface CalendarCache { calendars: CalendarInfo[]; events: CalEvent[] }
 export interface TasksCache { lists: TaskList[]; tasks: Task[] }
@@ -241,6 +265,9 @@ export const store = {
   },
   setSync: (key: SourceKey, v: SyncStatus) => set('sync', { ...store.sync(), [key]: v }),
   resetSync: () => del('sync'),
+
+  driveBackup: (): DriveBackupState => ({ ...EMPTY_DRIVE, ...get<Partial<DriveBackupState>>('driveBackup', {}) }),
+  setDriveBackup: (v: DriveBackupState) => set('driveBackup', v),
 
   /** Folders that uploads went into, with when the last one started, so abandoned part files there can be swept. */
   uploadDirs: () => get<Record<string, string>>('uploadDirs', {}),

@@ -41,6 +41,7 @@ export const DEFAULT_PREFS: Prefs = {
   pinnedLifts: [],
   gymMonthly: 0,
   claudeBudget: 0,
+  driveBackup: true,
 };
 
 /** Everything Settings › Panels can switch off. */

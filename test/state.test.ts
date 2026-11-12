@@ -29,8 +29,10 @@ describe('state for changed keys', () => {
     expect(st.fieldsFor(['calendar'])!.sort()).toEqual(['calendars', 'events', 'google']);
     expect(st.fieldsFor(['tasks'])!.sort()).toEqual(['google', 'taskLists', 'tasks']);
     expect(st.fieldsFor(['inbox'])!.sort()).toEqual(['google', 'inbox']);
-    expect(st.fieldsFor(['sync'])).toEqual(['sync']);
-    expect(st.fieldsFor(['prefs'])!.sort()).toEqual(['news', 'prefs']);
+    // The health warnings are worked out from the syncs, and the Drive switch is in prefs.
+    expect(st.fieldsFor(['sync'])).toEqual(['sync', 'health']);
+    expect(st.fieldsFor(['prefs'])!.sort()).toEqual(['drive', 'health', 'news', 'prefs']);
+    expect(st.fieldsFor(['driveBackup'])!.sort()).toEqual(['drive', 'health']);
     expect(st.fieldsFor(['money', 'smokes'])!.sort()).toEqual(['money', 'smokes']);
     // Two keys feeding the same field send it once.
     expect(st.fieldsFor(['calendar', 'tasks'])!.filter((f) => f === 'google')).toHaveLength(1);
@@ -62,7 +64,7 @@ describe('state for changed keys', () => {
     const notes = [{ ...STARTER_NOTES[0], text: 'changed' }];
     store.setNotes(notes);
     const s = st.stateFor(['notes', 'sync']);
-    expect(Object.keys(s).sort()).toEqual(['notes', 'sync', 'versions']);
+    expect(Object.keys(s).sort()).toEqual(['health', 'notes', 'sync', 'versions']);
     expect(s.notes).toEqual(notes);
     expect(s.versions).toEqual({ notes: docVersion('notes') });
     expect(s.sync).toEqual(st.state().sync);

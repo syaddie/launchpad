@@ -110,6 +110,8 @@ export interface Prefs {
   gymMonthly: number;
   /** A monthly budget for Claude in US dollars; going over it shows a warning. 0 means none. Missing in older saved prefs. */
   claudeBudget?: number;
+  /** Copy the daily database copies to Google Drive, once the Google sign-in allows it. */
+  driveBackup: boolean;
 }
 
 export interface CalendarInfo {
@@ -653,6 +655,38 @@ export interface SyncStatus {
   lastSuccess: string | null;
   lastAttempt: string | null;
   lastError: string | null;
+  /** Failures in a row since the last success; missing in statuses saved before it was counted. */
+  failures?: number;
+}
+
+/** Copying the daily database copies to a "Launchpad backups" folder in Google Drive. */
+export interface DriveStatus {
+  /** The switch in Settings › General › Backup (prefs.driveBackup). */
+  on: boolean;
+  /** The Google sign-in allows Drive (the drive.file scope). */
+  allowed: boolean;
+  lastSuccess: string | null;
+  lastAttempt: string | null;
+  lastError: string | null;
+  running: boolean;
+}
+
+/** Something the health check found wrong. `key` is a SourceKey for a sync, or database, copies or drive. */
+export interface HealthWarning {
+  key: SourceKey | 'database' | 'copies' | 'drive';
+  name: string;
+  text: string;
+  /** The error behind it, when there is one. */
+  detail?: string;
+}
+
+/** GET /api/health. */
+export interface Health {
+  database: { ok: boolean; error: string | null };
+  lastCopy: { at: string | null; ageHours: number | null };
+  drive: DriveStatus;
+  sync: Record<SourceKey, SyncStatus & { on: boolean; everyMinutes: number }>;
+  warnings: HealthWarning[];
 }
 
 export interface GoogleInfo {
@@ -663,6 +697,8 @@ export interface GoogleInfo {
   name?: string;
   /** Set when Google stopped accepting the sign-in and Launchpad disconnected itself: why, and when. */
   signedOut?: { reason: string; at: string };
+  /** Scopes added since this sign-in was made (e.g. drive.file); everything else keeps working until it's reconnected. */
+  missingScopes?: string[];
 }
 
 export interface AppState {
@@ -710,6 +746,10 @@ export interface AppState {
   briefing?: { note: Briefing | null; error: string | null };
   /** What Claude has cost this month so far, estimated in US dollars (Server › Claude usage). Missing in older cached copies. */
   claudeSpend?: number;
+  /** Copying the daily copies to Google Drive; missing in copies cached by older versions. */
+  drive?: DriveStatus;
+  /** What the health check found wrong (see GET /api/health); missing in copies cached by older versions. */
+  health?: HealthWarning[];
   /** The version of each document the page saves whole; missing in copies cached by older versions. */
   versions?: Partial<Record<SavedDoc, string>>;
 }
