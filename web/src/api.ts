@@ -1,4 +1,6 @@
-import type { AppState, Backup, BackupSnapshot, CalEvent, Countdown, DirListing, Mood, Package, Photo, Prefs, SavedDoc, ServerStats, ShellInfo, SourceKey, Task, Training } from '../../shared/types';
+import type { AppState, Backup, BackupSnapshot, CalEvent, Countdown, DirListing, DisksReport, LinkCheck, LogLine, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
+import type { AskResult } from '../../shared/ask';
+import type { UsageReport } from '../../shared/claudeUsage';
 import { kvGet, kvSet } from './idb';
 
 /** Where the state was kept before it moved to IndexedDB; still used where IndexedDB isn't available. */
@@ -195,6 +197,21 @@ export const api = {
   sync: (source: SourceKey, ifOlderThanSec = 0) =>
     req<AppState>('POST', `/api/sync/${source}${ifOlderThanSec ? `?ifOlderThan=${ifOlderThanSec}` : ''}`, {}),
   disconnectGoogle: () => req<AppState>('POST', '/api/auth/google/disconnect', {}),
+  /** An image pasted or dropped into a note; shown with imageMarkdown(id) (shared/notes.ts). */
+  uploadNoteImage: (image: Blob) => req<{ id: string }>('POST', '/api/note-images', image),
+  /** A notepad's earlier versions, newest first. */
+  noteHistory: (id: string) => req<NoteVersion[]>('GET', `/api/notes/${encodeURIComponent(id)}/history`),
+  /** Keep the notepad's saved text among its versions now, before an older one replaces it. */
+  keepNoteVersion: (id: string) => req<NoteVersion[]>('POST', `/api/notes/${encodeURIComponent(id)}/history`, {}),
+  /** Start checking every bookmark for ones that no longer open; the result comes through the change stream. */
+  checkLinks: () => req<LinkCheck>('POST', '/api/bookmarks/check', {}),
+  /** Try a feed before following it; refused with the reason when it doesn't work. */
+  checkNewsSource: (source: string) => req<{ source: string; title: string; count: number }>('POST', '/api/news/check', { source }),
+  saveStory: (s: Pick<SavedStory, 'title' | 'url' | 'source' | 'topic' | 'summary'>) => req<NewsLists>('POST', '/api/news/saved', s),
+  markStoryRead: (id: string, read: boolean) => req<NewsLists>('PATCH', `/api/news/saved/${encodeURIComponent(id)}`, { read }),
+  removeStory: (id: string) => req<NewsLists>('DELETE', `/api/news/saved/${encodeURIComponent(id)}`),
+  hideNews: (topic: string, urls: string[], hide: boolean) => req<NewsLists>('POST', '/api/news/hidden', { topic, urls, hide }),
+  muteSource: (source: string, muted: boolean) => req<NewsLists>('POST', '/api/news/muted', { source, muted }),
   addPhoto: (image: Blob) => req<Photo>('POST', '/api/photos', image),
   putPhotos: (v: Photo[]) => req('PUT', '/api/photos', v),
   deletePhoto: (id: string) => req('DELETE', `/api/photos/${encodeURIComponent(id)}`),
@@ -205,6 +222,10 @@ export const api = {
   putTraining: (v: Training) => req<Training>('PUT', '/api/training', v),
   refreshTraining: (force: boolean) => req<AppState>('POST', `/api/training/refresh${force ? '?force=1' : ''}`, {}),
   refreshLearn: (force: boolean) => req<AppState>('POST', `/api/learn/refresh${force ? '?force=1' : ''}`, {}),
+  refreshBriefing: (force: boolean) => req<Partial<AppState>>('POST', `/api/briefing/refresh${force ? '?force=1' : ''}`, {}),
+  /** ⌘K's Ask Launchpad: what's typed → one checked action, not yet done. */
+  ask: (text: string) => req<AskResult>('POST', '/api/ask', { text }),
+  claudeUsage: () => req<UsageReport>('GET', '/api/claude/usage'),
   putWeight: (date: string, kg: number | null) => req<Record<string, number>>('PUT', `/api/weights/${date}`, { kg }),
   putMood: (date: string, mood: Mood | { level: 0 }) => req<Record<string, Mood>>('PUT', `/api/moods/${date}`, mood),
   server: (iface?: string) => req<ServerStats>('GET', `/api/server${iface ? `?iface=${encodeURIComponent(iface)}` : ''}`),
@@ -222,9 +243,22 @@ export const api = {
   snapshots: () => req<BackupSnapshot[]>('GET', '/api/backup/snapshots'),
   takeSnapshot: () => req<BackupSnapshot[]>('POST', '/api/backup/snapshots', {}),
   restoreSnapshot: (id: string) => req<RestoreResult>('POST', `/api/backup/snapshots/${encodeURIComponent(id)}/restore`, {}),
+  containerLogs: (id: string, tail: number, since?: string) =>
+    req<LogLine[]>('GET', `/api/server/containers/${encodeURIComponent(id)}/logs?tail=${tail}${since ? `&since=${encodeURIComponent(since)}` : ''}`),
+  restartContainer: (id: string) => req('POST', `/api/server/containers/${encodeURIComponent(id)}/restart`, {}),
+  disks: (refresh = false) => req<DisksReport>(refresh ? 'POST' : 'GET', refresh ? '/api/server/disks/refresh' : '/api/server/disks', refresh ? {} : undefined),
+  snippets: () => req<Snippet[]>('GET', '/api/shell/snippets'),
+  addSnippet: (s: Omit<Snippet, 'id'>) => req<Snippet[]>('POST', '/api/shell/snippets', s),
+  editSnippet: (s: Snippet) => req<Snippet[]>('PUT', `/api/shell/snippets/${encodeURIComponent(s.id)}`, { name: s.name, command: s.command }),
+  deleteSnippet: (id: string) => req<Snippet[]>('DELETE', `/api/shell/snippets/${encodeURIComponent(id)}`),
   /** Take a copy now and upload it to Google Drive; resolves once it's there (or failed, in `drive.lastError`). */
   copyToDrive: () => req<AppState>('POST', '/api/backup/drive', {}),
 };
+
+/** Count an open of a bookmark (a tile, a search result, ⌘K, 1–9), for ranking results. Nothing waits on it. */
+export function bookmarkOpened(id: string): void {
+  req('POST', `/api/bookmarks/${encodeURIComponent(id)}/opened`, {}, true).catch(() => {});
+}
 
 /** Everything you've entered, as JSON. */
 export const BACKUP_URL = '/api/backup';

@@ -10,11 +10,15 @@ import { config } from './config';
 import type { StoredEmail } from './gmail-parse';
 import type { StoredPhoto } from './photos';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
+import { cleanOpens } from '../../shared/bookmarks';
+import type { UsageLog } from '../../shared/claudeUsage';
 import { cleanLearn } from '../../shared/learn';
+import { cleanNewsLists } from '../../shared/news';
+import { cleanHistory } from '../../shared/notes';
 import { cleanMoney } from '../../shared/money';
 import { cleanTraining } from '../../shared/training';
 import type {
-  BillSuggestion, BookmarkGroup, CalEvent, CalendarInfo, Countdown, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsTopic, Note, Package, Prefs, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
+  BillSuggestion, BookmarkGroup, BookmarkOpens, Briefing, CalEvent, LinkCheck, CalendarInfo, Countdown, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsLists, NewsTopic, Note, NoteVersion, Package, Prefs, Snippet, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
 } from '../../shared/types';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
@@ -137,9 +141,18 @@ export function docVersion(key: string): string {
 export const store = {
   bookmarks: () => get<BookmarkGroup[]>('bookmarks', STARTER_BOOKMARKS),
   setBookmarks: (v: BookmarkGroup[]) => set('bookmarks', v),
+  /** How often each bookmark's been opened, by id, for ranking search results. */
+  bookmarkOpens: (): BookmarkOpens => cleanOpens(get<unknown>('bookmarkOpens', null)),
+  setBookmarkOpens: (v: BookmarkOpens) => set('bookmarkOpens', v),
+  /** The last check for bookmarks that no longer open. */
+  linkCheck: () => get<LinkCheck>('linkCheck', { checkedAt: null, running: false, problems: {} }),
+  setLinkCheck: (v: LinkCheck) => set('linkCheck', v),
 
   notes: () => get<Note[]>('notes', STARTER_NOTES),
   setNotes: (v: Note[]) => set('notes', v),
+  /** Earlier versions of each notepad, newest first (server/src/notes.ts). */
+  noteHistory: (): Record<string, NoteVersion[]> => cleanHistory(get<unknown>('noteHistory', null)),
+  setNoteHistory: (v: Record<string, NoteVersion[]>) => set('noteHistory', v),
 
   prefs: (): Prefs => {
     const p = get<Partial<Prefs>>('prefs', {});
@@ -173,6 +186,10 @@ export const store = {
 
   news: () => get<NewsCache>('news', {}),
   setNews: (v: NewsCache) => set('news', v),
+
+  /** The reading list, hidden headlines and muted sources. */
+  newsLists: (): NewsLists => cleanNewsLists(get<unknown>('newsLists', null)),
+  setNewsLists: (v: NewsLists) => set('newsLists', cleanNewsLists(v)),
 
   inbox: (): InboxCache => {
     const v = get<Partial<InboxCache>>('inbox', {});
@@ -216,6 +233,14 @@ export const store = {
   learnNote: () => get<{ note: LearnNote | null; error: string | null }>('learnNote', { note: null, error: null }),
   setLearnNote: (v: { note: LearnNote | null; error: string | null }) => set('learnNote', v),
 
+  /** Claude's paragraph at the top of Today, written each morning. */
+  briefing: () => get<{ note: Briefing | null; error: string | null }>('briefing', { note: null, error: null }),
+  setBriefing: (v: { note: Briefing | null; error: string | null }) => set('briefing', v),
+
+  /** Tokens every Claude call used, by day, feature and model (see shared/claudeUsage.ts). */
+  claudeUsage: () => get<UsageLog>('claudeUsage', {}),
+  setClaudeUsage: (v: UsageLog) => set('claudeUsage', v),
+
   /** Oldest first, the last 30 days. */
   speedTests: () => get<SpeedTest[]>('speedTests', []),
   addSpeedTest: (t: SpeedTest) => {
@@ -256,6 +281,9 @@ export const store = {
 
   driveBackup: (): DriveBackupState => ({ ...EMPTY_DRIVE, ...get<Partial<DriveBackupState>>('driveBackup', {}) }),
   setDriveBackup: (v: DriveBackupState) => set('driveBackup', v),
+  /** The terminal's saved commands, in the order they were added. */
+  snippets: () => get<Snippet[]>('snippets', []),
+  setSnippets: (v: Snippet[]) => set('snippets', v),
 
   /** Folders that uploads went into, with when the last one started, so abandoned part files there can be swept. */
   uploadDirs: () => get<Record<string, string>>('uploadDirs', {}),

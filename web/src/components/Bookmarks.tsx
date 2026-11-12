@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import type { BookmarkGroup } from '../../../shared/types';
-import { newId } from '../util';
+import { createPortal } from 'react-dom';
+import { importFolders, newInFolder, parseBookmarkHtml, type ImportFolder } from '../../../shared/bookmarks';
+import type { BookmarkGroup, LinkCheck } from '../../../shared/types';
+import { bookmarkOpened } from '../api';
+import type { Notify } from '../hooks/useToast';
+import { ago, newId } from '../util';
+import { Drawer } from './Drawers';
 import { Fav, matchBookmark } from './TopBar';
 
 interface Props {
@@ -9,13 +14,21 @@ interface Props {
   search: string;
   edit: boolean;
   setEdit: (on: boolean) => void;
+  /** The last check for links that no longer open; shown in edit mode. */
+  linkCheck?: LinkCheck;
+  onCheckLinks?: () => void;
+  notify?: Notify;
 }
 
 type Drag = { type: 'tile'; g: number; i: number; id: string } | { type: 'group'; g: number; id: string };
 
 const NEW_URL = 'https://';
 
-export function Bookmarks({ groups, onChange, search, edit, setEdit }: Props) {
+export function Bookmarks({ groups, onChange, search, edit, setEdit, linkCheck, onCheckLinks, notify }: Props) {
+  const [importing, setImporting] = useState<{ folders: ImportFolder[]; file: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const problems = linkCheck?.problems ?? {};
+  const broken = groups.reduce((n, g) => n + g.items.filter((b) => problems[b.url]).length, 0);
   const [editTile, setEditTile] = useState<string | null>(null);
   const [draft, setDraft] = useState({ name: '', url: '' });
   const [dragId, setDragId] = useState<string | null>(null);
@@ -94,7 +107,46 @@ export function Bookmarks({ groups, onChange, search, edit, setEdit }: Props) {
     <section className={'panel bm-panel' + (edit ? ' edit-mode' : '')} style={{ gridArea: 'bm', zIndex: edit ? 5 : 1 }} aria-label="Bookmarks">
       <div className="panel-head" style={{ paddingBottom: 0 }}>
         <h2 className="panel-title">Bookmarks</h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {edit && linkCheck && (
+            <span className="meta" title={linkCheck.checkedAt ? `Every bookmark is opened once a week; last checked ${new Date(linkCheck.checkedAt).toLocaleString()}` : 'Every bookmark is opened once a week'}>
+              {linkCheck.running
+                ? 'Checking links…'
+                : linkCheck.error
+                  ? <span style={{ color: 'var(--wn)' }} title={linkCheck.error}>Couldn’t check links</span>
+                  : broken
+                  ? <span style={{ color: 'var(--wn)' }}>{broken} link{broken === 1 ? '' : 's'} look{broken === 1 ? 's' : ''} broken</span>
+                  : linkCheck.checkedAt ? `Links checked ${ago(linkCheck.checkedAt, new Date())}` : ''}
+            </span>
+          )}
+          {edit && onCheckLinks && (
+            <button className="btn btn-ghost btn-small" disabled={linkCheck?.running} onClick={onCheckLinks} title="Open every bookmark now and flag the ones that don’t">
+              <i className={'ph-duotone ph-link' + (linkCheck?.running ? ' spin' : '')} />
+              Check links
+            </button>
+          )}
+          {edit && (
+            <button className="btn btn-ghost btn-small" onClick={() => fileRef.current?.click()} title="Add bookmarks from a browser’s export (Bookmarks › Export, an .html file)">
+              <i className="ph-duotone ph-download-simple" />
+              Import
+            </button>
+          )}
+          {edit && (
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".html,.htm,text/html"
+              hidden
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                e.target.value = '';
+                if (!f) return;
+                const folders = parseBookmarkHtml(await f.text());
+                if (!folders.some((x) => x.items.length)) notify?.('No bookmarks in that file. Export them from your browser’s bookmark manager as HTML.');
+                else setImporting({ folders, file: f.name });
+              }}
+            />
+          )}
           {edit && (
             <button className="btn btn-ghost btn-small" onClick={() => onChange([...groups, { id: newId('g'), name: 'New group', items: [] }])}>
               <i className="ph-duotone ph-plus" />
@@ -161,17 +213,20 @@ export function Bookmarks({ groups, onChange, search, edit, setEdit }: Props) {
             <div className="bm-tiles">
               {g.items.map((b, ii) => {
                 const isDaily = g.name === 'Daily' && ii < 9;
+                const problem = edit ? problems[b.url] : undefined;
                 return (
                   <div key={b.id} className="tile-wrap">
                     <a
                       href={edit ? undefined : b.url}
                       target="_blank"
                       rel="noopener"
-                      className={'tile' + (editTile === b.id ? ' editing' : '')}
+                      className={'tile' + (editTile === b.id ? ' editing' : '') + (problem ? ' broken' : '')}
+                      title={problem ? `${problem.kind === 'gone' ? 'Looks gone' : 'Didn’t open'}: ${problem.why} (checked ${ago(problem.at, new Date())})` : undefined}
                       draggable={edit}
                       style={{ opacity: dragId === b.id ? 0.35 : q && !matchBookmark(b, q) ? 0.3 : 1 }}
+                      onAuxClick={(e) => !edit && e.button === 1 && bookmarkOpened(b.id)}
                       onClick={(e) => {
-                        if (!edit) return;
+                        if (!edit) return bookmarkOpened(b.id);
                         e.preventDefault();
                         setEditTile(b.id);
                         setDraft({ name: b.name, url: b.url });
@@ -194,6 +249,7 @@ export function Bookmarks({ groups, onChange, search, edit, setEdit }: Props) {
                     >
                       <Fav b={b} />
                       <span className="tile-name">{b.name}</span>
+                      {problem && <i className="ph-fill ph-warning-circle tile-broken" aria-label={`Link problem: ${problem.why}`} />}
                     </a>
                     {isDaily && <span className="tile-num mono">{ii + 1}</span>}
                     {edit && (
@@ -258,6 +314,80 @@ export function Bookmarks({ groups, onChange, search, edit, setEdit }: Props) {
         ))}
         {!groups.length && !edit && <div style={{ fontSize: 13, color: 'var(--t3)' }}>No bookmarks yet. Press Edit to add some.</div>}
       </div>
+      {importing && (
+        <ImportDrawer
+          file={importing.file}
+          folders={importing.folders}
+          groups={groups}
+          onClose={() => setImporting(null)}
+          onImport={(chosen) => {
+            const before = groups;
+            const r = importFolders(groups, importing.folders, chosen, newId);
+            setImporting(null);
+            if (!r.added) return notify?.(`Nothing new: ${r.skipped === 1 ? 'that bookmark is' : `all ${r.skipped} are`} already here.`);
+            onChange(r.groups);
+            notify?.(
+              `Added ${r.added} bookmark${r.added === 1 ? '' : 's'}${r.skipped ? `; skipped ${r.skipped} already here` : ''}.`,
+              { label: 'Undo', run: () => onChange(before) },
+            );
+          }}
+        />
+      )}
     </section>
+  );
+}
+
+/** Pick which folders of a browser's bookmark export become groups. */
+function ImportDrawer({ file, folders, groups, onClose, onImport }: {
+  file: string;
+  folders: ImportFolder[];
+  groups: BookmarkGroup[];
+  onClose: () => void;
+  onImport: (chosen: number[]) => void;
+}) {
+  const fresh = folders.map((f) => newInFolder(groups, f));
+  const [chosen, setChosen] = useState<Set<number>>(() => new Set(folders.flatMap((f, i) => (f.items.length && fresh[i] ? [i] : []))));
+  const toggle = (i: number) => setChosen((s) => {
+    const n = new Set(s);
+    if (n.has(i)) n.delete(i);
+    else n.add(i);
+    return n;
+  });
+  const total = [...chosen].reduce((n, i) => n + fresh[i], 0);
+  const names = new Set(groups.map((g) => g.name.trim().toLowerCase()));
+  // On the page itself, so it sits above every panel.
+  return createPortal(
+    <Drawer title="Import bookmarks" onClose={onClose}>
+      <div className="drawer-section">
+        <p className="meta" style={{ margin: 0, fontSize: 13, color: 'var(--t2)' }}>
+          From <b style={{ fontWeight: 600 }}>{file}</b>. Each folder you tick becomes a group with its own links (not its subfolders’, which are listed separately). A folder named like one of your groups adds to it. Links you already have are skipped.
+        </p>
+        <div className="import-list">
+          {folders.map((f, i) =>
+            f.items.length ? (
+              <label key={i} className="import-row" style={{ paddingLeft: 8 + Math.max(0, f.path.length - 1) * 16 }}>
+                <input type="checkbox" checked={chosen.has(i)} disabled={!fresh[i]} onChange={() => toggle(i)} />
+                <span className="import-name">
+                  {f.path.length ? f.path[f.path.length - 1] : 'Not in a folder (becomes “Imported”)'}
+                  {f.path.length > 1 && <span className="meta"> in {f.path.slice(0, -1).join(' › ')}</span>}
+                </span>
+                <span className="meta tnum" style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>
+                  {fresh[i] === f.items.length ? f.items.length : `${fresh[i]} new of ${f.items.length}`}
+                  {fresh[i] > 0 && names.has((f.path[f.path.length - 1] ?? 'Imported').trim().toLowerCase()) ? ' · adds to your group' : ''}
+                </span>
+              </label>
+            ) : null,
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <button className="btn btn-ghost btn-small" onClick={() => setChosen(new Set(folders.flatMap((_, i) => (fresh[i] ? [i] : []))))}>All</button>
+          <button className="btn btn-ghost btn-small" onClick={() => setChosen(new Set())}>None</button>
+          <button className="btn btn-primary" style={{ marginLeft: 'auto' }} disabled={!total} onClick={() => onImport([...chosen].sort((a, b) => a - b))}>
+            {total ? `Add ${total} bookmark${total === 1 ? '' : 's'}` : 'Nothing to add'}
+          </button>
+        </div>
+      </div>
+    </Drawer>,
+    document.body,
   );
 }

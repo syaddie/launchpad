@@ -2,13 +2,13 @@
 // load and uptime come from the kernel and describe the whole host even inside
 // Docker. Network traffic needs the host's /proc mounted at HOST_PROC (otherwise
 // only the container's own traffic is visible), and the container list needs
-// DOCKER_HOST pointing at a Docker socket or a read-only socket proxy.
+// DOCKER_HOST pointing at a Docker socket or a read-only socket proxy (docker.ts).
 import fs from 'node:fs';
-import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { config } from './config';
-import type { ContainerInfo, ServerStats } from '../../shared/types';
+import { canRestart, containers } from './docker';
+import type { ServerStats } from '../../shared/types';
 
 const SAMPLE_EVERY = 5_000;
 const KEEP = 60;
@@ -139,62 +139,6 @@ function busiest(names: string[]): string {
   return [...names].sort((a, b) => sum(b) - sum(a))[0] ?? '';
 }
 
-// ---------- Docker ----------
-
-/** GET a Docker Engine API path over DOCKER_HOST (unix:///var/run/docker.sock or tcp://host:2375). */
-function docker<T>(apiPath: string): Promise<T> {
-  const target = config.dockerHost;
-  const opts: http.RequestOptions = { path: apiPath, method: 'GET', timeout: 4000, headers: { Host: 'docker' } };
-  if (target.startsWith('unix://')) opts.socketPath = target.slice('unix://'.length);
-  else {
-    const u = new URL(target.replace(/^tcp:\/\//, 'http://'));
-    opts.host = u.hostname;
-    opts.port = Number(u.port || 2375);
-  }
-  return new Promise((resolve, reject) => {
-    const req = http.request(opts, (res) => {
-      let body = '';
-      res.setEncoding('utf8');
-      res.on('data', (c) => (body += c));
-      res.on('end', () => {
-        if ((res.statusCode ?? 500) >= 400) return reject(new Error(`Docker answered ${res.statusCode}`));
-        try {
-          resolve(JSON.parse(body) as T);
-        } catch {
-          reject(new Error('Docker sent something that isn’t JSON'));
-        }
-      });
-    });
-    req.on('timeout', () => req.destroy(new Error('Docker didn’t answer in time')));
-    req.on('error', reject);
-    req.end();
-  });
-}
-
-interface DockerContainer { Names?: string[]; Image?: string; State?: string; Status?: string }
-
-export function toContainers(list: DockerContainer[]): ContainerInfo[] {
-  return list
-    .map((c) => ({
-      name: (c.Names?.[0] ?? '').replace(/^\//, ''),
-      image: c.Image ?? '',
-      state: c.State ?? 'unknown',
-      status: c.Status ?? '',
-    }))
-    .sort((a, b) => Number(b.state === 'running') - Number(a.state === 'running') || a.name.localeCompare(b.name));
-}
-
-async function containers(): Promise<{ list: ContainerInfo[] | null; error: string | null }> {
-  if (!config.dockerHost) return { list: null, error: null };
-  try {
-    return { list: toContainers(await docker<DockerContainer[]>('/containers/json?all=1')), error: null };
-  } catch (e) {
-    const err = e as NodeJS.ErrnoException;
-    const down = ['ENOTFOUND', 'ECONNREFUSED', 'ENOENT', 'EAI_AGAIN'].includes(err.code ?? '');
-    return { list: null, error: down ? `Docker isn’t reachable at ${config.dockerHost}. Is the docker-proxy service running?` : err.message };
-  }
-}
-
 // ---------- stats ----------
 
 export async function serverStats(iface: string | undefined, speed: ServerStats['speed']): Promise<ServerStats> {
@@ -237,6 +181,7 @@ export async function serverStats(iface: string | undefined, speed: ServerStats[
         : null,
     containers: docker.list,
     containersError: docker.error,
+    canRestart: canRestart(),
     speed,
   };
 }

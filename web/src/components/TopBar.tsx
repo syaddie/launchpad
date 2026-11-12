@@ -2,7 +2,9 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { DOW, startOfDay } from '../../../shared/dates';
 import { fmtStudy, timerMinutes } from '../../../shared/learn';
 import { engineUrl, parseSearch } from '../../../shared/trackers';
-import type { AppState, Bookmark, SearchEngine, SourceKey, Weather } from '../../../shared/types';
+import { rankBookmarks } from '../../../shared/bookmarks';
+import type { AppState, Bookmark, BookmarkOpens, SearchEngine, SourceKey, Weather } from '../../../shared/types';
+import { bookmarkOpened } from '../api';
 import { fmtMinutes, lastTrained, minutes, workoutLabel } from '../../../shared/training';
 import { ago, favicon, fmtDay, hm, host, psiBand, uvBand, weatherIcon, weatherLabel } from '../util';
 
@@ -258,13 +260,13 @@ function failing(s: { lastSuccess: string | null; lastError: string | null }) {
 
 type Row = { key: string; url: string; bookmark?: Bookmark; engine?: SearchEngine; term?: string };
 
-/** Search rows: a prefixed search goes straight to its engine; otherwise bookmarks, then every engine. */
-export function searchRows(q: string, bookmarks: Bookmark[], engines: SearchEngine[]): Row[] {
+/** Search rows: a prefixed search goes straight to its engine; otherwise bookmarks (the most opened first), then every engine. */
+export function searchRows(q: string, bookmarks: Bookmark[], engines: SearchEngine[], opens?: BookmarkOpens): Row[] {
   const { engine, term } = parseSearch(q, engines);
   if (!term) return [];
   if (engine) return [{ key: 'e:' + engine.prefix, url: engineUrl(engine, term), engine, term }];
   const lq = term.toLowerCase();
-  const hits = bookmarks.filter((b) => matchBookmark(b, lq)).slice(0, 6);
+  const hits = rankBookmarks(bookmarks.filter((b) => matchBookmark(b, lq)), opens, lq).slice(0, 6);
   return [
     ...hits.map((b) => ({ key: 'b:' + b.id, url: b.url, bookmark: b })),
     ...engines.map((e) => ({ key: 'e:' + e.prefix, url: engineUrl(e, term), engine: e, term })),
@@ -283,7 +285,7 @@ export function TopBar({ data, now, subline, search, onSearch, searchRef, smokes
   const hidden = data.prefs.hidden;
   const trained = lastTrained(data.training.workouts, startOfDay(now));
   const engines = data.prefs.searchEngines;
-  const rows = searchRows(search, data.bookmarks.flatMap((g) => g.items), engines);
+  const rows = searchRows(search, data.bookmarks.flatMap((g) => g.items), engines, data.bookmarkOpens);
   const prefixed = rows.length === 1 && !!rows[0].engine && parseSearch(search, engines).engine !== null;
   const firstEngine = rows.findIndex((r) => r.engine);
   const cur = Math.min(sel, Math.max(0, rows.length - 1));
@@ -304,6 +306,7 @@ export function TopBar({ data, now, subline, search, onSearch, searchRef, smokes
       onSearch('');
       e.currentTarget.blur();
     } else if (e.key === 'Enter' && rows[cur]) {
+      if (rows[cur].bookmark) bookmarkOpened(rows[cur].bookmark!.id);
       open(rows[cur].url);
     }
   };
@@ -398,7 +401,10 @@ export function TopBar({ data, now, subline, search, onSearch, searchRef, smokes
                         role="option"
                         aria-selected={i === cur}
                         className={'search-row' + (i === cur ? ' sel' : '')}
-                        onMouseDown={() => onSearch('')}
+                        onMouseDown={() => {
+                          bookmarkOpened(r.bookmark!.id);
+                          onSearch('');
+                        }}
                       >
                         <Fav b={r.bookmark} small />
                         <span style={{ color: 'var(--tx)' }}>{r.bookmark.name}</span>

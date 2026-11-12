@@ -45,9 +45,10 @@ describe('backup', () => {
     store.setMoods({ '2026-11-01': { level: 4, note: 'good' } });
     store.setWeights({ '2026-11-01': 72.4 });
     store.setPrefs({ ...DEFAULT_PREFS, name: 'Sam', cigaretteLimit: 5 });
+    store.setSnippets([{ id: 's1', name: 'Disk usage', command: 'df -h' }]);
     const b = backup.exportBackup();
     expect(b.version).toBe(2);
-    for (const k of ['bookmarks', 'notes', 'prefs', 'countdowns', 'smokes', 'moods', 'weights', 'money', 'learn', 'training', 'exerciseMuscles', 'packages'] as const) expect(b).toHaveProperty(k);
+    for (const k of ['bookmarks', 'notes', 'prefs', 'countdowns', 'smokes', 'moods', 'weights', 'money', 'learn', 'training', 'exerciseMuscles', 'packages', 'snippets'] as const) expect(b).toHaveProperty(k);
     // Every cigarette, not just the 60 days the page gets.
     expect(b.smokes).toHaveLength(2);
     expect(JSON.stringify(b)).not.toMatch(/refreshToken/);
@@ -57,6 +58,7 @@ describe('backup', () => {
     store.setMoods({});
     store.setWeights({});
     store.setPrefs({ ...DEFAULT_PREFS });
+    store.setSnippets([]);
     const restored = backup.restoreBackup(JSON.parse(JSON.stringify(b)));
     expect(restored).toContain('money');
     expect(store.countdowns()).toEqual(b.countdowns);
@@ -65,6 +67,7 @@ describe('backup', () => {
     expect(store.weights()).toEqual(b.weights);
     expect(store.prefs().name).toBe('Sam');
     expect(store.prefs().cigaretteLimit).toBe(5);
+    expect(store.snippets()).toEqual([{ id: 's1', name: 'Disk usage', command: 'df -h' }]);
   });
 
   it('restores an old bookmarks-and-notes backup without touching the rest', () => {

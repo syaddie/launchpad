@@ -4,7 +4,10 @@ import { fmtDuration } from '../../../shared/trackers';
 import type { AppState, ServerStats, ShellInfo, SourceKey, SpeedTest } from '../../../shared/types';
 import { api, cachedServer, cacheServer, localGet, localSet } from '../api';
 import { ago, fmtBytes, hm, niceMax } from '../util';
+import { ClaudeUsagePanel } from './ClaudeUsage';
+import { ContainerRow, LogsDrawer } from './Containers';
 import { authorizeLine, Copyable } from './Copyable';
+import { DisksPanel } from './Disks';
 import { FilesPanel } from './Files';
 
 const POLL = 5_000;
@@ -262,8 +265,12 @@ function Overview({ data, now, onOpenSettings }: { data: AppState; now: Date; on
       </div>
       <div className="server-row grow">
         <SpeedPanel speed={stats.speed} plan={data.prefs.speedPlanMbps} every={data.prefs.speedTestHours} now={now} lastError={data.sync.speedtest.lastError} onTest={testNow} onOpenSettings={onOpenSettings} />
-        <ServicesPanel s={stats} data={data} now={now} />
+        <ServicesPanel s={stats} data={data} now={now} onChanged={load} />
       </div>
+      <div className="server-row">
+        <DisksPanel now={now} />
+      </div>
+      <div className="server-row"><ClaudeUsagePanel data={data} onOpenSettings={onOpenSettings} /></div>
     </>
   );
 }
@@ -628,33 +635,28 @@ const SYNCS: { key: SourceKey; name: string }[] = [
   { key: 'speedtest', name: 'Speed test' },
 ];
 
-function ServicesPanel({ s, data, now }: { s: ServerStats; data: AppState; now: Date }) {
+function ServicesPanel({ s, data, now, onChanged }: { s: ServerStats; data: AppState; now: Date; onChanged: () => void }) {
+  const [logsOf, setLogsOf] = useState<string | null>(null);
+  const [note, setNote] = useState<{ text: string; failed: boolean } | null>(null);
+  const logs = s.containers?.find((c) => c.id === logsOf);
+  const restarted = (name: string) => (error: string | null) => {
+    setNote(error ? { text: `Couldn’t restart ${name}: ${error}`, failed: true } : { text: `Restarted ${name}.`, failed: false });
+    onChanged();
+  };
   return (
     <section className="panel srv-panel services" aria-label="Services">
       <div className="panel-head">
         <h2 className="panel-title">Services</h2>
         <span className="meta">{s.hostname}</span>
       </div>
+      {note && (
+        <div className="status-line" style={{ margin: '0 10px', color: note.failed ? 'var(--wn)' : 'var(--t2)' }} role="status">
+          {note.text}
+        </div>
+      )}
       <div className="scroll">
         {s.containers ? (
-          s.containers.map((c) => {
-            const up = c.state === 'running';
-            const unhealthy = /unhealthy/i.test(c.status);
-            return (
-              <div key={c.name} className="container-row">
-                <span className="dot" style={{ width: 8, height: 8, background: up && !unhealthy ? 'var(--ac)' : up ? 'var(--wn)' : 'var(--ln)' }} />
-                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                  <span className="mono" style={{ fontSize: 13 }}>
-                    {c.name}
-                  </span>
-                  <span className="meta" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {c.status}
-                  </span>
-                </div>
-                <span className={'chip ' + (unhealthy ? 'chip-warn' : up ? 'chip-accent' : 'chip-muted')}>{unhealthy ? 'Unhealthy' : up ? 'Running' : c.state[0].toUpperCase() + c.state.slice(1)}</span>
-              </div>
-            );
-          })
+          s.containers.map((c) => <ContainerRow key={c.id || c.name} c={c} canRestart={s.canRestart} onLogs={() => setLogsOf(c.id)} onRestarted={restarted(c.name)} />)
         ) : (
           <div className="empty" style={{ gap: 6 }}>
             <p style={{ fontSize: 13 }}>
@@ -689,6 +691,7 @@ function ServicesPanel({ s, data, now }: { s: ServerStats; data: AppState; now: 
           </div>
         ))}
       </div>
+      {logs && <LogsDrawer c={logs} canRestart={s.canRestart} onClose={() => setLogsOf(null)} onRestarted={restarted(logs.name)} />}
     </section>
   );
 }

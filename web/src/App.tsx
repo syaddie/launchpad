@@ -3,7 +3,9 @@ import { STARTER_NOTES } from '../../shared/defaults';
 import { ymd } from '../../shared/dates';
 import { fmtStudy, timerMinutes } from '../../shared/learn';
 import { fmtKg } from '../../shared/training';
-import { nearestCountdown, smokesOn } from '../../shared/trackers';
+import { fmtUsd } from '../../shared/claudeUsage';
+import { fmtMoney, sortEntries } from '../../shared/money';
+import { MOOD_WORDS, nearestCountdown, smokesOn } from '../../shared/trackers';
 import type { AppState, Backup, BookmarkGroup, DesignKey, Countdown, Learn, Money, Mood, Note, Package, Photo, Prefs, Task, Training } from '../../shared/types';
 import { api, localGet, localSet, type RestoreResult } from './api';
 import { AddEvent } from './components/AddEvent';
@@ -29,8 +31,8 @@ import { useShortcuts } from './hooks/useShortcuts';
 import { useFlash, useToast } from './hooks/useToast';
 import { gridLayout, type Area } from './layout';
 import { send } from './outbox';
-import { paletteItems, paletteSearches, type PaletteContext } from './paletteItems';
-import { dayDiff, hm, inboxBadge, inMinutes, parseYmd } from './util';
+import { paletteAsk, paletteItems, paletteSearches, type AskHandlers, type PaletteContext } from './paletteItems';
+import { dayDiff, hm, inboxBadge, inMinutes, newId, parseYmd } from './util';
 
 // The views off the home page load the first time they're opened, so a new tab downloads
 // and starts only what home needs. They're fetched in the background once the page is up
@@ -67,6 +69,7 @@ export function App({ cached }: { cached: AppState | null }) {
   const [weightSignal, setWeightSignal] = useState(0);
   const [addWorkSignal, setAddWorkSignal] = useState(0);
   const [addEventSignal, setAddEventSignal] = useState(0);
+  const [readingSignal, setReadingSignal] = useState(0);
   const [serverTab, setServerTab] = useState<{ tab: ServerTab; n: number } | null>(null);
   const [learnNoteBusy, setLearnNoteBusy] = useState(false);
   const [newsBusy, setNewsBusy] = useState(false);
@@ -419,6 +422,16 @@ export function App({ cached }: { cached: AppState | null }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, data.newsSummaries, hasCourses]);
 
+  // Over the Claude budget (Settings › General): say so once a month in each browser.
+  const claudeOver = !!data.prefs.claudeBudget && (data.claudeSpend ?? 0) > data.prefs.claudeBudget;
+  useEffect(() => {
+    const month = ymd(new Date()).slice(0, 7);
+    if (!claudeOver || localGet('claudeBudgetWarned') === month) return;
+    localSet('claudeBudgetWarned', month);
+    showToast(`Claude has cost about ${fmtUsd(data.claudeSpend ?? 0)} this month, over your ${fmtUsd(data.prefs.claudeBudget ?? 0)} budget.`, { label: 'See usage', run: () => openServerTab('overview') });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [claudeOver]);
+
   const toggleHidden = (key: string) => {
     const hidden = data.prefs.hidden.includes(key) ? data.prefs.hidden.filter((h) => h !== key) : [...data.prefs.hidden, key];
     setPrefs({ ...data.prefs, hidden });
@@ -515,11 +528,41 @@ export function App({ cached }: { cached: AppState | null }) {
     api.patchPackage(id, { isNew: false }).catch(onSaveError);
   };
   const notesPanel = (
-    <Notes notes={notes} activeId={activeId} onActive={pickNote} onChange={setNotes} saved={saved} onOpenFocus={() => setFocus(true)} onEditing={onNoteEditing} />
+    <Notes notes={notes} activeId={activeId} onActive={pickNote} onChange={setNotes} saved={saved} onOpenFocus={() => setFocus(true)} onEditing={onNoteEditing} notify={showToast} />
   );
-  const bookmarksPanel = <Bookmarks groups={data.bookmarks} onChange={setBookmarks} search={search} edit={editBookmarks} setEdit={setEditBookmarks} />;
+  const checkLinks = () => api.checkLinks().then((linkCheck) => update((d) => ({ ...d, linkCheck }))).catch((e) => showToast(`Couldn’t start the link check: ${e.message}`));
+  const bookmarksPanel = <Bookmarks groups={data.bookmarks} onChange={setBookmarks} search={search} edit={editBookmarks} setEdit={setEditBookmarks} linkCheck={data.linkCheck} onCheckLinks={checkLinks} notify={showToast} />;
 
   // ---------- command palette ----------
+
+  /** Ask Launchpad's actions, through the same saves the views use, each with an undo where there's one to give. */
+  const askHandlers: AskHandlers = {
+    addTask: (listId, title, due) => {
+      addTask(listId, title, due);
+      showToast(`Added “${title}” to Tasks`);
+    },
+    addMoney: (entry) => {
+      const before = data.money;
+      setMoney({ ...before, entries: sortEntries([...before.entries, entry]) });
+      showToast(`Added ${fmtMoney(entry.amount)} ${entry.kind} to Money`, { label: 'Undo', run: () => setMoney(before) });
+    },
+    addCountdown: (cd) => {
+      const before = data.countdowns;
+      setCountdowns([...before, cd]);
+      showToast(`Added a countdown to ${cd.title}`, { label: 'Undo', run: () => setCountdowns(before) });
+    },
+    addBookmark: (groupId, name, url) => {
+      const before = data.bookmarks;
+      setBookmarks(before.map((g) => (g.id === groupId ? { ...g, items: [...g.items, { id: newId('b'), name, url }] } : g)));
+      showToast(`Added ${name} to bookmarks`, { label: 'Undo', run: () => setBookmarks(before) });
+    },
+    setMood: (date, mood) => {
+      const before = data.moods[date] ?? null;
+      setMood(date, mood);
+      showToast(`Logged ${MOOD_WORDS[mood.level - 1].toLowerCase()} for ${date === ymd(new Date()) ? 'today' : date}`, { label: 'Undo', run: () => setMood(date, before) });
+    },
+    notify: showToast,
+  };
 
   const paletteCtx: PaletteContext = {
     data, now, view, dark, design, localDesign, smokesToday, inboxCount, courseName, setView, setPrefs, setLocalDesign, logSmoke,
@@ -532,9 +575,12 @@ export function App({ cached }: { cached: AppState | null }) {
     // The field is in the Today panel, which Horizon's home doesn't have.
     openAddEvent: shown.has('today') && design !== 'horizon' ? () => (setView('home'), setAddEventSignal((n) => n + 1)) : undefined,
     refreshNews, refreshInbox,
+    openReading: () => (setView('news'), setReadingSignal((n) => n + 1)),
+    openNote: (id: string) => (pickNote(id), setView('home')),
     showShortcuts: () => setShortcuts(true),
     openSettings: () => setDrawer({ type: 'settings' }),
     toggleHidden,
+    ask: askHandlers,
   };
 
   const drawerTitle =
@@ -549,7 +595,7 @@ export function App({ cached }: { cached: AppState | null }) {
         {serverIssue && <ServerBanner issue={serverIssue} waiting={waiting} onRetry={() => refresh()} />}
         <Suspense fallback={<main className="view-loading" aria-busy="true" />}>
         {view === 'news' ? (
-          <News data={data} now={now} busy={newsBusy} onRefresh={refreshNews} onTopics={setNewsTopics} />
+          <News data={data} now={now} busy={newsBusy} onRefresh={refreshNews} onTopics={setNewsTopics} onLists={(newsLists) => update((d) => ({ ...d, newsLists }))} notify={showToast} readingSignal={readingSignal} />
         ) : view === 'inbox' ? (
           <Inbox
             data={data}
@@ -701,11 +747,11 @@ export function App({ cached }: { cached: AppState | null }) {
         </Drawer>
       )}
 
-      {focus && <FocusView notes={notes} activeId={activeId} onActive={pickNote} onChange={setNotes} saved={saved} onClose={() => setFocus(false)} />}
+      {focus && <FocusView notes={notes} activeId={activeId} onActive={pickNote} onChange={setNotes} saved={saved} onClose={() => setFocus(false)} notify={showToast} />}
 
       {shortcuts && <Shortcuts onClose={() => setShortcuts(false)} />}
 
-      {palette && <Palette items={paletteItems(paletteCtx)} searches={(q) => paletteSearches(paletteCtx, q)} onClose={() => setPalette(false)} />}
+      {palette && <Palette items={paletteItems(paletteCtx)} searches={(q) => paletteSearches(paletteCtx, q)} ask={paletteAsk(paletteCtx, !serverIssue)} onClose={() => setPalette(false)} />}
 
       {toast && (
         <div className="popover toast" role="status">
