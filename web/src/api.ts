@@ -1,4 +1,6 @@
 import type { AppState, Backup, BackupSnapshot, Countdown, DirListing, Mood, Package, Photo, Prefs, SavedDoc, ServerStats, ShellInfo, SourceKey, Task, Training } from '../../shared/types';
+import type { AskResult } from '../../shared/ask';
+import type { UsageReport } from '../../shared/claudeUsage';
 import { kvGet, kvSet } from './idb';
 
 /** Where the state was kept before it moved to IndexedDB; still used where IndexedDB isn't available. */
@@ -196,6 +198,10 @@ export const api = {
   putTraining: (v: Training) => req<Training>('PUT', '/api/training', v),
   refreshTraining: (force: boolean) => req<AppState>('POST', `/api/training/refresh${force ? '?force=1' : ''}`, {}),
   refreshLearn: (force: boolean) => req<AppState>('POST', `/api/learn/refresh${force ? '?force=1' : ''}`, {}),
+  refreshBriefing: (force: boolean) => req<Partial<AppState>>('POST', `/api/briefing/refresh${force ? '?force=1' : ''}`, {}),
+  /** ⌘K's Ask Launchpad: what's typed → one checked action, not yet done. */
+  ask: (text: string) => req<AskResult>('POST', '/api/ask', { text }),
+  claudeUsage: () => req<UsageReport>('GET', '/api/claude/usage'),
   putWeight: (date: string, kg: number | null) => req<Record<string, number>>('PUT', `/api/weights/${date}`, { kg }),
   putMood: (date: string, mood: Mood | { level: 0 }) => req<Record<string, Mood>>('PUT', `/api/moods/${date}`, mood),
   server: (iface?: string) => req<ServerStats>('GET', `/api/server${iface ? `?iface=${encodeURIComponent(iface)}` : ''}`),

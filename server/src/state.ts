@@ -4,6 +4,7 @@
 import { config, googleConfigured } from './config';
 import { claudeEnabled } from './claude';
 import { docVersion, store } from './store';
+import { monthCost } from '../../shared/claudeUsage';
 import type { AppState, NewsTopic, Photo, SavedDoc } from '../../shared/types';
 
 type Field = Exclude<keyof AppState, 'versions'>;
@@ -63,6 +64,8 @@ const FIELDS: { [F in Field]: () => AppState[F] } = {
   weights: () => store.weights(),
   learn: () => store.learn(),
   learnNote: () => (claudeEnabled() ? store.learnNote() : { note: null, error: null }),
+  briefing: () => (claudeEnabled() ? store.briefing() : { note: null, error: null }),
+  claudeSpend: () => monthCost(store.claudeUsage(), new Date()),
 };
 
 const SAVED: SavedDoc[] = ['bookmarks', 'notes', 'money', 'learn'];
@@ -96,6 +99,8 @@ export const KEY_FIELDS: Record<string, Field[]> = {
   trainingNote: ['trainingNote'],
   learn: ['learn'],
   learnNote: ['learnNote'],
+  briefing: ['briefing'],
+  claudeUsage: ['claudeSpend'],
   sync: ['sync'],
   gmailSeen: [],
   registered17: [],

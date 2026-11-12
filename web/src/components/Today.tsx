@@ -3,6 +3,7 @@ import { DOW, addDays, dayDiff, parseYmd, startOfDay } from '../../../shared/dat
 import { fmtMinutes, gymWorkout, minutes, workingSets, workoutLabel } from '../../../shared/training';
 import type { AppState, CalEvent } from '../../../shared/types';
 import { ago, fmtDay, hm, inMinutes } from '../util';
+import { Briefing } from './Briefing';
 
 interface Props {
   data: AppState;
@@ -143,6 +144,7 @@ export function Today({ data, now, wide, compact, onConnect, onRetry }: Props) {
         <h2 className="panel-title">Today</h2>
         <span className="meta">{connected && calOn && !error && sync.lastSuccess ? `Synced ${ago(sync.lastSuccess, now)}` : ''}</span>
       </div>
+      <Briefing data={data} now={now} />
       {(error || retrying) && (
         <div className="status-line">
           <i className="ph-duotone ph-cloud-slash" style={{ fontSize: 14 }} />

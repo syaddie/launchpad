@@ -96,6 +96,7 @@ export async function summariseHeadlines(topic: string, articles: NewsArticle[])
   const list = articles.map((a, i) => `[${i}] ${a.title} (${a.source}, ${a.publishedAt.slice(0, 16).replace('T', ' ')} UTC)`).join('\n');
   const parsed = await askJson<{ stories: { headline: string; summary: string; articles: number[] }[] }>({
     model: config.newsModel,
+    feature: 'news',
     system: SYSTEM,
     user: `Topic: ${topic}\n\nHeadlines, newest first:\n${list}`,
     schema: SCHEMA,

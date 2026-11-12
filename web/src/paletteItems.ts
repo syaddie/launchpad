@@ -1,15 +1,17 @@
 // What ⌘K offers: actions, views, panels to show or hide, bookmarks, and for what's typed,
 // quick logs ("weight 72.4", "study 45 cs210") and web searches.
+import { askable, type AskAction } from '../../shared/ask';
 import { ymd } from '../../shared/dates';
 import { fmtStudy, parseStudy, timerMinutes } from '../../shared/learn';
 import { fmtKg, parseWeight } from '../../shared/training';
 import { MOOD_WORDS, engineUrl, fmtDuration, parseSearch } from '../../shared/trackers';
-import type { AppState, DesignKey, Prefs, ViewKey } from '../../shared/types';
+import type { AppState, Countdown, DesignKey, Mood, MoneyEntry, Prefs, ViewKey } from '../../shared/types';
+import { api } from './api';
 import { DESIGNS, PANEL_ROWS } from './components/Drawers';
-import type { PaletteItem } from './components/Palette';
+import type { PaletteAsk, PaletteItem } from './components/Palette';
 import { VIEWS } from './components/Rail';
 import type { ServerTab } from './components/Server';
-import { host } from './util';
+import { host, newId } from './util';
 
 export interface PaletteContext {
   data: AppState;
@@ -40,6 +42,17 @@ export interface PaletteContext {
   showShortcuts: () => void;
   openSettings: () => void;
   toggleHidden: (key: string) => void;
+  /** What Ask Launchpad's actions save through (the same calls the views make). */
+  ask: AskHandlers;
+}
+
+export interface AskHandlers {
+  addTask: (listId: string, title: string, due: string | null) => void;
+  addMoney: (entry: MoneyEntry) => void;
+  addCountdown: (c: Countdown) => void;
+  addBookmark: (groupId: string, name: string, url: string) => void;
+  setMood: (date: string, mood: Mood) => void;
+  notify: (msg: string) => void;
 }
 
 export function paletteItems(c: PaletteContext): PaletteItem[] {
@@ -152,4 +165,44 @@ export function paletteSearches(c: PaletteContext, q: string): PaletteItem[] {
     keys: [e.prefix],
     run: () => window.open(engineUrl(e, term), '_blank', 'noopener'),
   }))];
+}
+
+// ---------- Ask Launchpad ----------
+
+/** Do what the preview said. The server checked the action; this checks it still fits what's here. */
+export function runAskAction(c: PaletteContext, a: AskAction): void {
+  const { data } = c;
+  const gone = (what: string) => c.ask.notify(`Couldn’t do that: the ${what} isn’t there any more.`);
+  switch (a.type) {
+    case 'money':
+      if (!data.money.accounts.some((x) => x.id === a.account)) return gone('account');
+      return c.ask.addMoney({ id: newId('e'), date: a.date, kind: a.kind, amount: a.amount, note: a.note, category: a.category, planned: a.date > ymd(new Date()), account: a.account, to: '' });
+    case 'task':
+      if (!data.taskLists.some((l) => l.id === a.listId)) return gone('task list');
+      return c.ask.addTask(a.listId, a.title, a.due);
+    case 'weight':
+      return c.setWeight(a.date, a.kg, true);
+    case 'smoke':
+      return c.logSmoke();
+    case 'study':
+      if (!data.learn.courses.some((x) => x.id === a.courseId)) return gone('course');
+      return c.logStudy(a.minutes, a.courseId);
+    case 'countdown':
+      return c.ask.addCountdown({ id: newId('c'), title: a.title, date: a.date, yearly: a.yearly, createdAt: new Date().toISOString() });
+    case 'bookmark':
+      if (!data.bookmarks.some((g) => g.id === a.groupId)) return gone('bookmark group');
+      return c.ask.addBookmark(a.groupId, a.name, a.url);
+    case 'mood':
+      return c.ask.setMood(a.date, { level: a.level, note: a.note || data.moods[a.date]?.note || '' });
+  }
+}
+
+/** ⌘K's Ask Launchpad, or nothing without an Anthropic API key (or while the server can't be reached). */
+export function paletteAsk(c: PaletteContext, online: boolean): PaletteAsk | undefined {
+  if (!c.data.newsSummaries || !online) return undefined;
+  return {
+    // Not for a web search with its prefix ("yt lofi").
+    when: (q) => askable(q) && !parseSearch(q, c.data.prefs.searchEngines).engine,
+    ask: (q) => api.ask(q).then((r) => ('error' in r ? r : { label: r.label, sub: r.sub, run: () => runAskAction(c, r.action) })),
+  };
 }
