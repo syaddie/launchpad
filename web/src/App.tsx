@@ -1,19 +1,15 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
 import { ymd } from '../../shared/dates';
 import { emptyLearn, fmtStudy, parseStudy, timerMinutes } from '../../shared/learn';
 import { starterMoney } from '../../shared/money';
 import { EMPTY_TRAINING, fmtKg, parseWeight } from '../../shared/training';
-import { MOOD_WORDS, engineUrl, fmtDuration, parseSearch, smokesOn } from '../../shared/trackers';
+import { MOOD_WORDS, engineUrl, fmtDuration, nearestCountdown, parseSearch, smokesOn } from '../../shared/trackers';
 import type { AppState, Backup, BookmarkGroup, DesignKey, Countdown, Learn, Money, Mood, Note, Package, Photo, Prefs, SavedDoc, Task, Training, ViewKey } from '../../shared/types';
 import { api, cachedState, cacheState, ConflictError, localGet, localSet, ServerError, TAB_ID, type RestoreResult } from './api';
 import { merge3, mergeNotes } from '../../shared/merge';
 import { Bookmarks } from './components/Bookmarks';
 import { AddPackageDrawer, DESIGNS, Drawer, PANEL_ROWS, PackageDrawer, SettingsDrawer } from './components/Drawers';
-import { Inbox, inboxBadge } from './components/Inbox';
-import { CourseDrawer, LearnView } from './components/Learn';
-import { MoneyView } from './components/Money';
-import { News } from './components/News';
 import { HeroPanel } from './components/Hero';
 import { HorizonHome } from './components/Horizon';
 import { FocusView, Notes } from './components/Notes';
@@ -21,16 +17,39 @@ import { Packages } from './components/Packages';
 import { Palette, type PaletteItem } from './components/Palette';
 import { PhotoPanel, shrinkImage, usePhotoSlots } from './components/Photos';
 import { Rail, VIEWS } from './components/Rail';
-import { Server, type ServerTab } from './components/Server';
+import type { ServerTab } from './components/Server';
 import { ServerBanner, type ServerIssue } from './components/ServerBanner';
 import { Shortcuts } from './components/Shortcuts';
 import { Tasks } from './components/Tasks';
 import { Today, todayAgenda } from './components/Today';
 import { TopBar, WeatherPanel } from './components/TopBar';
-import { ExerciseDrawer, TrainingView } from './components/Training';
-import { You, nearestCountdown } from './components/You';
 import { gridLayout, type Area, type Layout } from './layout';
-import { dayDiff, hashFor, hm, host, inMinutes, parseYmd, viewFromHash } from './util';
+import { dayDiff, hashFor, hm, host, inboxBadge, inMinutes, parseYmd, viewFromHash } from './util';
+
+// The views off the home page load the first time they're opened, so a new tab downloads
+// and starts only what home needs. They're fetched in the background once the page is up
+// (see preloadViews), so opening one is still instant, and works offline from the
+// service worker's copy.
+const loadInbox = () => import('./components/Inbox');
+const loadLearn = () => import('./components/Learn');
+const loadMoney = () => import('./components/money/MoneyView');
+const loadNews = () => import('./components/News');
+const loadServer = () => import('./components/Server');
+const loadTraining = () => import('./components/Training');
+const loadYou = () => import('./components/You');
+const Inbox = lazy(() => loadInbox().then((m) => ({ default: m.Inbox })));
+const LearnView = lazy(() => loadLearn().then((m) => ({ default: m.LearnView })));
+const CourseDrawer = lazy(() => loadLearn().then((m) => ({ default: m.CourseDrawer })));
+const MoneyView = lazy(() => loadMoney().then((m) => ({ default: m.MoneyView })));
+const News = lazy(() => loadNews().then((m) => ({ default: m.News })));
+const Server = lazy(() => loadServer().then((m) => ({ default: m.Server })));
+const TrainingView = lazy(() => loadTraining().then((m) => ({ default: m.TrainingView })));
+const ExerciseDrawer = lazy(() => loadTraining().then((m) => ({ default: m.ExerciseDrawer })));
+const You = lazy(() => loadYou().then((m) => ({ default: m.You })));
+
+function preloadViews() {
+  for (const load of [loadInbox, loadLearn, loadMoney, loadNews, loadServer, loadTraining, loadYou]) load().catch(() => {});
+}
 
 const EMPTY: AppState = {
   bookmarks: STARTER_BOOKMARKS,
@@ -310,6 +329,11 @@ export function App() {
         }),
     [merge],
   );
+
+  useEffect(() => {
+    const idle = window.requestIdleCallback ?? ((f: () => void) => window.setTimeout(f, 1500));
+    idle(preloadViews);
+  }, []);
 
   useEffect(() => {
     refresh();
@@ -1031,6 +1055,7 @@ export function App() {
       <div className="lp-inner">
         <TopBar data={data} now={now} subline={subline} search={search} onSearch={setSearch} searchRef={searchRef} smokesToday={smokesToday} onLogSmoke={logSmoke} onOpenTraining={() => setView('training')} onOpenLearn={() => setView('learn')} />
         {serverIssue && <ServerBanner issue={serverIssue} onRetry={refresh} />}
+        <Suspense fallback={<main className="view-loading" aria-busy="true" />}>
         {view === 'news' ? (
           <News data={data} now={now} busy={newsBusy} onRefresh={refreshNews} onTopics={setNewsTopics} />
         ) : view === 'inbox' ? (
@@ -1137,11 +1162,13 @@ export function App() {
           </main>
           )
         )}
+        </Suspense>
       </div>
       </div>
 
       {drawer && drawerTitle && (
         <Drawer title={drawerTitle} onClose={() => setDrawer(null)}>
+          <Suspense fallback={null}>
           {drawer.type === 'settings' && (
             <SettingsDrawer
               data={data}
@@ -1167,6 +1194,7 @@ export function App() {
             <CourseDrawer key={drawer.id} learn={data.learn} courseId={drawer.id} focusItem={drawer.item} now={now} onChange={setLearn} onClose={() => setDrawer(null)} notify={showToast} />
           )}
           {drawerPkg && <PackageDrawer key={drawerPkg.id} pkg={drawerPkg} now={now} onRename={(l) => renamePackage(drawerPkg.id, l)} onArchive={() => archivePackage(drawerPkg.id)} />}
+          </Suspense>
         </Drawer>
       )}
 

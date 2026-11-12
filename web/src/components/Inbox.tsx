@@ -25,12 +25,6 @@ const COLUMNS: { kind: InboxItem['kind']; title: string; empty: string }[] = [
 
 export const gmailUrl = (account: string | undefined, threadId: string) => `https://mail.google.com/mail/u/${encodeURIComponent(account || '0')}/#all/${threadId}`;
 
-/** Things to do in the two-day digest whose email is still unread: the rail's badge. */
-export function inboxBadge(data: AppState): number {
-  const unread = new Set(data.inbox.emails.filter((e) => e.unread).map((e) => e.id));
-  return (data.inbox.digests['2d']?.items ?? []).filter((i) => i.kind === 'action' && i.emails.some((id) => unread.has(id))).length;
-}
-
 export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings }: Props) {
   const [range, setRange] = useState<InboxRange>(() => (localGet('inboxRange') === '7d' ? '7d' : '2d'));
   const [allOpen, setAllOpen] = useState(false);

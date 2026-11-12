@@ -8,9 +8,9 @@ import { latencyStats, mbps } from '../server/src/speedtest';
 import { isPhysical, parseNetDev, toContainers } from '../server/src/system';
 import { pickAir, pickOutlook, pickRain, pickUv } from '../server/src/weather';
 import { gridLayout, type Area } from '../web/src/layout';
-import { niceMax, slowTests } from '../web/src/components/Server';
+import { slowTests } from '../web/src/components/Server';
 import { searchRows } from '../web/src/components/TopBar';
-import { hashFor, psiBand, uvBand, viewFromHash } from '../web/src/util';
+import { hashFor, niceMax, psiBand, uvBand, viewFromHash } from '../web/src/util';
 
 const tue = new Date(2026, 9, 27); // Tue 27 Oct 2026
 const cd = (p: Partial<Countdown>): Countdown => ({ id: 'x', title: 'X', date: '2026-11-19', yearly: false, createdAt: '2026-10-01T00:00:00+08:00', ...p });
