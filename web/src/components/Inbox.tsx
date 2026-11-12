@@ -1,7 +1,19 @@
 import { useState } from 'react';
-import type { AppState, InboxEmail, InboxItem, InboxRange } from '../../../shared/types';
+import type { AppState, BillSuggestion, InboxEmail, InboxItem, InboxRange } from '../../../shared/types';
 import { localGet, localSet } from '../api';
+import type { InboxAction } from '../hooks/useGoogleActions';
+import { billLine, gmailUrl, liveEmails } from '../inboxActions';
 import { ago } from '../util';
+
+export { gmailUrl };
+
+/** What can be done from the view: archive and mark read (with Undo), make a task, keep or dismiss a bill. */
+export interface InboxActions {
+  onAction: (emails: InboxEmail[], action: InboxAction) => void;
+  onTask: (source: { item: InboxItem; emails: InboxEmail[] } | { email: InboxEmail }) => void;
+  onKeepBill: (b: BillSuggestion) => void;
+  onDismissBill: (b: BillSuggestion) => void;
+}
 
 interface Props {
   data: AppState;
@@ -10,6 +22,7 @@ interface Props {
   onRefresh: () => void;
   onConnect: () => void;
   onOpenSettings: () => void;
+  actions?: InboxActions;
 }
 
 const RANGES: { key: InboxRange; name: string; words: string; ms: number }[] = [
@@ -23,21 +36,23 @@ const COLUMNS: { kind: InboxItem['kind']; title: string; empty: string }[] = [
   { kind: 'fyi', title: 'In passing', empty: '' },
 ];
 
-export const gmailUrl = (account: string | undefined, threadId: string) => `https://mail.google.com/mail/u/${encodeURIComponent(account || '0')}/#all/${threadId}`;
-
-export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings }: Props) {
+export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, actions }: Props) {
   const [range, setRange] = useState<InboxRange>(() => (localGet('inboxRange') === '7d' ? '7d' : '2d'));
   const [allOpen, setAllOpen] = useState(false);
   const r = RANGES.find((x) => x.key === range)!;
   const st = data.sync.inbox;
   const { inbox, google } = data;
-  const emails = inbox.emails.filter((e) => now.getTime() - Date.parse(e.at) <= r.ms);
+  // Archived from here: out of the list and the digest.
+  const emails = inbox.emails.filter((e) => !e.archived && now.getTime() - Date.parse(e.at) <= r.ms);
   const byId = new Map(inbox.emails.map((e) => [e.id, e]));
   const digest = inbox.digests[range];
   const unread = emails.filter((e) => e.unread).length;
   // Until the digest is written, the list is all there is to read.
   const showAll = allOpen || !digest;
   const ready = google.connected && data.prefs.sources.gmail;
+  const canModify = !google.missingScopes?.includes('gmail.modify');
+  const acts = actions && { ...actions, canModify };
+  const bills = data.bills ?? [];
 
   const pick = (k: InboxRange) => {
     setRange(k);
@@ -66,7 +81,7 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings }:
   const list = (
     <>
       {emails.map((e) => (
-        <EmailRow key={e.id} e={e} now={now} account={google.email} />
+        <EmailRow key={e.id} e={e} now={now} account={google.email} acts={acts} />
       ))}
     </>
   );
@@ -96,6 +111,44 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings }:
           </button>
         </div>
       </div>
+
+      {actions && !canModify && (
+        <div className="inbox-reconnect">
+          <span>Reconnect Google to allow archiving and marking emails read from here.</span>
+          <button className="btn-link" onClick={onConnect}>
+            Reconnect Google
+          </button>
+        </div>
+      )}
+
+      {actions && bills.length > 0 && (
+        <section className="panel inbox-bills" aria-label="Bills and receipts">
+          <div className="panel-head">
+            <h2 className="panel-title">Bills and receipts</h2>
+            <span className="meta">From your email · nothing goes into Money until you keep it</span>
+          </div>
+          <div className="scroll" style={{ maxHeight: 220 }}>
+            {bills.map((b) => (
+              <div key={b.id} className="bill-row">
+                <div className="bill-what">
+                  {billLine(b)}
+                  <a href={gmailUrl(google.email, b.threadId)} target="_blank" rel="noopener" title={b.source === 'claude' ? 'Read by Claude' : undefined}>
+                    {b.subject}
+                  </a>
+                </div>
+                <div className="pkg-new">
+                  <button className="keep" onClick={() => actions.onKeepBill(b)}>
+                    Keep
+                  </button>
+                  <button className="dismiss" onClick={() => actions.onDismissBill(b)}>
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {!inbox.fetchedAt ? (
         <div className="panel">
@@ -133,7 +186,8 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings }:
           </section>
           <div className="news-grid inbox-grid">
             {COLUMNS.map((c) => {
-              const items = digest?.items.filter((i) => i.kind === c.kind) ?? [];
+              // An item whose emails were all archived here is done with.
+              const items = digest?.items.filter((i) => i.kind === c.kind && liveEmails(i, byId).length > 0) ?? [];
               return (
                 <section key={c.kind} className="panel" aria-label={c.title}>
                   <div className="panel-head">
@@ -142,8 +196,8 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings }:
                   </div>
                   <div className="scroll" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     {digest && !items.length && c.empty && <div className="news-note">{c.empty}</div>}
-                    {items.map((it, i) => (
-                      <Item key={i} it={it} byId={byId} account={google.email} />
+                    {items.map((it) => (
+                      <Item key={it.emails.join(',') || it.headline} it={it} byId={byId} account={google.email} acts={acts} />
                     ))}
                     {c.kind === 'fyi' && (
                       <>
@@ -166,10 +220,14 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings }:
   );
 }
 
-function Item({ it, byId, account }: { it: InboxItem; byId: Map<string, InboxEmail>; account?: string }) {
-  const mails = it.emails.flatMap((id) => byId.get(id) ?? []);
+type Acts = InboxActions & { canModify: boolean };
+
+function Item({ it, byId, account, acts }: { it: InboxItem; byId: Map<string, InboxEmail>; account?: string; acts?: Acts }) {
+  const mails = liveEmails(it, byId);
   // One link per sender, to their newest email in the item.
   const senders = [...new Map(mails.map((m) => [m.fromEmail, m])).values()];
+  const anyUnread = mails.some((m) => m.unread);
+  const n = mails.length > 1 ? ` all ${mails.length}` : '';
   return (
     <article className="story">
       <div className="story-headline">
@@ -187,24 +245,63 @@ function Item({ it, byId, account }: { it: InboxItem; byId: Map<string, InboxEma
           ))}
         </div>
       )}
+      {acts && mails.length > 0 && (
+        <div className="inbox-acts">
+          {acts.canModify && (
+            <button onClick={() => acts.onAction(mails, 'archive')} title={`Archive${n} in Gmail`}>
+              <i className="ph-duotone ph-archive" aria-hidden="true" />
+              Archive
+            </button>
+          )}
+          {acts.canModify && anyUnread && (
+            <button onClick={() => acts.onAction(mails, 'read')} title={`Mark${n} read in Gmail`}>
+              <i className="ph-duotone ph-envelope-open" aria-hidden="true" />
+              Mark read
+            </button>
+          )}
+          <button onClick={() => acts.onTask({ item: it, emails: mails })} title={it.due ? `A task due ${it.due}, linking to the email` : 'A task linking to the email'}>
+            <i className="ph-duotone ph-check-square" aria-hidden="true" />
+            Make a task
+          </button>
+        </div>
+      )}
     </article>
   );
 }
 
-function EmailRow({ e, now, account }: { e: InboxEmail; now: Date; account?: string }) {
+function EmailRow({ e, now, account, acts }: { e: InboxEmail; now: Date; account?: string; acts?: Acts }) {
   return (
-    <a className={'headline email-row' + (e.unread ? ' unread' : '')} href={gmailUrl(account, e.threadId)} target="_blank" rel="noopener">
-      <span className="split">
-        <span className="email-from">
-          {e.unread && <span className="unread-dot" aria-label="Unread" />}
-          {e.from}
+    <div className="email-wrap">
+      <a className={'headline email-row' + (e.unread ? ' unread' : '')} href={gmailUrl(account, e.threadId)} target="_blank" rel="noopener">
+        <span className="split">
+          <span className="email-from">
+            {e.unread && <span className="unread-dot" aria-label="Unread" />}
+            {e.from}
+          </span>
+          <span className="headline-meta" style={{ flex: 'none' }}>
+            {ago(e.at, now)}
+          </span>
         </span>
-        <span className="headline-meta" style={{ flex: 'none' }}>
-          {ago(e.at, now)}
-        </span>
-      </span>
-      <span className="headline-title">{e.subject}</span>
-      {e.snippet && <span className="headline-meta email-snippet">{e.snippet}</span>}
-    </a>
+        <span className="headline-title">{e.subject}</span>
+        {e.snippet && <span className="headline-meta email-snippet">{e.snippet}</span>}
+      </a>
+      {acts && (
+        <div className="inbox-acts">
+          {acts.canModify && (
+            <button className="icon-only" onClick={() => acts.onAction([e], 'archive')} title="Archive" aria-label="Archive">
+              <i className="ph-duotone ph-archive" />
+            </button>
+          )}
+          {acts.canModify && e.unread && (
+            <button className="icon-only" onClick={() => acts.onAction([e], 'read')} title="Mark read" aria-label="Mark read">
+              <i className="ph-duotone ph-envelope-open" />
+            </button>
+          )}
+          <button className="icon-only" onClick={() => acts.onTask({ email: e })} title="Make a task" aria-label="Make a task">
+            <i className="ph-duotone ph-check-square" />
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

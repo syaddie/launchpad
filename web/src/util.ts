@@ -149,6 +149,6 @@ export function niceMax(v: number): number {
 
 /** Things to do in the two-day digest whose email is still unread: the rail's badge. */
 export function inboxBadge(data: AppState): number {
-  const unread = new Set(data.inbox.emails.filter((e) => e.unread).map((e) => e.id));
+  const unread = new Set(data.inbox.emails.filter((e) => e.unread && !e.archived).map((e) => e.id));
   return (data.inbox.digests['2d']?.items ?? []).filter((i) => i.kind === 'action' && i.emails.some((id) => unread.has(id))).length;
 }

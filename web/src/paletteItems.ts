@@ -2,12 +2,13 @@
 // quick logs ("weight 72.4", "study 45 cs210", "craving stress") and web searches.
 import { rankBookmarks } from '../../shared/bookmarks';
 import { askable, type AskAction } from '../../shared/ask';
-import { ymd } from '../../shared/dates';
+import { parseEvent, ymd, type EventDraft } from '../../shared/dates';
 import { fmtStudy, parseStudy, timerMinutes } from '../../shared/learn';
 import { fmtKg, parseWeight } from '../../shared/training';
 import { STRENGTH_WORDS, cravingsOn, engineUrl, fmtDuration, moodWord, parseCraving, parseSearch, triggerName } from '../../shared/trackers';
 import type { AppState, Countdown, CravingTrigger, DesignKey, Mood, MoneyEntry, Prefs, ViewKey } from '../../shared/types';
 import { api } from './api';
+import { canAddEvents, defaultCalendar, describeDraft } from './components/AddEvent';
 import { DESIGNS, PANEL_ROWS } from './components/Drawers';
 import type { PaletteAsk, PaletteItem } from './components/Palette';
 import { VIEWS } from './components/Rail';
@@ -40,6 +41,9 @@ export interface PaletteContext {
   runSpeedTest: () => void;
   openServerTab: (tab: ServerTab) => void;
   addPackage: () => void;
+  addEvent: (calendarId: string, d: EventDraft) => Promise<boolean>;
+  /** Put the cursor in Today's add-an-event field; missing when that panel isn't on screen. */
+  openAddEvent?: () => void;
   refreshNews: () => void;
   refreshInbox: () => void;
   /** News › Reading list. */
@@ -105,6 +109,9 @@ export function paletteItems(c: PaletteContext): PaletteItem[] {
     { id: 'a:terminal', group: 'Actions', label: 'Open the server terminal', icon: 'ph-terminal-window', words: 'shell ssh console command line', run: () => c.openServerTab('terminal') },
     { id: 'a:files', group: 'Actions', label: 'Browse the server’s files', icon: 'ph-folder-simple', words: 'file explorer sftp upload download folders', run: () => c.openServerTab('files') },
     { id: 'a:package', group: 'Actions', label: 'Add a package', icon: 'ph-package', words: 'tracking', run: c.addPackage },
+    ...(c.openAddEvent && eventsOn(data)
+      ? [{ id: 'a:event', group: 'Actions', label: 'Add a calendar event', icon: 'ph-calendar-plus', words: 'google calendar meeting appointment schedule', sub: 'Or type “event”, then what and when', run: c.openAddEvent }]
+      : []),
     { id: 'a:news', group: 'Actions', label: 'Refresh the news', icon: 'ph-arrows-clockwise', run: () => (setView('news'), c.refreshNews()) },
     ...readingItems(c),
     // Notepads by name, tag or anything in them, once something's typed.
@@ -202,6 +209,17 @@ export function paletteSearches(c: PaletteContext, q: string): PaletteItem[] {
       run: () => c.logStudy(study.minutes, study.courseId),
     });
   }
+  // "event lunch w/ Dan fri 1pm", or anything with a time in it, can go straight into the calendar.
+  const cal = eventsOn(data) ? defaultCalendar(data) : undefined;
+  const asked = q.match(/^(?:add |new )?event\s+(.+)/i);
+  const draft = cal && (asked ? parseEvent(asked[1], now) : parseEvent(q, now));
+  if (cal && draft?.title && (asked || (draft.understood && !draft.allDay))) {
+    log.push({
+      id: 'a:event-now', group: 'Actions', label: `Add “${draft.title}” to ${cal.name}`, icon: 'ph-calendar-plus', first: !!asked,
+      sub: describeDraft(draft),
+      run: () => void c.addEvent(cal.id, draft),
+    });
+  }
   const engines = data.prefs.searchEngines;
   const { engine, term } = parseSearch(q, engines);
   return [...log, ...(engine ? [engine] : engines).map((e) => ({
@@ -256,3 +274,6 @@ export function paletteAsk(c: PaletteContext, online: boolean): PaletteAsk | und
     ask: (q) => api.ask(q).then((r) => ('error' in r ? r : { label: r.label, sub: r.sub, run: () => runAskAction(c, r.action) })),
   };
 }
+
+/** Google is connected, the calendar syncs, and the sign-in allows adding events. */
+const eventsOn = (data: AppState) => data.google.connected && data.prefs.sources.calendar && canAddEvents(data);

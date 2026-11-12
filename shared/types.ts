@@ -122,6 +122,8 @@ export interface CalendarInfo {
   id: string;
   name: string;
   color: string;
+  /** You can add events to it (you own it or can edit it). Missing in calendars synced before this was kept. */
+  writable?: boolean;
 }
 
 export interface CalEvent {
@@ -151,6 +153,11 @@ export interface Task {
   title: string;
   /** YYYY-MM-DD or null. */
   due: string | null;
+  /** The task this is a subtask of. */
+  parent?: string;
+  notes?: string;
+  /** Google's order among its siblings (compare as strings). */
+  position?: string;
 }
 
 export interface TrackingEvent {
@@ -251,6 +258,8 @@ export interface InboxEmail {
   unread: boolean;
   /** Gmail's inbox tab: primary, updates, promotions, social or forums. */
   category: string;
+  /** Archived from Launchpad: left out of the digest and the list. */
+  archived?: boolean;
 }
 
 export interface InboxItem {
@@ -453,6 +462,31 @@ export interface Invoice {
 export type AccountKind = 'bank' | 'cash' | 'invest' | 'pot';
 
 /** Somewhere money is kept: a bank, a wallet, investments, or a pot set aside for something. */
+/**
+ * A bill, due notice or receipt found in Gmail, waiting for Keep or Dismiss in the Inbox view.
+ * Keep adds it to Money: planned money out on the due date, or done on the day it was paid.
+ */
+export interface BillSuggestion {
+  /** The email's id. */
+  id: string;
+  threadId: string;
+  subject: string;
+  payee: string;
+  amount: number;
+  /** ISO code, e.g. SGD or USD. */
+  currency: string;
+  /** due: still to pay · paid: a receipt. */
+  status: 'due' | 'paid';
+  /** YYYY-MM-DD: when it's due, or when it was paid. */
+  date: string;
+  /** The email didn't give a due date, so `date` is the day it arrived. */
+  noDate?: boolean;
+  category: MoneyCategory | '';
+  /** Read by the rules for known senders, or by Claude. */
+  source: 'rules' | 'claude';
+  foundAt: string;
+}
+
 export interface MoneyAccount {
   id: string;
   name: string;
@@ -880,6 +914,8 @@ export interface AppState {
   claudeSpend?: number;
   /** Copying the daily copies to Google Drive; missing in copies cached by older versions. */
   drive?: DriveStatus;
+  /** Bills and receipts found in Gmail, waiting for Keep or Dismiss; missing in copies cached by older versions. */
+  bills?: BillSuggestion[];
   /** What the health check found wrong (see GET /api/health); missing in copies cached by older versions. */
   health?: HealthWarning[];
   /** The version of each document the page saves whole; missing in copies cached by older versions. */

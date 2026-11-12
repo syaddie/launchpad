@@ -8,6 +8,7 @@ import { fmtMoney, sortEntries } from '../../shared/money';
 import { MOOD_WORDS, cravingsOn, nearestCountdown, smokesOn } from '../../shared/trackers';
 import type { AppState, Backup, BookmarkGroup, Craving, CravingTrigger, DesignKey, Countdown, Learn, Money, Mood, Note, Package, Photo, Prefs, Task, Training } from '../../shared/types';
 import { api, localGet, localSet, type RestoreResult } from './api';
+import { AddEvent } from './components/AddEvent';
 import { Bookmarks } from './components/Bookmarks';
 import { AddPackageDrawer, DESIGNS, Drawer, PackageDrawer, SettingsDrawer } from './components/Drawers';
 import { HeroPanel } from './components/Hero';
@@ -24,6 +25,7 @@ import { Tasks } from './components/Tasks';
 import { Today, todayAgenda } from './components/Today';
 import { TopBar, WeatherPanel } from './components/TopBar';
 import { useAppData } from './hooks/useAppData';
+import { useGoogleActions } from './hooks/useGoogleActions';
 import { useHashView, useLayout, useMinuteNow, useSystemDark } from './hooks/useDevice';
 import { useShortcuts } from './hooks/useShortcuts';
 import { useFlash, useToast } from './hooks/useToast';
@@ -69,6 +71,7 @@ export function App({ cached }: { cached: AppState | null }) {
   const [addCountdown, setAddCountdown] = useState(0);
   const [weightSignal, setWeightSignal] = useState(0);
   const [addWorkSignal, setAddWorkSignal] = useState(0);
+  const [addEventSignal, setAddEventSignal] = useState(0);
   const [readingSignal, setReadingSignal] = useState(0);
   const [serverTab, setServerTab] = useState<{ tab: ServerTab; n: number } | null>(null);
   const [learnNoteBusy, setLearnNoteBusy] = useState(false);
@@ -192,11 +195,11 @@ export function App({ cached }: { cached: AppState | null }) {
       .catch(onSaveError);
   };
 
-  const addTask = (listId: string, title: string, due: string | null) => {
-    const tmp: Task = { id: 'tmp-' + Date.now(), listId, title, due };
+  const addTask = (listId: string, title: string, due: string | null, opts: { parent?: string } = {}) => {
+    const tmp: Task = { id: 'tmp-' + Date.now(), listId, title, due, ...(opts.parent ? { parent: opts.parent, position: '~' } : {}) };
     update((d) => ({ ...d, tasks: [tmp, ...d.tasks] }));
     api
-      .addTask(listId, title, due)
+      .addTask(listId, title, due, opts)
       .then((t) => update((d) => ({ ...d, tasks: d.tasks.map((x) => (x.id === tmp.id ? t : x)) })))
       .catch((e) => {
         update((d) => ({ ...d, tasks: d.tasks.filter((x) => x.id !== tmp.id) }));
@@ -358,6 +361,8 @@ export function App({ cached }: { cached: AppState | null }) {
     update((d) => ({ ...d, money }));
     savers.money.schedule(money);
   };
+
+  const google = useGoogleActions({ data, update, refresh, notify: showToast, setMoney });
 
   const importMoney = (money: Money, summary: string) => {
     const before = data.money;
@@ -610,6 +615,9 @@ export function App({ cached }: { cached: AppState | null }) {
     addWork: () => (setView('learn'), setAddWorkSignal((n) => n + 1)),
     startStudy, stopStudy, logStudy, setWeight, runSpeedTest, openServerTab,
     addPackage: () => setDrawer({ type: 'add' }),
+    addEvent: google.addEvent,
+    // The field is in the Today panel, which Horizon's home doesn't have.
+    openAddEvent: shown.has('today') && design !== 'horizon' ? () => (setView('home'), setAddEventSignal((n) => n + 1)) : undefined,
     refreshNews, refreshInbox,
     openReading: () => (setView('news'), setReadingSignal((n) => n + 1)),
     openNote: (id: string) => (pickNote(id), setView('home')),
@@ -633,7 +641,15 @@ export function App({ cached }: { cached: AppState | null }) {
         {view === 'news' ? (
           <News data={data} now={now} busy={newsBusy} onRefresh={refreshNews} onTopics={setNewsTopics} onLists={(newsLists) => update((d) => ({ ...d, newsLists }))} notify={showToast} readingSignal={readingSignal} />
         ) : view === 'inbox' ? (
-          <Inbox data={data} now={now} busy={inboxBusy} onRefresh={refreshInbox} onConnect={connect} onOpenSettings={() => setDrawer({ type: 'settings' })} />
+          <Inbox
+            data={data}
+            now={now}
+            busy={inboxBusy}
+            onRefresh={refreshInbox}
+            onConnect={connect}
+            onOpenSettings={() => setDrawer({ type: 'settings' })}
+            actions={{ onAction: google.inboxAction, onTask: google.emailToTask, onKeepBill: google.keepBill, onDismissBill: google.dismissBill }}
+          />
         ) : view === 'you' ? (
           <You
             data={data}
@@ -718,9 +734,12 @@ export function App({ cached }: { cached: AppState | null }) {
               compact={photoCount === 2 && layout !== 'narrow'}
               onConnect={connect}
               onRetry={() => api.sync('calendar').then(merge).catch(() => refresh())}
+              addEvent={<AddEvent data={data} now={now} focusSignal={addEventSignal} onAdd={google.addEvent} onConnect={connect} />}
             />
             )}
-            {shown.has('tasks') && <Tasks data={data} now={now} onConnect={connect} onAdd={addTask} onComplete={completeTask} />}
+            {shown.has('tasks') && (
+              <Tasks data={data} now={now} onConnect={connect} onAdd={addTask} onComplete={completeTask} onUpdate={google.updateTask} onMove={google.moveTask} onDelete={google.deleteTask} />
+            )}
             {photoCount > 0 && <PhotoPanel photos={data.photos} area="photo" index={photoSlots.shown[0]} onStep={(d) => photoSlots.step(0, d)} />}
             {photoCount > 1 && <PhotoPanel photos={data.photos} area="photo2" index={photoSlots.shown[1]} onStep={(d) => photoSlots.step(1, d)} />}
             {shown.has('hero') && <HeroPanel data={data} now={now} extras={extras.join(' · ')} />}

@@ -2,6 +2,7 @@
 import { config } from './config';
 import { store } from './store';
 import { addDays, startOfDay } from '../../shared/dates';
+import { BILL_SENDERS, type BillMail } from './bills';
 import { extractTrackingNumbers, htmlToText, labelFor, parseInboxMessage, type Candidate, type StoredEmail } from './gmail-parse';
 import type { CalEvent, CalendarInfo, Task, TaskList } from '../../shared/types';
 
@@ -34,6 +35,11 @@ export function hasScope(name: ScopeName): boolean {
  * known yet: a sign-in from before scopes were saved learns them on its next token
  * refresh, within the hour.
  */
+/** For a call that needs a newer scope: stop with a plain message, before Google refuses it, when the sign-in is known to lack it. */
+export function needScope(name: ScopeName): void {
+  if (store.google()?.scopes && !hasScope(name)) throw new GoogleError('Reconnect Google in Settings to allow this.', 403);
+}
+
 export function missingScopes(): string[] {
   const g = store.google();
   if (!g?.scopes) return [];
@@ -193,6 +199,35 @@ function conference(ev: any): { url?: string; type?: string } {
   return { url, type };
 }
 
+function toCalEvent(calendarId: string, ev: any): CalEvent {
+  const allDay = !!ev.start?.date;
+  const conf = conference(ev);
+  return {
+    id: `${calendarId}:${ev.id}`,
+    calendarId,
+    title: ev.summary || '(No title)',
+    start: allDay ? ev.start.date : ev.start.dateTime,
+    end: allDay ? ev.end.date : ev.end.dateTime,
+    allDay,
+    location: ev.location || undefined,
+    conferenceUrl: conf.url,
+    conferenceType: conf.type,
+    description: ev.description ? htmlToText(ev.description).trim().slice(0, 600) : undefined,
+    htmlLink: ev.htmlLink,
+  };
+}
+
+/** A new event. All-day ones take YYYY-MM-DD dates (the end is the day after); timed ones ISO date-times. */
+export async function createEvent(calendarId: string, e: { title: string; allDay: boolean; start: string; end: string }): Promise<CalEvent> {
+  needScope('calendar.events');
+  const when = (v: string) => (e.allDay ? { date: v } : { dateTime: v });
+  const ev = await gapi<any>(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`, {
+    method: 'POST',
+    body: JSON.stringify({ summary: e.title, start: when(e.start), end: when(e.end) }),
+  });
+  return toCalEvent(calendarId, ev);
+}
+
 export async function fetchCalendar(): Promise<{ calendars: CalendarInfo[]; events: CalEvent[] }> {
   const list = await gapi<{ items: any[] }>('https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader&maxResults=250');
   const items = (list.items || []).filter((c) => !c.hidden && !c.deleted);
@@ -200,7 +235,7 @@ export async function fetchCalendar(): Promise<{ calendars: CalendarInfo[]; even
   const calendars: CalendarInfo[] = items.map((c, i) => {
     let name: string = c.summaryOverride || c.summary || 'Calendar';
     if (c.primary && name.includes('@')) name = 'Personal';
-    return { id: c.id, name, color: CAL_COLORS[i % CAL_COLORS.length] };
+    return { id: c.id, name, color: CAL_COLORS[i % CAL_COLORS.length], writable: c.accessRole === 'owner' || c.accessRole === 'writer' };
   });
 
   const today = startOfDay(new Date());
@@ -214,21 +249,7 @@ export async function fetchCalendar(): Promise<{ calendars: CalendarInfo[]; even
       for (const ev of res.items || []) {
         if (ev.status === 'cancelled') continue;
         if (ev.attendees?.some((a: any) => a.self && a.responseStatus === 'declined')) continue;
-        const allDay = !!ev.start?.date;
-        const conf = conference(ev);
-        events.push({
-          id: `${c.id}:${ev.id}`,
-          calendarId: c.id,
-          title: ev.summary || '(No title)',
-          start: allDay ? ev.start.date : ev.start.dateTime,
-          end: allDay ? ev.end.date : ev.end.dateTime,
-          allDay,
-          location: ev.location || undefined,
-          conferenceUrl: conf.url,
-          conferenceType: conf.type,
-          description: ev.description ? htmlToText(ev.description).trim().slice(0, 600) : undefined,
-          htmlLink: ev.htmlLink,
-        });
+        events.push(toCalEvent(c.id, ev));
       }
     }),
   );
@@ -253,7 +274,7 @@ export async function fetchTasks(): Promise<{ lists: TaskList[]; tasks: Task[] }
         const page = await gapi<{ items?: any[]; nextPageToken?: string }>(`${TASKS}/lists/${encodeURIComponent(l.id)}/tasks?${q}`);
         for (const t of page.items || []) {
           if (t.status === 'completed' || t.deleted || !t.title?.trim()) continue;
-          tasks.push({ id: t.id, listId: l.id, title: t.title.trim(), due: t.due ? t.due.slice(0, 10) : null });
+          tasks.push(toTask(l.id, t));
         }
         pageToken = page.nextPageToken || '';
       } while (pageToken);
@@ -262,11 +283,45 @@ export async function fetchTasks(): Promise<{ lists: TaskList[]; tasks: Task[] }
   return { lists, tasks };
 }
 
-export async function createTask(listId: string, title: string, due: string | null): Promise<Task> {
+function toTask(listId: string, t: any): Task {
+  const task: Task = { id: t.id, listId, title: (t.title || '').trim(), due: t.due ? t.due.slice(0, 10) : null };
+  if (t.parent) task.parent = t.parent;
+  if (t.notes) task.notes = t.notes;
+  if (t.position) task.position = t.position;
+  return task;
+}
+
+const taskUrl = (listId: string, taskId: string) => `${TASKS}/lists/${encodeURIComponent(listId)}/tasks/${encodeURIComponent(taskId)}`;
+/** Google Tasks keeps only the day of a due date, written as midnight UTC. */
+const dueField = (due: string | null) => (due ? `${due}T00:00:00.000Z` : null);
+
+/** A new task, or with `parent` a subtask of that task. */
+export async function createTask(listId: string, title: string, due: string | null, opts: { notes?: string; parent?: string } = {}): Promise<Task> {
   const body: Record<string, string> = { title };
-  if (due) body.due = `${due}T00:00:00.000Z`;
-  const t = await gapi<any>(`${TASKS}/lists/${encodeURIComponent(listId)}/tasks`, { method: 'POST', body: JSON.stringify(body) });
-  return { id: t.id, listId, title: t.title, due: t.due ? t.due.slice(0, 10) : null };
+  if (due) body.due = dueField(due)!;
+  if (opts.notes) body.notes = opts.notes;
+  const q = opts.parent ? `?parent=${encodeURIComponent(opts.parent)}` : '';
+  const t = await gapi<any>(`${TASKS}/lists/${encodeURIComponent(listId)}/tasks${q}`, { method: 'POST', body: JSON.stringify(body) });
+  return toTask(listId, t);
+}
+
+/** Change a task's title or due date (null clears it). */
+export async function updateTask(listId: string, taskId: string, patch: { title?: string; due?: string | null }): Promise<Task> {
+  const body: Record<string, string | null> = {};
+  if (patch.title !== undefined) body.title = patch.title;
+  if (patch.due !== undefined) body.due = dueField(patch.due);
+  const t = await gapi<any>(taskUrl(listId, taskId), { method: 'PATCH', body: JSON.stringify(body) });
+  return toTask(listId, t);
+}
+
+/** Move a task to another list. Google takes its subtasks along. */
+export async function moveTask(listId: string, taskId: string, toList: string): Promise<Task> {
+  const t = await gapi<any>(`${taskUrl(listId, taskId)}/move?destinationTasklist=${encodeURIComponent(toList)}`, { method: 'POST' });
+  return toTask(toList, t);
+}
+
+export async function deleteTask(listId: string, taskId: string): Promise<void> {
+  await gapi(taskUrl(listId, taskId), { method: 'DELETE' });
 }
 
 export async function completeTask(listId: string, taskId: string): Promise<void> {
@@ -349,6 +404,39 @@ export async function scanGmail(): Promise<GmailFind[]> {
   return finds;
 }
 
+
+/** Archive or un-archive, mark read or unread: label changes on up to 1000 emails at once. */
+export async function modifyEmails(ids: string[], change: { add?: string[]; remove?: string[] }): Promise<void> {
+  needScope('gmail.modify');
+  if (!ids.length) return;
+  await gapi(`${GMAIL}/messages/batchModify`, {
+    method: 'POST',
+    body: JSON.stringify({ ids, addLabelIds: change.add || [], removeLabelIds: change.remove || [] }),
+  });
+}
+
+// Bills, due notices and receipts: subjects that say so, and senders that send them.
+const BILL_QUERY = [
+  'newer_than:7d -in:chats -in:spam -in:trash -in:sent -in:drafts -category:promotions',
+  '(subject:(bill OR statement OR receipt OR invoice OR payment OR paid OR "amount due" OR order OR renewal OR premium OR subscription OR trip OR ride OR booking)',
+  `OR from:(${BILL_SENDERS.join(' OR ')}))`,
+].join(' ');
+
+/** Recent bill-like emails not in `seen`, with their text, for bills.ts to read. */
+export async function fetchBillMail(seen: Set<string>): Promise<BillMail[]> {
+  const ids = (await listMessageIds(BILL_QUERY, 40)).filter((id) => !seen.has(id));
+  const out: BillMail[] = [];
+  for (let i = 0; i < ids.length; i += 8) {
+    await Promise.all(
+      ids.slice(i, i + 8).map(async (id) => {
+        const msg = await gapi<any>(`${GMAIL}/messages/${id}?format=full`);
+        const e = parseInboxMessage(msg, '');
+        out.push({ id, threadId: e.threadId, from: e.from, fromEmail: e.fromEmail, subject: e.subject, at: e.at, text: bodyText(msg.payload).slice(0, 20000) });
+      }),
+    );
+  }
+  return out.sort((a, b) => b.at.localeCompare(a.at));
+}
 
 // ---------- Inbox ----------
 
