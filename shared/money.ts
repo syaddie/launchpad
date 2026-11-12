@@ -6,13 +6,15 @@
 // their money as a linked entry, kept in step here.
 // Also cleaning for what the page sends, and reading the old workbook on import.
 import { MON, addDays, dayDiff, pad2, parseYmd, ymd } from './dates';
-import type { AccountKind, Invoice, Money, MoneyAccount, MoneyCategory, MoneyEntry, WishItem, WishPriority, WishStatus } from './types';
+import type { AccountKind, Every, Invoice, Money, MoneyAccount, MoneyCategory, MoneyEntry, SavingsGoal, Subscription, WishItem, WishPriority, WishStatus } from './types';
 import type { XCell, XSheet } from './xlsx';
 
 export const MAX_ENTRIES = 5000;
 export const MAX_WISHES = 200;
 export const MAX_ACCOUNTS = 30;
 export const MAX_INVOICES = 500;
+export const MAX_SUBS = 200;
+export const MAX_GOALS = 50;
 export const CATEGORIES: MoneyCategory[] = ['Food', 'Transport', 'Shopping', 'Bills', 'Family', 'Fun', 'Travel', 'Pay', 'Other'];
 export const PRIORITIES: Exclude<WishPriority, ''>[] = ['High', 'Medium', 'Low'];
 export const STATUSES: Exclude<WishStatus, ''>[] = ['Wanted', 'Saving up', 'Purchased', 'Dropped'];
@@ -44,7 +46,7 @@ export const starterAccounts = (opening = 0): MoneyAccount[] => [
 export const mainAccount = (accounts: MoneyAccount[]): string => (accounts.find((a) => a.spendable && !a.archived) ?? accounts.find((a) => !a.archived) ?? accounts[0]).id;
 
 /** A fresh tracker starts on the 1st of this month with $0 everywhere. */
-export const starterMoney = (today: Date): Money => ({ start: ymd(new Date(today.getFullYear(), today.getMonth(), 1)), accounts: starterAccounts(), entries: [], wishlist: [], invoices: [] });
+export const starterMoney = (today: Date): Money => ({ start: ymd(new Date(today.getFullYear(), today.getMonth(), 1)), accounts: starterAccounts(), entries: [], wishlist: [], invoices: [], subs: [], goals: [] });
 
 /** Cents, so 0.1 + 0.2 shows as $0.30 and not a long tail. */
 const cents = (n: number) => Math.round(n * 100) / 100;
@@ -248,6 +250,124 @@ export function wishStats(list: WishItem[]) {
   return { items: list.filter((w) => w.name.trim()).length, total, purchased, stillToBuy: cents(total - purchased - dropped) };
 }
 
+// ---------- savings goals ----------
+
+export interface GoalRow {
+  goal: SavingsGoal;
+  /** A pot's own goal, set in the account rather than in the goals list. */
+  fromAccount: boolean;
+  /** What's there now: the account's balance from what's done, or what's set aside. */
+  have: number;
+  left: number;
+  /**
+   * The first day it's reachable: when the account's planned balance gets there
+   * ("planned"), or the day the day-to-day forecast could cover what's left and stay
+   * above $0 ("forecast"). null when neither happens in the tracked months.
+   */
+  reachOn: string | null;
+  how: 'done' | 'planned' | 'forecast' | null;
+  /** A month needed from here to hit the date; null without one. */
+  perMonth: number | null;
+  /** It has a date and isn't reachable by then. */
+  late: boolean;
+}
+
+/** The pots' goals as goals, so they show beside the goals list. */
+export const accountGoals = (money: Money): SavingsGoal[] =>
+  money.accounts.filter((a) => a.goal !== null && !a.archived).map((a) => ({ id: `acct-${a.id}`, name: a.name, target: a.goal, by: a.goalBy, account: a.id, saved: 0 }));
+
+const endOfMonth = (key: string) => `${key}-${pad2(daysIn(key))}`;
+
+/** The first day from `from` on that an account's planned balance is at least `target` and stays there to `last`. */
+function accountReaches(money: Money, id: string, target: number, from: string, last: string): string | null {
+  let bal = accountBalance(money, id, from);
+  const byDay = new Map<string, number>();
+  for (const e of money.entries) if (e.date > from && e.date <= last) byDay.set(e.date, (byDay.get(e.date) ?? 0) + effectOn(e, id));
+  let found: string | null = bal >= target ? from : null;
+  for (let d = addDays(parseYmd(from), 1); ymd(d) <= last; d = addDays(d, 1)) {
+    bal = cents(bal + (byDay.get(ymd(d)) ?? 0));
+    if (bal < target) found = null;
+    else found ??= ymd(d);
+  }
+  return found;
+}
+
+/** Each goal (the list's, then the pots') with its progress and when the forecast gets it there. */
+export function goalRows(money: Money, months: MonthCalc[], today: string): GoalRow[] {
+  const last = months.length ? endOfMonth(months[months.length - 1].key) : today;
+  const rows = (list: SavingsGoal[], fromAccount: boolean) =>
+    list.flatMap((goal): GoalRow[] => {
+      if (goal.target === null || goal.target <= 0) return [];
+      const acct = money.accounts.find((a) => a.id === goal.account);
+      const have = acct ? accountBalance(money, acct.id, today, true) : goal.saved;
+      const left = cents(Math.max(0, goal.target - have));
+      let reachOn: string | null = null;
+      let how: GoalRow['how'] = null;
+      if (!left) [reachOn, how] = [today, 'done'];
+      else if (acct) {
+        reachOn = accountReaches(money, acct.id, goal.target, today, last);
+        if (reachOn) how = 'planned';
+        else if (!acct.spendable) {
+          // Move the rest from day to day, after what's already planned for the pot.
+          reachOn = affordableFrom(cents(goal.target - accountBalance(money, acct.id, last)), months, today);
+          how = reachOn ? 'forecast' : null;
+        }
+      } else {
+        reachOn = affordableFrom(left, months, today);
+        how = reachOn ? 'forecast' : null;
+      }
+      return [{
+        goal,
+        fromAccount,
+        have,
+        left,
+        reachOn,
+        how,
+        perMonth: goal.by && left ? goalPerMonth(have, goal.target, goal.by, today) : null,
+        late: !!goal.by && !!left && (!reachOn || reachOn.slice(0, 7) > goal.by),
+      }];
+    });
+  return [...rows(money.goals, false), ...rows(accountGoals(money), true)];
+}
+
+// ---------- what if ----------
+
+export interface Preview {
+  /** False when the entries don't touch the day-to-day accounts, so the forecast stays the same. */
+  changes: boolean;
+  /** The month whose end is shown: the entries' first, or this one if that's passed. */
+  month: string;
+  monthEnd: { before: number; after: number };
+  low: { before: { balance: number; date: string } | null; after: { balance: number; date: string } | null };
+  /** Days from today on that end below $0, and the first one that wasn't before. */
+  below: { before: number; after: number; first: string | null };
+}
+
+/** What adding some entries would do to the forecast, before they're saved. */
+export function previewAdd(money: Money, add: MoneyEntry[], today: string): Preview {
+  const next = { ...money, entries: sortEntries([...money.entries, ...add]) };
+  const keys = monthKeys(next, today);
+  const before = calcMonths(money, keys);
+  const after = calcMonths(next, keys);
+  const first = add.map((e) => e.date).sort()[0] ?? today;
+  const month = first.slice(0, 7) < today.slice(0, 7) ? today.slice(0, 7) : first.slice(0, 7);
+  const at = keys.indexOf(month);
+  const days = (ms: MonthCalc[]) => ms.flatMap((m) => m.balances.map((b, i) => ({ date: `${m.key}-${pad2(i + 1)}`, b }))).filter((d) => d.date >= today);
+  const dBefore = days(before);
+  const dAfter = days(after);
+  return {
+    changes: after.some((m, i) => m.closing !== before[i].closing || m.lowest !== before[i].lowest),
+    month,
+    monthEnd: { before: before[at].closing, after: after[at].closing },
+    low: { before: lowestAhead(before, today), after: lowestAhead(after, today) },
+    below: {
+      before: dBefore.filter((d) => d.b < 0).length,
+      after: dAfter.filter((d) => d.b < 0).length,
+      first: dAfter.find((d, i) => d.b < 0 && dBefore[i].b >= 0)?.date ?? null,
+    },
+  };
+}
+
 /** Money out per category for some entries, biggest first. Uncategorised spending is "Not set". */
 export function byCategory(entries: MoneyEntry[]): { category: string; amount: number }[] {
   const totals = new Map<string, number>();
@@ -378,6 +498,7 @@ function ids<T extends { id: string }>(list: T[], prefix: string): T[] {
 
 const isMonth = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(v);
 const KINDS = ACCOUNT_KINDS.map((k) => k.key);
+const EVERY: Every[] = ['week', 'fortnight', 'month'];
 
 /**
  * Coerces anything into a valid Money: real dates, positive amounts, known categories,
@@ -414,6 +535,7 @@ export function cleanMoney(v: unknown, today = new Date()): Money {
       // A negative amount is the other direction.
       const kind = to ? 'move' : (x.kind === 'in') !== a < 0 ? 'in' : 'out';
       const invoice = str(x.invoice, 40);
+      const series = str(x.series, 40);
       return [{
         id: str(x.id, 40),
         date: x.date,
@@ -425,6 +547,7 @@ export function cleanMoney(v: unknown, today = new Date()): Money {
         account,
         to,
         ...(invoice ? { invoice } : {}),
+        ...(series ? { series } : {}),
       }];
     });
   const invoices = (Array.isArray(m.invoices) ? m.invoices : []).slice(0, MAX_INVOICES).flatMap((x: Partial<Invoice>): Invoice[] => {
@@ -442,12 +565,34 @@ export function cleanMoney(v: unknown, today = new Date()): Money {
     target: isMonth(x?.target) ? x!.target! : '',
     notes: str(x?.notes, 200),
   }));
+  // A subscription is its entries: one whose entries are all gone goes too.
+  const inSeries = new Set(entries.map((e) => e.series).filter(Boolean));
+  const seenSub = new Set<string>();
+  const subs = (Array.isArray(m.subs) ? m.subs : []).slice(0, MAX_SUBS).flatMap((x: Partial<Subscription>): Subscription[] => {
+    const id = str(x?.id, 40);
+    if (!id || !inSeries.has(id) || seenSub.has(id) || !EVERY.includes(x!.every as Every)) return [];
+    seenSub.add(id);
+    return [{ id, every: x!.every!, review: x!.review === true, since: isMonth(x!.since) ? x!.since! : '' }];
+  });
+  const goals = (Array.isArray(m.goals) ? m.goals : []).slice(0, MAX_GOALS).map((x: Partial<SavingsGoal>): SavingsGoal => {
+    const target = amount(x?.target);
+    return {
+      id: str(x?.id, 40),
+      name: str(x?.name, 60),
+      target: target === null ? null : Math.abs(target),
+      by: isMonth(x?.by) ? x!.by! : '',
+      account: known.has(x?.account as string) ? x!.account! : '',
+      saved: Math.abs(amount(x?.saved) ?? 0),
+    };
+  });
   return syncInvoices({
     start: isDate(m.start) ? m.start : starterMoney(today).start,
     accounts,
     entries: sortEntries(ids(entries, 'e')),
     wishlist: ids(wishlist, 'w'),
     invoices: ids(invoices, 'i'),
+    subs,
+    goals: ids(goals, 'g'),
   });
 }
 

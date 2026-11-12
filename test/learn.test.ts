@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  classesOn, cleanLearn, courseGrade, dueGroup, emptyLearn, fmtStudy, letterOf, neededFor, nextUp, openWork, parseStudy, studyStreak, studyWeek, upcomingExams, weekByCourse, weeklyStudy,
+  classesOn, cleanLearn, courseGrade, dueGroup, emptyLearn, fmtStudy, letterOf, neededFor, nextUp, openWork, parseStudy, studyStreak, studyWeek, upcomingExams, weekByCourse, weeklyStudy, whatIf,
 } from '../shared/learn';
 import type { Assessment, CalEvent, Course, Learn } from '../shared/types';
 
@@ -151,5 +151,26 @@ describe('cleaning', () => {
     expect(l.timer).toBeNull();
     expect(l.calendarId).toBe('school');
     expect(cleanLearn(null)).toEqual(emptyLearn());
+  });
+});
+
+describe('what if', () => {
+  it('gives the best and worst final grade still possible', () => {
+    // CS: 38.63 points from the 45% marked, 55% of the course still open.
+    expect(whatIf(sample().assessments, 'cs')).toEqual({ final: null, worst: 38.6, best: 93.6, filled: 0, open: 55 });
+  });
+  it('counts what-if scores for unmarked work, leaving real marks alone', () => {
+    const l = sample();
+    const id = (title: string) => l.assessments.find((a) => a.title === title)!.id;
+    const marked = l.assessments.find((a) => a.courseId === 'cs' && a.score !== null)!.id;
+    expect(whatIf(l.assessments, 'cs', { [id('Lab 8')]: 100, [id('Final')]: 80, [marked]: 0 })).toEqual({ final: null, worst: 66.6, best: 87.6, filled: 34, open: 21 });
+    const full = [work('x', 60, { score: 70 }), work('x', 40)];
+    expect(whatIf(full, 'x', { [full[1].id]: 90 })).toMatchObject({ final: 78, worst: 78, best: 78, open: 0 });
+    expect(whatIf(full, 'x', { [full[1].id]: null }).final).toBeNull();
+  });
+  it('keeps an aim only when it’s a number, within 0–100', () => {
+    const l = cleanLearn({ courses: [course('c', 'C')], assessments: [work('c', 10, { aim: 150 }), work('c', 10, { aim: 'x' as never })] });
+    expect(l.assessments.map((a) => a.aim)).toEqual([100, undefined]);
+    expect('aim' in l.assessments[1]).toBe(false);
   });
 });
