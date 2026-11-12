@@ -539,7 +539,7 @@ export function App() {
       <Rail view={view} hidden={data.prefs.hidden} badges={{ inbox: inboxCount }} onView={setView} onPalette={() => setPalette(true)} onSettings={() => setDrawer({ type: 'settings' })} />
       <div className="lp-inner">
         <TopBar data={data} now={now} subline={subline} search={search} onSearch={setSearch} searchRef={searchRef} smokesToday={smokesToday} onLogSmoke={logSmoke} onOpenTraining={() => setView('training')} onOpenLearn={() => setView('learn')} />
-        {serverIssue && <ServerBanner issue={serverIssue} onRetry={refresh} />}
+        {serverIssue && <ServerBanner issue={serverIssue} onRetry={() => refresh()} />}
         <Suspense fallback={<main className="view-loading" aria-busy="true" />}>
         {view === 'news' ? (
           <News data={data} now={now} busy={newsBusy} onRefresh={refreshNews} onTopics={setNewsTopics} />

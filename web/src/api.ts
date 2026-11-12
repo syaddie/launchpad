@@ -106,6 +106,8 @@ async function req<T>(method: string, url: string, body?: unknown, keepalive = f
 
 export const api = {
   state: () => req<AppState>('GET', '/api/state'),
+  /** Just the parts of the state these store keys (from the change stream) feed. */
+  stateFor: (keys: string[]) => req<Partial<AppState>>('GET', `/api/state?keys=${keys.map(encodeURIComponent).join(',')}`),
   /** Save a whole document. With `base`, the server refuses it (ConflictError) if someone else saved since that version. */
   putDoc: <K extends SavedDoc>(key: K, v: AppState[K], base?: string, keepalive?: boolean) =>
     req<{ ok: true; version: string }>('PUT', `/api/${key}`, v, keepalive, base === undefined ? undefined : { 'X-Base-Version': base }),

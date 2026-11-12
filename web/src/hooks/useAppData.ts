@@ -83,9 +83,9 @@ export function useAppData({ notify, onSaveError, onNotesSaved, onMoneySaved, no
 
   const { savers, setBase } = useSavers({ data, dataRef, update, notify, onError: onSaveError, onNotesSaved, onMoneySaved });
 
-  /** Take fresh server state, but keep local edits that haven't been saved yet. */
+  /** Take fresh server state, all of it or some parts, but keep local edits that haven't been saved yet. */
   const merge = useCallback(
-    (s: AppState) => {
+    (s: Partial<AppState>) => {
       const keep: Record<SavedDoc, boolean> = {
         bookmarks: savers.bookmarks.busy(),
         notes: savers.notes.busy() || noteEditing.current,
@@ -93,14 +93,12 @@ export function useAppData({ notify, onSaveError, onNotesSaved, onMoneySaved, no
         learn: savers.learn.busy(),
       };
       // A document taken from the server is the new starting point for the next save; one kept keeps its old one.
-      for (const k of SAVED_DOCS) if (!keep[k]) setBase(k, s[k], s.versions?.[k]);
-      update((prev) => ({
-        ...s,
-        bookmarks: keep.bookmarks ? prev.bookmarks : s.bookmarks,
-        notes: keep.notes ? prev.notes : s.notes,
-        money: keep.money ? prev.money : s.money,
-        learn: keep.learn ? prev.learn : s.learn,
-      }));
+      for (const k of SAVED_DOCS) if (s[k] !== undefined && !keep[k]) setBase(k, s[k], s.versions?.[k]);
+      update((prev) => {
+        const next = { ...prev, ...s, versions: { ...prev.versions, ...s.versions } };
+        for (const k of SAVED_DOCS) if (keep[k]) Object.assign(next, { [k]: prev[k] });
+        return next;
+      });
     },
     [update, savers, setBase, noteEditing],
   );
@@ -117,14 +115,14 @@ export function useAppData({ notify, onSaveError, onNotesSaved, onMoneySaved, no
   const lastRefresh = useRef(0);
   /** The change stream is open, so polling can slow right down. */
   const live = useRef(false);
+  /** Fetch the state and take it in: all of it, or with `keys`, just what those store keys feed. */
   const refresh = useCallback(
-    () =>
-      api
-        .state()
+    (keys?: string[]) =>
+      (Array.isArray(keys) ? api.stateFor(keys) : api.state())
         .then((s) => {
           merge(s);
           setServerIssue(null);
-          lastRefresh.current = Date.now();
+          if (!Array.isArray(keys)) lastRefresh.current = Date.now();
         })
         .catch((e) => {
           console.warn('refresh failed', e);
@@ -136,7 +134,7 @@ export function useAppData({ notify, onSaveError, onNotesSaved, onMoneySaved, no
 
   useEffect(() => {
     refresh();
-    // While the change stream is open, a poll every 5 minutes is only a backstop.
+    // While the change stream is open, a full fetch every 5 minutes is only a backstop.
     const iv = window.setInterval(() => (!live.current || Date.now() - lastRefresh.current > 5 * 60_000) && refresh(), 60_000);
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
@@ -152,28 +150,47 @@ export function useAppData({ notify, onSaveError, onNotesSaved, onMoneySaved, no
     };
   }, [refresh, merge]);
 
-  // Live updates: the server says when something changed (another tab, a phone, a sync that
-  // finished) and this tab fetches the state. Only a visible tab keeps the stream open, so a
-  // pile of background tabs doesn't use up the browser's six connections over plain HTTP.
+  // Live updates: the server says which store keys changed (another tab, a phone, a sync that
+  // finished) and this tab fetches just the parts of the state those feed. Only a visible tab
+  // keeps the stream open, so a pile of background tabs doesn't use up the browser's six
+  // connections over plain HTTP.
   useEffect(() => {
     if (typeof EventSource === 'undefined') return;
     let es: EventSource | null = null;
     let soon = 0;
     let retry = 0;
-    const later = () => {
+    /** Keys changed since the last fetch; null when it should be everything. */
+    let keys: Set<string> | null = new Set();
+    const later = (changed: string[] | null) => {
+      if (keys && changed) for (const k of changed) keys.add(k);
+      else keys = null;
       clearTimeout(soon);
-      soon = window.setTimeout(refresh, 150);
+      soon = window.setTimeout(() => {
+        const ask = keys;
+        keys = new Set();
+        refresh(ask ? [...ask] : undefined);
+      }, 150);
+    };
+    const onChange = (e: MessageEvent<string>) => {
+      let changed: string[] | null = null;
+      try {
+        const k = (JSON.parse(e.data) as { keys?: unknown }).keys;
+        if (Array.isArray(k) && k.length && k.every((x) => typeof x === 'string')) changed = k;
+      } catch {
+        // Not a message this page understands: fetch everything.
+      }
+      later(changed);
     };
     const open = () => {
       if (es || document.visibilityState !== 'visible') return;
       const src = new EventSource(`/api/events?tab=${TAB_ID}`);
       let hellos = 0;
-      // Reconnected after a restart or a dropped connection: catch up on what was missed.
+      // Reconnected after a restart or a dropped connection: catch up on everything that was missed.
       src.addEventListener('hello', () => {
         live.current = true;
-        if (hellos++) later();
+        if (hellos++) later(null);
       });
-      src.addEventListener('change', later);
+      src.addEventListener('change', onChange);
       src.onerror = () => {
         live.current = false;
         // EventSource retries a dropped stream itself, but gives up on an error status (a
