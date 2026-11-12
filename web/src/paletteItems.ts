@@ -85,7 +85,7 @@ export function paletteItems(c: PaletteContext): PaletteItem[] {
     { id: 'a:files', group: 'Actions', label: 'Browse the server’s files', icon: 'ph-folder-simple', words: 'file explorer sftp upload download folders', run: () => c.openServerTab('files') },
     { id: 'a:package', group: 'Actions', label: 'Add a package', icon: 'ph-package', words: 'tracking', run: c.addPackage },
     ...(c.openAddEvent && eventsOn(data)
-      ? [{ id: 'a:event', group: 'Actions', label: 'Add a calendar event', icon: 'ph-calendar-plus', words: 'google calendar meeting appointment schedule', sub: 'Or type “event lunch w/ Dan fri 1pm” here', run: c.openAddEvent }]
+      ? [{ id: 'a:event', group: 'Actions', label: 'Add a calendar event', icon: 'ph-calendar-plus', words: 'google calendar meeting appointment schedule', sub: 'Or type “event”, then what and when', run: c.openAddEvent }]
       : []),
     { id: 'a:news', group: 'Actions', label: 'Refresh the news', icon: 'ph-arrows-clockwise', run: () => (setView('news'), c.refreshNews()) },
     {
@@ -151,7 +151,7 @@ export function paletteSearches(c: PaletteContext, q: string): PaletteItem[] {
   }
   // "event lunch w/ Dan fri 1pm", or anything with a time in it, can go straight into the calendar.
   const cal = eventsOn(data) ? defaultCalendar(data) : undefined;
-  const asked = q.match(/^(?:event|cal|calendar|add event)\s+(.+)/i);
+  const asked = q.match(/^(?:add |new )?event\s+(.+)/i);
   const draft = cal && (asked ? parseEvent(asked[1], now) : parseEvent(q, now));
   if (cal && draft?.title && (asked || (draft.understood && !draft.allDay))) {
     log.push({
