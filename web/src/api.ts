@@ -1,4 +1,4 @@
-import type { AppState, Backup, BackupSnapshot, Countdown, DirListing, LinkCheck, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, SourceKey, Task, Training } from '../../shared/types';
+import type { AppState, Backup, BackupSnapshot, Countdown, DirListing, DisksReport, LinkCheck, LogLine, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
 import type { AskResult } from '../../shared/ask';
 import type { UsageReport } from '../../shared/claudeUsage';
 import { kvGet, kvSet } from './idb';
@@ -234,6 +234,14 @@ export const api = {
   snapshots: () => req<BackupSnapshot[]>('GET', '/api/backup/snapshots'),
   takeSnapshot: () => req<BackupSnapshot[]>('POST', '/api/backup/snapshots', {}),
   restoreSnapshot: (id: string) => req<RestoreResult>('POST', `/api/backup/snapshots/${encodeURIComponent(id)}/restore`, {}),
+  containerLogs: (id: string, tail: number, since?: string) =>
+    req<LogLine[]>('GET', `/api/server/containers/${encodeURIComponent(id)}/logs?tail=${tail}${since ? `&since=${encodeURIComponent(since)}` : ''}`),
+  restartContainer: (id: string) => req('POST', `/api/server/containers/${encodeURIComponent(id)}/restart`, {}),
+  disks: (refresh = false) => req<DisksReport>(refresh ? 'POST' : 'GET', refresh ? '/api/server/disks/refresh' : '/api/server/disks', refresh ? {} : undefined),
+  snippets: () => req<Snippet[]>('GET', '/api/shell/snippets'),
+  addSnippet: (s: Omit<Snippet, 'id'>) => req<Snippet[]>('POST', '/api/shell/snippets', s),
+  editSnippet: (s: Snippet) => req<Snippet[]>('PUT', `/api/shell/snippets/${encodeURIComponent(s.id)}`, { name: s.name, command: s.command }),
+  deleteSnippet: (id: string) => req<Snippet[]>('DELETE', `/api/shell/snippets/${encodeURIComponent(id)}`),
   /** Take a copy now and upload it to Google Drive; resolves once it's there (or failed, in `drive.lastError`). */
   copyToDrive: () => req<AppState>('POST', '/api/backup/drive', {}),
 };

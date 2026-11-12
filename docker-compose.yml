@@ -12,10 +12,12 @@ services:
       # below reaches the container directly and doesn't need this.
       - "8090:8080"
     environment:
-      # Server view: the host's network traffic, and the container list through
-      # docker-proxy below. Both are optional; see docs/setup.md step 8.
+      # Server view: the host's network traffic, the container list and logs through
+      # docker-proxy, and restarts through docker-restart (both below). All optional;
+      # see docs/setup.md step 8.
       - HOST_PROC=/host/proc
       - DOCKER_HOST=tcp://docker-proxy:2375
+      - DOCKER_RESTART_HOST=tcp://docker-restart:2375
       # Server view's terminal and files: SSH to the machine itself, as SSH_USER
       # from .env. Leave SSH_USER empty to keep them off; see docs/setup.md step 9.
       - SSH_HOST=host.docker.internal
@@ -40,16 +42,35 @@ services:
     depends_on:
       - launchpad
 
-  # A read-only window on Docker for the Server view's container list. It answers
-  # GET requests about containers and refuses everything else (starting, stopping,
-  # exec…), so Launchpad never holds the Docker socket itself. Not exposed outside
-  # this compose network.
+  # A read-only window on Docker for the Server view's container list and logs. It
+  # answers GET requests about containers and refuses everything else (starting,
+  # stopping, exec…), so Launchpad never holds the Docker socket itself. Not exposed
+  # outside this compose network.
   docker-proxy:
     image: tecnativa/docker-socket-proxy:latest
     container_name: launchpad-docker-proxy
     restart: unless-stopped
     environment:
       - CONTAINERS=1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  # Restarts for the Server view's Restart button, and nothing else. The proxy's
+  # ALLOW_RESTARTS only works with POST=1 (Tecnativa/docker-socket-proxy#101), but
+  # with every other section off this one still refuses everything except stop,
+  # restart and kill on a container, and Launchpad itself only ever sends restart.
+  # Kept apart from docker-proxy so that one stays read-only. Delete this service
+  # and DOCKER_RESTART_HOST above to leave the Restart button out.
+  docker-restart:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: launchpad-docker-restart
+    restart: unless-stopped
+    environment:
+      - POST=1
+      - ALLOW_RESTARTS=1
+      - EVENTS=0
+      - PING=0
+      - VERSION=0
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 

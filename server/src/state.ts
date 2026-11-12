@@ -128,6 +128,8 @@ export const KEY_FIELDS: Record<string, Field[]> = {
   registered17: [],
   speedTests: [],
   uploadDirs: [],
+  // The terminal fetches its snippets itself.
+  snippets: [],
 };
 
 /** The fields changed store keys feed, or null when one isn't known (then send everything). */

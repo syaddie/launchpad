@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { cleanCountdowns, cleanMoods, cleanPackages, cleanPrefs, cleanSmokes, cleanWeights, validBookmarks, validNotes } from './clean';
+import { cleanCountdowns, cleanMoods, cleanPackages, cleanPrefs, cleanSmokes, cleanSnippets, cleanWeights, validBookmarks, validNotes } from './clean';
 import { MAX_PHOTOS, photoExists, readPhoto, restorePhotoFile, sniffImage, type StoredPhoto } from './photos';
 import { snapshotDb, store } from './store';
 import { isZip, unzip, zipStream, type ZipEntry } from './zip';
@@ -38,6 +38,7 @@ export function exportBackup(): Backup {
     newsLists: store.newsLists(),
     bookmarkOpens: store.bookmarkOpens(),
     noteHistory: store.noteHistory(),
+    snippets: store.snippets(),
   };
 }
 
@@ -59,6 +60,7 @@ export const PART_NAMES: Record<BackupPart, string> = {
   newsLists: 'reading list',
   bookmarkOpens: 'bookmark ranking',
   noteHistory: 'notepad history',
+  snippets: 'terminal snippets',
 };
 
 function cleanMuscles(v: unknown): Record<string, ExerciseMuscles> | null {
@@ -144,6 +146,11 @@ export function restoreBackup(body: unknown): BackupPart[] {
   if (has('bookmarkOpens') && typeof b.bookmarkOpens === 'object') {
     const v = cleanOpens(b.bookmarkOpens);
     writes.push(['bookmarkOpens', () => store.setBookmarkOpens(v)]);
+  }
+
+  if (has('snippets') && Array.isArray(b.snippets)) {
+    const v = cleanSnippets(b.snippets);
+    writes.push(['snippets', () => store.setSnippets(v)]);
   }
 
   if (!writes.length) throw new RestoreError('That file isn’t a Launchpad backup.');
@@ -241,6 +248,7 @@ export function describeRestored(parts: BackupPart[]): string[] {
       case 'packages': return plural(store.packages().length, 'package');
       case 'photos': return plural(store.photos().length, 'photo');
       case 'newsLists': return `reading list (${plural(store.newsLists().saved.length, 'story', 'stories')})`;
+      case 'snippets': return plural(store.snippets().length, 'terminal snippet');
       default: return PART_NAMES[p];
     }
   });
