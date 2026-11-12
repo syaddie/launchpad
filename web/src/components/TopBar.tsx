@@ -321,9 +321,11 @@ export function TopBar({ data, now, subline, search, onSearch, searchRef, smokes
   ];
   const needsGoogle = (k: SourceKey) => k === 'calendar' || k === 'tasks' || k === 'gmail' || k === 'inbox';
   const connected = data.google.connected;
+  const health = data.health ?? [];
   const lines = sources
     .filter((s) => connected || !needsGoogle(s.key))
     .map((s) => {
+      const h = health.find((w) => w.key === s.key);
       const st = data.sync[s.key];
       const off =
         s.key === 'news'
@@ -336,11 +338,15 @@ export function TopBar({ data, now, subline, search, onSearch, searchRef, smokes
                 ? !data.prefs.speedTestHours
                 : needsGoogle(s.key) && !data.prefs.sources[s.key as 'calendar'];
       if (off) return { name: s.name, text: 'Off', warn: false };
+      if (h) return { name: s.name, text: h.text, warn: true, why: h.detail ?? st.lastError };
       if (failing(st)) return { name: s.name, text: `Couldn’t sync · last synced ${ago(st.lastSuccess, now)}`, warn: true, why: st.lastError };
       return { name: s.name, text: st.lastSuccess ? `${s.ok} ${ago(st.lastSuccess, now)}` : 'Waiting for first sync', warn: false };
     });
   if (data.google.signedOut) lines.unshift({ name: 'Google', text: 'Signed out · reconnect in Settings', warn: true, why: data.google.signedOut.reason });
   else if (!connected) lines.unshift({ name: 'Google', text: 'Not connected', warn: false });
+  else if (data.google.missingScopes?.length) lines.unshift({ name: 'Google', text: 'Reconnect in Settings to allow backups to Drive, creating events and inbox actions', warn: false });
+  // The database, the daily copy and Drive, from the server's health check.
+  for (const w of health) if (!sources.some((s) => s.key === w.key)) lines.push({ name: w.name, text: w.text, warn: true, why: w.detail ?? null });
   const anyFail = lines.some((l) => l.warn);
   const dot = anyFail ? 'var(--wn)' : connected ? 'var(--t3)' : 'var(--ln)';
 

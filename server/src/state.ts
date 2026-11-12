@@ -3,6 +3,9 @@
 // only the parts those keys feed (GET /api/state?keys=…).
 import { config, googleConfigured } from './config';
 import { claudeEnabled } from './claude';
+import { missingScopes } from './google';
+import { driveStatus } from './drive';
+import { currentWarnings } from './health';
 import { docVersion, store } from './store';
 import type { AppState, NewsTopic, Photo, SavedDoc } from '../../shared/types';
 
@@ -30,7 +33,7 @@ const FIELDS: { [F in Field]: () => AppState[F] } = {
   prefs: () => store.prefs(),
   google: () => {
     const g = store.google();
-    return { configured: googleConfigured(), connected: !!g, email: g?.email, name: g?.name, signedOut: g ? undefined : store.googleSignedOut() ?? undefined };
+    return { configured: googleConfigured(), connected: !!g, email: g?.email, name: g?.name, signedOut: g ? undefined : store.googleSignedOut() ?? undefined, missingScopes: g ? missingScopes() : undefined };
   },
   calendars: () => store.calendar().calendars,
   events: () => store.calendar().events,
@@ -63,6 +66,8 @@ const FIELDS: { [F in Field]: () => AppState[F] } = {
   weights: () => store.weights(),
   learn: () => store.learn(),
   learnNote: () => (claudeEnabled() ? store.learnNote() : { note: null, error: null }),
+  drive: driveStatus,
+  health: currentWarnings,
 };
 
 const SAVED: SavedDoc[] = ['bookmarks', 'notes', 'money', 'learn'];
@@ -76,8 +81,8 @@ export const KEY_FIELDS: Record<string, Field[]> = {
   bookmarks: ['bookmarks'],
   notes: ['notes'],
   // News comes in the order of the topics in prefs.
-  prefs: ['prefs', 'news'],
-  google: ['google'],
+  prefs: ['prefs', 'news', 'drive'],
+  google: ['google', 'drive'],
   googleSignedOut: ['google'],
   calendar: ['calendars', 'events', 'google'],
   tasks: ['taskLists', 'tasks', 'google'],
@@ -96,7 +101,8 @@ export const KEY_FIELDS: Record<string, Field[]> = {
   trainingNote: ['trainingNote'],
   learn: ['learn'],
   learnNote: ['learnNote'],
-  sync: ['sync'],
+  sync: ['sync', 'health'],
+  driveBackup: ['drive', 'health'],
   gmailSeen: [],
   registered17: [],
   speedTests: [],

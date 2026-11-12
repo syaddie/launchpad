@@ -63,6 +63,7 @@ export function cleanPrefs(body: Partial<Prefs>, prev: Prefs): Prefs {
     speedPlanMbps: num(body.speedPlanMbps, 0, 100_000, prev.speedPlanMbps),
     setsPerWeek: num(body.setsPerWeek, 1, 40, prev.setsPerWeek),
     gymMonthly: typeof body.gymMonthly === 'number' && Number.isFinite(body.gymMonthly) ? Math.min(10_000, Math.max(0, Math.round(body.gymMonthly * 100) / 100)) : prev.gymMonthly,
+    driveBackup: typeof body.driveBackup === 'boolean' ? body.driveBackup : prev.driveBackup ?? true,
     pinnedLifts: Array.isArray(body.pinnedLifts) ? [...new Set(body.pinnedLifts.filter(isStr).map((t) => t.slice(0, 120)))].slice(0, 12) : prev.pinnedLifts,
   };
   if (!next.searchEngines.length) next.searchEngines = DEFAULT_ENGINES;

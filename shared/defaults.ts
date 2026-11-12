@@ -40,6 +40,7 @@ export const DEFAULT_PREFS: Prefs = {
   setsPerWeek: 10,
   pinnedLifts: [],
   gymMonthly: 0,
+  driveBackup: true,
 };
 
 /** Everything Settings › Panels can switch off. */
