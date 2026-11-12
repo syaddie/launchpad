@@ -41,7 +41,9 @@ interface Props {
  * monthly summary and the charts are worked out from the entries (shared/money.ts).
  * Invoices in Owed each have their money as an entry, kept in step on every change.
  */
-export function MoneyView({ money, now, saved, onChange: save, onImport, notify, together }: Props) {
+export function MoneyView({ money: given, now, saved, onChange: save, onImport, notify, together }: Props) {
+  // A copy kept by the page before subscriptions and goals (or an edit queued then) has neither.
+  const money: Money = given.subs && given.goals ? given : { ...given, subs: given.subs ?? [], goals: given.goals ?? [] };
   const today = ymd(now);
   const onChange = (m: Money) => save(syncInvoices(m));
   const lateInvoices = invoiceRows(money, today).filter((r) => !r.paidOn && r.daysLeft < 0).length;
