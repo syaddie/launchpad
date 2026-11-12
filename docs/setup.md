@@ -116,7 +116,7 @@ The News view (in the rail on the left, or press `N`) works without this and lis
    ```
    ANTHROPIC_API_KEY=sk-ant-...
    ```
-3. Optional: `NEWS_MODEL`, `INBOX_MODEL`, `TRAINING_MODEL` and `LEARN_MODEL` pick the models. The default for all four, `claude-haiku-5-5`, costs a few cents a month for news and for training and at most a dollar or two for the inbox; `claude-opus-5-5` writes richer summaries at about 40 times the price.
+3. Optional: `NEWS_MODEL`, `INBOX_MODEL`, `TRAINING_MODEL`, `LEARN_MODEL`, `BRIEFING_MODEL` (the daily briefing in Today) and `ASK_MODEL` (⌘K’s Ask Launchpad) pick the models. The default for all of them, `claude-haiku-5-5`, costs a few cents a month for news, training, the briefing and ⌘K and at most a dollar or two for the inbox (Server › Claude usage shows the real numbers); `claude-opus-5-5` writes richer summaries at about 40 times the price.
 
 News summaries are written from headlines only, at most every 3 hours per topic and only when new headlines have appeared.
 
@@ -200,11 +200,11 @@ Until both are done the panel says which step is missing instead of showing an e
 
 ## Backups
 
-Everything is in one SQLite file inside the `launchpad-data` volume, with photos in a `photos` folder beside it. Settings → General → **Backup** has:
+Everything is in one SQLite file inside the `launchpad-data` volume, with photos in a `photos` folder beside it, images pasted into notes in `note-images` and bookmark icons in `favicons` (a cache, fetched again when missing). Settings → General → **Backup** has:
 
-- **Download backup**: one JSON file with everything you've entered (bookmarks, notes, settings, countdowns, the cigarette, mood and weight logs, the money tracker, courses and study time, workouts, exercise muscles, packages, the photo list and terminal snippets). It leaves out what sync fetches again (calendar, tasks, mail, news, weather) and the Google sign-in.
-- **With photos (.zip)**: the same backup plus every photo file, in one .zip.
-- **Restore…** takes either file (and the older bookmarks-and-notes files from **Export JSON**). Each part it holds replaces what's there; parts it doesn't hold are kept. From a .zip, photos missing here are put back. Cloudflare refuses uploads over 100 MB, so a bigger .zip has to be restored over the LAN address.
+- **Download backup**: one JSON file with everything you've entered (bookmarks, notes, settings, countdowns, the cigarette, mood and weight logs, the money tracker, courses and study time, workouts, exercise muscles, packages, the photo list, notepads' earlier versions, the news reading list with hidden headlines and muted sources, how often each bookmark's been opened, and the terminal's snippets). It leaves out what sync fetches again (calendar, tasks, mail, news, weather) and the Google sign-in.
+- **With photos (.zip)**: the same backup plus every photo file and every image the notes show, in one .zip.
+- **Restore…** takes either file (and the older bookmarks-and-notes files from **Export JSON**). Each part it holds replaces what's there; parts it doesn't hold are kept. From a .zip, photos and note images missing here are put back. Cloudflare refuses uploads over 100 MB, so a bigger .zip has to be restored over the LAN address.
 - **Database (.db)**: a consistent copy of the whole SQLite database, safe to take while Launchpad runs. It includes the Google sign-in, so keep it private. To put it back by hand, stop the container, replace `launchpad.db` in the volume (and delete any `launchpad.db-wal` and `launchpad.db-shm` beside it), then start it.
 
 **Automatic copies.** Launchpad also keeps copies of the database by itself, in a `backups` folder beside it: one a day (the last 14), one just before every restore (the last 10), and any you take with **Take a copy now** (the last 10). Settings lists them; **Put back** restores what you'd entered from one, and each can be downloaded as a `.db`.

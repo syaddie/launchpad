@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CARRIERS, detectCarrier, trackUrl } from '../../../shared/carriers';
 import { startOfDay } from '../../../shared/dates';
 import { DEFAULT_ENGINES } from '../../../shared/defaults';
+import { fmtUsd } from '../../../shared/claudeUsage';
 import type { AccentKey, AppState, Backup, BackupSnapshot, DesignKey, GoogleSource, Package, Photo, Prefs, SearchEngine, ThemeMode } from '../../../shared/types';
 import { api, BACKUP_URL, DB_BACKUP_URL, snapshotUrl, ZIP_BACKUP_URL } from '../api';
 import { PhotoSettings } from './Photos';
@@ -478,6 +479,18 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
       </div>
 
       <div className="drawer-section">
+        <div className="drawer-label">Claude budget</div>
+        <NumberField label="Budget" value={p.claudeBudget ?? 0} min={0} max={10000} decimals={2} suffix="US dollars a month" onSave={(n) => onPrefs({ ...p, claudeBudget: n })} />
+        <div className="meta">
+          {data.claudeSpend !== undefined && `About ${fmtUsd(data.claudeSpend)} so far this month. `}
+          {(p.claudeBudget ?? 0) > 0 && (data.claudeSpend ?? 0) > (p.claudeBudget ?? 0)
+            ? <b style={{ color: 'var(--wn)', fontWeight: 600 }}>That’s over the budget. </b>
+            : null}
+          Server › Claude usage has the breakdown; going over shows a warning there and on the next new tab. Leave it empty for no budget.
+        </div>
+      </div>
+
+      <div className="drawer-section">
         <div className="drawer-label">Package tracking</div>
         <div style={{ fontSize: 13, color: 'var(--t2)' }}>
           {data.tracking.allCarriers
@@ -684,6 +697,7 @@ export const PANEL_ROWS: { section: string; hint?: string; rows: { key: string; 
     section: 'Home panels',
     rows: [
       { key: 'panel:today', name: 'Today' },
+      { key: 'panel:briefing', name: 'Daily briefing', meta: 'Claude’s few lines on the day, at the top of Today' },
       { key: 'panel:tasks', name: 'Tasks' },
       { key: 'panel:notes', name: 'Notes' },
       { key: 'panel:packages', name: 'Packages' },

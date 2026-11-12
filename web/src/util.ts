@@ -1,5 +1,5 @@
 import { DOW, MON, dayDiff, pad2, parseYmd } from '../../shared/dates';
-import type { Bookmark, Package, ViewKey } from '../../shared/types';
+import type { AppState, Bookmark, Package, ViewKey } from '../../shared/types';
 
 export const hm = (d: Date) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 
@@ -46,10 +46,9 @@ export function host(url: string): string {
   }
 }
 
-const isLocal = (url: string) => /^(\d+\.){3}\d+$|\.local$|^localhost$/.test(host(url).split(':')[0]);
-
+/** The bookmark's icon, kept by the Launchpad server, so nothing is fetched from another site as tiles paint. */
 export function favicon(b: Bookmark): string {
-  return isLocal(b.url) ? '' : `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host(b.url))}&sz=64`;
+  return /^https?:\/\//i.test(b.url) ? `/api/favicon?host=${encodeURIComponent(host(b.url).toLowerCase())}` : '';
 }
 
 export const STEP_LABELS = ['Info received', 'In transit', 'Out for delivery', 'Delivered'];
@@ -140,3 +139,16 @@ export function viewFromHash(hash: string): ViewKey {
 
 /** The hash for a view: none for home, so "/" stays the plain new-tab page. */
 export const hashFor = (v: ViewKey) => (v === 'home' ? '' : '#' + v);
+
+/** A round number at or above v for a chart's top: 1, 2, 5 × 10ⁿ. */
+export function niceMax(v: number): number {
+  if (v <= 0) return 1;
+  const p = 10 ** Math.floor(Math.log10(v));
+  return ([1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((m) => m * p >= v) ?? 10) * p;
+}
+
+/** Things to do in the two-day digest whose email is still unread: the rail's badge. */
+export function inboxBadge(data: AppState): number {
+  const unread = new Set(data.inbox.emails.filter((e) => e.unread).map((e) => e.id));
+  return (data.inbox.digests['2d']?.items ?? []).filter((i) => i.kind === 'action' && i.emails.some((id) => unread.has(id))).length;
+}

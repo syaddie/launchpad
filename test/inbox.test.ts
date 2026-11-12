@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { cleanBody, parseInboxMessage, senderEmail, type StoredEmail } from '../server/src/gmail-parse';
 import { emailList, inRange, toDigest } from '../server/src/inbox';
-import { gmailUrl, inboxBadge } from '../web/src/components/Inbox';
+import { gmailUrl } from '../web/src/components/Inbox';
+import { inboxBadge } from '../web/src/util';
 import type { AppState } from '../shared/types';
 
 const mail = (p: Partial<StoredEmail>): StoredEmail => ({

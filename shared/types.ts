@@ -12,8 +12,50 @@ export interface BookmarkGroup {
   items: Bookmark[];
 }
 
+/** How often and how lately a bookmark's been opened (shared/bookmarks.ts). */
+export interface OpenCount {
+  /** Each open adds 1, and the total halves every two weeks since `last`. */
+  score: number;
+  last: string;
+  /** Opens ever. */
+  n: number;
+}
+
+/** Keyed by bookmark id. */
+export type BookmarkOpens = Record<string, OpenCount>;
+
+/** A bookmark the link check couldn't open. */
+export interface LinkProblem {
+  /** gone: not found, or the address doesn't resolve · failing: errors or doesn't answer. */
+  kind: 'gone' | 'failing';
+  /** What happened, e.g. "Not found (404)". */
+  why: string;
+  at: string;
+}
+
+/** The weekly check of every bookmark (server/src/bookmarks.ts). */
+export interface LinkCheck {
+  checkedAt: string | null;
+  running: boolean;
+  /** Keyed by the bookmark's address; ones that opened fine aren't listed. */
+  problems: Record<string, LinkProblem>;
+  /** Why the last check didn't count (the server couldn't reach anything); its results are the ones before. */
+  error?: string;
+}
+
 export interface Note {
   id: string;
+  name: string;
+  text: string;
+  /** Lower case, without "#" (shared/notes.ts); missing on notepads that never had any. */
+  tags?: string[];
+  /** Shown first among the tabs. */
+  pinned?: boolean;
+}
+
+/** An earlier version of a notepad, as it was until `at` (server/src/notes.ts keeps them). */
+export interface NoteVersion {
+  at: string;
   name: string;
   text: string;
 }
@@ -66,6 +108,8 @@ export interface Prefs {
   pinnedLifts: string[];
   /** What the gym costs a month, in dollars, for the cost of each session; 0 hides it. */
   gymMonthly: number;
+  /** A monthly budget for Claude in US dollars; going over it shows a warning. 0 means none. Missing in older saved prefs. */
+  claudeBudget?: number;
 }
 
 export interface CalendarInfo {
@@ -148,7 +192,10 @@ export interface NewsStory {
 }
 
 export interface NewsTopic {
+  /** What's followed, as in prefs.newsTopics (see shared/news.ts). */
   topic: string;
+  /** A feed's own title, once it's been fetched. */
+  title?: string;
   /** Newest first. */
   articles: NewsArticle[];
   /** Claude's digest of the headlines, or null before the first one (or without an API key). */
@@ -156,6 +203,30 @@ export interface NewsTopic {
   summarisedAt: string | null;
   fetchedAt: string | null;
   error: string | null;
+}
+
+/** A story or headline kept to read later. */
+export interface SavedStory {
+  id: string;
+  title: string;
+  url: string;
+  source: string;
+  /** What it was found under, as in prefs.newsTopics. */
+  topic: string;
+  /** Claude's summary, for a saved story; empty for a headline. */
+  summary: string;
+  savedAt: string;
+  /** Marked read: it stays a week in case you want it again. */
+  readAt: string | null;
+}
+
+/** The reading list, headlines hidden from a topic, and sources muted everywhere (shared/news.ts). */
+export interface NewsLists {
+  saved: SavedStory[];
+  /** Keyed by lower-cased topic. */
+  hidden: Record<string, { url: string; at: string }[]>;
+  /** Outlet names, as headlines give them. */
+  muted: string[];
 }
 
 /** How far back an inbox digest looks. */
@@ -492,6 +563,12 @@ export interface Learn {
   calendarId: string;
 }
 
+/** Claude's paragraph at the top of Today: the day ahead in two to four sentences. */
+export interface Briefing {
+  text: string;
+  writtenAt: string;
+}
+
 /** Claude's short note on the week ahead in Learn. */
 export interface LearnNote {
   headline: string;
@@ -648,6 +725,9 @@ export interface GoogleInfo {
 
 export interface AppState {
   bookmarks: BookmarkGroup[];
+  /** For ranking search and ⌘K results. */
+  bookmarkOpens: BookmarkOpens;
+  linkCheck: LinkCheck;
   notes: Note[];
   prefs: Prefs;
   google: GoogleInfo;
@@ -660,6 +740,7 @@ export interface AppState {
   /** Carriers that get live status (SingPost always; others with a 17TRACK key). */
   tracking: { allCarriers: boolean };
   news: NewsTopic[];
+  newsLists: NewsLists;
   /** ANTHROPIC_API_KEY is set, so news topics and the inbox get summaries and not just lists. */
   newsSummaries: boolean;
   inbox: InboxState;
@@ -683,6 +764,10 @@ export interface AppState {
   learn: Learn;
   /** null before the first note, or without an Anthropic API key. */
   learnNote: { note: LearnNote | null; error: string | null };
+  /** Claude's paragraph at the top of Today; null before the first one, or without an Anthropic API key. Missing in older cached copies. */
+  briefing?: { note: Briefing | null; error: string | null };
+  /** What Claude has cost this month so far, estimated in US dollars (Server › Claude usage). Missing in older cached copies. */
+  claudeSpend?: number;
   /** The version of each document the page saves whole; missing in copies cached by older versions. */
   versions?: Partial<Record<SavedDoc, string>>;
 }
@@ -710,6 +795,12 @@ export interface Backup {
   packages?: Package[];
   /** The photo panels' order and focus points. The files come in a .zip backup; a JSON one only re-lists photos still on the server. */
   photos?: Photo[];
+  /** The reading list, hidden headlines and muted sources. */
+  newsLists?: NewsLists;
+  /** How often each bookmark's been opened, for ranking. */
+  bookmarkOpens?: BookmarkOpens;
+  /** Earlier versions of each notepad, by its id. The images notes show come in a .zip backup. */
+  noteHistory?: Record<string, NoteVersion[]>;
   /** The terminal's saved commands. */
   snippets?: Snippet[];
 }

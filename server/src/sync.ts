@@ -5,7 +5,8 @@ import { googleConfigured } from './config';
 import { claudeEnabled } from './claude';
 import { fetchCalendar, fetchInbox, fetchTasks, GoogleError, scanGmail } from './google';
 import { inRange, summariseInbox } from './inbox';
-import { fetchHeadlines, summariseHeadlines } from './news';
+import { fetchSource, summariseHeadlines } from './news';
+import { sourceKey, visibleArticles } from '../../shared/news';
 import { asServer, store, updatePackages, type NewsCache } from './store';
 import { runSpeedTest } from './speedtest';
 import { canTrack, track, TrackingUnavailable } from './tracking';
@@ -99,11 +100,13 @@ async function runCarriers() {
 
 async function runNews(force: boolean) {
   const prev = store.news();
+  const lists = store.newsLists();
   const results = await Promise.all(
     store.prefs().newsTopics.map(async (topic) => {
-      const old = prev[topic.toLowerCase()];
+      const old = prev[sourceKey(topic)];
       const entry = {
         topic,
+        title: old?.title,
         articles: old?.articles ?? [],
         stories: claudeEnabled() ? old?.stories ?? null : null,
         summarisedAt: old?.summarisedAt ?? null,
@@ -112,14 +115,19 @@ async function runNews(force: boolean) {
         error: null as string | null,
       };
       try {
-        entry.articles = await fetchHeadlines(topic);
+        // Each followed item fails on its own: a broken feed shows its error and keeps its last headlines.
+        const got = await fetchSource(topic);
+        entry.articles = got.articles;
+        if (got.title) entry.title = got.title;
         entry.fetchedAt = new Date().toISOString();
+        // Headlines hidden from the topic, or from a muted source, aren't summarised.
+        const shown = visibleArticles(topic, entry.articles, lists);
         const known = new Set(entry.summarisedUrls);
-        const fresh = entry.articles.some((a) => !known.has(a.url));
+        const fresh = shown.some((a) => !known.has(a.url));
         const due = force || !entry.summarisedAt || Date.now() - Date.parse(entry.summarisedAt) > RESUMMARISE_AFTER;
-        if (claudeEnabled() && entry.articles.length && (!entry.stories || (fresh && due))) {
-          entry.stories = await summariseHeadlines(topic, entry.articles);
-          entry.summarisedUrls = entry.articles.map((a) => a.url);
+        if (claudeEnabled() && shown.length && (!entry.stories || (fresh && due))) {
+          entry.stories = await summariseHeadlines(topic, shown, entry.title);
+          entry.summarisedUrls = shown.map((a) => a.url);
           entry.summarisedAt = new Date().toISOString();
         }
       } catch (e) {
@@ -130,7 +138,7 @@ async function runNews(force: boolean) {
   );
   // A topic removed meanwhile is hidden by state(); one added meanwhile is fetched by refreshNews().
   const next: NewsCache = {};
-  for (const r of results) next[r.topic.toLowerCase()] = r;
+  for (const r of results) next[sourceKey(r.topic)] = r;
   store.setNews(next);
   const failed = results.filter((r) => r.error);
   if (failed.length && failed.length === results.length) throw new Error(`${failed[0].topic}: ${failed[0].error}`);

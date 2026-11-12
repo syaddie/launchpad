@@ -1,11 +1,20 @@
-import type { AppState, Backup, BackupSnapshot, Countdown, DirListing, DisksReport, LogLine, Mood, Package, Photo, Prefs, SavedDoc, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
+import type { AppState, Backup, BackupSnapshot, Countdown, DirListing, DisksReport, LinkCheck, LogLine, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
+import type { AskResult } from '../../shared/ask';
+import type { UsageReport } from '../../shared/claudeUsage';
+import { kvGet, kvSet } from './idb';
 
+/** Where the state was kept before it moved to IndexedDB; still used where IndexedDB isn't available. */
 const STATE_KEY = 'launchpad:state';
+/** Theme, accent and layout: tiny, and read by index.html before first paint so the colours never flash. */
 const PREFS_KEY = 'launchpad:prefs';
 const SERVER_KEY = 'launchpad:server';
 
-// localStorage mirrors: paint instantly from cache, then refresh from the server.
-export function cachedState(): AppState | null {
+// The page paints at once from its own copy of the state, kept in IndexedDB, then refreshes from the server.
+
+/** IndexedDB works here; when it doesn't (blocked, or a very old browser), the copy stays in localStorage. */
+let idbOk = true;
+
+function readLocal(): AppState | null {
   try {
     const raw = localStorage.getItem(STATE_KEY);
     return raw ? (JSON.parse(raw) as AppState) : null;
@@ -14,13 +23,70 @@ export function cachedState(): AppState | null {
   }
 }
 
-export function cacheState(s: AppState): void {
+/** The page's copy of the state, read once before the first paint. Waits at most a second. */
+export async function loadCachedState(): Promise<AppState | null> {
+  const read = (async () => {
+    try {
+      const s = await kvGet<AppState>('state');
+      if (s) {
+        // A copy from before the move that's still there: IndexedDB has one now.
+        if (localStorage.getItem(STATE_KEY) !== null) localStorage.removeItem(STATE_KEY);
+        return s;
+      }
+    } catch {
+      idbOk = false;
+      return readLocal();
+    }
+    // The first run since the move: copy the localStorage copy across, and only remove it once that's stored.
+    const old = readLocal();
+    if (old) {
+      kvSet('state', old)
+        .then(() => localStorage.removeItem(STATE_KEY))
+        .catch(() => {});
+    }
+    return old;
+  })().catch(() => null);
+  return Promise.race([read, new Promise<null>((r) => setTimeout(() => r(null), 1000))]);
+}
+
+let pending: AppState | null = null;
+let pendingTimer = 0;
+
+/** Write the latest copy now (the page is being hidden or closed). */
+function flushState(): void {
+  clearTimeout(pendingTimer);
+  const s = pending;
+  pending = null;
+  if (!s) return;
+  if (!idbOk) return writeLocal(s);
+  kvSet('state', s).catch(() => {
+    // Storage full or blocked: the page still works, it just paints from the network.
+  });
+}
+
+function writeLocal(s: AppState): void {
   try {
     localStorage.setItem(STATE_KEY, JSON.stringify(s));
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: s.prefs.theme, accent: s.prefs.accent, design: s.prefs.design }));
   } catch {
     // Storage full or blocked: the page still works, it just paints from the network.
   }
+}
+
+/** Keep a copy of the state. Typing changes it on every key, so the write waits for a pause. */
+export function cacheState(s: AppState): void {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: s.prefs.theme, accent: s.prefs.accent, design: s.prefs.design }));
+  } catch {
+    // ignore
+  }
+  pending = s;
+  clearTimeout(pendingTimer);
+  pendingTimer = window.setTimeout(flushState, 300);
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', flushState);
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && flushState());
 }
 
 /** The Server view's last reading, so it opens on that instead of a blank page. */
@@ -106,6 +172,8 @@ async function req<T>(method: string, url: string, body?: unknown, keepalive = f
 
 export const api = {
   state: () => req<AppState>('GET', '/api/state'),
+  /** Just the parts of the state these store keys (from the change stream) feed. */
+  stateFor: (keys: string[]) => req<Partial<AppState>>('GET', `/api/state?keys=${keys.map(encodeURIComponent).join(',')}`),
   /** Save a whole document. With `base`, the server refuses it (ConflictError) if someone else saved since that version. */
   putDoc: <K extends SavedDoc>(key: K, v: AppState[K], base?: string, keepalive?: boolean) =>
     req<{ ok: true; version: string }>('PUT', `/api/${key}`, v, keepalive, base === undefined ? undefined : { 'X-Base-Version': base }),
@@ -120,15 +188,35 @@ export const api = {
   sync: (source: SourceKey, ifOlderThanSec = 0) =>
     req<AppState>('POST', `/api/sync/${source}${ifOlderThanSec ? `?ifOlderThan=${ifOlderThanSec}` : ''}`, {}),
   disconnectGoogle: () => req<AppState>('POST', '/api/auth/google/disconnect', {}),
+  /** An image pasted or dropped into a note; shown with imageMarkdown(id) (shared/notes.ts). */
+  uploadNoteImage: (image: Blob) => req<{ id: string }>('POST', '/api/note-images', image),
+  /** A notepad's earlier versions, newest first. */
+  noteHistory: (id: string) => req<NoteVersion[]>('GET', `/api/notes/${encodeURIComponent(id)}/history`),
+  /** Keep the notepad's saved text among its versions now, before an older one replaces it. */
+  keepNoteVersion: (id: string) => req<NoteVersion[]>('POST', `/api/notes/${encodeURIComponent(id)}/history`, {}),
+  /** Start checking every bookmark for ones that no longer open; the result comes through the change stream. */
+  checkLinks: () => req<LinkCheck>('POST', '/api/bookmarks/check', {}),
+  /** Try a feed before following it; refused with the reason when it doesn't work. */
+  checkNewsSource: (source: string) => req<{ source: string; title: string; count: number }>('POST', '/api/news/check', { source }),
+  saveStory: (s: Pick<SavedStory, 'title' | 'url' | 'source' | 'topic' | 'summary'>) => req<NewsLists>('POST', '/api/news/saved', s),
+  markStoryRead: (id: string, read: boolean) => req<NewsLists>('PATCH', `/api/news/saved/${encodeURIComponent(id)}`, { read }),
+  removeStory: (id: string) => req<NewsLists>('DELETE', `/api/news/saved/${encodeURIComponent(id)}`),
+  hideNews: (topic: string, urls: string[], hide: boolean) => req<NewsLists>('POST', '/api/news/hidden', { topic, urls, hide }),
+  muteSource: (source: string, muted: boolean) => req<NewsLists>('POST', '/api/news/muted', { source, muted }),
   addPhoto: (image: Blob) => req<Photo>('POST', '/api/photos', image),
   putPhotos: (v: Photo[]) => req('PUT', '/api/photos', v),
   deletePhoto: (id: string) => req('DELETE', `/api/photos/${encodeURIComponent(id)}`),
   putCountdowns: (v: Countdown[]) => req<Countdown[]>('PUT', '/api/countdowns', v),
-  addSmoke: () => req<string[]>('POST', '/api/smokes', {}),
+  /** `at` for one logged earlier (a queued one); otherwise the server's time. */
+  addSmoke: (at?: string) => req<string[]>('POST', '/api/smokes', at ? { at } : {}),
   removeSmoke: (at?: string) => req<string[]>('DELETE', `/api/smokes${at ? `?at=${encodeURIComponent(at)}` : ''}`),
   putTraining: (v: Training) => req<Training>('PUT', '/api/training', v),
   refreshTraining: (force: boolean) => req<AppState>('POST', `/api/training/refresh${force ? '?force=1' : ''}`, {}),
   refreshLearn: (force: boolean) => req<AppState>('POST', `/api/learn/refresh${force ? '?force=1' : ''}`, {}),
+  refreshBriefing: (force: boolean) => req<Partial<AppState>>('POST', `/api/briefing/refresh${force ? '?force=1' : ''}`, {}),
+  /** ⌘K's Ask Launchpad: what's typed → one checked action, not yet done. */
+  ask: (text: string) => req<AskResult>('POST', '/api/ask', { text }),
+  claudeUsage: () => req<UsageReport>('GET', '/api/claude/usage'),
   putWeight: (date: string, kg: number | null) => req<Record<string, number>>('PUT', `/api/weights/${date}`, { kg }),
   putMood: (date: string, mood: Mood | { level: 0 }) => req<Record<string, Mood>>('PUT', `/api/moods/${date}`, mood),
   server: (iface?: string) => req<ServerStats>('GET', `/api/server${iface ? `?iface=${encodeURIComponent(iface)}` : ''}`),
@@ -155,6 +243,11 @@ export const api = {
   editSnippet: (s: Snippet) => req<Snippet[]>('PUT', `/api/shell/snippets/${encodeURIComponent(s.id)}`, { name: s.name, command: s.command }),
   deleteSnippet: (id: string) => req<Snippet[]>('DELETE', `/api/shell/snippets/${encodeURIComponent(id)}`),
 };
+
+/** Count an open of a bookmark (a tile, a search result, ⌘K, 1–9), for ranking results. Nothing waits on it. */
+export function bookmarkOpened(id: string): void {
+  req('POST', `/api/bookmarks/${encodeURIComponent(id)}/opened`, {}, true).catch(() => {});
+}
 
 /** Everything you've entered, as JSON. */
 export const BACKUP_URL = '/api/backup';

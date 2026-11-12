@@ -112,6 +112,7 @@ export async function summariseInbox(range: InboxRange, emails: StoredEmail[], n
   const cal = eventList(events, range);
   const raw = await askJson<RawDigest>({
     model: config.inboxModel,
+    feature: 'inbox',
     system: system(range, name, aboutMe),
     user:
       `Now: ${stamp(new Date().toISOString())}\n\n` +

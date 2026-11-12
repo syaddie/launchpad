@@ -448,12 +448,3 @@ function MoodPanel({ moods, now, onMood }: { moods: Record<string, Mood>; now: D
     </section>
   );
 }
-
-/** Nearest upcoming countdown for the line under the greeting: "Japan in 23 days". */
-export function nearestCountdown(list: Countdown[], now: Date): string {
-  const today = startOfDay(now);
-  const next = sortCountdowns(list, today)[0];
-  if (!next) return '';
-  const { days } = countdownNext(next, today);
-  return days >= 0 ? `${next.title} ${countdownPhrase(days)}` : '';
-}

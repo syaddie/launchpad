@@ -54,6 +54,7 @@ export async function labelExercises(training: Training): Promise<Record<string,
     const batch = todo.slice(i, i + MUSCLE_BATCH);
     const res = await askJson<{ exercises: unknown[] }>({
       model: config.trainingModel,
+      feature: 'training',
       system: MUSCLE_SYSTEM,
       user: batch.join('\n'),
       schema: MUSCLE_SCHEMA,
@@ -154,6 +155,7 @@ export function refreshTraining(force = false): Promise<void> {
       if (!force && state.note?.latest === latest && !state.error) return;
       const res = await askJson<{ headline: string; points: string[] }>({
         model: config.trainingModel,
+        feature: 'training',
         system: NOTE_SYSTEM,
         user: noteInput(training, muscles, store.prefs().setsPerWeek, new Date(), store.weights()),
         schema: NOTE_SCHEMA,

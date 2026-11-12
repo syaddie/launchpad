@@ -3,12 +3,18 @@ import { createRoot } from 'react-dom/client';
 import '@phosphor-icons/web/duotone/style.css';
 import './styles.css';
 import './designs.css';
+import { loadCachedState } from './api';
 import { App } from './App';
+import { loadOutbox } from './outbox';
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
+// The copy kept in the browser comes first, so a new tab paints with your data at once,
+// along with any edits still waiting to be saved.
+Promise.all([loadCachedState(), loadOutbox()]).then(([cached]) =>
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <App cached={cached} />
+    </StrictMode>,
+  ),
 );
 
 // Installable on a phone's home screen, and opens even when the server can't be reached (see public/sw.js).

@@ -3,7 +3,8 @@ import { DOW, MON } from '../../../shared/dates';
 import { fmtDuration } from '../../../shared/trackers';
 import type { AppState, ServerStats, ShellInfo, SourceKey, SpeedTest } from '../../../shared/types';
 import { api, cachedServer, cacheServer, localGet, localSet } from '../api';
-import { ago, fmtBytes, hm } from '../util';
+import { ago, fmtBytes, hm, niceMax } from '../util';
+import { ClaudeUsagePanel } from './ClaudeUsage';
 import { ContainerRow, LogsDrawer } from './Containers';
 import { authorizeLine, Copyable } from './Copyable';
 import { DisksPanel } from './Disks';
@@ -269,6 +270,7 @@ function Overview({ data, now, onOpenSettings }: { data: AppState; now: Date; on
       <div className="server-row">
         <DisksPanel now={now} />
       </div>
+      <div className="server-row"><ClaudeUsagePanel data={data} onOpenSettings={onOpenSettings} /></div>
     </>
   );
 }
@@ -387,13 +389,6 @@ function StoragePanel({ s }: { s: ServerStats }) {
 }
 
 // ---------- network ----------
-
-/** A round number at or above v for a chart's top: 1, 2, 5 × 10ⁿ. */
-export function niceMax(v: number): number {
-  if (v <= 0) return 1;
-  const p = 10 ** Math.floor(Math.log10(v));
-  return ([1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((m) => m * p >= v) ?? 10) * p;
-}
 
 function rate(bps: number): { v: number; unit: string } {
   if (bps >= 1e6) return { v: bps / 1e6, unit: 'MB/s' };
