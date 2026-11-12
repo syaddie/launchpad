@@ -8,6 +8,7 @@ import { ClaudeUsagePanel } from './ClaudeUsage';
 import { ContainerRow, LogsDrawer } from './Containers';
 import { authorizeLine, Copyable } from './Copyable';
 import { DisksPanel } from './Disks';
+import { ErrorBoundary } from './ErrorBoundary';
 import { FilesPanel } from './Files';
 
 const POLL = 5_000;
@@ -101,6 +102,7 @@ export function Server({ data, now, openTab, onOpenSettings, split }: {
       {tab === 'overview' && <Overview data={data} now={now} onOpenSettings={onOpenSettings} />}
       {needsShell && !ready && <ShellSetup info={info} error={infoError} onRetry={loadInfo} onTrusted={setInfo} />}
       {ready && opened.has('terminal') && (
+        <ErrorBoundary label="The terminal">
         <Suspense
           fallback={
             (tab === 'terminal' || both) && (
@@ -114,6 +116,7 @@ export function Server({ data, now, openTab, onOpenSettings, split }: {
         >
           <TerminalPanel target={info.target!} publicKey={info.publicKey} hidden={!both && tab !== 'terminal'} cd={cd} onFailed={loadInfo} />
         </Suspense>
+        </ErrorBoundary>
       )}
       {ready && opened.has('files') && (
         <FilesPanel
