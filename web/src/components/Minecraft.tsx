@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { McMux, McServer, McStatus } from '../../../shared/types';
+import type { McDiagnosis, McMux, McServer, McStatus } from '../../../shared/types';
 import { api, localGet, localSet } from '../api';
 import { MC_COMMANDS, fillFor } from '../mcCommands';
 
@@ -9,6 +9,20 @@ const LIST_EVERY = 10_000;
 const MAX_LINES = 3000;
 const HISTORY = 50;
 const QUICK = ['list', 'save-all', 'time set day', 'weather clear'];
+/** After Start: how often to look for the server, how long to wait for it, and how long it must stay up. */
+const START_EVERY = 3_000;
+const START_WAIT = 60_000;
+const STAY_UP = 6_000;
+const FINDING_ICON = { error: 'ph-x-circle', warn: 'ph-warning', info: 'ph-info' } as const;
+
+const sleep = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms));
+
+/** A diagnosis as plain text, to paste into a message or an issue. */
+export function report(s: Pick<McStatus, 'name' | 'dir' | 'mux' | 'session' | 'start'>, d: McDiagnosis): string {
+  const head = [`${s.name} (${d.running ? 'running' : 'stopped'}) at ${new Date(d.at).toISOString()}`, `Folder: ${s.dir}`, `Runs in: ${s.mux} ${s.session}`, `Start: ${s.start || '(none)'}`];
+  const found = d.findings.map((f) => `- [${f.level}] ${f.text}${f.detail ? `\n    ${f.detail}` : ''}`);
+  return [...head, '', 'Findings:', ...found, '', `--- ${s.mux} session ---`, d.pane || '(nothing)', '', '--- logs/latest.log (end) ---', d.log || '(nothing)'].join('\n');
+}
 
 /** A log line's level, for its colour: [12:34:56] [Server thread/WARN]: … */
 export function lineLevel(line: string): 'warn' | 'error' | 'chat' | '' {
@@ -144,6 +158,16 @@ function Console({ s, onChanged, onEdit }: { s: McStatus; onChanged: () => void;
   const [note, setNote] = useState<{ text: string; failed: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [sheet, setSheet] = useState(() => localGet('mcSheet') === '1');
+  const [starting, setStarting] = useState(false);
+  const [diag, setDiag] = useState<{ busy: boolean; data: McDiagnosis | null; error: string } | null>(null);
+  // False once this console is gone, so a Start that's still waiting stops quietly.
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   const offset = useRef<number | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
@@ -198,17 +222,74 @@ function Console({ s, onChanged, onEdit }: { s: McStatus; onChanged: () => void;
       });
   };
 
+  /** Check the server over SSH: its folder, start script, Java, EULA and port, and what its terminal and log said last. */
+  const diagnose = () => {
+    setDiag({ busy: true, data: null, error: '' });
+    return api
+      .mcDiagnose(s.id)
+      .then((data) => alive.current && setDiag({ busy: false, data, error: '' }))
+      .catch((e: Error) => alive.current && setDiag({ busy: false, data: null, error: e.message }));
+  };
+
+  /** After the start command is typed: wait for the server's process, then make sure it stays up. Any failure runs Diagnose. */
+  const watchStart = async () => {
+    const began = Date.now();
+    let lastError = '';
+    while (alive.current && Date.now() - began < START_WAIT) {
+      await sleep(START_EVERY);
+      if (!alive.current) return;
+      try {
+        const now = (await api.minecraft(true)).find((x) => x.id === s.id);
+        lastError = '';
+        if (now?.running) {
+          setNote({ text: `${s.name} is up. Making sure it stays up…`, failed: false });
+          await sleep(STAY_UP);
+          if (!alive.current) return;
+          const still = (await api.minecraft(true)).find((x) => x.id === s.id)?.running;
+          onChanged();
+          if (still) return setNote({ text: `${s.name} is running.`, failed: false });
+          setNote({ text: `${s.name} started, then stopped again within ${STAY_UP / 1000} seconds.`, failed: true });
+          return void diagnose();
+        }
+      } catch (e) {
+        lastError = (e as Error).message;
+      }
+      setNote({ text: `Starting ${s.name}… waiting for it to come up (${Math.round((Date.now() - began) / 1000)}s)`, failed: false });
+    }
+    if (!alive.current) return;
+    setNote({ text: `${s.name} didn’t come up within ${START_WAIT / 1000} seconds.${lastError ? ` The last check failed: ${lastError}` : ''}`, failed: true });
+    onChanged();
+    void diagnose();
+  };
+
   const start = () => {
     setBusy(true);
+    setStarting(true);
+    setDiag(null);
     api
       .mcStart(s.id)
       .then(() => {
-        setNote({ text: `Starting ${s.name}…`, failed: false });
+        setNote({ text: `Typed the start command into ${s.mux} session ${s.session}. Waiting for ${s.name} to come up…`, failed: false });
         atBottom.current = true;
-        window.setTimeout(onChanged, 3000);
+        return watchStart();
       })
-      .catch((e: Error) => setNote({ text: e.message, failed: true }))
-      .finally(() => setBusy(false));
+      .catch((e: Error) => {
+        setNote({ text: e.message, failed: true });
+        void diagnose();
+      })
+      .finally(() => {
+        if (!alive.current) return;
+        setBusy(false);
+        setStarting(false);
+      });
+  };
+
+  const copyReport = () => {
+    if (!diag?.data) return;
+    navigator.clipboard
+      ?.writeText(report(s, diag.data))
+      .then(() => setNote({ text: 'Report copied.', failed: false }))
+      .catch(() => setNote({ text: 'Couldn’t copy. Select the text in the panel instead.', failed: true }));
   };
 
   const stop = () => {
@@ -254,7 +335,7 @@ function Console({ s, onChanged, onEdit }: { s: McStatus; onChanged: () => void;
         </div>
         <div className="mc-tools">
           {!s.running && s.saved && s.start && (
-            <button className="btn btn-primary btn-small" disabled={busy} onClick={start}>
+            <button className="btn btn-primary btn-small" disabled={busy || starting} onClick={start}>
               <i className="ph-duotone ph-play" />
               Start
             </button>
@@ -265,6 +346,10 @@ function Console({ s, onChanged, onEdit }: { s: McStatus; onChanged: () => void;
               Stop
             </button>
           )}
+          <button className="btn btn-secondary btn-small" disabled={diag?.busy || starting} onClick={() => void diagnose()} title="Check why it won’t start, or what it last said">
+            <i className={'ph-duotone ' + (diag?.busy ? 'ph-circle-notch spin' : 'ph-stethoscope')} />
+            Diagnose
+          </button>
           <button className="btn btn-secondary btn-small" onClick={toggleSheet} aria-expanded={sheet} aria-controls="mc-sheet">
             <i className="ph-duotone ph-list-magnifying-glass" />
             Commands
@@ -282,6 +367,53 @@ function Console({ s, onChanged, onEdit }: { s: McStatus; onChanged: () => void;
       {note && (
         <div className="status-line" style={{ margin: 0, color: note.failed ? 'var(--wn)' : 'var(--t2)' }} role="status">
           {note.text}
+        </div>
+      )}
+      {diag && (
+        <div className="mc-diag" role="region" aria-label="Diagnosis">
+          <div className="mc-diag-head">
+            <span className="drawer-label">Diagnosis</span>
+            <span style={{ display: 'inline-flex', gap: 2 }}>
+              {diag.data && (
+                <button className="icon-btn" title="Copy report" aria-label="Copy report" onClick={copyReport}>
+                  <i className="ph-duotone ph-copy" />
+                </button>
+              )}
+              <button className="icon-btn" title="Check again" aria-label="Check again" disabled={diag.busy} onClick={() => void diagnose()}>
+                <i className="ph-duotone ph-arrow-clockwise" />
+              </button>
+              <button className="icon-btn" title="Close" aria-label="Close diagnosis" onClick={() => setDiag(null)}>
+                <i className="ph-duotone ph-x" />
+              </button>
+            </span>
+          </div>
+          {diag.busy && <p className="meta">Checking {s.name}…</p>}
+          {diag.error && (
+            <div className="status-line" style={{ margin: 0, color: 'var(--wn)' }}>
+              Couldn’t check: {diag.error}
+            </div>
+          )}
+          {diag.data?.findings.map((f, i) => (
+            <div key={i} className={'mc-finding ' + f.level}>
+              <i className={'ph-duotone ' + FINDING_ICON[f.level]} aria-hidden />
+              <div>
+                <span>{f.text}</span>
+                {f.detail && <code className="mono meta mc-detail">{f.detail}</code>}
+              </div>
+            </div>
+          ))}
+          {diag.data && (
+            <>
+              <details>
+                <summary className="meta">What the {s.mux} session printed</summary>
+                <pre className="mono mc-pre">{diag.data.pane || '(nothing)'}</pre>
+              </details>
+              <details>
+                <summary className="meta">End of logs/latest.log</summary>
+                <pre className="mono mc-pre">{diag.data.log || '(nothing)'}</pre>
+              </details>
+            </>
+          )}
         </div>
       )}
       <div

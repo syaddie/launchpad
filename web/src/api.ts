@@ -1,4 +1,4 @@
-import type { DownloadJob, DownloadsInfo, McLog, McServer, McStatus, TorrentsInfo } from '../../shared/types';
+import type { DownloadJob, DownloadsInfo, McDiagnosis, McLog, McServer, McStatus, TorrentsInfo } from '../../shared/types';
 import type { AppState, Backup, BackupSnapshot, CalEvent, Countdown, Craving, DirListing, DisksReport, LinkCheck, LogLine, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
 import type { AskResult } from '../../shared/ask';
 import type { UsageReport } from '../../shared/claudeUsage';
@@ -144,7 +144,7 @@ export class ConflictError extends Error {
   }
 }
 
-async function req<T>(method: string, url: string, body?: unknown, keepalive = false, extra?: Record<string, string>): Promise<T> {
+async function req<T>(method: string, url: string, body?: unknown, keepalive = false, extra?: Record<string, string>, timeoutMs?: number): Promise<T> {
   const raw = body instanceof Blob;
   let res: Response;
   try {
@@ -153,8 +153,11 @@ async function req<T>(method: string, url: string, body?: unknown, keepalive = f
       headers: { 'X-Launchpad-Tab': TAB_ID, ...(body === undefined ? {} : { 'Content-Type': raw ? body.type || 'application/octet-stream' : 'application/json' }), ...extra },
       body: body === undefined ? undefined : raw ? body : JSON.stringify(body),
       keepalive,
+      signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
     });
-  } catch {
+  } catch (e) {
+    // Reached it, but it never answered: a stuck request, not a server that's down.
+    if (timeoutMs && e instanceof DOMException && e.name === 'TimeoutError') throw new Error(`Launchpad didn’t answer within ${Math.round(timeoutMs / 1000)} seconds.`);
     throw new ServerError('unreachable', 'Can’t reach the Launchpad server.');
   }
   if (res.status === 403) throw new ServerError('access', 'Not signed in through Cloudflare Access.', 403);
@@ -258,13 +261,15 @@ export const api = {
   editSnippet: (s: Snippet) => req<Snippet[]>('PUT', `/api/shell/snippets/${encodeURIComponent(s.id)}`, { name: s.name, command: s.command }),
   deleteSnippet: (id: string) => req<Snippet[]>('DELETE', `/api/shell/snippets/${encodeURIComponent(id)}`),
   /** Saved Minecraft servers and any others running; `fresh` looks again rather than using the last few seconds' look. */
-  minecraft: (fresh = false) => req<McStatus[]>('GET', `/api/minecraft${fresh ? '?fresh=1' : ''}`),
+  minecraft: (fresh = false) => req<McStatus[]>('GET', `/api/minecraft${fresh ? '?fresh=1' : ''}`, undefined, false, undefined, 30_000),
   addMcServer: (s: Omit<McServer, 'id'>) => req<McStatus[]>('POST', '/api/minecraft/servers', s),
   editMcServer: (s: McServer) => req<McStatus[]>('PUT', `/api/minecraft/servers/${encodeURIComponent(s.id)}`, s),
   deleteMcServer: (id: string) => req<McStatus[]>('DELETE', `/api/minecraft/servers/${encodeURIComponent(id)}`),
-  mcLog: (id: string, offset: number | null) => req<McLog>('GET', `/api/minecraft/${encodeURIComponent(id)}/log${offset === null ? '' : `?offset=${offset}`}`),
-  mcCommand: (id: string, command: string) => req('POST', `/api/minecraft/${encodeURIComponent(id)}/command`, { command }),
-  mcStart: (id: string) => req('POST', `/api/minecraft/${encodeURIComponent(id)}/start`, {}),
+  // The server gives SSH 15-20 seconds, so these wait a little longer than that before giving up.
+  mcLog: (id: string, offset: number | null) => req<McLog>('GET', `/api/minecraft/${encodeURIComponent(id)}/log${offset === null ? '' : `?offset=${offset}`}`, undefined, false, undefined, 25_000),
+  mcCommand: (id: string, command: string) => req('POST', `/api/minecraft/${encodeURIComponent(id)}/command`, { command }, false, undefined, 30_000),
+  mcStart: (id: string) => req('POST', `/api/minecraft/${encodeURIComponent(id)}/start`, {}, false, undefined, 30_000),
+  mcDiagnose: (id: string) => req<McDiagnosis>('GET', `/api/minecraft/${encodeURIComponent(id)}/diagnose`, undefined, false, undefined, 40_000),
   downloads: () => req<DownloadsInfo>('GET', '/api/downloads'),
   startDownload: (url: string, dir: string) => req<DownloadJob>('POST', '/api/downloads', { url, dir }),
   cancelDownload: (id: string) => req<DownloadJob>('POST', `/api/downloads/${encodeURIComponent(id)}/cancel`, {}),

@@ -28,7 +28,7 @@ import { MAX_PHOTOS, MAX_PHOTO_BYTES, readPhoto, removePhotoFile, sniffImage, wr
 import { isRunning, newPackage, refreshPackage, refreshSummaries, refreshWeather, runAllGoogle, runIfStale, runSource, signOutGoogle, startScheduler } from './sync';
 import { attachTerminal, FileError, listDir, makeDir, MAX_TEXT, readFileStream, readText, remove, rename, shellInfo, trustHostKey, abandonUpload, uploadPiece, UPLOAD_CHUNK, writeText } from './shell';
 import { serverStats, startSampler } from './system';
-import { cleanMcServer, MAX_MC, mcStatuses, readLog, sendCommand, startServer } from './minecraft';
+import { cleanMcServer, diagnose, MAX_MC, mcStatuses, readLog, sendCommand, startServer } from './minecraft';
 import { cancelDownload, clearDownloads, listDownloads, startDownload } from './downloads';
 import { addTorrentFile, addTorrentLinks, MAX_TORRENT_FILE, QbitError, torrentAction, torrents } from './qbit';
 import { containerLogs, DockerError, restartContainer } from './docker';
@@ -775,6 +775,9 @@ app.post('/api/minecraft/:id/command', async (c) => {
   await sendCommand(c.req.param('id'), body?.command);
   return c.json({ ok: true });
 });
+
+/** Why a server won't start: its folder, start script, Java, EULA and port, and what its terminal and log last said. */
+app.get('/api/minecraft/:id/diagnose', async (c) => c.json(await diagnose(c.req.param('id'))));
 
 app.post('/api/minecraft/:id/start', async (c) => {
   await startServer(c.req.param('id'));
