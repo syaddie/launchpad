@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { McMux, McServer, McStatus } from '../../../shared/types';
 import { api, localGet, localSet } from '../api';
+import { MC_COMMANDS, fillFor } from '../mcCommands';
 
 const LOG_EVERY = 1500;
 const LIST_EVERY = 10_000;
@@ -142,6 +143,7 @@ function Console({ s, onChanged, onEdit }: { s: McStatus; onChanged: () => void;
   const [cmd, setCmd] = useState('');
   const [note, setNote] = useState<{ text: string; failed: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [sheet, setSheet] = useState(() => localGet('mcSheet') === '1');
   const offset = useRef<number | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
@@ -215,6 +217,20 @@ function Console({ s, onChanged, onEdit }: { s: McStatus; onChanged: () => void;
     window.setTimeout(onChanged, 8000);
   };
 
+  const toggleSheet = () => {
+    setSheet((on) => {
+      localSet('mcSheet', on ? '0' : '1');
+      return !on;
+    });
+  };
+
+  /** Put a command in the box to finish and send; it never sends on its own. */
+  const fill = (usage: string) => {
+    setCmd(fillFor(usage));
+    histAt.current = -1;
+    input.current?.focus();
+  };
+
   const keys = (e: React.KeyboardEvent<HTMLInputElement>) => {
     const h = history.current;
     if (e.key === 'ArrowUp' && h.length) {
@@ -249,6 +265,10 @@ function Console({ s, onChanged, onEdit }: { s: McStatus; onChanged: () => void;
               Stop
             </button>
           )}
+          <button className="btn btn-secondary btn-small" onClick={toggleSheet} aria-expanded={sheet} aria-controls="mc-sheet">
+            <i className="ph-duotone ph-list-magnifying-glass" />
+            Commands
+          </button>
           <button className="btn btn-secondary btn-small" onClick={onEdit}>
             <i className={'ph-duotone ' + (s.saved ? 'ph-pencil-simple' : 'ph-floppy-disk')} />
             {s.saved ? 'Edit' : 'Save'}
@@ -289,6 +309,24 @@ function Console({ s, onChanged, onEdit }: { s: McStatus; onChanged: () => void;
         )}
       </div>
       {logError && lines && <span className="meta" style={{ color: 'var(--wn)' }}>Couldn’t refresh the log: {logError}</span>}
+      {sheet && (
+        <div id="mc-sheet" className="mc-sheet" role="region" aria-label="Command cheatsheet">
+          <p className="meta mc-sheet-hint">
+            {canType ? 'Click a command to put it in the box. Fill in the <parts>, then Send.' : 'Commands can only be sent while the server is running in tmux or screen.'}
+          </p>
+          {MC_COMMANDS.map((g) => (
+            <div key={g.title} className="mc-sheet-group">
+              <span className="drawer-label">{g.title}</span>
+              {g.commands.map((c) => (
+                <button key={c.usage} className="mc-sheet-row" disabled={!canType} onClick={() => fill(c.usage)} title={`Put "${fillFor(c.usage).trim()}" in the command box`}>
+                  <span className="mono mc-sheet-cmd">{c.usage}</span>
+                  <span className="meta">{c.desc}</span>
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
       <div className="mc-quick">
         {QUICK.map((q) => (
           <button key={q} className="chip chip-neutral mono mc-chip" disabled={!canType || busy} onClick={() => send(q)}>

@@ -1824,6 +1824,17 @@ button.m-stat { cursor: default; }
 .mc-line.warn { color: var(--wn); }
 .mc-line.error { color: var(--wn); font-weight: 600; }
 .mc-line.chat { color: var(--acd); }
+.mc-sheet { flex: 0 0 auto; max-height: 240px; overflow: auto; display: flex; flex-direction: column; gap: 10px; padding: 10px 12px; border: 1px solid var(--ln); border-radius: 6px; }
+[data-layout='narrow'] .mc-sheet { max-height: 40vh; }
+.mc-sheet-hint { margin: 0; text-wrap: pretty; }
+.mc-sheet-group { display: flex; flex-direction: column; gap: 2px; }
+.mc-sheet-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 4px 8px; border: none; border-radius: 4px; background: none; color: var(--tx); font: inherit; text-align: left; cursor: pointer; }
+.mc-sheet-row:hover:not(:disabled) { background: var(--hv); }
+.mc-sheet-row:disabled { cursor: default; opacity: 0.6; }
+.mc-sheet-cmd { font-size: 12px; overflow-wrap: anywhere; }
+.mc-sheet-row .meta { text-align: right; flex: none; }
+[data-layout='narrow'] .mc-sheet-row { flex-direction: column; gap: 0; }
+[data-layout='narrow'] .mc-sheet-row .meta { text-align: left; }
 .mc-quick { display: flex; flex-wrap: wrap; gap: 6px; }
 .mc-chip { border: none; cursor: pointer; font-size: 11px; }
 .mc-chip:hover:not(:disabled) { color: var(--tx); }
