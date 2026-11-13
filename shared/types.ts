@@ -783,6 +783,107 @@ export interface Snippet {
   command: string;
 }
 
+// ---------- Minecraft ----------
+
+/** How a Minecraft server's console is reached: the tmux or screen session it runs in. */
+export type McMux = 'tmux' | 'screen';
+
+/** A Minecraft server saved in Launchpad, so it's listed (and can be started) while it's stopped. */
+export interface McServer {
+  id: string;
+  name: string;
+  /** The server's folder, with server.properties and logs/latest.log in it. */
+  dir: string;
+  mux: McMux;
+  /** The tmux or screen session's name. */
+  session: string;
+  /** What to type in the session to start it, e.g. ./start.sh. Empty: no Start button. */
+  start: string;
+}
+
+export interface McStatus extends McServer {
+  /** Saved in Launchpad; otherwise only found running. */
+  saved: boolean;
+  running: boolean;
+  pid: number | null;
+  /** It runs inside tmux or screen, so commands can be typed into it. */
+  attached: boolean;
+}
+
+/** New lines of a server's logs/latest.log since `offset`. */
+export interface McLog {
+  text: string;
+  /** Where the next read starts. */
+  offset: number;
+  /** The log started over (a restart) or this is the first read: replace what's shown. */
+  reset: boolean;
+  /** There's no logs/latest.log in the folder. */
+  missing: boolean;
+}
+
+// ---------- downloads and torrents ----------
+
+export interface DownloadJob {
+  id: string;
+  url: string;
+  /** The file's name in `dir`; known once the site answers. */
+  name: string;
+  dir: string;
+  received: number;
+  /** From Content-Length; null when the site doesn't say. */
+  total: number | null;
+  bps: number;
+  state: 'starting' | 'downloading' | 'done' | 'failed' | 'cancelled';
+  error: string | null;
+  startedAt: string;
+  endedAt: string | null;
+}
+
+export interface DownloadsInfo {
+  jobs: DownloadJob[];
+  /** Where a download goes unless another folder is picked: ~/Downloads, or home. Null without SSH. */
+  defaultDir: string | null;
+}
+
+export type TorrentStatus = 'downloading' | 'seeding' | 'done' | 'paused' | 'queued' | 'checking' | 'stalled' | 'metadata' | 'moving' | 'error';
+
+export interface Torrent {
+  hash: string;
+  name: string;
+  size: number;
+  /** Bytes downloaded of `size`. */
+  done: number;
+  /** 0 to 1. */
+  progress: number;
+  dlBps: number;
+  upBps: number;
+  /** Seconds to go; null when unknown or finished. */
+  etaSec: number | null;
+  /** qBittorrent's own state, e.g. stalledDL. */
+  state: string;
+  status: TorrentStatus;
+  seeds: number;
+  peers: number;
+  ratio: number;
+  addedAt: string;
+  /** Where qBittorrent saves it, inside its container. */
+  savePath: string;
+  /** The same folder on the server itself, for Files; null when QBIT_HOST_DIR isn't set or it's elsewhere. */
+  hostDir: string | null;
+}
+
+export interface TorrentsInfo {
+  /** QBIT_URL is set. */
+  configured: boolean;
+  error: string | null;
+  torrents: Torrent[];
+  dlBps: number;
+  upBps: number;
+  version: string | null;
+  /** Where finished torrents land on the server (QBIT_HOST_DIR), if known. */
+  hostDir: string | null;
+}
+
 export interface ServerStats {
   at: string;
   hostname: string;
@@ -954,6 +1055,8 @@ export interface Backup {
   noteHistory?: Record<string, NoteVersion[]>;
   /** The terminal's saved commands. */
   snippets?: Snippet[];
+  /** The Minecraft servers saved in the Server view. */
+  minecraft?: McServer[];
 }
 
 export type BackupPart = Exclude<keyof Backup, 'version' | 'exported'>;

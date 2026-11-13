@@ -198,11 +198,44 @@ Reading SMART needs root, so Launchpad runs `sudo -n /usr/sbin/smartctl` over th
 
 Until both are done the panel says which step is missing instead of showing an error. Disks behind a hardware RAID card or some USB enclosures may not show up, or show without figures. To undo it: `sudo rm /etc/sudoers.d/launchpad-smartctl`.
 
+## 11. Optional: downloads and torrents
+
+Server › **Downloads** has one box for links. An `https://` link is fetched by Launchpad straight into a folder on the server (`~/Downloads` if you have one, else your home folder, or whichever you type), over the terminal's SSH login, so it needs step 9. It goes into a hidden `.launchpad-upload-….part` file first and takes its real name when it's complete; one that fails or is cancelled is removed, and one cut off by a restart is swept away a day later. The list is kept in memory, so a restart of Launchpad (a deploy, say) forgets it and stops any still running. Up to four run at once.
+
+Magnet links (one a line) and `.torrent` files go to **qBittorrent**, which `docker-compose.yml` runs beside Launchpad. Launchpad lists its torrents with progress, speed and time left, and can pause, resume and delete them (keeping or deleting the files). Set it up once:
+
+1. Get the new `docker-compose.yml` and make the folder torrents download into, as your user:
+   ```bash
+   cd ~/launchpad
+   git pull
+   mkdir -p ~/torrents
+   ```
+2. In `.env`, set `TORRENTS_DIR` to that folder's full path (`echo $HOME/torrents` prints it). If `id -u` isn't 1000, set `TORRENTS_UID` and `TORRENTS_GID` to what `id -u` and `id -g` print, so the files are yours.
+3. Start it, and read the temporary password it made for `admin`:
+   ```bash
+   docker compose up -d
+   docker logs qbittorrent 2>&1 | grep -i password
+   ```
+4. Open its Web UI at `http://<server-lan-ip>:8091`, sign in as `admin` with that password, and set your own in Tools › Options › Web UI › Authentication.
+5. Put the login in `.env` as `QBIT_USER` and `QBIT_PASS`, then `docker compose up -d` once more.
+
+Port 8091 is only for your LAN, like 8090. For better speeds, forward port 6881 (TCP and UDP) on your router to the server. Finished torrents have a button that opens their folder in Files. To leave torrents out, delete the `qbittorrent` service and `QBIT_URL` from `docker-compose.yml`.
+
+## 12. Optional: Minecraft consoles
+
+Server › **Minecraft** lists the Minecraft servers on the machine and gives each a console. It needs step 9: everything goes over the same SSH login.
+
+- **Finding them.** Launchpad looks for Java processes running as your SSH user with a `server.properties` (or `velocity.toml`) in their folder, or `nogui` on their command line, and for the tmux or screen session each runs in. So start your servers in tmux or screen, as that user.
+- **The console** shows the server's `logs/latest.log` as it's written (warnings and errors in the warning colour, chat in the accent colour) and types what you send into its session, then presses Enter, as if you'd attached and typed it. A leading `/` is dropped. Up and Down go through what you've sent before. **Stop** sends `stop`.
+- **Saving a server** (Save on one that's found, or + for one that isn't running) keeps it in the list while it's stopped. With a **start command** (`./start.sh`, say), **Start** makes its tmux or screen session if it isn't there, with a shell in the server's folder, and types the start command in. Saved servers are part of the backup.
+
+A server started some other way (systemd, `nohup`) shows up with its log, but Launchpad can't type into it.
+
 ## Backups
 
 Everything is in one SQLite file inside the `launchpad-data` volume, with photos in a `photos` folder beside it, images pasted into notes in `note-images` and bookmark icons in `favicons` (a cache, fetched again when missing). Settings → General → **Backup** has:
 
-- **Download backup**: one JSON file with everything you've entered (bookmarks, notes, settings, countdowns, the cigarette, mood and weight logs, the money tracker, courses and study time, workouts, exercise muscles, packages, the photo list, notepads' earlier versions, the news reading list with hidden headlines and muted sources, how often each bookmark's been opened, and the terminal's snippets). It leaves out what sync fetches again (calendar, tasks, mail, news, weather) and the Google sign-in.
+- **Download backup**: one JSON file with everything you've entered (bookmarks, notes, settings, countdowns, the cigarette, mood and weight logs, the money tracker, courses and study time, workouts, exercise muscles, packages, the photo list, notepads' earlier versions, the news reading list with hidden headlines and muted sources, how often each bookmark's been opened, the terminal's snippets and the saved Minecraft servers). It leaves out what sync fetches again (calendar, tasks, mail, news, weather) and the Google sign-in.
 - **With photos (.zip)**: the same backup plus every photo file and every image the notes show, in one .zip.
 - **Restore…** takes either file (and the older bookmarks-and-notes files from **Export JSON**). Each part it holds replaces what's there; parts it doesn't hold are kept. From a .zip, photos and note images missing here are put back. Cloudflare refuses uploads over 100 MB, so a bigger .zip has to be restored over the LAN address.
 - **Database (.db)**: a consistent copy of the whole SQLite database, safe to take while Launchpad runs. It includes the Google sign-in, so keep it private. To put it back by hand, stop the container, replace `launchpad.db` in the volume (and delete any `launchpad.db-wal` and `launchpad.db-shm` beside it), then start it.

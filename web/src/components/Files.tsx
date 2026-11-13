@@ -38,10 +38,12 @@ function iconFor(e: FileEntry): string {
 interface Upload { name: string; pct: number }
 
 /** A file explorer for the server, over SFTP. Stays mounted while hidden, so an open file keeps its edits. */
-export function FilesPanel({ publicKey, hidden, now, onOpenTerminal, onFailed }: {
+export function FilesPanel({ publicKey, hidden, now, open, onOpenTerminal, onFailed }: {
   publicKey: string;
   hidden: boolean;
   now: Date;
+  /** A folder to go to, from another tab; `n` changes each time. */
+  open?: { path: string; n: number } | null;
   /** Open the terminal in this folder. */
   onOpenTerminal: (path: string) => void;
   /** Nothing could be listed at all: the parent checks whether the host key changed. */
@@ -78,10 +80,13 @@ export function FilesPanel({ publicKey, hidden, now, onOpenTerminal, onFailed }:
       .finally(() => setLoading(false));
   }, []);
 
+  // A folder asked for before this mounted is where it opens.
+  const openedAt = useRef(open?.n);
   useEffect(() => {
     // Back to the last folder, or the root if it's gone.
-    const last = localGet('filesPath') || '/';
+    const last = (openedAt.current !== undefined && open?.path) || localGet('filesPath') || '/';
     load(last).catch(() => (last !== '/' ? load('/') : Promise.reject()).catch(() => onFailedRef.current()));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
 
   const dirty = !!file && file.text !== file.saved;
@@ -97,6 +102,13 @@ export function FilesPanel({ publicKey, hidden, now, onOpenTerminal, onFailed }:
     setCreating(false);
     load(path).catch(() => {});
   };
+
+  useEffect(() => {
+    if (!open || open.n === openedAt.current) return;
+    openedAt.current = open.n;
+    go(open.path);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open?.n]);
 
   const refresh = () => listing && load(listing.path).catch(() => {});
 

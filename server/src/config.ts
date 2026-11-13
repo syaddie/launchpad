@@ -44,6 +44,15 @@ export const config = {
     port: Number(env.SSH_PORT || 22),
     user: env.SSH_USER || '',
   },
+  /** Optional: qBittorrent's Web UI, for the Server view's torrents. Empty QBIT_USER: it lets Launchpad in without signing in. */
+  qbit: {
+    url: (env.QBIT_URL || '').replace(/\/+$/, ''),
+    user: env.QBIT_USER || '',
+    pass: env.QBIT_PASS || '',
+    /** Where qBittorrent saves inside its container, and the same folder on the server, so finished torrents open in Files. */
+    saveDir: (env.QBIT_SAVE_DIR || '/downloads').replace(/(.)\/+$/, '$1'),
+    hostDir: (env.QBIT_HOST_DIR || '').replace(/(.)\/+$/, '$1'),
+  },
   /** Optional: verify Cloudflare Access JWTs so only your Access login can reach the app. */
   access: {
     teamDomain: (env.CF_ACCESS_TEAM_DOMAIN || '').replace(/^https?:\/\//, '').replace(/\/+$/, ''),

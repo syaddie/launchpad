@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { cleanMcServers } from './minecraft';
 import { cleanCountdowns, cleanMoods, cleanPackages, cleanPrefs, cleanSmokes, cleanSnippets, cleanWeights, validBookmarks, validNotes } from './clean';
 import { MAX_PHOTOS, photoExists, readPhoto, restorePhotoFile, sniffImage, type StoredPhoto } from './photos';
 import { snapshotDb, store } from './store';
@@ -41,6 +42,7 @@ export function exportBackup(): Backup {
     bookmarkOpens: store.bookmarkOpens(),
     noteHistory: store.noteHistory(),
     snippets: store.snippets(),
+    minecraft: store.minecraft(),
   };
 }
 
@@ -64,6 +66,7 @@ export const PART_NAMES: Record<BackupPart, string> = {
   bookmarkOpens: 'bookmark ranking',
   noteHistory: 'notepad history',
   snippets: 'terminal snippets',
+  minecraft: 'Minecraft servers',
 };
 
 function cleanMuscles(v: unknown): Record<string, ExerciseMuscles> | null {
@@ -158,6 +161,11 @@ export function restoreBackup(body: unknown): BackupPart[] {
   if (has('snippets') && Array.isArray(b.snippets)) {
     const v = cleanSnippets(b.snippets);
     writes.push(['snippets', () => store.setSnippets(v)]);
+  }
+
+  if (has('minecraft') && Array.isArray(b.minecraft)) {
+    const v = cleanMcServers(b.minecraft);
+    writes.push(['minecraft', () => store.setMinecraft(v)]);
   }
 
   if (!writes.length) throw new RestoreError('That file isn’t a Launchpad backup.');
@@ -256,6 +264,7 @@ export function describeRestored(parts: BackupPart[]): string[] {
       case 'photos': return plural(store.photos().length, 'photo');
       case 'newsLists': return `reading list (${plural(store.newsLists().saved.length, 'story', 'stories')})`;
       case 'snippets': return plural(store.snippets().length, 'terminal snippet');
+      case 'minecraft': return plural(store.minecraft().length, 'Minecraft server');
       default: return PART_NAMES[p];
     }
   });

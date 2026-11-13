@@ -47,9 +47,11 @@ describe('backup', () => {
     store.setCravings([{ id: 'k1', at: '2026-11-01T03:00:00.000Z', strength: 3, trigger: 'coffee', note: 'after lunch' }]);
     store.setPrefs({ ...DEFAULT_PREFS, name: 'Sam', cigaretteLimit: 5 });
     store.setSnippets([{ id: 's1', name: 'Disk usage', command: 'df -h' }]);
+    const mc = { id: 'm1', name: 'Survival', dir: '/home/me/mc', mux: 'tmux' as const, session: 'survival', start: './start.sh' };
+    store.setMinecraft([mc]);
     const b = backup.exportBackup();
     expect(b.version).toBe(2);
-    for (const k of ['bookmarks', 'notes', 'prefs', 'countdowns', 'smokes', 'moods', 'cravings', 'weights', 'money', 'learn', 'training', 'exerciseMuscles', 'packages', 'snippets'] as const) expect(b).toHaveProperty(k);
+    for (const k of ['bookmarks', 'notes', 'prefs', 'countdowns', 'smokes', 'moods', 'cravings', 'weights', 'money', 'learn', 'training', 'exerciseMuscles', 'packages', 'snippets', 'minecraft'] as const) expect(b).toHaveProperty(k);
     // Every cigarette, not just the 60 days the page gets.
     expect(b.smokes).toHaveLength(2);
     expect(JSON.stringify(b)).not.toMatch(/refreshToken/);
@@ -61,6 +63,7 @@ describe('backup', () => {
     store.setCravings([]);
     store.setPrefs({ ...DEFAULT_PREFS });
     store.setSnippets([]);
+    store.setMinecraft([]);
     const restored = backup.restoreBackup(JSON.parse(JSON.stringify(b)));
     expect(restored).toContain('money');
     expect(store.countdowns()).toEqual(b.countdowns);
@@ -72,6 +75,7 @@ describe('backup', () => {
     expect(store.prefs().name).toBe('Sam');
     expect(store.prefs().cigaretteLimit).toBe(5);
     expect(store.snippets()).toEqual([{ id: 's1', name: 'Disk usage', command: 'df -h' }]);
+    expect(store.minecraft()).toEqual([mc]);
   });
 
   it('restores an old bookmarks-and-notes backup without touching the rest', () => {

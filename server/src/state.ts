@@ -144,6 +144,8 @@ export const KEY_FIELDS: Record<string, Field[]> = {
   uploadDirs: [],
   // The terminal fetches its snippets itself.
   snippets: [],
+  // So does the Minecraft tab its servers.
+  minecraftServers: [],
 };
 
 /** The fields changed store keys feed, or null when one isn't known (then send everything). */

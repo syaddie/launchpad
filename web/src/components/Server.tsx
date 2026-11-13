@@ -9,22 +9,29 @@ import { ContainerRow, LogsDrawer } from './Containers';
 import { authorizeLine, Copyable } from './Copyable';
 import { DisksPanel } from './Disks';
 import { ErrorBoundary } from './ErrorBoundary';
+import { DownloadsPanel } from './Downloads';
 import { FilesPanel } from './Files';
+import { MinecraftPanel } from './Minecraft';
 
 const POLL = 5_000;
 
 // xterm is most of the terminal's weight, so it loads the first time the tab opens.
 const TerminalPanel = lazy(() => import('./Terminal').then((m) => ({ default: m.TerminalPanel })));
 
-export type ServerTab = 'overview' | 'terminal' | 'files';
+export type ServerTab = 'overview' | 'terminal' | 'files' | 'minecraft' | 'downloads';
 type Tab = ServerTab;
 const TABS: { key: Tab; name: string; icon: string }[] = [
   { key: 'overview', name: 'Overview', icon: 'ph-gauge' },
   { key: 'terminal', name: 'Terminal', icon: 'ph-terminal-window' },
   { key: 'files', name: 'Files', icon: 'ph-folder-simple' },
+  { key: 'minecraft', name: 'Minecraft', icon: 'ph-cube' },
+  { key: 'downloads', name: 'Downloads', icon: 'ph-download-simple' },
 ];
 
-/** The Server view: the machine's health at a glance, a shell on it, and its files. */
+/** The two tabs a wide screen shows side by side. */
+const pair = (t: Tab) => t === 'terminal' || t === 'files';
+
+/** The Server view: the machine's health at a glance, a shell on it, its files, its Minecraft servers and its downloads. */
 export function Server({ data, now, openTab, onOpenSettings, split }: {
   data: AppState;
   /** Terminal and Files open side by side (Console, Bento and Horizon on a wide enough screen). */
@@ -38,13 +45,14 @@ export function Server({ data, now, openTab, onOpenSettings, split }: {
   // The terminal and files stay mounted once opened, so the screen and unsaved edits survive a switch of tab.
   const [opened, setOpened] = useState<Set<Tab>>(() => new Set([tab]));
   const [cd, setCd] = useState<{ path: string; n: number } | null>(null);
+  const [filesAt, setFilesAt] = useState<{ path: string; n: number } | null>(null);
   const [info, setInfo] = useState<ShellInfo | null>(null);
   const [infoError, setInfoError] = useState('');
 
   const setTab = (t: Tab) => {
     setTabState(t);
     setOpened((o) => {
-      const want: Tab[] = split && t !== 'overview' ? ['terminal', 'files'] : [t];
+      const want: Tab[] = split && pair(t) ? ['terminal', 'files'] : [t];
       return want.every((w) => o.has(w)) ? o : new Set([...o, ...want]);
     });
     localSet('serverTab', t);
@@ -75,7 +83,9 @@ export function Server({ data, now, openTab, onOpenSettings, split }: {
   }, [needsShell, info, loadInfo]);
 
   const ready = !!info?.configured && !info.newHostKey;
-  const both = !!split && needsShell;
+  // Downloads works without SSH too (torrents), so it shows what it can rather than the setup.
+  const blocked = needsShell && tab !== 'downloads' && !ready;
+  const both = !!split && pair(tab);
   // Opening the shell side of a split view mounts both halves.
   useEffect(() => {
     if (both && !(opened.has('terminal') && opened.has('files'))) setOpened((o) => new Set([...o, 'terminal', 'files']));
@@ -86,7 +96,7 @@ export function Server({ data, now, openTab, onOpenSettings, split }: {
       <div className="server-head">
         <div className="tabs server-tabs" role="tablist" aria-label="Server">
           {TABS.map((t) => (
-            <button key={t.key} role="tab" aria-selected={tab === t.key || (both && t.key !== 'overview')} className={'tab' + (tab === t.key || (both && t.key !== 'overview') ? ' active' : '')} onClick={() => setTab(t.key)}>
+            <button key={t.key} role="tab" aria-selected={tab === t.key || (both && pair(t.key))} className={'tab' + (tab === t.key || (both && pair(t.key)) ? ' active' : '')} onClick={() => setTab(t.key)}>
               <i className={'ph-duotone ' + t.icon} />
               {t.name}
             </button>
@@ -100,7 +110,7 @@ export function Server({ data, now, openTab, onOpenSettings, split }: {
         )}
       </div>
       {tab === 'overview' && <Overview data={data} now={now} onOpenSettings={onOpenSettings} />}
-      {needsShell && !ready && <ShellSetup info={info} error={infoError} onRetry={loadInfo} onTrusted={setInfo} />}
+      {blocked && <ShellSetup info={info} error={infoError} onRetry={loadInfo} onTrusted={setInfo} />}
       {ready && opened.has('terminal') && (
         <ErrorBoundary label="The terminal">
         <Suspense
@@ -118,11 +128,28 @@ export function Server({ data, now, openTab, onOpenSettings, split }: {
         </Suspense>
         </ErrorBoundary>
       )}
+      {ready && tab === 'minecraft' && (
+        <ErrorBoundary label="Minecraft">
+          <MinecraftPanel onFailed={loadInfo} />
+        </ErrorBoundary>
+      )}
+      {tab === 'downloads' && (
+        <ErrorBoundary label="Downloads">
+          <DownloadsPanel
+            shellReady={info ? ready : null}
+            onOpenFolder={(path) => {
+              setFilesAt((f) => ({ path, n: (f?.n ?? 0) + 1 }));
+              setTab('files');
+            }}
+          />
+        </ErrorBoundary>
+      )}
       {ready && opened.has('files') && (
         <FilesPanel
           publicKey={info.publicKey}
           hidden={!both && tab !== 'files'}
           now={now}
+          open={filesAt}
           onFailed={loadInfo}
           onOpenTerminal={(path) => {
             setCd((c) => ({ path, n: (c?.n ?? 0) + 1 }));
