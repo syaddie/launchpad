@@ -47,7 +47,8 @@ async function signIn(): Promise<void> {
   }
   const text = (await res.text()).trim();
   if (res.status === 403) throw new QbitError('qBittorrent has locked Launchpad out after too many wrong passwords. Check QBIT_PASS, then restart the qbittorrent container.', 502);
-  if (!res.ok || !/^ok/i.test(text)) throw new QbitError('qBittorrent didn’t take QBIT_USER and QBIT_PASS. Check them in .env.', 502);
+  // v4 answers 200 "Ok." (or 200 "Fails."); v5 answers 204 with no body, and 401 for a wrong password.
+  if (!res.ok || (res.status !== 204 && !/^ok/i.test(text))) throw new QbitError('qBittorrent didn’t take QBIT_USER and QBIT_PASS. Check them in .env.', 502);
   const set = res.headers.getSetCookie();
   cookie = set.map((c) => c.split(';')[0]).filter(Boolean).join('; ') || null;
 }
@@ -61,11 +62,11 @@ async function qreq(pathname: string, body?: URLSearchParams | FormData, retried
   } catch (e) {
     throw unreachable(e);
   }
-  if (res.status === 403 && !retried && config.qbit.user) {
+  if ((res.status === 403 || res.status === 401) && !retried && config.qbit.user) {
     cookie = null;
     return qreq(pathname, body, true);
   }
-  if (res.status === 403) throw new QbitError(config.qbit.user ? 'qBittorrent refused Launchpad’s sign-in.' : 'qBittorrent wants a password: set QBIT_USER and QBIT_PASS.', 502);
+  if (res.status === 403 || res.status === 401) throw new QbitError(config.qbit.user ? 'qBittorrent refused Launchpad’s sign-in.' : 'qBittorrent wants a password: set QBIT_USER and QBIT_PASS.', 502);
   return res;
 }
 
