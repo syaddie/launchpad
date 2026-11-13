@@ -24,7 +24,7 @@ services:
       # Server › Downloads' torrents: qBittorrent below. QBIT_USER and QBIT_PASS come from
       # .env; QBIT_HOST_DIR is where its downloads land on the server, for Files. See
       # docs/setup.md step 11.
-      - QBIT_URL=http://qbittorrent:8080
+      - QBIT_URL=http://qbittorrent:8092
       - QBIT_HOST_DIR=${TORRENTS_DIR:-}
     extra_hosts:
       # Lets the container reach the host's own sshd.
@@ -91,9 +91,9 @@ services:
       - PUID=${TORRENTS_UID:-1000}
       - PGID=${TORRENTS_GID:-1000}
       - TZ=Asia/Singapore
-      - WEBUI_PORT=8080
+      - WEBUI_PORT=8092
     ports:
-      - "8091:8080"
+      - "8092:8092"
       # Peers reach it here; forward 6881 on the router for better speeds.
       - "6881:6881"
       - "6881:6881/udp"
