@@ -19,7 +19,7 @@ import { cleanMoney } from '../../shared/money';
 import { cleanCravings } from '../../shared/trackers';
 import { cleanTraining } from '../../shared/training';
 import type {
-  BillSuggestion, BookmarkGroup, BookmarkOpens, Briefing, CalEvent, LinkCheck, CalendarInfo, Countdown, Craving, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsLists, NewsTopic, Note, NoteVersion, Package, Prefs, ReviewNote, Snippet, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
+  BillSuggestion, BookmarkGroup, BookmarkOpens, Briefing, CalEvent, LinkCheck, CalendarInfo, Countdown, Craving, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsLists, NewsTopic, Note, NoteVersion, McServer, Package, Prefs, ReviewNote, Snippet, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
 } from '../../shared/types';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
@@ -292,6 +292,8 @@ export const store = {
   setDriveBackup: (v: DriveBackupState) => set('driveBackup', v),
   /** The terminal's saved commands, in the order they were added. */
   snippets: () => get<Snippet[]>('snippets', []),
+  minecraft: () => get<McServer[]>('minecraftServers', []),
+  setMinecraft: (v: McServer[]) => set('minecraftServers', v),
   setSnippets: (v: Snippet[]) => set('snippets', v),
 
   /** Folders that uploads went into, with when the last one started, so abandoned part files there can be swept. */

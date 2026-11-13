@@ -108,6 +108,8 @@ export function paletteItems(c: PaletteContext): PaletteItem[] {
     { id: 'a:speed', group: 'Actions', label: 'Run a speed test', icon: 'ph-gauge', words: 'internet', run: c.runSpeedTest },
     { id: 'a:terminal', group: 'Actions', label: 'Open the server terminal', icon: 'ph-terminal-window', words: 'shell ssh console command line', run: () => c.openServerTab('terminal') },
     { id: 'a:files', group: 'Actions', label: 'Browse the server’s files', icon: 'ph-folder-simple', words: 'file explorer sftp upload download folders', run: () => c.openServerTab('files') },
+    { id: 'a:minecraft', group: 'Actions', label: 'Open the Minecraft console', icon: 'ph-cube', words: 'minecraft server console rcon players tmux screen game', run: () => c.openServerTab('minecraft') },
+    { id: 'a:downloads', group: 'Actions', label: 'Download to the server', icon: 'ph-download-simple', words: 'download link url wget curl torrent magnet qbittorrent', run: () => c.openServerTab('downloads') },
     { id: 'a:package', group: 'Actions', label: 'Add a package', icon: 'ph-package', words: 'tracking', run: c.addPackage },
     ...(c.openAddEvent && eventsOn(data)
       ? [{ id: 'a:event', group: 'Actions', label: 'Add a calendar event', icon: 'ph-calendar-plus', words: 'google calendar meeting appointment schedule', sub: 'Or type “event”, then what and when', run: c.openAddEvent }]

@@ -28,6 +28,9 @@ import { MAX_PHOTOS, MAX_PHOTO_BYTES, readPhoto, removePhotoFile, sniffImage, wr
 import { isRunning, newPackage, refreshPackage, refreshSummaries, refreshWeather, runAllGoogle, runIfStale, runSource, signOutGoogle, startScheduler } from './sync';
 import { attachTerminal, FileError, listDir, makeDir, MAX_TEXT, readFileStream, readText, remove, rename, shellInfo, trustHostKey, abandonUpload, uploadPiece, UPLOAD_CHUNK, writeText } from './shell';
 import { serverStats, startSampler } from './system';
+import { cleanMcServer, MAX_MC, mcStatuses, readLog, sendCommand, startServer } from './minecraft';
+import { cancelDownload, clearDownloads, listDownloads, startDownload } from './downloads';
+import { addTorrentFile, addTorrentLinks, MAX_TORRENT_FILE, QbitError, torrentAction, torrents } from './qbit';
 import { containerLogs, DockerError, restartContainer } from './docker';
 import { diskHealth } from './disks';
 import { startCleanup } from './cleanup';
@@ -645,7 +648,7 @@ function foreignOrigin(origin: string | undefined, host: string | undefined): bo
   }
 }
 
-for (const p of ['/api/shell/*', '/api/files/*', '/api/backup', '/api/backup/*']) {
+for (const p of ['/api/shell/*', '/api/files/*', '/api/backup', '/api/backup/*', '/api/minecraft', '/api/minecraft/*', '/api/downloads', '/api/downloads/*', '/api/torrents', '/api/torrents/*']) {
   app.use(p, async (c, next) => (foreignOrigin(c.req.header('origin'), c.req.header('host')) ? c.json({ error: 'Cross-site request refused' }, 403) : next()));
 }
 
@@ -736,6 +739,82 @@ app.post('/api/files/delete', async (c) => {
   const body = await c.req.json();
   await remove(body?.path);
   return c.json({ ok: true });
+});
+
+// ---------- Minecraft ----------
+
+/** Saved servers and any others found running, over SSH. ?fresh=1 looks again now. */
+app.get('/api/minecraft', async (c) => c.json(await mcStatuses(c.req.query('fresh') === '1')));
+
+app.post('/api/minecraft/servers', async (c) => {
+  const list = store.minecraft();
+  if (list.length >= MAX_MC) return c.json({ error: `That’s ${MAX_MC} servers already.` }, 400);
+  store.setMinecraft([...list, cleanMcServer(await c.req.json(), randomBytes(9).toString('base64url'))]);
+  return c.json(await mcStatuses(true));
+});
+
+app.put('/api/minecraft/servers/:id', async (c) => {
+  const id = c.req.param('id');
+  const list = store.minecraft();
+  if (!list.some((x) => x.id === id)) return c.json({ error: 'That server was removed, maybe on another device.' }, 404);
+  const s = cleanMcServer(await c.req.json(), id);
+  store.setMinecraft(list.map((x) => (x.id === id ? s : x)));
+  return c.json(await mcStatuses(true));
+});
+
+app.delete('/api/minecraft/servers/:id', async (c) => {
+  store.setMinecraft(store.minecraft().filter((x) => x.id !== c.req.param('id')));
+  return c.json(await mcStatuses(true));
+});
+
+/** The console: new lines of logs/latest.log since ?offset=, or the last part of it without. */
+app.get('/api/minecraft/:id/log', async (c) => c.json(await readLog(c.req.param('id'), c.req.query('offset'))));
+
+app.post('/api/minecraft/:id/command', async (c) => {
+  const body = await c.req.json();
+  await sendCommand(c.req.param('id'), body?.command);
+  return c.json({ ok: true });
+});
+
+app.post('/api/minecraft/:id/start', async (c) => {
+  await startServer(c.req.param('id'));
+  return c.json({ ok: true });
+});
+
+// ---------- downloads and torrents ----------
+
+app.get('/api/downloads', async (c) => c.json(await listDownloads()));
+
+/** Fetch a link into a folder on the server; the page polls the list for progress. */
+app.post('/api/downloads', async (c) => c.json(startDownload(await c.req.json())));
+
+app.post('/api/downloads/:id/cancel', (c) => c.json(cancelDownload(c.req.param('id'))));
+
+app.post('/api/downloads/clear', (c) => c.json(clearDownloads()));
+
+app.get('/api/torrents', async (c) => c.json(await torrents()));
+
+/** Magnet links (or links to .torrent files), one a line. */
+app.post('/api/torrents', async (c) => {
+  const body = await c.req.json();
+  await addTorrentLinks(body?.urls, body?.paused === true);
+  return c.json(await torrents());
+});
+
+/** A .torrent file, its bytes as the body. */
+app.post(
+  '/api/torrents/file',
+  bodyLimit({ maxSize: MAX_TORRENT_FILE, onError: (c) => c.json({ error: 'That .torrent file is over 10 MB.' }, 413) }),
+  async (c) => {
+    await addTorrentFile(await c.req.arrayBuffer(), c.req.query('name') ?? 'file.torrent');
+    return c.json(await torrents());
+  },
+);
+
+app.post('/api/torrents/action', async (c) => {
+  const body = await c.req.json();
+  await torrentAction(body?.hashes, body?.action);
+  return c.json(await torrents());
 });
 
 // ---------- backup ----------
@@ -943,7 +1022,7 @@ app.get('/api/carriers', (c) => c.json(CARRIERS));
 // ---------- errors ----------
 
 app.onError((err, c) => {
-  if (err instanceof FileError || err instanceof DockerError) return c.json({ error: err.message }, err.status);
+  if (err instanceof FileError || err instanceof DockerError || err instanceof QbitError) return c.json({ error: err.message }, err.status);
   console.error(`[api] ${c.req.method} ${c.req.path}:`, err.message);
   if (err instanceof GoogleError && err.authExpired) signOutGoogle(err.message);
   return c.json({ error: err.message }, 500);

@@ -228,7 +228,7 @@ const IDLE = 5 * 60_000;
 let sftpConn: Promise<{ conn: Client; sftp: SFTPWrapper }> | null = null;
 let sftpTimer: NodeJS.Timeout | undefined;
 
-function sftpSession() {
+export function sftpSession() {
   if (!sftpConn) {
     const p = connect().then(
       (conn) =>
@@ -253,14 +253,14 @@ export class FileError extends Error {
   }
 }
 
-function sftpError(e: Error & { code?: number }, p: string): Error {
+export function sftpError(e: Error & { code?: number }, p: string): Error {
   // SFTP status codes: 2 no such file, 3 permission denied, 4 failure (often "not empty" or "exists").
   if (e.code === 2) return new FileError(`${p} doesn’t exist.`, 404);
   if (e.code === 3) return new FileError(`Permission denied: ${p}`, 403);
   return new FileError(`${e.message} (${p})`, 500);
 }
 
-function call<T>(p: string, fn: (cb: (err: Error | null | undefined, v: T) => void) => void): Promise<T> {
+export function call<T>(p: string, fn: (cb: (err: Error | null | undefined, v: T) => void) => void): Promise<T> {
   return new Promise((resolve, reject) => fn((e, v) => (e ? reject(sftpError(e, p)) : resolve(v))));
 }
 
@@ -283,7 +283,7 @@ export function kindOf(mode: number): FileEntry['kind'] | 'link' {
   return t === 0o040000 ? 'dir' : t === 0o100000 ? 'file' : t === 0o120000 ? 'link' : 'other';
 }
 
-const stat = (sftp: SFTPWrapper, p: string) => call<Stats>(p, (cb) => sftp.stat(p, cb));
+export const stat = (sftp: SFTPWrapper, p: string) => call<Stats>(p, (cb) => sftp.stat(p, cb));
 
 /** A folder's contents, folders first. Without a path, the SSH user's home folder. */
 export async function listDir(p?: string): Promise<DirListing> {
@@ -310,6 +310,12 @@ export async function listDir(p?: string): Promise<DirListing> {
   );
   entries.sort((a, b) => Number(b.kind === 'dir') - Number(a.kind === 'dir') || a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
   return { path: abs, entries };
+}
+
+/** The SSH user's home folder. */
+export async function homeDir(): Promise<string> {
+  const { sftp } = await sftpSession();
+  return call<string>('~', (cb) => sftp.realpath('.', cb));
 }
 
 /** A file to send to the browser as a stream. */
@@ -365,7 +371,7 @@ export function cleanSize(n: unknown, what: string): number {
   return v;
 }
 
-const partPath = (dir: string, id: string) => path.posix.join(dir, `.launchpad-upload-${id}.part`);
+export const partPath = (dir: string, id: string) => path.posix.join(dir, `.launchpad-upload-${id}.part`);
 
 /** A part file stops growing once its upload is given up on; after this long it's swept away. */
 export const PART_MAX_AGE = 24 * 60 * 60_000;
@@ -384,7 +390,7 @@ async function removeParts(sftp: SFTPWrapper, dir: string, names: string[]): Pro
 }
 
 /** Remember the folder an upload went into, so its part file is swept even if the folder is never opened again. */
-function noteUploadDir(dir: string): void {
+export function noteUploadDir(dir: string): void {
   store.setUploadDirs({ ...store.uploadDirs(), [dir]: new Date().toISOString() });
 }
 
@@ -485,7 +491,7 @@ function overwrite(u: UploadPiece, existing: Stats): boolean {
   return u.overwrite;
 }
 
-async function moveInto(sftp: SFTPWrapper, from: string, to: string, replace: boolean): Promise<void> {
+export async function moveInto(sftp: SFTPWrapper, from: string, to: string, replace: boolean): Promise<void> {
   if (replace) {
     // OpenSSH's posix-rename replaces in one step; plain SFTP rename refuses an existing target.
     try {
