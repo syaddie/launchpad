@@ -1835,6 +1835,17 @@ button.m-stat { cursor: default; }
 .mc-sheet-row .meta { text-align: right; flex: none; }
 [data-layout='narrow'] .mc-sheet-row { flex-direction: column; gap: 0; }
 [data-layout='narrow'] .mc-sheet-row .meta { text-align: left; }
+.mc-diag { flex: 0 0 auto; max-height: 300px; overflow: auto; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--ln); border-radius: 6px; }
+[data-layout='narrow'] .mc-diag { max-height: 45vh; }
+.mc-diag-head { display: flex; align-items: center; justify-content: space-between; }
+.mc-finding { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; text-wrap: pretty; }
+.mc-finding > i { font-size: 16px; flex: none; margin-top: 1px; }
+.mc-finding.error > i { color: var(--wn); }
+.mc-finding.warn > i { color: var(--wn); opacity: 0.7; }
+.mc-finding.info > i { color: var(--t3); }
+.mc-detail { display: block; margin-top: 2px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.mc-diag summary { cursor: pointer; }
+.mc-pre { margin: 6px 0 0; padding: 8px; max-height: 160px; overflow: auto; font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--hv); border-radius: 4px; }
 .mc-quick { display: flex; flex-wrap: wrap; gap: 6px; }
 .mc-chip { border: none; cursor: pointer; font-size: 11px; }
 .mc-chip:hover:not(:disabled) { color: var(--tx); }

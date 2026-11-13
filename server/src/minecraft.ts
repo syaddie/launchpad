@@ -8,10 +8,26 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import { cleanPath, FileError, runCommand, sftpSession, shellQuote, stat } from './shell';
 import { store } from './store';
-import type { McLog, McMux, McServer, McStatus } from '../../shared/types';
+import type { McDiagnosis, McFinding, McLog, McMux, McServer, McStatus } from '../../shared/types';
 
 export const MAX_MC = 20;
 const SESSION = /^[A-Za-z0-9_.-]{1,64}$/;
+
+/**
+ * runCommand, but a timeout or a failed connection says what Launchpad was doing and
+ * lands in the server's own log (docker logs), so the cause can be found afterwards.
+ */
+async function ssh(cmd: string, timeoutMs: number, what: string) {
+  try {
+    return await runCommand(cmd, timeoutMs);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const slow = /took too long/.test(msg);
+    const text = slow ? `${what}: the server didn’t answer within ${Math.round(timeoutMs / 1000)} seconds. SSH may be stuck, or the machine is overloaded.` : `${what}: ${msg}`;
+    console.error(`[minecraft] ${text}`);
+    throw new FileError(text, 409);
+  }
+}
 
 // ---------- saved servers ----------
 
@@ -170,7 +186,7 @@ let cache: { at: number; found: Promise<Detected[]> } | null = null;
 
 async function detect(fresh = false): Promise<Detected[]> {
   if (!fresh && cache && Date.now() - cache.at < 4_000) return cache.found;
-  const found = runCommand(DETECT, 15_000).then((r) => parseDetect(r.stdout));
+  const found = ssh(DETECT, 15_000, 'Looking for Minecraft servers').then((r) => parseDetect(r.stdout));
   cache = { at: Date.now(), found };
   found.catch(() => cache?.found === found && (cache = null));
   return found;
@@ -218,9 +234,10 @@ export function startLine(s: McServer): string {
 }
 
 async function run(cmd: string, what: string): Promise<void> {
-  const r = await runCommand(cmd, 15_000);
+  const r = await ssh(cmd, 15_000, what);
   if (r.code) {
     const err = r.stderr.trim().split('\n').pop() || `exited with ${r.code}`;
+    console.error(`[minecraft] ${what}: ${err}`);
     if (/command not found/.test(err)) throw new FileError(`${what}: ${err}. Install it on the server.`, 409);
     throw new FileError(`${what}: ${err}`, 409);
   }
@@ -241,6 +258,150 @@ export async function startServer(id: string): Promise<void> {
   if (!saved?.start) throw new FileError(`Add a start command to ${s.name} first.`, 409);
   await run(startLine(saved), `Couldn’t start ${s.name}`);
   cache = null;
+}
+
+// ---------- finding out why it won't start ----------
+
+/** What one look at the server's folder, tools and terminal turned up. */
+export interface DiagFacts {
+  dirExists: boolean;
+  hasMux: boolean;
+  /** Java's version line, or null when `java` isn't on the SSH shell's PATH. */
+  java: string | null;
+  /** The start command's script, when it names one: where it stands. */
+  startFile: 'none' | 'ok' | 'missing' | 'notexec';
+  eula: 'true' | 'false' | 'missing';
+  port: number;
+  /** What's listening on the server's port, if anything. */
+  portBusy: string | null;
+  diskFreeMb: number | null;
+  /** A crash report written in the last 30 minutes. */
+  recentCrash: string | null;
+  pane: string;
+  log: string;
+}
+
+/** The script file a start command runs, as a full path, when it begins with ./ or /. */
+export function startScript(s: McServer): string | null {
+  const first = s.start.trim().split(/\s+/)[0] ?? '';
+  if (first.startsWith('/')) return first;
+  if (first.startsWith('./')) return path.posix.join(s.dir, first);
+  return null;
+}
+
+/** One round trip that gathers everything diagnose() reasons about. Sections start with @@name. */
+export function diagScript(s: McServer): string {
+  const d = shellQuote(s.dir);
+  const script = startScript(s);
+  const f = script ? shellQuote(script) : '';
+  const pane =
+    s.mux === 'tmux'
+      ? `tmux capture-pane -p -t ${shellQuote('=' + s.session + ':')} -S -40 2>&1 | tail -n 40`
+      : `f=$(mktemp); screen -S ${shellQuote(s.session)} -p 0 -X hardcopy -h "$f" 2>&1; tail -n 40 "$f" 2>&1; rm -f "$f"`;
+  return [
+    `echo @@dir; [ -d ${d} ] && echo yes || echo no`,
+    `echo @@mux; command -v ${s.mux} >/dev/null 2>&1 && echo yes || echo no`,
+    'echo @@java; command -v java >/dev/null 2>&1 && java -version 2>&1 | head -n 1',
+    `echo @@startfile; ${script ? `if [ ! -e ${f} ]; then echo missing; elif [ ! -x ${f} ]; then echo notexec; else echo ok; fi` : 'echo none'}`,
+    `echo @@eula; grep -i '^eula=' ${shellQuote(path.posix.join(s.dir, 'eula.txt'))} 2>/dev/null`,
+    `echo @@port; p=$(grep -E '^server-port=' ${shellQuote(path.posix.join(s.dir, 'server.properties'))} 2>/dev/null | head -n 1 | cut -d= -f2 | tr -d '\\r '); case "$p" in ''|*[!0-9]*) p=25565;; esac; echo "port=$p"; ss -ltnp 2>/dev/null | grep -E ":$p[[:space:]]" | head -n 1`,
+    `echo @@disk; df -Pk ${d} 2>/dev/null | tail -n 1`,
+    `echo @@crash; find ${shellQuote(path.posix.join(s.dir, 'crash-reports'))} -name '*.txt' -mmin -30 2>/dev/null | head -n 1`,
+    `echo @@pane; ${pane}`,
+    `echo @@log; tail -n 40 ${shellQuote(path.posix.join(s.dir, 'logs', 'latest.log'))} 2>&1`,
+    'true',
+  ].join('\n');
+}
+
+/** diagScript's output as facts. Anything missing reads as "not found". */
+export function parseDiag(out: string): DiagFacts {
+  const parts: Record<string, string[]> = {};
+  let cur = '';
+  for (const line of out.split('\n')) {
+    const m = /^@@(\w+)$/.exec(line.trim());
+    if (m) parts[(cur = m[1])] = [];
+    else if (cur) parts[cur].push(line);
+  }
+  const sec = (k: string) => (parts[k] ?? []).join('\n').replace(/\s+$/, '');
+  const first = (k: string) => (parts[k] ?? []).map((l) => l.trim()).find(Boolean) ?? '';
+  const eula = /^eula\s*=\s*(\w+)/i.exec(first('eula'))?.[1]?.toLowerCase();
+  const portLines = parts.port ?? [];
+  const port = Number(/^port=(\d+)$/.exec(portLines[0]?.trim() ?? '')?.[1]) || 25565;
+  const free = Number(first('disk').split(/\s+/)[3]);
+  const startFile = first('startfile');
+  return {
+    dirExists: first('dir') === 'yes',
+    hasMux: first('mux') === 'yes',
+    java: first('java') || null,
+    startFile: startFile === 'ok' || startFile === 'missing' || startFile === 'notexec' ? startFile : 'none',
+    eula: eula === 'true' ? 'true' : eula ? 'false' : 'missing',
+    port,
+    portBusy: portLines.slice(1).map((l) => l.trim()).find(Boolean) ?? null,
+    diskFreeMb: Number.isFinite(free) && first('disk') ? Math.round(free / 1024) : null,
+    recentCrash: first('crash') || null,
+    pane: sec('pane'),
+    log: sec('log'),
+  };
+}
+
+/** Things the terminal or the log say that point at a cause, with what to do about it. */
+const OUTPUT_CLUES: { re: RegExp; level: McFinding['level']; text: string }[] = [
+  { re: /UnsupportedClassVersionError|class file version/i, level: 'error', text: 'This server needs a newer version of Java than the one it ran with. (Minecraft 1.20.5 and up needs Java 21.)' },
+  { re: /Unable to access jarfile/i, level: 'error', text: 'Java can’t find the server .jar named in the start command. Check its name and folder.' },
+  { re: /Could not reserve enough space|Invalid maximum heap size|Initial heap size set to a larger value/i, level: 'error', text: 'The memory in the start command (-Xmx or -Xms) is more than the machine can give. Lower it.' },
+  { re: /OutOfMemoryError/i, level: 'error', text: 'The server ran out of memory. Give it more with -Xmx, or free some on the machine.' },
+  { re: /FAILED TO BIND TO PORT|Address already in use/i, level: 'error', text: 'The server’s port is already taken by another program, maybe an old server still running.' },
+  { re: /No space left on device/i, level: 'error', text: 'The disk is full.' },
+  { re: /You need to agree to the EULA/i, level: 'error', text: 'The EULA hasn’t been accepted. Set eula=true in eula.txt.' },
+  { re: /java: (command )?not found/i, level: 'error', text: 'Java isn’t installed, or isn’t on the PATH inside the session.' },
+  { re: /: command not found/i, level: 'error', text: 'The session doesn’t know a command in the start line. Is the program installed?' },
+  { re: /Permission denied/i, level: 'error', text: 'The session was refused access to something. Check file permissions (and that the start script is executable).' },
+  { re: /No such file or directory/i, level: 'error', text: 'The start command points at something that doesn’t exist.' },
+  { re: /Failed to start the minecraft server|Encountered an unexpected exception|Exception in thread "main"/i, level: 'error', text: 'The server crashed while starting. The lines below it have the cause.' },
+];
+
+/** The findings for a server, most serious first. Nothing here touches the server. */
+export function explain(f: DiagFacts, s: McServer, running: boolean): McFinding[] {
+  const out: McFinding[] = [];
+  const add = (level: McFinding['level'], text: string, detail?: string) => out.push({ level, text, detail });
+  if (!f.dirExists) add('error', `The folder ${s.dir} isn’t on the server. Check the path under Edit.`);
+  if (!f.hasMux) add('error', `${s.mux} isn’t installed on the server, so there’s nowhere to run or type into the server. Install it (for example: sudo apt install ${s.mux}).`);
+  if (f.startFile === 'missing') add('error', `The start script ${startScript(s)} doesn’t exist.`);
+  if (f.startFile === 'notexec') add('error', `The start script ${startScript(s)} isn’t executable. In that folder, run: chmod +x ${path.posix.basename(startScript(s) ?? '')}`);
+  if (!running && !f.java) add('warn', 'Java wasn’t found on the PATH of Launchpad’s SSH login. That’s fine if the session finds it itself or the start command gives its full path.');
+  if (f.eula === 'false') add('error', 'eula.txt says eula=false, so the server stops straight away. Change it to eula=true.');
+  else if (f.eula === 'missing' && !running) add('warn', 'There’s no eula.txt yet. The first run makes it, then it needs eula=true before the next one.');
+  if (!running && f.portBusy) add('error', `Port ${f.port} is already in use, so a server can’t start on it. Another server may still be running.`, f.portBusy);
+  if (f.diskFreeMb !== null && f.diskFreeMb < 200) add('warn', `Only ${f.diskFreeMb} MB is free on the disk.`);
+  if (f.recentCrash) add('warn', 'A crash report was written in the last 30 minutes.', f.recentCrash);
+
+  // The terminal and log, line by line, for known messages. Each message is reported once.
+  // Without tmux or screen the "terminal" is only our own command's complaint, so it's left out.
+  const seen = new Set<string>();
+  const lines = `${f.hasMux ? f.pane : ''}\n${f.log}`.split('\n').filter((l) => l.trim());
+  for (const clue of OUTPUT_CLUES) {
+    const line = lines.find((l) => clue.re.test(l));
+    if (!line || seen.has(clue.text)) continue;
+    seen.add(clue.text);
+    add(clue.level, clue.text, line.trim().slice(0, 240));
+  }
+
+  const order = { error: 0, warn: 1, info: 2 };
+  out.sort((a, b) => order[a.level] - order[b.level]);
+  if (!out.length) {
+    add('info', 'Nothing obviously wrong: the folder, start script, EULA and port check out. What the session printed is below.');
+    if (!f.pane.trim() && !running) add('info', 'The session printed nothing. If it didn’t exist before, Start made it, so try Start once more and look again.');
+  }
+  return out;
+}
+
+/** Look over a server that won't start, or has stopped, and say what's likely wrong. */
+export async function diagnose(id: string): Promise<McDiagnosis> {
+  const s = await find(id, true);
+  if (!s.dir) throw new FileError(`Launchpad doesn’t know ${s.name}’s folder, so it can’t check it. Save the server with its folder.`, 409);
+  const r = await ssh(diagScript(s), 20_000, `Checking ${s.name}`);
+  const facts = parseDiag(r.stdout);
+  return { findings: explain(facts, s, s.running), pane: plainLog(facts.pane), log: plainLog(facts.log), running: s.running, at: Date.now() };
 }
 
 // ---------- the log ----------

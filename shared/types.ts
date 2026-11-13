@@ -810,6 +810,26 @@ export interface McStatus extends McServer {
   attached: boolean;
 }
 
+/** One thing the check found out about a server that won't start (or is misbehaving). */
+export interface McFinding {
+  level: 'error' | 'warn' | 'info';
+  text: string;
+  /** The line of output it came from, when there is one. */
+  detail?: string;
+}
+
+/** What Diagnose reports: the findings, plus the raw output they came from. */
+export interface McDiagnosis {
+  findings: McFinding[];
+  /** What the tmux or screen session last printed. */
+  pane: string;
+  /** The end of logs/latest.log. */
+  log: string;
+  running: boolean;
+  /** When the check ran (ms since epoch). */
+  at: number;
+}
+
 /** New lines of a server's logs/latest.log since `offset`. */
 export interface McLog {
   text: string;
