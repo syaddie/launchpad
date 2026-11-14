@@ -43,7 +43,6 @@ import { refreshReviewNote, startReviewNotes, tasksDoneIn } from './review';
 import { cleanCraving } from '../../shared/trackers';
 import { refreshTraining } from './training';
 import { ask, MAX_ASK } from './ask';
-import { refreshBriefing, startBriefing } from './briefing';
 import { claudeEnabled } from './claude';
 import { summariseUsage } from '../../shared/claudeUsage';
 import type { Mood, NewsLists, Package, Photo, Prefs, SavedDoc, SourceKey } from '../../shared/types';
@@ -584,13 +583,7 @@ app.post('/api/review/refresh', async (c) => {
   return c.json(state());
 });
 
-// ---------- Claude: the briefing, ⌘K's Ask Launchpad, the usage meter ----------
-
-/** Write the briefing when this morning's isn't written yet (or again, with ?force=1), then send it. */
-app.post('/api/briefing/refresh', async (c) => {
-  await refreshBriefing(c.req.query('force') === '1');
-  return c.json(stateFor(['briefing']));
-});
+// ---------- Claude: ⌘K's Ask Launchpad, the usage meter ----------
 
 /** What's typed in ⌘K → one checked action and how to say it. Nothing is done until the page sends it. */
 app.post('/api/ask', async (c) => {
@@ -1075,4 +1068,3 @@ startSampler();
 startCleanup();
 startSnapshots(copyDailyToDrive);
 startLinkChecks();
-startBriefing();

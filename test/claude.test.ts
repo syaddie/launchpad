@@ -19,11 +19,9 @@ afterAll(() => {
   }
 });
 let claude: typeof import('../server/src/claude');
-let briefing: typeof import('../server/src/briefing');
 let store: typeof import('../server/src/store').store;
 beforeAll(async () => {
   claude = await import('../server/src/claude');
-  briefing = await import('../server/src/briefing');
   store = (await import('../server/src/store')).store;
 });
 
@@ -122,53 +120,5 @@ describe('recording a call', () => {
     const day = store.claudeUsage()['2026-11-12'].ask;
     expect(day['claude-sonnet-5-5']).toMatchObject({ calls: 1, input: 500, output: 10 });
     expect(day['claude-sonnet-5']).toMatchObject({ calls: 0, input: 700, cacheRead: 800 });
-  });
-});
-
-describe('the daily briefing', () => {
-  it('is due from 6:00 until this morning’s is written', () => {
-    const at = (h: number, m = 0) => new Date(2026, 10, 12, h, m);
-    expect(briefing.briefingDue(null, at(5, 59))).toBe(false);
-    expect(briefing.briefingDue(null, at(6))).toBe(true);
-    expect(briefing.briefingDue({ text: 'x', writtenAt: at(5, 30).toISOString() }, at(7))).toBe(true);
-    expect(briefing.briefingDue({ text: 'x', writtenAt: at(6, 1).toISOString() }, at(18))).toBe(false);
-    expect(briefing.briefingDue({ text: 'x', writtenAt: new Date(2026, 10, 11, 7).toISOString() }, at(6, 5))).toBe(true);
-  });
-
-  it('reads the day and leaves out what’s switched off', () => {
-    const now = new Date(2026, 10, 12, 6, 0);
-    const money = starterMoney(now);
-    money.entries = [
-      { id: 'e1', date: '2026-11-01', kind: 'in', amount: 500, note: '', category: '', planned: false, account: money.accounts[0].id, to: '' },
-      { id: 'e2', date: '2026-11-12', kind: 'out', amount: 120, note: 'phone bill', category: 'Bills', planned: true, account: money.accounts[0].id, to: '' },
-      { id: 'e3', date: '2026-11-20', kind: 'out', amount: 450, note: 'rent', category: 'Bills', planned: true, account: money.accounts[0].id, to: '' },
-    ];
-    const data = {
-      prefs: { ...DEFAULT_PREFS, hidden: ['view:training'] },
-      googleConnected: true,
-      events: [
-        { id: 'v1', calendarId: 'p', title: 'Standup', start: new Date(2026, 10, 12, 9, 30).toISOString(), end: new Date(2026, 10, 12, 9, 45).toISOString(), allDay: false, conferenceType: 'Google Meet' },
-        { id: 'v2', calendarId: 'p', title: 'Tomorrow thing', start: new Date(2026, 10, 13, 9).toISOString(), end: new Date(2026, 10, 13, 10).toISOString(), allDay: false },
-      ],
-      tasks: [{ id: 't1', listId: 'L', title: 'Renew passport', due: '2026-11-10' }, { id: 't2', listId: 'L', title: 'Later', due: '2026-11-30' }],
-      inbox: { digest: null, unread: new Set<string>() },
-      learn: emptyLearn(),
-      packages: [],
-      weather: null,
-      money,
-      training: { ...EMPTY_TRAINING, workouts: [{ id: 'w', title: 'Push', start: new Date(2026, 10, 10).toISOString(), end: new Date(2026, 10, 10, 1).toISOString(), exercises: [] }] } as never,
-      countdowns: [{ id: 'c', title: 'Japan trip', date: '2026-12-01', yearly: false, createdAt: '' }],
-    };
-    const text = briefing.briefingInput(data, now);
-    expect(text).toContain('Today is Thu 12 Nov 2026');
-    expect(text).toContain('- 09:30–09:45 Standup (Google Meet call)');
-    expect(text).not.toContain('Tomorrow thing');
-    expect(text).toContain('- Renew passport (was due Tue 10 Nov)');
-    expect(text).not.toContain('Later');
-    expect(text).toContain('- in the day-to-day accounts now: $500');
-    expect(text).toContain('- planned today: out $120, phone bill');
-    expect(text).toContain('gets as low as −$70');
-    expect(text).not.toContain('Training');
-    expect(text).toContain('Nearest countdown: Japan trip');
   });
 });

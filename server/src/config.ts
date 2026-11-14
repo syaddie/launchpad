@@ -14,7 +14,7 @@ export const config = {
   },
   /** Optional: 17TRACK API key for carriers other than SingPost. */
   seventeenTrackKey: env.SEVENTEEN_TRACK_API_KEY || '',
-  /** Optional: Anthropic API key for the News and Inbox summaries, the Training and Learn notes, the daily briefing and ⌘K's Ask Launchpad. Without it they show plain lists or nothing. */
+  /** Optional: Anthropic API key for the News and Inbox summaries, the Training and Learn notes, and ⌘K's Ask Launchpad. Without it they show plain lists or nothing. */
   anthropicKey: env.ANTHROPIC_API_KEY || '',
   /** Claude model that writes the news summaries. */
   newsModel: env.NEWS_MODEL || 'claude-haiku-5-5',
@@ -24,8 +24,6 @@ export const config = {
   trainingModel: env.TRAINING_MODEL || 'claude-haiku-5-5',
   /** Claude model that writes the note on the week ahead in Learn. */
   learnModel: env.LEARN_MODEL || 'claude-haiku-5-5',
-  /** Claude model that writes the daily briefing at the top of Today. */
-  briefingModel: env.BRIEFING_MODEL || 'claude-haiku-5-5',
   /** Claude model that turns what's typed in ⌘K into an action ("Ask Launchpad"). */
   askModel: env.ASK_MODEL || 'claude-haiku-5-5',
   /** Claude model that writes the weekly recap in Review. */

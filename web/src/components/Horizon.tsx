@@ -4,7 +4,7 @@ import { fmtStudy, timerMinutes } from '../../../shared/learn';
 import { smokesOn } from '../../../shared/trackers';
 import type { AppState, CalEvent, Package, Task } from '../../../shared/types';
 import { chipOf, fmtDay, hm, inMinutes, segColor, statusText, weatherLabel } from '../util';
-import { Briefing } from './Briefing';
+import { KeyFigures } from './KeyFigures';
 import { todayAgenda } from './Today';
 
 // Horizon's home: everything sorted by when, not by what. A ribbon of today's
@@ -208,7 +208,7 @@ export function HorizonHome(props: Props) {
             <h2>Now</h2>
             <span>{hm(now)}{focus && !cur ? ` – ${hm(focus.e)}` : cur ? ` – ${hm(cur.e)}` : ''}</span>
           </div>
-          {show.today && <Briefing data={data} now={now} />}
+          {show.today && <KeyFigures data={data} now={now} />}
           {calOn && focus && (
             <div className="hz-card hot">
               <div className="hz-tagline">

@@ -757,7 +757,7 @@ export const PANEL_ROWS: { section: string; hint?: string; rows: { key: string; 
     section: 'Home panels',
     rows: [
       { key: 'panel:today', name: 'Today' },
-      { key: 'panel:briefing', name: 'Daily briefing', meta: 'Claude’s few lines on the day, at the top of Today' },
+      { key: 'panel:briefing', name: 'Key figures', meta: 'Events left, tasks due, unread, packages and balance, at the top of Today' },
       { key: 'panel:tasks', name: 'Tasks' },
       { key: 'panel:notes', name: 'Notes' },
       { key: 'panel:packages', name: 'Packages' },

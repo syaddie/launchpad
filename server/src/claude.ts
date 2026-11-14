@@ -1,7 +1,7 @@
 // The Claude calls Launchpad makes, all through here so each one's tokens are counted
 // (the usage meter in the Server view). askJson: a system prompt, a user message and a
 // JSON schema in, the parsed JSON out; used by the News and Inbox summaries, Training,
-// Learn and the daily briefing. askTool: the same, but Claude picks one of a few tools
+// Learn and the weekly recap. askTool: the same, but Claude picks one of a few tools
 // (⌘K's "Ask Launchpad"). Pass `feature` so the meter can say what the tokens were for.
 import Anthropic from '@anthropic-ai/sdk';
 import type { BetaMessage, BetaTool, MessageCreateParamsNonStreaming as BetaMessageCreateParamsNonStreaming } from '@anthropic-ai/sdk/resources/beta/messages/messages';
@@ -34,7 +34,7 @@ export function claudeErrorMessage(e: unknown, model: string): string {
   }
   if (e.status === 403) return `This API key isn’t allowed to use Claude (${detail}). Check the key’s workspace at platform.claude.com.`;
   if (e.status === 404) {
-    return `The model “${model}” isn’t available. Check NEWS_MODEL, INBOX_MODEL and TRAINING_MODEL in .env, and LEARN_MODEL, BRIEFING_MODEL and ASK_MODEL too (or remove them to use the default), then restart Launchpad.`;
+    return `The model “${model}” isn’t available. Check NEWS_MODEL, INBOX_MODEL and TRAINING_MODEL in .env, and LEARN_MODEL and ASK_MODEL too (or remove them to use the default), then restart Launchpad.`;
   }
   if (e.status === 429) return 'Hit the Claude API rate limit. It tries again on the next sync; if it keeps happening, check your limits at platform.claude.com.';
   if (e.status && e.status >= 500) return `The Claude API is having trouble (${e.status} ${detail}). It tries again on the next sync.`;
