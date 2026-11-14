@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { McDiagnosis, McMux, McServer, McStatus } from '../../../shared/types';
 import { api, localGet, localSet } from '../api';
-import { MC_COMMANDS, fillFor } from '../mcCommands';
+import { fillFor } from '../mcCommands';
+import { McCommandSheet } from './McCommandSheet';
 
 const LOG_EVERY = 1500;
 const LIST_EVERY = 10_000;
@@ -441,24 +442,7 @@ function Console({ s, onChanged, onEdit }: { s: McStatus; onChanged: () => void;
         )}
       </div>
       {logError && lines && <span className="meta" style={{ color: 'var(--wn)' }}>Couldn’t refresh the log: {logError}</span>}
-      {sheet && (
-        <div id="mc-sheet" className="mc-sheet" role="region" aria-label="Command cheatsheet">
-          <p className="meta mc-sheet-hint">
-            {canType ? 'Click a command to put it in the box. Fill in the <parts>, then Send.' : 'Commands can only be sent while the server is running in tmux or screen.'}
-          </p>
-          {MC_COMMANDS.map((g) => (
-            <div key={g.title} className="mc-sheet-group">
-              <span className="drawer-label">{g.title}</span>
-              {g.commands.map((c) => (
-                <button key={c.usage} className="mc-sheet-row" disabled={!canType} onClick={() => fill(c.usage)} title={`Put "${fillFor(c.usage).trim()}" in the command box`}>
-                  <span className="mono mc-sheet-cmd">{c.usage}</span>
-                  <span className="meta">{c.desc}</span>
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
+      {sheet && <McCommandSheet canType={canType} onFill={fill} />}
       <div className="mc-quick">
         {QUICK.map((q) => (
           <button key={q} className="chip chip-neutral mono mc-chip" disabled={!canType || busy} onClick={() => send(q)}>
