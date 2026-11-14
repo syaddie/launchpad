@@ -226,7 +226,6 @@ export const api = {
   putTraining: (v: Training) => req<Training>('PUT', '/api/training', v),
   refreshTraining: (force: boolean) => req<AppState>('POST', `/api/training/refresh${force ? '?force=1' : ''}`, {}),
   refreshLearn: (force: boolean) => req<AppState>('POST', `/api/learn/refresh${force ? '?force=1' : ''}`, {}),
-  refreshBriefing: (force: boolean) => req<Partial<AppState>>('POST', `/api/briefing/refresh${force ? '?force=1' : ''}`, {}),
   /** ⌘K's Ask Launchpad: what's typed → one checked action, not yet done. */
   ask: (text: string) => req<AskResult>('POST', '/api/ask', { text }),
   claudeUsage: () => req<UsageReport>('GET', '/api/claude/usage'),

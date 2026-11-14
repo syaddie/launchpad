@@ -19,7 +19,7 @@ import { cleanMoney } from '../../shared/money';
 import { cleanCravings } from '../../shared/trackers';
 import { cleanTraining } from '../../shared/training';
 import type {
-  BillSuggestion, BookmarkGroup, BookmarkOpens, Briefing, CalEvent, LinkCheck, CalendarInfo, Countdown, Craving, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsLists, NewsTopic, Note, NoteVersion, McServer, Package, Prefs, ReviewNote, Snippet, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
+  BillSuggestion, BookmarkGroup, BookmarkOpens, CalEvent, LinkCheck, CalendarInfo, Countdown, Craving, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsLists, NewsTopic, Note, NoteVersion, McServer, Package, Prefs, ReviewNote, Snippet, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
 } from '../../shared/types';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
@@ -243,8 +243,6 @@ export const store = {
   setReviewNotes: (v: { notes: Record<string, ReviewNote>; error: string | null }) =>
     set('reviewNotes', { ...v, notes: Object.fromEntries(Object.entries(v.notes).sort(([a], [b]) => (a < b ? -1 : 1)).slice(-104)) }),
   /** Claude's paragraph at the top of Today, written each morning. */
-  briefing: () => get<{ note: Briefing | null; error: string | null }>('briefing', { note: null, error: null }),
-  setBriefing: (v: { note: Briefing | null; error: string | null }) => set('briefing', v),
 
   /** Tokens every Claude call used, by day, feature and model (see shared/claudeUsage.ts). */
   claudeUsage: () => get<UsageLog>('claudeUsage', {}),

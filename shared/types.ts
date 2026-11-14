@@ -665,12 +665,6 @@ export interface Learn {
   calendarId: string;
 }
 
-/** Claude's paragraph at the top of Today: the day ahead in two to four sentences. */
-export interface Briefing {
-  text: string;
-  writtenAt: string;
-}
-
 /** Claude's short note on the week ahead in Learn. */
 export interface LearnNote {
   headline: string;
@@ -1029,8 +1023,6 @@ export interface AppState {
   reviewNotes: { notes: Record<string, ReviewNote>; error: string | null };
   /** Packages delivered in the last year, archived ones included, for the Review. */
   delivered: { label: string; at: string }[];
-  /** Claude's paragraph at the top of Today; null before the first one, or without an Anthropic API key. Missing in older cached copies. */
-  briefing?: { note: Briefing | null; error: string | null };
   /** What Claude has cost this month so far, estimated in US dollars (Server › Claude usage). Missing in older cached copies. */
   claudeSpend?: number;
   /** Copying the daily copies to Google Drive; missing in copies cached by older versions. */
