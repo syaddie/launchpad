@@ -4,7 +4,8 @@ import { DEFAULT_ENGINES, HIDEABLE_KEYS } from '../../shared/defaults';
 import { MAX_JOURNAL } from '../../shared/trackers';
 import { parseNewsSource } from '../../shared/news';
 import { cleanKg } from '../../shared/training';
-import type { BookmarkGroup, Countdown, Mood, Note, Package, Prefs, SearchEngine, Snippet } from '../../shared/types';
+import { DESIGN_KEYS } from '../../shared/types';
+import type { BookmarkGroup, Countdown, DesignKey, Mood, Note, Package, Prefs, SearchEngine, Snippet } from '../../shared/types';
 
 export const isStr = (v: unknown): v is string => typeof v === 'string';
 
@@ -66,7 +67,7 @@ export function cleanPrefs(body: Partial<Prefs>, prev: Prefs): Prefs {
     name: isStr(body.name) ? body.name.slice(0, 40) : prev.name,
     theme: ['system', 'light', 'dark'].includes(body.theme as string) ? body.theme! : prev.theme,
     accent: ['sage', 'slate', 'terracotta'].includes(body.accent as string) ? body.accent! : prev.accent,
-    design: ['broadsheet', 'console', 'bento', 'horizon'].includes(body.design as string) ? body.design! : prev.design ?? 'broadsheet',
+    design: DESIGN_KEYS.includes(body.design as DesignKey) ? body.design! : prev.design ?? 'broadsheet',
     hiddenCalendars: Array.isArray(body.hiddenCalendars) ? body.hiddenCalendars.filter(isStr) : prev.hiddenCalendars,
     sources: { ...prev.sources, ...pickBools(body.sources, Object.keys(prev.sources)) },
     newsTopics: Array.isArray(body.newsTopics) ? cleanTopics(body.newsTopics) : prev.newsTopics,

@@ -42,6 +42,9 @@ interface Props {
   onConnect: () => void;
 }
 
+/** The last focusSignal that put the cursor in the field, kept across mounts. */
+let answeredSignal = 0;
+
 export function AddEvent({ data, now, focusSignal, onAdd, onConnect }: Props) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -51,9 +54,11 @@ export function AddEvent({ data, now, focusSignal, onAdd, onConnect }: Props) {
   const cal = cals.find((c) => c.id === calId) ?? cals[0];
 
   useEffect(() => {
-    if (!focusSignal) return;
+    // Each ask is answered once: coming back to Home later (or to this tab, in Focus) doesn't take the cursor again.
+    if (!focusSignal || focusSignal === answeredSignal) return;
     // After ⌘K has closed and handed focus back.
     const t = window.setTimeout(() => {
+      answeredSignal = focusSignal;
       input.current?.scrollIntoView({ block: 'nearest' });
       input.current?.focus();
     }, 60);

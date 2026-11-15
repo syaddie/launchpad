@@ -687,6 +687,9 @@ export const DESIGNS: { key: DesignKey; name: string; blurb: string }[] = [
   { key: 'console', name: 'Console', blurb: 'A terminal dashboard: monospace, boxed panes, F1–F9 for the views. Weather details are printed, not hovered. Always dark.' },
   { key: 'bento', name: 'Bento', blurb: 'Tiles that lead with one big number, a colour for each part of life, and a dock at the bottom. Follows Theme.' },
   { key: 'horizon', name: 'Horizon', blurb: 'Today’s hours across the top, then Now, Later today, This week and Anytime. Follows Theme.' },
+  { key: 'vista', name: 'Vista', blurb: 'Your photos as the backdrop, frosted-glass panels, and a big clock and search in the middle. Follows Theme and Accent.' },
+  { key: 'focus', name: 'Focus', blurb: 'The clock and what’s next on the left; Today, Tasks, Notes and Packages one at a time behind tabs, with room to breathe. Follows Theme and Accent.' },
+  { key: 'poster', name: 'Poster', blurb: 'Big type, hard rules and one red: a Swiss poster. Numbered panels and a solid nav bar. Follows Theme.' },
 ];
 
 function LayoutSettings({ prefs, onPrefs, local, onLocal }: { prefs: Prefs; onPrefs: (p: Prefs) => void; local: DesignKey | ''; onLocal: (d: DesignKey | '') => void }) {

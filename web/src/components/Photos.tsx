@@ -83,6 +83,26 @@ export function PhotoPanel({ photos, area, index: i, onStep }: PanelProps) {
   );
 }
 
+/**
+ * Vista's backdrop: the photo fills the window behind the panels, softened so text reads
+ * over it. With no photos (or the photo panels switched off) it's a wash of the accent colour.
+ */
+export function Wallpaper({ photos, index, onNext }: { photos: Photo[]; index: number; onNext: () => void }) {
+  const p = photos[index];
+  return (
+    <>
+      <div className={'wallpaper' + (p ? '' : ' plain')} aria-hidden="true">
+        {p && <img key={p.id} src={photoUrl(p.id)} alt="" style={{ objectPosition: focusPos(p) }} />}
+      </div>
+      {photos.length > 1 && (
+        <button className="photo-btn wallpaper-next" title="Next photo" aria-label="Show the next photo" onClick={onNext}>
+          <i className="ph-duotone ph-image" aria-hidden="true" />
+        </button>
+      )}
+    </>
+  );
+}
+
 interface SettingsProps {
   photos: Photo[];
   onAdd: (files: File[]) => Promise<string>;
@@ -90,7 +110,7 @@ interface SettingsProps {
   onFocus: (id: string, focus: Photo['focus']) => void;
 }
 
-const HINT = 'Shown in two panels on the dashboard. Click a photo to pick the part that stays in frame.';
+const HINT = 'Shown in the photo panels on the dashboard, and as the backdrop in the Vista layout. Click a photo to pick the part that stays in frame.';
 
 export function PhotoSettings({ photos, onAdd, onRemove, onFocus }: SettingsProps) {
   const [msg, setMsg] = useState(HINT);

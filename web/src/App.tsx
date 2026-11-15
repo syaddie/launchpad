@@ -11,13 +11,14 @@ import { api, localGet, localSet, type RestoreResult } from './api';
 import { AddEvent } from './components/AddEvent';
 import { Bookmarks } from './components/Bookmarks';
 import { AddPackageDrawer, DESIGNS, Drawer, PackageDrawer, SettingsDrawer } from './components/Drawers';
+import { FocusHome, type FocusTabInfo } from './components/FocusHome';
 import { HeroPanel } from './components/Hero';
 import { HorizonHome } from './components/Horizon';
 import { FocusView, Notes } from './components/Notes';
 import { Packages } from './components/Packages';
 import { Palette } from './components/Palette';
-import { PhotoPanel, shrinkImage, usePhotoSlots } from './components/Photos';
-import { Rail } from './components/Rail';
+import { PhotoPanel, shrinkImage, usePhotoSlots, Wallpaper } from './components/Photos';
+import { Rail, VIEWS } from './components/Rail';
 import type { ServerTab } from './components/Server';
 import { ServerBanner } from './components/ServerBanner';
 import { Shortcuts } from './components/Shortcuts';
@@ -30,7 +31,7 @@ import { useHashView, useLayout, useMinuteNow, useSystemDark } from './hooks/use
 import { useShortcuts } from './hooks/useShortcuts';
 import { useFlash, useToast } from './hooks/useToast';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { gridLayout, type Area } from './layout';
+import { focusTab, gridLayout, type Area, type FocusTab } from './layout';
 import { send } from './outbox';
 import { paletteAsk, paletteItems, paletteSearches, type AskHandlers, type PaletteContext } from './paletteItems';
 import type { PendingCall } from './pending';
@@ -91,6 +92,12 @@ export function App({ cached }: { cached: AppState | null }) {
   const setLocalDesign = (d: DesignKey | '') => {
     setLocalDesignState(d);
     localSet('design', d);
+  };
+  // The panel Focus's home has open; the other layouts show them all at once.
+  const [homeTab, setHomeTabState] = useState(() => localGet('homeTab'));
+  const setHomeTab = (t: FocusTab) => {
+    setHomeTabState(t);
+    localSet('homeTab', t);
   };
   const [saved, flashSaved, setSaved] = useFlash();
   const [moneySaved, flashMoneySaved, setMoneySaved] = useFlash();
@@ -560,15 +567,32 @@ export function App({ cached }: { cached: AppState | null }) {
       .filter(([, k]) => !hidden.has(k))
       .map(([a]) => a),
   );
-  if (photoCount > 0) shown.add('photo');
-  if (photoCount > 1) shown.add('photo2');
-  // Bento opens with a clock tile; Console and Bento print the weather details as a panel.
-  if (design === 'bento') shown.add('hero');
+  // Vista's photos are its wallpaper; Focus has room for one beside the tabs.
+  if (photoCount > 0 && design !== 'vista') shown.add('photo');
+  if (photoCount > 1 && design !== 'vista' && design !== 'focus') shown.add('photo2');
+  // Bento and Focus open with a clock tile; Console and Bento print the weather details as a panel.
+  if (design === 'bento' || design === 'focus') shown.add('hero');
   const weatherOn = !!data.prefs.weatherArea && !hidden.has('top:weather');
   if ((design === 'console' || design === 'bento') && weatherOn) shown.add('wx');
   const grid = gridLayout(layout, shown, design);
   const smokesToday = smokesOn(data.smokes, now).length;
   const inboxCount = inboxBadge(data);
+
+  // Focus: what's waiting behind each tab.
+  const activeTab = focusTab(homeTab, shown);
+  const focusTabs: FocusTabInfo[] = [];
+  if (design === 'focus') {
+    const today = ymd(now);
+    const calOn = data.google.connected && data.prefs.sources.calendar;
+    const tasksOn = data.google.connected && data.prefs.sources.tasks;
+    const left = calOn ? todayAgenda(data, now).todays.filter((e) => e.e > now).length : 0;
+    const dueToday = tasksOn ? data.tasks.filter((t) => t.due === today).length : 0;
+    const onTheWay = data.packages.filter((p) => p.stage < 3);
+    if (shown.has('today')) focusTabs.push({ key: 'today', name: 'Today', icon: 'ph-calendar-blank', count: left });
+    if (shown.has('tasks')) focusTabs.push({ key: 'tasks', name: 'Tasks', icon: 'ph-check-square', count: overdue + dueToday, warn: overdue > 0 });
+    if (shown.has('notes')) focusTabs.push({ key: 'notes', name: 'Notes', icon: 'ph-notebook' });
+    if (shown.has('pkgs')) focusTabs.push({ key: 'pkgs', name: 'Packages', icon: 'ph-package', count: onTheWay.length, warn: onTheWay.some((p) => p.exception) });
+  }
 
   const keepPackage = (id: string) => {
     patchPackage(id, { isNew: false });
@@ -576,6 +600,32 @@ export function App({ cached }: { cached: AppState | null }) {
   };
   const notesPanel = (
     <Notes notes={notes} activeId={activeId} onActive={pickNote} onChange={setNotes} saved={saved} onOpenFocus={() => setFocus(true)} onEditing={onNoteEditing} notify={showToast} />
+  );
+  const todayPanel = (
+    <Today
+      data={data}
+      now={now}
+      wide={layout === 'wide' || design === 'focus'}
+      compact={shown.has('photo2') && layout !== 'narrow'}
+      onConnect={connect}
+      onRetry={() => api.sync('calendar').then(merge).catch(() => refresh())}
+      addEvent={<AddEvent data={data} now={now} focusSignal={addEventSignal} onAdd={google.addEvent} onConnect={connect} />}
+    />
+  );
+  const tasksPanel = <Tasks data={data} now={now} onConnect={connect} onAdd={addTask} onComplete={completeTask} onUpdate={google.updateTask} onMove={google.moveTask} onDelete={google.deleteTask} />;
+  const packagesPanel = (
+    <Packages packages={data.packages} now={now} onOpen={(id) => setDrawer({ type: 'pkg', id })} onAdd={() => setDrawer({ type: 'add' })} onKeep={keepPackage} onDismiss={archivePackage} />
+  );
+  const heroPanel = <HeroPanel data={data} now={now} extras={extras.join(' · ')} />;
+  const noPanels = (
+    <div className="panel" style={{ gridColumn: '1 / -1' }}>
+      <div className="empty">
+        <p>Every home panel is switched off.</p>
+        <button className="btn btn-secondary" onClick={() => setDrawer({ type: 'settings' })}>
+          Open Settings
+        </button>
+      </div>
+    </div>
   );
   const checkLinks = () => api.checkLinks().then((linkCheck) => update((d) => ({ ...d, linkCheck }))).catch((e) => showToast(`Couldn’t start the link check: ${e.message}`));
   const bookmarksPanel = <Bookmarks groups={data.bookmarks} onChange={setBookmarks} search={search} edit={editBookmarks} setEdit={setEditBookmarks} linkCheck={data.linkCheck} onCheckLinks={checkLinks} notify={showToast} />;
@@ -620,10 +670,10 @@ export function App({ cached }: { cached: AppState | null }) {
     addPackage: () => setDrawer({ type: 'add' }),
     addEvent: google.addEvent,
     // The field is in the Today panel, which Horizon's home doesn't have.
-    openAddEvent: shown.has('today') && design !== 'horizon' ? () => (setView('home'), setAddEventSignal((n) => n + 1)) : undefined,
+    openAddEvent: shown.has('today') && design !== 'horizon' ? () => (setView('home'), setHomeTab('today'), setAddEventSignal((n) => n + 1)) : undefined,
     refreshNews, refreshInbox,
     openReading: () => (setView('news'), setReadingSignal((n) => n + 1)),
-    openNote: (id: string) => (pickNote(id), setView('home')),
+    openNote: (id: string) => (pickNote(id), setHomeTab('notes'), setView('home')),
     showShortcuts: () => setShortcuts(true),
     openSettings: () => setDrawer({ type: 'settings' }),
     toggleHidden,
@@ -635,10 +685,11 @@ export function App({ cached }: { cached: AppState | null }) {
 
   return (
     <div ref={rootRef} className="lp-root" data-layout={layout} data-design={design} data-view={view}>
+      {design === 'vista' && <Wallpaper photos={photoCount > 0 ? data.photos : []} index={photoSlots.shown[0]} onNext={() => photoSlots.step(0, 1)} />}
       <div className="lp-shell">
       <Rail view={view} hidden={data.prefs.hidden} badges={{ inbox: inboxCount }} onView={setView} onPalette={() => setPalette(true)} onSettings={() => setDrawer({ type: 'settings' })} />
       <div className="lp-inner">
-        <TopBar data={data} now={now} subline={subline} search={search} onSearch={setSearch} searchRef={searchRef} smokesToday={smokesToday} onLogSmoke={logSmoke} onOpenTraining={() => setView('training')} onOpenLearn={() => setView('learn')} />
+        <TopBar data={data} now={now} title={view === 'home' ? undefined : VIEWS.find((v) => v.key === view)?.name} subline={subline} search={search} onSearch={setSearch} searchRef={searchRef} smokesToday={smokesToday} onLogSmoke={logSmoke} onOpenTraining={() => setView('training')} onOpenLearn={() => setView('learn')} />
         {serverIssue && <ServerBanner issue={serverIssue} waiting={waiting} onRetry={() => refresh()} />}
         <ErrorBoundary resetKey={view}>
         <Suspense fallback={<main className="view-loading" aria-busy="true" />}>
@@ -700,7 +751,18 @@ export function App({ cached }: { cached: AppState | null }) {
         ) : view === 'server' ? (
           <Server data={data} now={now} openTab={serverTab} onOpenSettings={() => setDrawer({ type: 'settings' })} split={design !== 'broadsheet' && layout !== 'narrow'} />
         ) : (
-          design === 'horizon' ? (
+          design === 'focus' ? (
+            <FocusHome
+              tabs={focusTabs}
+              active={activeTab}
+              onTab={setHomeTab}
+              hero={heroPanel}
+              photo={shown.has('photo') && <PhotoPanel photos={data.photos} area="photo" index={photoSlots.shown[0]} onStep={(d) => photoSlots.step(0, d)} />}
+              panel={activeTab === 'today' ? todayPanel : activeTab === 'tasks' ? tasksPanel : activeTab === 'notes' ? notesPanel : packagesPanel}
+              bookmarks={shown.has('bm') && bookmarksPanel}
+              empty={noPanels}
+            />
+          ) : design === 'horizon' ? (
             <HorizonHome
               data={data}
               now={now}
@@ -730,46 +792,16 @@ export function App({ cached }: { cached: AppState | null }) {
             />
           ) : (
           <main className="lp-grid" style={{ gridTemplateAreas: grid.areas, gridTemplateColumns: grid.columns, gridTemplateRows: grid.rows }}>
-            {shown.has('today') && (
-            <Today
-              data={data}
-              now={now}
-              wide={layout === 'wide'}
-              compact={photoCount === 2 && layout !== 'narrow'}
-              onConnect={connect}
-              onRetry={() => api.sync('calendar').then(merge).catch(() => refresh())}
-              addEvent={<AddEvent data={data} now={now} focusSignal={addEventSignal} onAdd={google.addEvent} onConnect={connect} />}
-            />
-            )}
-            {shown.has('tasks') && (
-              <Tasks data={data} now={now} onConnect={connect} onAdd={addTask} onComplete={completeTask} onUpdate={google.updateTask} onMove={google.moveTask} onDelete={google.deleteTask} />
-            )}
-            {photoCount > 0 && <PhotoPanel photos={data.photos} area="photo" index={photoSlots.shown[0]} onStep={(d) => photoSlots.step(0, d)} />}
-            {photoCount > 1 && <PhotoPanel photos={data.photos} area="photo2" index={photoSlots.shown[1]} onStep={(d) => photoSlots.step(1, d)} />}
-            {shown.has('hero') && <HeroPanel data={data} now={now} extras={extras.join(' · ')} />}
+            {shown.has('today') && todayPanel}
+            {shown.has('tasks') && tasksPanel}
+            {shown.has('photo') && <PhotoPanel photos={data.photos} area="photo" index={photoSlots.shown[0]} onStep={(d) => photoSlots.step(0, d)} />}
+            {shown.has('photo2') && <PhotoPanel photos={data.photos} area="photo2" index={photoSlots.shown[1]} onStep={(d) => photoSlots.step(1, d)} />}
+            {shown.has('hero') && heroPanel}
             {shown.has('wx') && <WeatherPanel data={data} now={now} />}
             {shown.has('notes') && notesPanel}
-            {shown.has('pkgs') && (
-            <Packages
-              packages={data.packages}
-              now={now}
-              onOpen={(id) => setDrawer({ type: 'pkg', id })}
-              onAdd={() => setDrawer({ type: 'add' })}
-              onKeep={keepPackage}
-              onDismiss={archivePackage}
-            />
-            )}
+            {shown.has('pkgs') && packagesPanel}
             {shown.has('bm') && bookmarksPanel}
-            {!shown.size && (
-              <div className="panel" style={{ gridColumn: '1 / -1' }}>
-                <div className="empty">
-                  <p>Every home panel is switched off.</p>
-                  <button className="btn btn-secondary" onClick={() => setDrawer({ type: 'settings' })}>
-                    Open Settings
-                  </button>
-                </div>
-              </div>
-            )}
+            {!shown.size && noPanels}
           </main>
           )
         )}
