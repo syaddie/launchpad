@@ -63,7 +63,9 @@ export interface NoteVersion {
 export type ThemeMode = 'system' | 'light' | 'dark';
 export type AccentKey = 'sage' | 'slate' | 'terracotta';
 /** The whole-page design picked in Settings › Layout. Every design shows every view; only the arrangement and look change. */
-export type DesignKey = 'broadsheet' | 'console' | 'bento' | 'horizon';
+export type DesignKey = 'broadsheet' | 'console' | 'bento' | 'horizon' | 'vista' | 'focus' | 'poster';
+/** Every design, for checking a saved or sent one is still known. */
+export const DESIGN_KEYS: DesignKey[] = ['broadsheet', 'console', 'bento', 'horizon', 'vista', 'focus', 'poster'];
 export type GoogleSource = 'calendar' | 'tasks' | 'gmail';
 export type SourceKey = GoogleSource | 'carriers' | 'news' | 'inbox' | 'weather' | 'speedtest';
 export type ViewKey = 'home' | 'news' | 'inbox' | 'you' | 'training' | 'learn' | 'money' | 'server' | 'review';

@@ -11,6 +11,8 @@ import { ago, favicon, fmtDay, hm, host, psiBand, uvBand, weatherIcon, weatherLa
 interface Props {
   data: AppState;
   now: Date;
+  /** The view's name, shown in place of the greeting; missing on Home. */
+  title?: string;
   subline: string;
   search: string;
   onSearch: (q: string) => void;
@@ -39,7 +41,7 @@ function Clock({ weather, showAir }: { weather: Weather | null; showAir: boolean
   return (
     <div className="clock-row">
       <a className="serif clock clock-link" href="https://time.is/" target="_blank" rel="noopener" title="Check the time on time.is">{hm(now)}</a>
-      <span className="tnum" style={{ fontSize: 13, color: 'var(--t2)', whiteSpace: 'nowrap' }}>
+      <span className="tnum clock-date">
         {fmtDay(now)} · {tzLabel()}
       </span>
       {weather && <WeatherNow w={weather} now={now} showAir={showAir} />}
@@ -273,7 +275,7 @@ export function searchRows(q: string, bookmarks: Bookmark[], engines: SearchEngi
   ];
 }
 
-export function TopBar({ data, now, subline, search, onSearch, searchRef, smokesToday, onLogSmoke, onOpenTraining, onOpenLearn }: Props) {
+export function TopBar({ data, now, title, subline, search, onSearch, searchRef, smokesToday, onLogSmoke, onOpenTraining, onOpenLearn }: Props) {
   const [focused, setFocused] = useState(false);
   const [sel, setSel] = useState(0);
   const [syncHover, setSyncHover] = useState(false);
@@ -355,16 +357,14 @@ export function TopBar({ data, now, subline, search, onSearch, searchRef, smokes
 
   return (
     <header className="topbar">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
-        <div className="serif greeting">
-          {greeting}
-          {data.prefs.name ? `, ${data.prefs.name}` : ''}
-        </div>
-        <div className="subline">{subline}</div>
+      <div className="top-left">
+        {/* Home greets you; every other view says where you are. */}
+        <h1 className="serif greeting">{title ?? `${greeting}${data.prefs.name ? `, ${data.prefs.name}` : ''}`}</h1>
+        <div className="subline" title={subline}>{subline}</div>
       </div>
-      <div className="top-right" style={{ display: 'flex', alignItems: 'flex-end', gap: '15px 30px', flexWrap: 'wrap' }}>
+      <div className="top-right">
         <Clock weather={data.prefs.weatherArea && !hidden.includes('top:weather') ? data.weather.now : null} showAir={!hidden.includes('top:air')} />
-        <div className="top-tools" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+        <div className="top-tools">
           <div className="search">
             <i className="ph-duotone ph-magnifying-glass" />
             <input
