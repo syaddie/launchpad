@@ -86,7 +86,6 @@ const FIELDS: { [F in Field]: () => AppState[F] } = {
     const since = Date.now() - 366 * 86_400_000;
     return store.packages().flatMap((p) => (p.deliveredAt && Date.parse(p.deliveredAt) >= since ? [{ label: p.label || p.number, at: p.deliveredAt }] : []));
   },
-  briefing: () => (claudeEnabled() ? store.briefing() : { note: null, error: null }),
   claudeSpend: () => monthCost(store.claudeUsage(), new Date()),
   drive: driveStatus,
   health: currentWarnings,
@@ -130,7 +129,6 @@ export const KEY_FIELDS: Record<string, Field[]> = {
   learn: ['learn'],
   learnNote: ['learnNote'],
   reviewNotes: ['reviewNotes'],
-  briefing: ['briefing'],
   claudeUsage: ['claudeSpend'],
   sync: ['sync', 'health'],
   driveBackup: ['drive', 'health'],

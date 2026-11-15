@@ -65,3 +65,45 @@ export const MC_COMMANDS: McCommandGroup[] = [
 export function fillFor(usage: string): string {
   return usage.split(/[<[]/)[0];
 }
+
+/** One entry in the full list: every command the server answers to `help` with. */
+export interface McListed {
+  /** As in McCommand, but a command's subcommands are one <a|b|c> to pick from. */
+  usage: string;
+  group: string;
+  desc?: string;
+  /** The mod it comes from, when that's known. */
+  mod?: string;
+  /** Other names for it, without the slash. */
+  also?: string[];
+}
+
+/** The full list's groups, in the order they're shown. */
+export const MC_GROUPS = ['Server', 'Access', 'Players', 'World', 'Scripting', 'Mods'];
+
+/** The commands that match every word typed, in `group` unless it's null. */
+export function filterCommands(all: McListed[], query: string, group: string | null): McListed[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  return all.filter((c) => {
+    if (group && c.group !== group) return false;
+    const hay = [c.usage, c.desc, c.mod, ...(c.also ?? [])].join(' ').toLowerCase();
+    return words.every((w) => hay.includes(w));
+  });
+}
+
+/** The pins that were saved: only commands still in the list, each once. */
+export function parsePins(raw: string | null, all: McListed[]): string[] {
+  try {
+    const v: unknown = JSON.parse(raw || '[]');
+    if (!Array.isArray(v)) return [];
+    const known = new Set(all.map((c) => c.usage));
+    return [...new Set(v.filter((x): x is string => typeof x === 'string' && known.has(x)))];
+  } catch {
+    return [];
+  }
+}
+
+/** `pins` with `usage` added at the end, or taken out if it was there. */
+export function togglePin(pins: string[], usage: string): string[] {
+  return pins.includes(usage) ? pins.filter((p) => p !== usage) : [...pins, usage];
+}

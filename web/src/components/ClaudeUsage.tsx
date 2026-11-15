@@ -93,7 +93,7 @@ export function ClaudeUsagePanel({ data, onOpenSettings }: { data: AppState; onO
 
       {nothing ? (
         <div className="empty">
-          <p>No Claude calls yet. Each summary, note, briefing and ⌘K question is counted here once it runs.</p>
+          <p>No Claude calls yet. Each summary, note and ⌘K question is counted here once it runs.</p>
         </div>
       ) : (
         <>
