@@ -51,6 +51,8 @@ export const config = {
     saveDir: (env.QBIT_SAVE_DIR || '/downloads').replace(/(.)\/+$/, '$1'),
     hostDir: (env.QBIT_HOST_DIR || '').replace(/(.)\/+$/, '$1'),
   },
+  /** Instagram downloads: a Python with instaloader installed. The Docker image sets this to its own; outside it, `python3`. */
+  instaloaderPython: env.INSTALOADER_PYTHON || 'python3',
   /** Optional: verify Cloudflare Access JWTs so only your Access login can reach the app. */
   access: {
     teamDomain: (env.CF_ACCESS_TEAM_DOMAIN || '').replace(/^https?:\/\//, '').replace(/\/+$/, ''),

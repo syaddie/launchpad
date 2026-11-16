@@ -853,12 +853,52 @@ export interface DownloadJob {
   error: string | null;
   startedAt: string;
   endedAt: string | null;
+  /** Instagram posts or a profile, rather than one file: `url` is what was pasted, `received` counts every file. */
+  ig?: IgProgress;
+}
+
+export interface IgProgress {
+  /** A profile's newest how many; null for post links. Kept for Try again. */
+  limit: number | null;
+  /** Each post's caption (.txt) and details (.json) are saved beside it. */
+  metadata: boolean;
+  /** Posts asked for: the links pasted, or the profile's limit (it may have fewer). */
+  want: number;
+  /** Posts finished with, saved or not. */
+  postsDone: number;
+  /** The post being saved: files done of its total. */
+  current: { done: number; of: number } | null;
+  /** Photos and videos saved, ones already in the folder, and posts that couldn't be read. */
+  files: number;
+  skipped: number;
+  failed: number;
+  /** Why the last post that couldn't be read couldn't be. */
+  lastError: string | null;
+  /** Where the files went: the account's folder, or `dir` when the posts came from several accounts. */
+  folder: string | null;
+  /** Waiting for another Instagram download to finish (they run one at a time). */
+  queued: boolean;
+  /** Instagram asked to slow down; carrying on at this time. */
+  waitUntil: string | null;
+}
+
+export interface InstagramInfo {
+  /** instaloader is installed where Launchpad can run it (it comes with the Docker image). */
+  available: boolean;
+  version: string | null;
+  /** Why it isn't available. */
+  error: string | null;
+  /** Signed in with this account's session; null downloads public posts only. */
+  account: string | null;
+  /** Instagram turned the session away last time it was used. */
+  stale: boolean;
 }
 
 export interface DownloadsInfo {
   jobs: DownloadJob[];
   /** Where a download goes unless another folder is picked: ~/Downloads, or home. Null without SSH. */
   defaultDir: string | null;
+  instagram: InstagramInfo;
 }
 
 export type TorrentStatus = 'downloading' | 'seeding' | 'done' | 'paused' | 'queued' | 'checking' | 'stalled' | 'metadata' | 'moving' | 'error';

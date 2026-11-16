@@ -1951,3 +1951,16 @@ button.m-stat { cursor: default; }
 .dl-tools { display: flex; gap: 2px; }
 .dl-confirm { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 2px 0 4px; }
 .dl-setup ol { gap: 12px; }
+/* Instagram: the options under the box, and signing in with a browser's session. */
+.dl-add > .panel-head { flex-wrap: wrap; }
+.dl-head-tools { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.dl-ig-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; font-size: 13px; color: var(--t2); }
+.dl-ig-limit { display: inline-flex; align-items: center; gap: 8px; }
+.dl-ig-limit .input { width: 76px; box-sizing: border-box; text-align: right; }
+.dl-ig-toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.dl-ig-session { display: flex; flex-direction: column; gap: 12px; max-width: none; padding-top: 14px; border-top: 1px solid var(--ln); font-size: 13px; }
+.dl-ig-session ol { gap: 6px; }
+.dl-ig-session p i { vertical-align: -2px; }
+.dl-ig-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 640px; }
+.dl-ig-form .input { flex: 1 1 260px; min-width: 0; box-sizing: border-box; }
+.dl-ig-actions { display: flex; flex-wrap: wrap; gap: 6px; }

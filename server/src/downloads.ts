@@ -3,7 +3,7 @@
 // the browser. Each goes into a hidden part file named like an upload's, so one cut
 // off by a restart is swept away with them a day later, and takes its real name when
 // it's complete. The list lives in memory: a restart forgets it (and stops any still
-// running).
+// running). Instagram posts come through here too (instagram.ts), one job a link or profile.
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { Readable, Transform } from 'node:stream';
@@ -15,9 +15,9 @@ import type { DownloadJob, DownloadsInfo } from '../../shared/types';
 export const MAX_ACTIVE = 4;
 const KEEP = 30;
 /** A download that gets nothing for this long is given up on. */
-const STALL = 90_000;
+export const STALL = 90_000;
 
-interface Job extends DownloadJob {
+export interface Job extends DownloadJob {
   ctl: AbortController;
   cancelled: boolean;
   lastAt: number;
@@ -85,7 +85,7 @@ export function withNumber(name: string, n: number): string {
 }
 
 /** `name`, or the first numbered one that isn't in `dir` yet. */
-async function freeName(sftp: SFTPWrapper, dir: string, name: string): Promise<string> {
+export async function freeName(sftp: SFTPWrapper, dir: string, name: string): Promise<string> {
   for (let n = 1; n < 1000; n++) {
     const pick = n === 1 ? name : withNumber(name, n);
     if (!(await stat(sftp, path.posix.join(dir, pick)).catch(() => null))) return pick;
@@ -93,12 +93,58 @@ async function freeName(sftp: SFTPWrapper, dir: string, name: string): Promise<s
   throw new FileError(`There are too many files called ${name} there already.`, 409);
 }
 
-function view(j: Job): DownloadJob {
+export function view(j: Job): DownloadJob {
   const { ctl: _c, cancelled: _x, lastAt: _a, lastBytes: _b, lastByteAt: _t, ...rest } = j;
-  return { ...rest };
+  return { ...rest, ig: rest.ig && { ...rest.ig, current: rest.ig.current && { ...rest.ig.current } } };
 }
 
 const active = () => jobs.filter((j) => j.state === 'starting' || j.state === 'downloading');
+
+/** A job's own fields, ready to go on the list. */
+export function newJob(fields: Pick<DownloadJob, 'url' | 'name' | 'dir'> & Partial<DownloadJob>): Job {
+  const now = Date.now();
+  return {
+    id: crypto.randomUUID(),
+    received: 0,
+    total: null,
+    bps: 0,
+    state: 'starting',
+    error: null,
+    startedAt: new Date(now).toISOString(),
+    endedAt: null,
+    ctl: new AbortController(),
+    cancelled: false,
+    lastAt: now,
+    lastBytes: 0,
+    lastByteAt: now,
+    ...fields,
+  };
+}
+
+/** Refuse a fifth download at once; otherwise put `job` at the top of the list and forget the oldest finished ones. */
+export function addJob(job: Job): void {
+  if (active().length >= MAX_ACTIVE) throw new FileError(`${MAX_ACTIVE} downloads are going already. Wait for one to finish.`, 409);
+  jobs.unshift(job);
+  for (let i = jobs.length - 1; i >= 0 && jobs.length > KEEP; i--) if (!active().includes(jobs[i])) jobs.splice(i, 1);
+}
+
+/** Counts what passes through onto `job`: its bytes so far, its speed, and when the last arrived (for the stall check). */
+export function counter(job: Job): Transform {
+  return new Transform({
+    transform(chunk: Buffer, _enc, cb) {
+      const now = Date.now();
+      job.received += chunk.length;
+      job.lastByteAt = now;
+      if (now - job.lastAt >= 1000) {
+        const bps = ((job.received - job.lastBytes) * 1000) / (now - job.lastAt);
+        job.bps = job.bps ? job.bps * 0.5 + bps * 0.5 : bps;
+        job.lastAt = now;
+        job.lastBytes = job.received;
+      }
+      cb(null, chunk);
+    },
+  });
+}
 
 let defaultDir: string | null = null;
 
@@ -112,45 +158,29 @@ async function pickDefaultDir(): Promise<string | null> {
   return defaultDir;
 }
 
-export async function listDownloads(): Promise<DownloadsInfo> {
+export async function listDownloads(): Promise<Omit<DownloadsInfo, 'instagram'>> {
   return { jobs: jobs.map(view), defaultDir: await pickDefaultDir().catch(() => null) };
+}
+
+/** The folder a download goes into, once SSH is known to be set up. */
+export function downloadDir(dir: unknown): string {
+  if (!shellConfigured()) throw new FileError('Downloads are written over the terminal’s SSH login, which isn’t set up yet.', 409);
+  return cleanPath(typeof dir === 'string' ? dir.trim() : dir);
 }
 
 /** Start fetching `url` into `dir`; it carries on after this returns. `name` overrides the one the site gives. */
 export function startDownload(body: { url?: unknown; dir?: unknown; name?: unknown }): DownloadJob {
-  if (!shellConfigured()) throw new FileError('Downloads are written over the terminal’s SSH login, which isn’t set up yet.', 409);
+  const dir = downloadDir(body.dir);
   const url = cleanUrl(body.url);
-  const dir = cleanPath(typeof body.dir === 'string' ? body.dir.trim() : body.dir);
   const want = typeof body.name === 'string' && body.name.trim() ? cleanName(body.name.trim()) : null;
-  if (active().length >= MAX_ACTIVE) throw new FileError(`${MAX_ACTIVE} downloads are going already. Wait for one to finish.`, 409);
-  const now = Date.now();
-  const job: Job = {
-    id: crypto.randomUUID(),
-    url: url.href,
-    name: want ?? nameFrom(url, null),
-    dir,
-    received: 0,
-    total: null,
-    bps: 0,
-    state: 'starting',
-    error: null,
-    startedAt: new Date(now).toISOString(),
-    endedAt: null,
-    ctl: new AbortController(),
-    cancelled: false,
-    lastAt: now,
-    lastBytes: 0,
-    lastByteAt: now,
-  };
-  jobs.unshift(job);
-  // Forget the oldest finished ones.
-  for (let i = jobs.length - 1; i >= 0 && jobs.length > KEEP; i--) if (!active().includes(jobs[i])) jobs.splice(i, 1);
+  const job = newJob({ url: url.href, name: want ?? nameFrom(url, null), dir });
+  addJob(job);
   fetchInto(job, url, want).catch(() => {});
   return view(job);
 }
 
 /** Why a fetch failed, in words: Node puts the reason (no such host, refused…) in `cause`. */
-function fetchError(e: unknown): string {
+export function fetchError(e: unknown): string {
   const err = e as Error & { cause?: Error & { code?: string } };
   const c = err.cause;
   if (c?.code === 'ENOTFOUND' || c?.code === 'EAI_AGAIN') return 'Can’t find that site.';
@@ -184,20 +214,7 @@ async function fetchInto(job: Job, url: URL, want: string | null): Promise<void>
     part = partPath(job.dir, `dl-${job.id}`);
     noteUploadDir(job.dir);
     job.state = 'downloading';
-    const count = new Transform({
-      transform(chunk: Buffer, _enc, cb) {
-        const now = Date.now();
-        job.received += chunk.length;
-        job.lastByteAt = now;
-        if (now - job.lastAt >= 1000) {
-          const bps = ((job.received - job.lastBytes) * 1000) / (now - job.lastAt);
-          job.bps = job.bps ? job.bps * 0.5 + bps * 0.5 : bps;
-          job.lastAt = now;
-          job.lastBytes = job.received;
-        }
-        cb(null, chunk);
-      },
-    });
+    const count = counter(job);
     const source = Readable.fromWeb(res.body as import('node:stream/web').ReadableStream);
     try {
       await pipeline(source, count, sftp.createWriteStream(part, { flags: 'w', mode: 0o644 }), { signal: job.ctl.signal });

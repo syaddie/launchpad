@@ -1,0 +1,4 @@
+# Instagram downloads (Server › Downloads): installed into the Docker image by the Dockerfile.
+# Pinned so a cached image layer and a fresh build agree; raise it when Instagram changes
+# something and a new instaloader fixes it (https://github.com/instaloader/instaloader/releases).
+instaloader==4.16
