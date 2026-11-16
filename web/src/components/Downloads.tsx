@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { DownloadJob, DownloadsInfo, Torrent, TorrentsInfo, TorrentStatus } from '../../../shared/types';
+import { cleanIgLimit, IG_DEFAULT_LIMIT, IG_MAX_LIMIT, parseInstagram } from '../../../shared/instagram';
+import type { DownloadJob, DownloadsInfo, InstagramInfo, Torrent, TorrentsInfo, TorrentStatus } from '../../../shared/types';
 import { api, localGet, localSet } from '../api';
-import { fmtBytes } from '../util';
+import { fmtBytes, hm } from '../util';
 import { Copyable } from './Copyable';
 
 const POLL = 2000;
 
-/** Where a pasted link goes: qBittorrent for magnets and .torrent files, otherwise straight to a folder. */
-export function linkKind(text: string): 'torrent' | 'http' | null {
+/** Where a pasted link goes: qBittorrent for magnets and .torrent files, Instagram's posts and profiles through instaloader, otherwise straight to a folder. */
+export function linkKind(text: string): 'torrent' | 'http' | 'instagram' | null {
+  const ig = parseInstagram(text);
+  if (ig) return 'error' in ig ? null : 'instagram';
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (!lines.length) return null;
   if (lines.every((l) => /^magnet:\?/i.test(l) || /^https?:\/\/\S+\.torrent(\?\S*)?$/i.test(l))) return 'torrent';
@@ -75,7 +78,15 @@ export function DownloadsPanel({ shellReady, onOpenFolder }: {
 
   return (
     <div className="dl-view">
-      <AddBox shellReady={shellReady !== false} defaultDir={dl?.defaultDir ?? null} torrentsOn={!!tor?.configured} onAdded={loadDl} onTorrents={setTor} />
+      <AddBox
+        shellReady={shellReady !== false}
+        defaultDir={dl?.defaultDir ?? null}
+        torrentsOn={!!tor?.configured}
+        instagram={dl?.instagram ?? null}
+        onInstagram={(instagram) => setDl((d) => d && { ...d, instagram })}
+        onAdded={loadDl}
+        onTorrents={setTor}
+      />
       <div className="server-row dl-row">
         <DownloadList info={dl} error={dlError} shellReady={shellReady} onChanged={loadDl} onOpenFolder={onOpenFolder} />
         <Torrents info={tor} error={torError} onInfo={setTor} onOpenFolder={shellReady ? onOpenFolder : undefined} />
@@ -86,10 +97,13 @@ export function DownloadsPanel({ shellReady, onOpenFolder }: {
 
 // ---------- adding ----------
 
-function AddBox({ shellReady, defaultDir, torrentsOn, onAdded, onTorrents }: {
+function AddBox({ shellReady, defaultDir, torrentsOn, instagram, onInstagram, onAdded, onTorrents }: {
   shellReady: boolean;
   defaultDir: string | null;
   torrentsOn: boolean;
+  /** Null until the list has loaded. */
+  instagram: InstagramInfo | null;
+  onInstagram: (i: InstagramInfo) => void;
   onAdded: () => void;
   onTorrents: (t: TorrentsInfo) => void;
 }) {
@@ -97,9 +111,15 @@ function AddBox({ shellReady, defaultDir, torrentsOn, onAdded, onTorrents }: {
   const [dir, setDir] = useState(() => localGet('dlDir') ?? '');
   const [note, setNote] = useState<{ text: string; failed: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [igOpen, setIgOpen] = useState(false);
+  const [igLimit, setIgLimit] = useState(() => localGet('igLimit') ?? String(IG_DEFAULT_LIMIT));
+  const [igMeta, setIgMeta] = useState(() => localGet('igMeta') === '1');
   const file = useRef<HTMLInputElement>(null);
   const kind = linkKind(text);
+  const ig = parseInstagram(text);
+  const igTarget = ig && !('error' in ig) ? ig : null;
   const folder = dir.trim() || defaultDir || '';
+  const igReady = !!instagram?.available;
 
   const done = (msg: string) => {
     setText('');
@@ -116,10 +136,15 @@ function AddBox({ shellReady, defaultDir, torrentsOn, onAdded, onTorrents }: {
             onTorrents(t);
             done(text.trim().includes('\n') ? 'Added to qBittorrent.' : 'Added to qBittorrent. It shows below once it has the torrent’s details.');
           })
-        : api.startDownload(text.trim(), folder).then((j) => {
+        : api.startDownload(text.trim(), folder, kind === 'instagram' ? { limit: cleanIgLimit(igLimit), metadata: igMeta } : undefined).then((j) => {
             if (dir.trim()) localSet('dlDir', dir.trim());
             onAdded();
-            done(`Downloading ${j.name} into ${j.dir}.`);
+            if (!j.ig) done(`Downloading ${j.name} into ${j.dir}.`);
+            else {
+              localSet('igLimit', String(cleanIgLimit(igLimit)));
+              localSet('igMeta', igMeta ? '1' : '0');
+              done(j.ig.queued ? `${j.name} starts when the Instagram download before it is done.` : `Saving ${j.name} into ${j.dir}.`);
+            }
           });
     p.catch(failed).finally(() => setBusy(false));
   };
@@ -140,32 +165,58 @@ function AddBox({ shellReady, defaultDir, torrentsOn, onAdded, onTorrents }: {
       });
   };
 
+  const into = folder || 'your home folder';
   const hint =
-    kind === 'torrent'
-      ? torrentsOn
-        ? 'Goes to qBittorrent.'
-        : 'That’s a torrent: set up qBittorrent below to download it.'
-      : kind === 'http'
-        ? shellReady
-          ? `Saves into ${folder || 'your home folder'}.`
-          : 'Set up the terminal’s SSH login first: downloads are written over it.'
-        : text.trim()
-          ? 'Paste an https:// link, or one magnet link a line.'
-          : 'An https:// link downloads straight to the server; a magnet link goes to qBittorrent.';
-  const blocked = !kind || (kind === 'torrent' ? !torrentsOn : !shellReady);
+    ig && 'error' in ig
+      ? ig.error
+      : kind === 'torrent'
+        ? torrentsOn
+          ? 'Goes to qBittorrent.'
+          : 'That’s a torrent: set up qBittorrent below to download it.'
+        : !shellReady && (kind === 'http' || kind === 'instagram')
+          ? 'Set up the terminal’s SSH login first: downloads are written over it.'
+          : kind === 'http'
+            ? `Saves into ${into}.`
+            : igTarget
+              ? !instagram
+                ? 'Checking Instagram downloads are set up…'
+                : !igReady
+                  ? instagram.error || 'Instagram downloads aren’t set up on this server.'
+                  : igTarget.profile
+                    ? `Saves the newest posts of @${igTarget.profile} into ${into}/${igTarget.profile}.${instagram.account ? '' : ' Public profiles only until you sign in.'}`
+                    : `Saves ${igTarget.posts.length === 1 ? 'the post’s' : `the ${igTarget.posts.length} posts’`} photos and videos into ${into}, in a folder for each account.`
+              : text.trim()
+                ? 'Paste an https:// link, Instagram links one a line, or magnet links one a line.'
+                : 'An https:// link downloads straight to the server, an Instagram post or profile saves its photos and videos, and a magnet link goes to qBittorrent.';
+  const blocked = !kind || (kind === 'torrent' ? !torrentsOn : !shellReady || (kind === 'instagram' && !igReady));
 
   return (
     <section className="panel srv-panel dl-add" aria-label="Download to the server">
       <div className="panel-head">
         <h2 className="panel-title">Download to the server</h2>
-        {torrentsOn && (
-          <>
-            <input ref={file} type="file" accept=".torrent,application/x-bittorrent" hidden onChange={(e) => addFile(e.target.files?.[0])} />
-            <button className="btn btn-secondary btn-small" disabled={busy} onClick={() => file.current?.click()}>
-              <i className="ph-duotone ph-file-arrow-up" />
-              Add a .torrent file
-            </button>
-          </>
+        {(torrentsOn || igReady) && (
+          <span className="dl-head-tools">
+            {igReady && (
+              <button
+                className="btn btn-secondary btn-small"
+                aria-expanded={igOpen}
+                title={instagram!.account ? (instagram!.stale ? 'Instagram turned this session away last time' : 'Signed in to Instagram') : 'Sign in to Instagram, for private posts'}
+                onClick={() => setIgOpen(!igOpen)}
+              >
+                <i className={'ph-duotone ' + (instagram!.stale ? 'ph-warning-circle' : 'ph-instagram-logo')} style={instagram!.stale ? { color: 'var(--wn)' } : undefined} />
+                {instagram!.account ? `@${instagram!.account}` : 'Instagram'}
+              </button>
+            )}
+            {torrentsOn && (
+              <>
+                <input ref={file} type="file" accept=".torrent,application/x-bittorrent" hidden onChange={(e) => addFile(e.target.files?.[0])} />
+                <button className="btn btn-secondary btn-small" disabled={busy} onClick={() => file.current?.click()}>
+                  <i className="ph-duotone ph-file-arrow-up" />
+                  Add a .torrent file
+                </button>
+              </>
+            )}
+          </span>
         )}
       </div>
       <form
@@ -179,8 +230,12 @@ function AddBox({ shellReady, defaultDir, torrentsOn, onAdded, onTorrents }: {
           className="input mono dl-link"
           rows={text.includes('\n') ? 4 : 1}
           value={text}
-          placeholder="https://… or magnet:?xt=…"
-          onChange={(e) => setText(e.target.value)}
+          placeholder="https://…, an Instagram link, or magnet:?xt=…"
+          onChange={(e) => {
+            setText(e.target.value);
+            // What the last one said gives way to what this one will do.
+            if (e.target.value.trim()) setNote(null);
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
@@ -204,13 +259,42 @@ function AddBox({ shellReady, defaultDir, torrentsOn, onAdded, onTorrents }: {
           </label>
         )}
         <button className="btn btn-primary" disabled={blocked || busy}>
-          <i className={'ph-duotone ' + (busy ? 'ph-circle-notch spin' : kind === 'torrent' ? 'ph-magnet' : 'ph-download-simple')} />
+          <i className={'ph-duotone ' + (busy ? 'ph-circle-notch spin' : kind === 'torrent' ? 'ph-magnet' : kind === 'instagram' ? 'ph-instagram-logo' : 'ph-download-simple')} />
           Download
         </button>
       </form>
-      <span className="meta" role="status" style={note?.failed ? { color: 'var(--wn)' } : undefined}>
+      {kind === 'instagram' && igReady && (
+        <div className="dl-ig-opts">
+          {igTarget?.profile && (
+            <label className="dl-ig-limit">
+              Newest
+              <input
+                className="input sm tnum"
+                type="number"
+                min={1}
+                max={IG_MAX_LIMIT}
+                value={igLimit}
+                onChange={(e) => setIgLimit(e.target.value)}
+                onBlur={() => setIgLimit(String(cleanIgLimit(igLimit)))}
+                aria-label="How many of the newest posts"
+              />
+              posts
+            </label>
+          )}
+          <span className="dl-ig-toggle">
+            <button type="button" role="switch" aria-checked={igMeta} aria-labelledby="dl-ig-meta" className={'switch' + (igMeta ? ' on' : '')} onClick={() => setIgMeta(!igMeta)}>
+              <span />
+            </button>
+            <span id="dl-ig-meta" onClick={() => setIgMeta(!igMeta)}>
+              Caption and details too
+            </span>
+          </span>
+        </div>
+      )}
+      <span className="meta" role="status" style={note?.failed || (!note && ig && 'error' in ig) ? { color: 'var(--wn)' } : undefined}>
         {note?.text ?? hint}
       </span>
+      {igOpen && instagram && igReady && <IgSession info={instagram} onInfo={onInstagram} onClose={() => setIgOpen(false)} />}
     </section>
   );
 }
@@ -256,7 +340,13 @@ function DownloadList({ info, error, shellReady, onChanged, onOpenFolder }: {
       ) : (
         <div className="dl-items">
           {jobs.map((j) => (
-            <JobRow key={j.id} j={j} onCancel={() => act(api.cancelDownload(j.id))} onRetry={() => act(api.startDownload(j.url, j.dir))} onOpenFolder={() => onOpenFolder(j.dir)} />
+            <JobRow
+              key={j.id}
+              j={j}
+              onCancel={() => act(api.cancelDownload(j.id))}
+              onRetry={() => act(api.startDownload(j.url, j.dir, j.ig ? { limit: j.ig.limit ?? undefined, metadata: j.ig.metadata } : undefined))}
+              onOpenFolder={() => onOpenFolder(j.ig?.folder ?? j.dir)}
+            />
           ))}
         </div>
       )}
@@ -264,20 +354,62 @@ function DownloadList({ info, error, shellReady, onChanged, onOpenFolder }: {
   );
 }
 
+const count = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? one : many}`;
+
+/** An Instagram job's line under its name: where it's got to, or what it saved. */
+export function igDetail(j: DownloadJob): string {
+  const ig = j.ig!;
+  if (j.state === 'starting' || j.state === 'downloading') {
+    if (ig.queued) return 'Starts when the Instagram download before it is done';
+    if (ig.waitUntil) return `Instagram asked to slow down · carrying on at ${hm(new Date(ig.waitUntil))}`;
+    if (!ig.postsDone && !ig.current) return ig.want === 1 && ig.limit === null ? 'Finding the post…' : 'Finding the posts…';
+    return [
+      ig.want > 1 ? `post ${Math.min(ig.postsDone + 1, ig.want)} of ${ig.want}` : '',
+      ig.current && ig.current.of > 1 ? `file ${Math.min(ig.current.done + 1, ig.current.of)} of ${ig.current.of}` : '',
+      j.received ? fmtBytes(j.received) : '',
+      ig.skipped ? `${ig.skipped} already there` : '',
+      // A speed of a few bytes a second is one that's still settling (or files being skipped).
+      j.bps >= 1000 ? fmtRate(j.bps) : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+  }
+  if (j.state === 'failed') return j.error || 'Failed';
+  const saved = ig.files ? `${count(ig.files, 'file')} · ${fmtBytes(j.received)}` : '';
+  if (j.state === 'cancelled') return saved ? `Cancelled · ${saved} saved` : 'Cancelled';
+  if (!ig.postsDone) return 'No posts to save';
+  return [saved || (ig.skipped ? '' : 'Nothing new'), ig.skipped ? `${ig.skipped} already there` : '', ig.failed ? `${count(ig.failed, 'post')} couldn’t be read` : '', `in ${ig.folder ?? j.dir}`].filter(Boolean).join(' · ');
+}
+
+/** How far through an Instagram job is, by posts and the files of the one being saved; null while it's still finding them. */
+export function igPercent(ig: NonNullable<DownloadJob['ig']>): number | null {
+  if (ig.queued || ig.waitUntil || (!ig.postsDone && !ig.current) || !ig.want) return null;
+  const part = ig.current && ig.current.of ? ig.current.done / ig.current.of : 0;
+  return Math.min(100, ((ig.postsDone + part) / ig.want) * 100);
+}
+
 function JobRow({ j, onCancel, onRetry, onOpenFolder }: { j: DownloadJob; onCancel: () => void; onRetry: () => void; onOpenFolder: () => void }) {
   const going = j.state === 'starting' || j.state === 'downloading';
-  const pct = j.total ? (j.received / j.total) * 100 : null;
+  const pct = j.ig ? igPercent(j.ig) : j.total ? (j.received / j.total) * 100 : null;
   const left = j.total && j.bps ? (j.total - j.received) / j.bps : null;
-  const detail = going
-    ? [j.total ? `${fmtBytes(j.received)} of ${fmtBytes(j.total)}` : fmtBytes(j.received), fmtRate(j.bps), left !== null ? `${fmtEta(left)} left` : ''].filter(Boolean).join(' · ')
-    : j.state === 'done'
-      ? `${fmtBytes(j.received)} · in ${j.dir}`
-      : j.state === 'cancelled'
-        ? 'Cancelled'
-        : j.error || 'Failed';
+  const detail = j.ig
+    ? igDetail(j)
+    : going
+      ? [j.total ? `${fmtBytes(j.received)} of ${fmtBytes(j.total)}` : fmtBytes(j.received), fmtRate(j.bps), left !== null ? `${fmtEta(left)} left` : ''].filter(Boolean).join(' · ')
+      : j.state === 'done'
+        ? `${fmtBytes(j.received)} · in ${j.dir}`
+        : j.state === 'cancelled'
+          ? 'Cancelled'
+          : j.error || 'Failed';
+  // Some of an Instagram job's posts couldn't be read: done, but worth a look.
+  const partly = j.state === 'done' && !!j.ig?.failed;
+  const folder = j.ig?.folder ?? j.dir;
   return (
     <div className="dl-item">
-      <i className={'ph-duotone ' + (j.state === 'done' ? 'ph-check-circle' : j.state === 'failed' ? 'ph-warning-circle' : j.state === 'cancelled' ? 'ph-x-circle' : 'ph-download-simple')} style={{ color: j.state === 'failed' ? 'var(--wn)' : j.state === 'done' ? 'var(--ac)' : 'var(--t3)' }} />
+      <i
+        className={'ph-duotone ' + (j.state === 'done' ? (partly ? 'ph-warning-circle' : 'ph-check-circle') : j.state === 'failed' ? 'ph-warning-circle' : j.state === 'cancelled' ? 'ph-x-circle' : j.ig ? 'ph-instagram-logo' : 'ph-download-simple')}
+        style={{ color: j.state === 'failed' || partly ? 'var(--wn)' : j.state === 'done' ? 'var(--ac)' : 'var(--t3)' }}
+      />
       <div className="dl-item-main">
         <span className="dl-name" title={j.url}>
           {j.name}
@@ -287,7 +419,7 @@ function JobRow({ j, onCancel, onRetry, onOpenFolder }: { j: DownloadJob; onCanc
             <span style={{ width: `${pct ?? 30}%` }} />
           </div>
         )}
-        <span className="meta tnum" style={j.state === 'failed' ? { color: 'var(--wn)' } : undefined}>
+        <span className="meta tnum" style={j.state === 'failed' ? { color: 'var(--wn)' } : undefined} title={partly ? (j.ig!.lastError ?? undefined) : detail}>
           {detail}
         </span>
       </div>
@@ -302,12 +434,107 @@ function JobRow({ j, onCancel, onRetry, onOpenFolder }: { j: DownloadJob; onCanc
             <i className="ph-duotone ph-arrow-clockwise" />
           </button>
         )}
-        {j.state === 'done' && (
-          <button className="icon-btn" title="Open the folder in Files" aria-label={`Open ${j.dir} in Files`} onClick={onOpenFolder}>
+        {(j.state === 'done' || (j.state === 'cancelled' && !!j.ig?.files)) && (
+          <button className="icon-btn" title="Open the folder in Files" aria-label={`Open ${folder} in Files`} onClick={onOpenFolder}>
             <i className="ph-duotone ph-folder-open" />
           </button>
         )}
       </span>
+    </div>
+  );
+}
+
+// ---------- Instagram sign-in ----------
+
+/** Signing Instagram downloads in with a browser's session, or out again. */
+function IgSession({ info, onInfo, onClose }: { info: InstagramInfo; onInfo: (i: InstagramInfo) => void; onClose: () => void }) {
+  const [cookie, setCookie] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [replacing, setReplacing] = useState(false);
+  const run = (p: Promise<InstagramInfo>, after?: () => void) => {
+    setBusy(true);
+    setError('');
+    p.then((i) => {
+      onInfo(i);
+      setCookie('');
+      setReplacing(false);
+      after?.();
+    })
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setBusy(false));
+  };
+  const asking = !info.account || info.stale || replacing;
+  return (
+    <div className="shell-setup dl-ig-session" role="group" aria-label="Instagram sign-in">
+      {info.account && (
+        <p>
+          {info.stale ? (
+            <>
+              <i className="ph-duotone ph-warning-circle" style={{ color: 'var(--wn)' }} /> Instagram turned away the session for <b>@{info.account}</b> last time. Paste a fresh one below, or sign out to download public posts only.
+            </>
+          ) : (
+            <>
+              Signed in to Instagram as <b>@{info.account}</b>, so private posts you can see download too.
+            </>
+          )}
+        </p>
+      )}
+      {asking && (
+        <>
+          {!info.account && <p>Public posts and profiles download without signing in. For private ones you follow, or when Instagram limits the server, give Launchpad the session of a browser that’s signed in:</p>}
+          <ol>
+            <li>Sign in at instagram.com, ideally in a private window.</li>
+            <li>
+              Open the developer tools (F12) › Application (Storage in Firefox) › Cookies › https://www.instagram.com, and copy the value of <span className="mono">sessionid</span>.
+            </li>
+            <li>Paste it here. Close that window without signing out, as signing out ends the session.</li>
+          </ol>
+          <form
+            className="dl-ig-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (cookie.trim() && !busy) run(api.instagramSignIn(cookie.trim()));
+            }}
+          >
+            <input
+              className="input sm mono"
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              value={cookie}
+              onChange={(e) => setCookie(e.target.value)}
+              placeholder="sessionid, or the whole Cookie header"
+              aria-label="Instagram session cookie"
+            />
+            <button className="btn btn-primary btn-small" disabled={!cookie.trim() || busy}>
+              <i className={'ph-duotone ' + (busy ? 'ph-circle-notch spin' : 'ph-sign-in')} />
+              {busy ? 'Checking with Instagram…' : 'Sign in'}
+            </button>
+          </form>
+        </>
+      )}
+      {error && (
+        <span className="meta" role="alert" style={{ color: 'var(--wn)' }}>
+          {error}
+        </span>
+      )}
+      <div className="dl-ig-actions">
+        {info.account && !info.stale && !replacing && (
+          <button className="btn btn-secondary btn-small" disabled={busy} onClick={() => setReplacing(true)}>
+            Use another session
+          </button>
+        )}
+        {info.account && (
+          <button className="btn btn-secondary btn-small" disabled={busy} onClick={() => run(api.instagramSignOut())}>
+            Sign out
+          </button>
+        )}
+        <button className="btn btn-secondary btn-small" onClick={onClose}>
+          Close
+        </button>
+      </div>
+      <span className="meta">The session stays on the server, readable by Launchpad alone: not in this browser or in backups. It’s used for these downloads and nothing else.</span>
     </div>
   );
 }

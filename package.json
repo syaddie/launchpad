@@ -9,7 +9,7 @@
     "dev:web": "vite",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p server/tsconfig.json --noEmit",
     "build": "npm run typecheck && vite build && npm run build:server",
-    "build:server": "esbuild server/src/index.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/server/index.js --external:cpu-features --banner:js=\"import{createRequire}from'module';import{fileURLToPath as __lpUrl}from'url';import{dirname as __lpDir}from'path';const require=createRequire(import.meta.url);const __filename=__lpUrl(import.meta.url);const __dirname=__lpDir(__filename);\"",
+    "build:server": "esbuild server/src/index.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/server/index.js --external:cpu-features --banner:js=\"import{createRequire}from'module';import{fileURLToPath as __lpUrl}from'url';import{dirname as __lpDir}from'path';const require=createRequire(import.meta.url);const __filename=__lpUrl(import.meta.url);const __dirname=__lpDir(__filename);\" && node -e \"require('fs').copyFileSync('server/src/instagram.py','dist/server/instagram.py')\"",
     "start": "node --disable-warning=ExperimentalWarning dist/server/index.js",
     "test": "TZ=Asia/Singapore vitest run"
   },

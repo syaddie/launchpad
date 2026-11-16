@@ -30,6 +30,8 @@ import { attachTerminal, FileError, listDir, makeDir, MAX_TEXT, readFileStream, 
 import { serverStats, startSampler } from './system';
 import { cleanMcServer, diagnose, MAX_MC, mcStatuses, readLog, sendCommand, startServer } from './minecraft';
 import { cancelDownload, clearDownloads, listDownloads, startDownload } from './downloads';
+import { instagramInfo, signInInstagram, signOutInstagram, startInstagram } from './instagram';
+import { parseInstagram } from '../../shared/instagram';
 import { addTorrentFile, addTorrentLinks, MAX_TORRENT_FILE, QbitError, torrentAction, torrents } from './qbit';
 import { containerLogs, DockerError, restartContainer } from './docker';
 import { diskHealth } from './disks';
@@ -45,7 +47,7 @@ import { refreshTraining } from './training';
 import { ask, MAX_ASK } from './ask';
 import { claudeEnabled } from './claude';
 import { summariseUsage } from '../../shared/claudeUsage';
-import type { Mood, NewsLists, Package, Photo, Prefs, SavedDoc, SourceKey } from '../../shared/types';
+import type { DownloadsInfo, Mood, NewsLists, Package, Photo, Prefs, SavedDoc, SourceKey } from '../../shared/types';
 
 const app = new Hono();
 
@@ -779,10 +781,23 @@ app.post('/api/minecraft/:id/start', async (c) => {
 
 // ---------- downloads and torrents ----------
 
-app.get('/api/downloads', async (c) => c.json(await listDownloads()));
+app.get('/api/downloads', async (c) => {
+  const [list, instagram] = await Promise.all([listDownloads(), instagramInfo()]);
+  return c.json({ ...list, instagram } satisfies DownloadsInfo);
+});
 
-/** Fetch a link into a folder on the server; the page polls the list for progress. */
-app.post('/api/downloads', async (c) => c.json(startDownload(await c.req.json())));
+/** Fetch a link into a folder on the server, or an Instagram post's or profile's photos and videos; the page polls the list for progress. */
+app.post('/api/downloads', async (c) => {
+  const body = await c.req.json();
+  const ig = typeof body?.url === 'string' ? parseInstagram(body.url) : null;
+  if (ig && 'error' in ig) throw new FileError(ig.error);
+  return c.json(ig ? startInstagram(body, ig) : startDownload(body));
+});
+
+/** Sign Instagram downloads in with a browser's session cookie, checked with Instagram first. */
+app.post('/api/downloads/instagram', async (c) => c.json(await signInInstagram((await c.req.json())?.cookie)));
+
+app.delete('/api/downloads/instagram', async (c) => c.json(await signOutInstagram()));
 
 app.post('/api/downloads/:id/cancel', (c) => c.json(cancelDownload(c.req.param('id'))));
 

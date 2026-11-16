@@ -1,4 +1,4 @@
-import type { DownloadJob, DownloadsInfo, McDiagnosis, McLog, McServer, McStatus, TorrentsInfo } from '../../shared/types';
+import type { DownloadJob, DownloadsInfo, InstagramInfo, McDiagnosis, McLog, McServer, McStatus, TorrentsInfo } from '../../shared/types';
 import type { AppState, Backup, BackupSnapshot, CalEvent, Countdown, Craving, DirListing, DisksReport, LinkCheck, LogLine, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
 import type { AskResult } from '../../shared/ask';
 import type { UsageReport } from '../../shared/claudeUsage';
@@ -270,7 +270,10 @@ export const api = {
   mcStart: (id: string) => req('POST', `/api/minecraft/${encodeURIComponent(id)}/start`, {}, false, undefined, 30_000),
   mcDiagnose: (id: string) => req<McDiagnosis>('GET', `/api/minecraft/${encodeURIComponent(id)}/diagnose`, undefined, false, undefined, 40_000),
   downloads: () => req<DownloadsInfo>('GET', '/api/downloads'),
-  startDownload: (url: string, dir: string) => req<DownloadJob>('POST', '/api/downloads', { url, dir }),
+  /** `ig` only matters for Instagram links: a profile's newest how many, and whether to save captions and details too. */
+  startDownload: (url: string, dir: string, ig?: { limit?: number; metadata: boolean }) => req<DownloadJob>('POST', '/api/downloads', { url, dir, ...ig }),
+  instagramSignIn: (cookie: string) => req<InstagramInfo>('POST', '/api/downloads/instagram', { cookie }),
+  instagramSignOut: () => req<InstagramInfo>('DELETE', '/api/downloads/instagram'),
   cancelDownload: (id: string) => req<DownloadJob>('POST', `/api/downloads/${encodeURIComponent(id)}/cancel`, {}),
   clearDownloads: () => req<DownloadJob[]>('POST', '/api/downloads/clear', {}),
   torrents: () => req<TorrentsInfo>('GET', '/api/torrents'),
