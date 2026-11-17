@@ -786,6 +786,10 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 
 /* ---------- inbox ---------- */
 
+/* Bills and the summary sit above the columns and keep their full height. When they leave too little room,
+   the columns keep a usable height and the whole view scrolls down to them, rather than squashing them to nothing. */
+.lp-root:not([data-layout='narrow']) .inbox { overflow-y: auto; margin: -1px; padding: 1px; } /* room for the panels' 1px outline */
+.lp-root:not([data-layout='narrow']) .inbox-grid { min-height: 420px; }
 .inbox-brief { flex: none; }
 .inbox-overview { margin: 0; padding: 0 10px; max-width: 78ch; font-family: var(--f-display); font-size: 17px; line-height: 1.5; text-wrap: pretty; }
 .inbox-skimmed { margin: 8px 0 0; padding: 0 10px; font-size: 12px; color: var(--t3); text-wrap: pretty; }
@@ -806,6 +810,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .inbox-reconnect { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; flex: none; font-size: 13px; color: var(--t3); }
 /* Bills and receipts found in Gmail, waiting for Keep or Dismiss. */
 .inbox-bills { flex: none; }
+.inbox-bills .scroll { max-height: 220px; }
+/* Phones scroll the page, not the panel, so every bill shows rather than being cut off at the first few. */
+[data-layout='narrow'] .inbox-bills .scroll { max-height: none; }
 .bill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 7px 10px; border-radius: var(--r); font-size: 13px; }
 .bill-row + .bill-row { border-top: 1px solid var(--ln); border-radius: 0; }
 .bill-row .bill-what { flex: 1 1 260px; min-width: 0; }
