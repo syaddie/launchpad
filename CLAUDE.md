@@ -5,7 +5,7 @@
 Whatever the change, it isn't finished until there are no loose ends:
 
 - **No bugs.** Try more than the happy path: empty and full states (nothing there, a lot there), errors, and anything else the change touches.
-- **Clean in every layout, phones included.** Check it at desktop, wide and phone (narrow) sizes. Nothing should be cut off, overlapping, squashed to nothing, or impossible to scroll to.
+- **Clean in every design and every screen size, phones included.** Check each of the app's designs (Broadsheet, Console, Bento, Horizon, Vista, Focus, Poster; the full list is `DESIGN_KEYS` in `shared/types.ts`) at desktop, wide and phone (narrow) sizes. Nothing should be cut off, overlapping, squashed to nothing, or impossible to scroll to.
 - **Seen working in the app**, not just in tests. If you couldn't check something, say so.
 
 ## Merging to main
