@@ -5,6 +5,7 @@ import type { Money, MoneyEntry } from '../../../../shared/types';
 import { unmarked } from '../../../../shared/subscriptions';
 import { readXlsx } from '../../../../shared/xlsx';
 import { localGet, localSet } from '../../api';
+import { useActiveTabInView } from '../../hooks/useActiveTabInView';
 import { newId } from '../../util';
 import { MonthTab } from './MonthTab';
 import { Overview } from './Overview';
@@ -58,6 +59,7 @@ export function MoneyView({ money: given, now, saved, onChange: save, onImport, 
   const latest = useRef(money);
   latest.current = money;
 
+  const tabsRef = useActiveTabInView(tab);
   const setTab = (t: Tab) => {
     setTabState(t);
     localSet('moneyTab', t);
@@ -86,7 +88,7 @@ export function MoneyView({ money: given, now, saved, onChange: save, onImport, 
   return (
     <main className="money" aria-label="Money">
       <div className="money-head">
-        <div className="tabs money-tabs" role="tablist">
+        <div ref={tabsRef} className="tabs money-tabs" role="tablist">
           {TABS.map((t) => (
             <button key={t.key} role="tab" aria-selected={tab === t.key} className={'tab' + (tab === t.key ? ' active' : '')} onClick={() => setTab(t.key)}>
               {t.name}
