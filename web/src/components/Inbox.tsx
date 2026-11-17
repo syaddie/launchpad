@@ -61,7 +61,7 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, a
 
   if (!ready) {
     return (
-      <main className="news" aria-label="Inbox">
+      <main className="news inbox" aria-label="Inbox">
         <div className="panel">
           <div className="empty">
             <p>
@@ -87,7 +87,7 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, a
   );
 
   return (
-    <main className="news" aria-label="Inbox">
+    <main className="news inbox" aria-label="Inbox">
       <div className="news-head">
         <div className="segmented" role="tablist" aria-label="How far back">
           {RANGES.map((x) => (
@@ -127,7 +127,7 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, a
             <h2 className="panel-title">Bills and receipts</h2>
             <span className="meta">From your email · nothing goes into Money until you keep it</span>
           </div>
-          <div className="scroll" style={{ maxHeight: 220 }}>
+          <div className="scroll">
             {bills.map((b) => (
               <div key={b.id} className="bill-row">
                 <div className="bill-what">
@@ -159,7 +159,7 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, a
           <div className="news-note">No email in {r.words}.</div>
         </div>
       ) : !data.newsSummaries ? (
-        <div className="news-grid">
+        <div className="news-grid inbox-grid">
           <section className="panel" aria-label="Emails">
             <div className="panel-head">
               <h2 className="panel-title">Emails</h2>
