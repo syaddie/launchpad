@@ -3,6 +3,7 @@ import { DOW, MON } from '../../../shared/dates';
 import { fmtDuration } from '../../../shared/trackers';
 import type { AppState, ServerStats, ShellInfo, SourceKey, SpeedTest } from '../../../shared/types';
 import { api, cachedServer, cacheServer, localGet, localSet } from '../api';
+import { useActiveTabInView } from '../hooks/useActiveTabInView';
 import { ago, fmtBytes, hm, niceMax } from '../util';
 import { ClaudeUsagePanel } from './ClaudeUsage';
 import { ContainerRow, LogsDrawer } from './Containers';
@@ -44,6 +45,7 @@ export function Server({ data, now, openTab, onOpenSettings, split }: {
   const [tab, setTabState] = useState<Tab>(() => TABS.find((t) => t.key === localGet('serverTab'))?.key ?? 'overview');
   // The terminal and files stay mounted once opened, so the screen and unsaved edits survive a switch of tab.
   const [opened, setOpened] = useState<Set<Tab>>(() => new Set([tab]));
+  const tabsRef = useActiveTabInView(tab);
   const [cd, setCd] = useState<{ path: string; n: number } | null>(null);
   const [filesAt, setFilesAt] = useState<{ path: string; n: number } | null>(null);
   const [info, setInfo] = useState<ShellInfo | null>(null);
@@ -94,7 +96,7 @@ export function Server({ data, now, openTab, onOpenSettings, split }: {
   return (
     <main className={'server' + (both && ready ? ' split-shell' : '')}>
       <div className="server-head">
-        <div className="tabs server-tabs" role="tablist" aria-label="Server">
+        <div ref={tabsRef} className="tabs server-tabs" role="tablist" aria-label="Server">
           {TABS.map((t) => (
             <button key={t.key} role="tab" aria-selected={tab === t.key || (both && pair(t.key))} className={'tab' + (tab === t.key || (both && pair(t.key)) ? ' active' : '')} onClick={() => setTab(t.key)}>
               <i className={'ph-duotone ' + t.icon} />

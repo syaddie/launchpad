@@ -431,7 +431,11 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .menu button:hover:not(:disabled) { background: var(--hv); }
 .menu button:disabled { opacity: 0.4; cursor: default; }
 
-.tabs { display: flex; gap: 2px; }
+/* A row of tabs that doesn't fit (a view's tabs on a phone) scrolls sideways rather than
+   running off the edge. As a scroll container it may shrink below its content in a flex row. */
+.tabs { display: flex; gap: 2px; min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; }
+/* The scroll box would clip a focus ring drawn outside the tab, so draw it inside. */
+.tabs .tab:focus-visible { outline-offset: -2px; }
 .tab {
   flex: none;
   border: none;
