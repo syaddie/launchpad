@@ -26,7 +26,14 @@ import { eventStream, tabOf } from './events';
 import { recentSmokes, state, stateFor } from './state';
 import { MAX_PHOTOS, MAX_PHOTO_BYTES, readPhoto, removePhotoFile, sniffImage, writePhoto } from './photos';
 import { isRunning, newPackage, refreshPackage, refreshSummaries, refreshWeather, runAllGoogle, runIfStale, runSource, signOutGoogle, startScheduler } from './sync';
-import { attachTerminal, FileError, listDir, makeDir, MAX_TEXT, readFileStream, readText, remove, rename, shellInfo, trustHostKey, abandonUpload, uploadPiece, UPLOAD_CHUNK, writeText } from './shell';
+import { attachTerminal, cleanPath, FileError, listDir, makeDir, MAX_TEXT, readFileStream, readText, rename, sftpSession, shellInfo, trustHostKey, abandonUpload, uploadPiece, UPLOAD_CHUNK, writeText } from './shell';
+import { downloadHeaders, etagOf, ifRangeOk, inlineHeaders, parseRange, rangeHeaders } from './fileserve';
+import { cleanPaths, deleteItems, emptyTrash, listTrash, restoreItems, trashPaths } from './trash';
+import { checkCompress, checkExtract, compressPaths, extractArchive } from './archive';
+import { cancelJob, dismissJob, listJobs, startJob } from './filejobs';
+import { deleteForGood, folderSizes, takeTicket, transfer, zipTicket } from './fileops';
+import { zipPaths } from './zipstream';
+import { cancelSearch, cleanQuery, searchFiles } from './filesearch';
 import { serverStats, startSampler } from './system';
 import { cleanMcServer, diagnose, MAX_MC, mcStatuses, readLog, sendCommand, startServer } from './minecraft';
 import { cancelDownload, clearDownloads, listDownloads, startDownload } from './downloads';
@@ -683,15 +690,22 @@ app.delete('/api/shell/snippets/:id', (c) => {
 
 app.get('/api/files/list', async (c) => c.json(await listDir(c.req.query('path'))));
 
-app.get('/api/files/download', async (c) => {
-  const f = await readFileStream(c.req.query('path'));
-  return c.body(f.body, 200, {
-    'Content-Type': 'application/octet-stream',
-    'Content-Length': String(f.size),
-    'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(f.name)}`,
-    'X-Content-Type-Options': 'nosniff',
-  });
-});
+/** A file, or the part a Range header asks for, so big downloads can resume and videos can seek. */
+async function sendFile(c: Context, inline: boolean) {
+  const p = cleanPath(c.req.query('path'));
+  const kind = inline ? inlineHeaders(path.posix.basename(p)) : downloadHeaders(path.posix.basename(p));
+  if (!kind) throw new FileError('That kind of file can’t be shown here. Download it instead.', 415);
+  // A Range for a version of the file that's since changed gets the whole new file.
+  const f = await readFileStream(p, (size, mtime) => (ifRangeOk(c.req.header('if-range'), etagOf(size, mtime)) ? parseRange(c.req.header('range'), size) : null));
+  const { status, headers } = rangeHeaders(f.size, f.part, f.mtime);
+  if (status === 416 || !f.body) return c.body(null, 416, { ...kind, ...headers });
+  return c.body(f.body, status, { ...kind, ...headers });
+}
+
+app.get('/api/files/download', (c) => sendFile(c, false));
+
+/** Images, PDFs, audio and video, shown in the page; see fileserve.ts for what's allowed and the headers that keep it safe. */
+app.get('/api/files/preview', (c) => sendFile(c, true));
 
 app.get('/api/files/text', async (c) => c.json(await readText(c.req.query('path'))));
 
@@ -730,9 +744,131 @@ app.post('/api/files/rename', async (c) => {
   return c.json({ ok: true });
 });
 
+/** To the trash (trash.ts), or with `permanent` for good, as a job. Takes `paths`, or one `path`. */
 app.post('/api/files/delete', async (c) => {
   const body = await c.req.json();
-  await remove(body?.path);
+  const paths = body?.paths ?? body?.path;
+  if (body?.permanent === true) return c.json({ job: deleteForGood(paths) });
+  return c.json(await trashPaths(paths));
+});
+
+app.get('/api/files/trash', async (c) => c.json(await listTrash()));
+
+app.post('/api/files/trash/restore', async (c) => c.json(await restoreItems((await c.req.json())?.items)));
+
+/** Items in the trash, for good; a job, as a big folder takes a while. */
+app.post('/api/files/trash/delete', async (c) => {
+  const items = (await c.req.json())?.items;
+  const n = Array.isArray(items) ? items.length : 0;
+  const what = n === 1 ? 'one thing' : `${n} things`;
+  return c.json({ job: startJob('empty', `Deleting ${what} from the trash`, '', async (ctx) => (await deleteItems(items, ctx.signal), { message: `Deleted ${what} for good.` })) });
+});
+
+app.post('/api/files/trash/empty', (c) =>
+  c.json({
+    job: startJob('empty', 'Emptying the trash', '', async (ctx) => {
+      ctx.progress('Deleting everything in the trash…');
+      await emptyTrash(ctx.signal);
+      return { message: 'The trash is empty.' };
+    }),
+  }),
+);
+
+/** Folder sizes from du, for up to 50 folders at once. */
+app.post('/api/files/size', async (c) => c.json(await folderSizes((await c.req.json())?.paths, c.req.raw.signal)));
+
+/** Copy or move into a folder; a move on one disk is done at once, anything else is a job. */
+app.post('/api/files/transfer', async (c) => {
+  const body = await c.req.json();
+  if (body?.mode !== 'copy' && body?.mode !== 'move') return c.json({ error: 'Copy or move?' }, 400);
+  return c.json(await transfer(body.mode, body.paths, body.to));
+});
+
+app.post('/api/files/extract', async (c) => {
+  const file = cleanPath((await c.req.json())?.path);
+  const dir = path.posix.dirname(file);
+  await checkExtract(file);
+  return c.json({
+    job: startJob('extract', `Unpacking ${path.posix.basename(file)}`, dir, async (ctx) => {
+      const r = await extractArchive(file, dir, { signal: ctx.signal, progress: ctx.progress });
+      return { message: `Unpacked into ${path.posix.basename(r.folder)}.`, result: r.folder };
+    }),
+  });
+});
+
+app.post('/api/files/compress', async (c) => {
+  const body = await c.req.json();
+  const paths = cleanPaths(body?.paths);
+  const format = body?.format === 'tar.gz' ? 'tar.gz' : 'zip';
+  const dir = path.posix.dirname(paths[0]);
+  const what = paths.length === 1 ? path.posix.basename(paths[0]) : `${paths.length} items`;
+  await checkCompress(paths, format);
+  return c.json({
+    job: startJob('compress', `Packing ${what} into a .${format}`, dir, async (ctx) => {
+      const r = await compressPaths(paths, format, { signal: ctx.signal, progress: ctx.progress });
+      return { message: `Made ${path.posix.basename(r.file)}.`, result: r.file };
+    }),
+  });
+});
+
+app.get('/api/files/jobs', (c) => c.json(listJobs()));
+app.post('/api/files/jobs/:id/cancel', (c) => c.json(cancelJob(c.req.param('id'))));
+app.post('/api/files/jobs/:id/dismiss', (c) => c.json(dismissJob(c.req.param('id'))));
+
+/** A link to fetch a zip of these with; see zipTicket. */
+app.post('/api/files/zip', async (c) => c.json(await zipTicket((await c.req.json())?.paths)));
+
+app.get('/api/files/zip/:ticket', async (c) => {
+  const t = takeTicket(c.req.param('ticket'));
+  if (!t) return c.json({ error: 'That download link has expired. Try again.' }, 404);
+  const { sftp } = await sftpSession();
+  const stream = zipPaths(sftp, t.paths);
+  return c.body(Readable.toWeb(stream) as ReadableStream, 200, {
+    'Content-Type': 'application/zip',
+    'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(t.name)}`,
+    'X-Content-Type-Options': 'nosniff',
+    'Cache-Control': 'no-store',
+  });
+});
+
+/** Names or contents under a folder, as lines of JSON: each hit as it's found, then how it ended. */
+app.post('/api/files/search', async (c) => {
+  const body = await c.req.json();
+  const dir = cleanPath(body?.dir);
+  const query = cleanQuery(body?.query);
+  const mode = body?.mode === 'content' ? 'content' : 'name';
+  const id = typeof body?.id === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(body.id) ? body.id : undefined;
+  const signal = c.req.raw.signal;
+  const enc = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(ctl) {
+      const send = (v: unknown) => {
+        try {
+          ctl.enqueue(enc.encode(JSON.stringify(v) + '\n'));
+        } catch {
+          // The page went away.
+        }
+      };
+      searchFiles(dir, query, mode, send, { id, signal })
+        .then(send, (e: Error) => send({ done: true, count: 0, more: false, timedOut: false, tool: 'find', error: e.message }))
+        .finally(() => {
+          try {
+            ctl.close();
+          } catch {
+            // Already closed.
+          }
+        });
+    },
+    cancel() {
+      if (id) cancelSearch(id);
+    },
+  });
+  return c.body(stream, 200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+});
+
+app.post('/api/files/search/cancel', async (c) => {
+  const id = (await c.req.json())?.id;
+  if (typeof id === 'string') cancelSearch(id);
   return c.json({ ok: true });
 });
 

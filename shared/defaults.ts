@@ -39,6 +39,7 @@ export const DEFAULT_PREFS: Prefs = {
   speedPlanMbps: 0,
   setsPerWeek: 10,
   pinnedLifts: [],
+  pinnedFolders: [],
   gymMonthly: 0,
   claudeBudget: 0,
   driveBackup: true,
