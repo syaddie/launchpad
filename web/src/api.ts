@@ -2,6 +2,7 @@ import type { DownloadJob, DownloadsInfo, InstagramInfo, McDiagnosis, McLog, McS
 import type { AppState, Backup, BackupSnapshot, CalEvent, Countdown, Craving, DirListing, DisksReport, LinkCheck, LogLine, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
 import type { AlertsInfo } from '../../shared/types';
 import type { AskResult } from '../../shared/ask';
+import type { ShellAskResult, ShellAskStatus } from '../../shared/shellAsk';
 import type { UsageReport } from '../../shared/claudeUsage';
 import { kvGet, kvSet } from './idb';
 
@@ -260,6 +261,9 @@ export const api = {
   addSnippet: (s: Omit<Snippet, 'id'>) => req<Snippet[]>('POST', '/api/shell/snippets', s),
   editSnippet: (s: Snippet) => req<Snippet[]>('PUT', `/api/shell/snippets/${encodeURIComponent(s.id)}`, { name: s.name, command: s.command }),
   deleteSnippet: (id: string) => req<Snippet[]>('DELETE', `/api/shell/snippets/${encodeURIComponent(id)}`),
+  shellAskStatus: () => req<ShellAskStatus>('GET', '/api/shell/ask'),
+  /** A plain-English request → one command to put at the prompt; `cwd` is the shell's folder when it's known. */
+  shellAsk: (text: string, cwd: string | null) => req<ShellAskResult>('POST', '/api/shell/ask', { text, cwd }, false, undefined, 60_000),
   /** Saved Minecraft servers and any others running; `fresh` looks again rather than using the last few seconds' look. */
   minecraft: (fresh = false) => req<McStatus[]>('GET', `/api/minecraft${fresh ? '?fresh=1' : ''}`, undefined, false, undefined, 30_000),
   addMcServer: (s: Omit<McServer, 'id'>) => req<McStatus[]>('POST', '/api/minecraft/servers', s),
