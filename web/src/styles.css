@@ -1945,6 +1945,8 @@ button.m-stat { cursor: default; }
 [data-layout='narrow'] .mc-view { flex: none; min-height: 0; overflow: visible; }
 .mc-view-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
 .mc-view-where { flex: 1 1 200px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* No hover on a phone to read the rest, so it wraps. */
+[data-layout='narrow'] .mc-view-where { white-space: normal; overflow-wrap: anywhere; }
 .mc-note { margin: 0; text-wrap: pretty; }
 .mc-note.warn { color: var(--wn); }
 .mc-section { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 1px solid var(--ln); }
@@ -1972,6 +1974,8 @@ button.m-stat { cursor: default; }
 .mc-backup > i { flex: none; font-size: 18px; color: var(--t3); }
 .mc-backup-text { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 13px; }
 .mc-backup-text .meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-backup-when { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; }
+.mc-backup-when > span:first-child { white-space: nowrap; }
 .mc-backup-tools { flex: none; display: flex; align-items: center; gap: 4px; }
 .mc-auto { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .mc-auto-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; text-wrap: pretty; }
@@ -2000,6 +2004,9 @@ button.m-stat { cursor: default; }
 .explain summary { cursor: pointer; }
 .explain-pre { margin: 6px 0 0; padding: 8px; max-height: 200px; overflow: auto; font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--hv); border-radius: var(--r); }
 .logs-explain { flex: none; padding: 0 30px 10px; }
+/* In the console, Diagnosis and the explanation give way (each scrolls) so the log and the command line stay inside the panel. */
+.mc-console > .mc-diag, .mc-console > .explain { flex: 0 1 auto; min-height: 96px; }
+[data-layout='narrow'] .mc-console > .mc-diag, [data-layout='narrow'] .mc-console > .explain { flex: none; min-height: 0; }
 .logs-explain .explain { max-height: 40vh; }
 
 /* ---------- Server › Downloads ---------- */

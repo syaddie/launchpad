@@ -147,9 +147,9 @@ export function McBackupsView({ s, onChanged }: { s: McStatus; onChanged: () => 
             <li key={b.name} className="mc-backup">
               <i className="ph-duotone ph-archive" aria-hidden />
               <div className="mc-backup-text">
-                <span>
-                  {fmtWhen(b.at, now)}
-                  {b.beforeRestore && <span className="chip chip-neutral" style={{ marginLeft: 8 }}>Before a restore</span>}
+                <span className="mc-backup-when">
+                  <span>{fmtWhen(b.at, now)}</span>
+                  {b.beforeRestore && <span className="chip chip-neutral">Before a restore</span>}
                 </span>
                 <span className="meta mono" title={b.name}>
                   {fmtSize(b.size)} · {b.name}

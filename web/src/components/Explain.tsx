@@ -86,7 +86,7 @@ export function ExplainBox({ state, onClose, onRetry }: { state: ExplainState; o
     <div className="explain" role="region" aria-label="What Claude made of the log" aria-busy={state.busy}>
       <div className="explain-head">
         <span className="drawer-label">
-          <i className="ph-duotone ph-sparkle" aria-hidden /> Explained by Claude
+          <i className="ph-duotone ph-sparkle" aria-hidden /> {state.busy ? 'Asking Claude…' : 'error' in state ? 'Couldn’t explain it' : 'Explained by Claude'}
         </span>
         <span style={{ display: 'inline-flex', gap: 2 }}>
           {r && (
@@ -104,7 +104,7 @@ export function ExplainBox({ state, onClose, onRetry }: { state: ExplainState; o
           </button>
         </span>
       </div>
-      {state.busy && <p className="meta" style={{ margin: 0 }}>Reading it and asking Claude…</p>}
+      {state.busy && <p className="meta" style={{ margin: 0 }}>Sending it to Claude, secrets taken out…</p>}
       {'error' in state && (
         <div className="status-line" style={{ margin: 0 }}>
           {state.error}
