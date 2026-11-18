@@ -7,7 +7,7 @@ const parentOf = (p: string) => p.replace(/\/[^/]*$/, '') || '/';
 const nameOf = (p: string) => p.split('/').pop() || p;
 
 /**
- * An image, PDF, audio or video file from the server, shown in the panel. The arrows
+ * An image, audio or video file from the server, shown in the panel. The arrows
  * (on screen or the keyboard) step through the folder's other previewable files.
  */
 export function FileViewer({ path, siblings, hidden, onStep, onClose }: {
@@ -108,8 +108,6 @@ export function FileViewer({ path, siblings, hidden, onStep, onClose }: {
             <i className="ph-duotone ph-music-notes files-viewer-icon" />
             <audio key={path} src={src} controls preload="metadata" onError={() => setFailed(true)} />
           </>
-        ) : kind === 'pdf' ? (
-          <iframe key={path} src={src} title={nameOf(path)} />
         ) : (
           cant
         )}

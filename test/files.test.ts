@@ -18,8 +18,7 @@ describe('previews and ranges', () => {
     expect(previewOf('a.JPG')).toEqual({ type: 'image/jpeg', kind: 'image' });
     expect(previewOf('x.mkv')?.kind).toBe('video');
     expect(previewOf('t.flac')?.kind).toBe('audio');
-    expect(previewOf('doc.pdf')?.kind).toBe('pdf');
-    for (const bad of ['page.html', 'page.htm', 'logo.svg', 'feed.xml', 'x.xhtml', 'run.js', 'noext', 'a.svgz']) expect(previewOf(bad)).toBeNull();
+    for (const bad of ['doc.pdf', 'page.html', 'page.htm', 'logo.svg', 'feed.xml', 'x.xhtml', 'run.js', 'noext', 'a.svgz']) expect(previewOf(bad)).toBeNull();
   });
 
   it('sends inline only with nosniff and a sandboxing CSP', () => {
@@ -31,9 +30,8 @@ describe('previews and ranges', () => {
     expect(img['Content-Security-Policy']).toMatch(/default-src 'none'/);
     expect(img['Content-Security-Policy']).toMatch(/sandbox/);
     expect(img['Content-Disposition']).toMatch(/^inline; filename\*=UTF-8''cat\.png$/);
-    const pdf = inlineHeaders('a b.pdf')!;
-    expect(pdf['Content-Security-Policy']).toMatch(/default-src 'none'/);
-    expect(pdf['Content-Disposition']).toContain('a%20b.pdf');
+    expect(inlineHeaders('a b.pdf')).toBeNull();
+    expect(inlineHeaders('a b.mp4')!['Content-Disposition']).toContain('a%20b.mp4');
     expect(downloadHeaders('x.html')['Content-Type']).toBe('application/octet-stream');
     expect(downloadHeaders('x.html')['Content-Disposition']).toMatch(/^attachment/);
   });

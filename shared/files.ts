@@ -86,7 +86,7 @@ export interface FolderSize {
   partial: boolean;
 }
 
-export type PreviewKind = 'image' | 'pdf' | 'audio' | 'video';
+export type PreviewKind = 'image' | 'audio' | 'video';
 
 /**
  * Files the browser may show inline, by extension, with the type they're sent as.
@@ -101,7 +101,6 @@ export const PREVIEW_TYPES: Record<string, { type: string; kind: PreviewKind }> 
   avif: { type: 'image/avif', kind: 'image' },
   bmp: { type: 'image/bmp', kind: 'image' },
   ico: { type: 'image/x-icon', kind: 'image' },
-  pdf: { type: 'application/pdf', kind: 'pdf' },
   mp3: { type: 'audio/mpeg', kind: 'audio' },
   m4a: { type: 'audio/mp4', kind: 'audio' },
   aac: { type: 'audio/aac', kind: 'audio' },
