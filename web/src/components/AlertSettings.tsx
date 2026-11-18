@@ -4,11 +4,14 @@ import type { AlertKind, AlertRecord, AlertsInfo, Prefs } from '../../../shared/
 import { api } from '../api';
 import { ago } from '../util';
 
-/** The switches shown. Minecraft crashes get theirs once the Minecraft view sends them (server/src/notify.ts, notify()). */
+/**
+ * The switches shown. Containers, and SMART under Disks, come back once they've been tried
+ * against a real Docker and smartctl (server/src/alerts.ts); Minecraft crashes get a switch once
+ * the Minecraft view sends them (server/src/notify.ts, notify()).
+ */
 const KINDS: { key: AlertKind; name: string; meta: string }[] = [
   { key: 'health', name: 'Health warnings', meta: 'The database, daily copies, Drive and syncs, as on the Server view' },
-  { key: 'containers', name: 'Containers', meta: 'One that stops, turns unhealthy or keeps restarting' },
-  { key: 'disks', name: 'Disks', meta: 'The disk Launchpad’s data is on 90% full, or SMART saying a disk is failing' },
+  { key: 'disks', name: 'Disk space', meta: 'The disk Launchpad’s data is on 90% full' },
 ];
 
 const ICONS: Record<AlertRecord['type'], string> = { problem: 'ph-warning', fixed: 'ph-check-circle', paused: 'ph-bell-slash', event: 'ph-siren', test: 'ph-bell-ringing' };
