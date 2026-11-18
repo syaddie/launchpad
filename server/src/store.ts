@@ -157,7 +157,7 @@ export const store = {
 
   prefs: (): Prefs => {
     const p = get<Partial<Prefs>>('prefs', {});
-    return { ...DEFAULT_PREFS, ...p, sources: { ...DEFAULT_PREFS.sources, ...p.sources } };
+    return { ...DEFAULT_PREFS, ...p, sources: { ...DEFAULT_PREFS.sources, ...p.sources }, alerts: { ...DEFAULT_PREFS.alerts, ...p.alerts } };
   },
   setPrefs: (v: Prefs) => set('prefs', v),
 
@@ -297,6 +297,16 @@ export const store = {
   /** Folders that uploads went into, with when the last one started, so abandoned part files there can be swept. */
   uploadDirs: () => get<Record<string, string>>('uploadDirs', {}),
   setUploadDirs: (v: Record<string, string>) => set('uploadDirs', v),
+
+  /**
+   * The ntfy topic alerts go to (notify.ts). Anyone with it can read them, so like the Google
+   * sign-in it stays out of the JSON backup, the page's state and the Drive copies.
+   */
+  alertTopic: () => get<string>('alertTopic', ''),
+  setAlertTopic: (v: string) => (v ? set('alertTopic', v) : del('alertTopic')),
+  /** What the phone has been told and when, so a restart doesn't repeat it (notify.ts checks it). */
+  alertMemory: () => get<unknown>('alertMemory', null),
+  setAlertMemory: (v: unknown) => set('alertMemory', v),
 };
 
 export function updatePackages(fn: (pkgs: Package[]) => Package[]): Package[] {

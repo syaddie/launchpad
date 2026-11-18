@@ -36,6 +36,8 @@ import { addTorrentFile, addTorrentLinks, MAX_TORRENT_FILE, QbitError, torrentAc
 import { containerLogs, DockerError, restartContainer } from './docker';
 import { diskHealth } from './disks';
 import { startCleanup } from './cleanup';
+import { alertsInfo, sendTest, setTopicUrl } from './notify';
+import { startAlerts } from './alerts';
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
 import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
@@ -202,6 +204,35 @@ app.put('/api/prefs', async (c) => {
   // A new area should show straight away; the page refreshes after saving.
   if (next.weatherArea && next.weatherArea !== prev.weatherArea) await refreshWeather();
   return c.json(next);
+});
+
+// ---------- phone alerts (notify.ts, alerts.ts) ----------
+
+// The test sends to an outside address, so a page from another site can't ask for it.
+app.use('/api/alerts/*', async (c, next) => (foreignOrigin(c.req.header('origin'), c.req.header('host')) ? c.json({ error: 'Cross-site request refused' }, 403) : next()));
+app.use('/api/alerts', async (c, next) => (foreignOrigin(c.req.header('origin'), c.req.header('host')) ? c.json({ error: 'Cross-site request refused' }, 403) : next()));
+
+/** Where alerts go and how sending is going. The topic isn't in the page's state, so Settings › Alerts asks for it here. */
+app.get('/api/alerts', (c) => c.json(alertsInfo()));
+
+app.put('/api/alerts', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  try {
+    setTopicUrl(body.topicUrl);
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+  return c.json(alertsInfo());
+});
+
+app.post('/api/alerts/test', async (c) => {
+  try {
+    await sendTest();
+  } catch (e) {
+    // Not 502: the page reads that as Launchpad itself being down.
+    return c.json({ error: (e as Error).message }, 422);
+  }
+  return c.json(alertsInfo());
 });
 
 // ---------- news: feeds, the reading list, hidden headlines, muted sources ----------
@@ -1083,3 +1114,4 @@ startSampler();
 startCleanup();
 startSnapshots(copyDailyToDrive);
 startLinkChecks();
+startAlerts();
