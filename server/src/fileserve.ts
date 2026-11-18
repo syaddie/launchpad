@@ -1,7 +1,7 @@
 // Sending a server file to the browser: as a download, or inline for the preview,
 // either way with HTTP Range so a video can seek and a download can resume.
 //
-// Inline is only for images (not SVG), audio and video (shared/files.ts), and
+// Inline is only for images (not SVG), PDFs, audio and video (shared/files.ts), and
 // every inline response forbids sniffing and carries a sandboxing CSP. A file shown on
 // Launchpad's own origin could otherwise run as a page with the whole API at hand:
 // an uploaded .html, or an .svg with a script in it.
@@ -40,7 +40,10 @@ export const ifRangeOk = (ifRange: string | undefined, etag: string) => !ifRange
 
 /**
  * For anything shown inline. The CSP gives the response an opaque origin and runs nothing
- * in it, so even if a browser did treat it as a page it couldn't reach the API.
+ * in it, so even if a browser did treat it as a page it couldn't reach the API. PDFs leave
+ * the sandbox out: a sandboxed page may not load plugins, and Safari shows PDFs with one, so
+ * it would show nothing (Chrome shows them either way). No browser's PDF viewer runs a PDF's
+ * script on the page's origin, and nosniff keeps a PDF from ever being read as a page.
  */
 export function inlineHeaders(name: string): Record<string, string> | null {
   const p = previewOf(name);
@@ -49,7 +52,7 @@ export function inlineHeaders(name: string): Record<string, string> | null {
     'Content-Type': p.type,
     'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(name)}`,
     'X-Content-Type-Options': 'nosniff',
-    'Content-Security-Policy': "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox",
+    'Content-Security-Policy': p.kind === 'pdf' ? "default-src 'none'; object-src 'self'" : "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox",
     'Cross-Origin-Resource-Policy': 'same-origin',
     'Referrer-Policy': 'no-referrer',
   };
