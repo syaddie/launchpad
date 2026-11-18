@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it, vi } from 'vitest';
-import { cleanVideoFormat, videoLink } from '../shared/video';
+import { cleanVideoFormat, videoLink, wantsVideo } from '../shared/video';
 import { HelperError, runHelper, type Helper } from '../server/src/helper';
 import { MIN_FREE, roomFor, stepOf, videoBytes } from '../server/src/ytdlp';
 import { downloadFinished, onDownloadFinished, type FinishedDownload } from '../server/src/downloads';
@@ -62,6 +62,18 @@ describe('video links', () => {
     expect(linkKind('https://www.instagram.com/reel/Dfy0nLPsmAq/')).toBe('instagram');
     expect(linkKind('https://www.youtube.com/watch?v=a\nhttps://www.youtube.com/watch?v=b')).toBe(null);
     expect(linkKind('magnet:?xt=urn:btih:abc')).toBe('torrent');
+  });
+
+  it('sends YouTube links to yt-dlp on the server even when the page doesn’t say to', () => {
+    expect(wantsVideo({ url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' })).toBe(true);
+    expect(wantsVideo({ url: 'https://youtu.be/jNQXAC9IVRw?si=abc' })).toBe(true);
+    expect(wantsVideo({ url: 'youtu.be/jNQXAC9IVRw' })).toBe(true);
+    expect(wantsVideo({ url: 'https://youtube.com/shorts/abcdEFGhij0?si=x' })).toBe(true);
+    expect(wantsVideo({ url: 'https://vimeo.com/76979871', via: 'video' })).toBe(true);
+    expect(wantsVideo({ url: 'https://vimeo.com/76979871' })).toBe(false);
+    expect(wantsVideo({ url: 'https://example.com/watch' })).toBe(false);
+    expect(wantsVideo({ url: 42 })).toBe(false);
+    expect(wantsVideo(null)).toBe(false);
   });
 
   it('takes a known format, or the best', () => {
