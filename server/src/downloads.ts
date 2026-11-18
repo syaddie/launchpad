@@ -3,7 +3,9 @@
 // the browser. Each goes into a hidden part file named like an upload's, so one cut
 // off by a restart is swept away with them a day later, and takes its real name when
 // it's complete. The list lives in memory: a restart forgets it (and stops any still
-// running). Instagram posts come through here too (instagram.ts), one job a link or profile.
+// running). Instagram posts come through here too (instagram.ts), one job a link or profile,
+// and videos saved with yt-dlp (ytdlp.ts). When one finishes, downloadFinished tells whatever
+// asked with onDownloadFinished, as qbit.ts does for torrents.
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { Readable, Transform } from 'node:stream';
@@ -95,7 +97,44 @@ export async function freeName(sftp: SFTPWrapper, dir: string, name: string): Pr
 
 export function view(j: Job): DownloadJob {
   const { ctl: _c, cancelled: _x, lastAt: _a, lastBytes: _b, lastByteAt: _t, ...rest } = j;
-  return { ...rest, ig: rest.ig && { ...rest.ig, current: rest.ig.current && { ...rest.ig.current } } };
+  return { ...rest, ig: rest.ig && { ...rest.ig, current: rest.ig.current && { ...rest.ig.current } }, video: rest.video && { ...rest.video } };
+}
+
+// ---------- finished ----------
+
+/** A download that has just finished, for whatever wants to act on it (unpacking an archive, say). */
+export interface FinishedDownload {
+  /** A link fetched into a folder, a video saved with yt-dlp, or a torrent qBittorrent has finished. */
+  source: 'link' | 'video' | 'torrent';
+  /** The download's id in the list, or the torrent's hash. */
+  id: string;
+  name: string;
+  /** Where it is on the server: the file, or a torrent's folder when it has several files. Null for a torrent saved where Files can't see it (outside QBIT_HOST_DIR). */
+  path: string | null;
+  /** `path` is a torrent's folder rather than a file. */
+  isDir: boolean;
+}
+
+export type FinishedListener = (d: FinishedDownload) => void | Promise<void>;
+const finishedListeners = new Set<FinishedListener>();
+
+/**
+ * Call `fn` each time a link, a video or a torrent finishes, once its file has its real name in
+ * its folder on the server. Returns a function that stops it. A listener that throws or rejects
+ * is logged, and doesn't hold up the download or the other listeners.
+ */
+export function onDownloadFinished(fn: FinishedListener): () => void {
+  finishedListeners.add(fn);
+  return () => finishedListeners.delete(fn);
+}
+
+/** Tell the listeners: the one place links (here), videos (ytdlp.ts) and torrents (qbit.ts) are noticed finishing. */
+export function downloadFinished(d: FinishedDownload): void {
+  for (const fn of finishedListeners) {
+    Promise.resolve()
+      .then(() => fn({ ...d }))
+      .catch((e) => console.error(`[downloads] After ${d.name} finished:`, (e as Error)?.message ?? e));
+  }
 }
 
 const active = () => jobs.filter((j) => j.state === 'starting' || j.state === 'downloading');
@@ -158,7 +197,7 @@ async function pickDefaultDir(): Promise<string | null> {
   return defaultDir;
 }
 
-export async function listDownloads(): Promise<Omit<DownloadsInfo, 'instagram'>> {
+export async function listDownloads(): Promise<Omit<DownloadsInfo, 'instagram' | 'video'>> {
   return { jobs: jobs.map(view), defaultDir: await pickDefaultDir().catch(() => null) };
 }
 
@@ -230,6 +269,7 @@ async function fetchInto(job: Job, url: URL, want: string | null): Promise<void>
     part = null;
     job.state = 'done';
     job.total = job.received;
+    downloadFinished({ source: 'link', id: job.id, name: job.name, path: path.posix.join(job.dir, job.name), isDir: false });
   } catch (e) {
     job.state = job.cancelled ? 'cancelled' : 'failed';
     const reason = job.ctl.signal.aborted && !job.cancelled ? job.ctl.signal.reason : e;

@@ -55,6 +55,9 @@ export const config = {
   },
   /** Instagram downloads: a Python with instaloader installed. The Docker image sets this to its own; outside it, `python3`. */
   instaloaderPython: env.INSTALOADER_PYTHON || 'python3',
+  /** Video downloads: a Python with yt-dlp and yt-dlp-ejs installed, and ffmpeg's path if it isn't on the PATH. The Docker image sets the Python to its own. */
+  ytdlpPython: env.YTDLP_PYTHON || 'python3',
+  ytdlpFfmpeg: env.YTDLP_FFMPEG || '',
   /** Optional: verify Cloudflare Access JWTs so only your Access login can reach the app. */
   access: {
     teamDomain: (env.CF_ACCESS_TEAM_DOMAIN || '').replace(/^https?:\/\//, '').replace(/\/+$/, ''),

@@ -1038,6 +1038,34 @@ export interface DownloadJob {
   endedAt: string | null;
   /** Instagram posts or a profile, rather than one file: `url` is what was pasted, `received` counts every file. */
   ig?: IgProgress;
+  /** A video (or its sound) saved with yt-dlp: `received` and `total` are the download's, then the copy's into `dir`. */
+  video?: VideoProgress;
+}
+
+/** Server › Downloads' choices for a video: yt-dlp's best, up to 1080p as an .mp4, or the sound as an .mp3. */
+export type VideoFormat = 'best' | '1080p' | 'mp3';
+
+export interface VideoProgress {
+  format: VideoFormat;
+  /** The site as yt-dlp names it (Youtube, TikTok, Vimeo…), once it has looked. */
+  site: string | null;
+  title: string | null;
+  /** Finding the video; downloading it (`part` of `parts`: the video, then its sound); ffmpeg at work on it (`step`); copying it into the folder. */
+  phase: 'finding' | 'downloading' | 'processing' | 'saving';
+  part: number;
+  parts: number;
+  /** What ffmpeg is doing: joining the video and sound, making an MP3 or an MP4, tidying the file, or adding its title. */
+  step: 'join' | 'mp3' | 'mp4' | 'fix' | 'tags' | null;
+  /** The link was a playlist's (or a channel's), so only its first video was taken. */
+  playlist: boolean;
+}
+
+export interface VideoInfo {
+  /** yt-dlp and ffmpeg are installed where Launchpad can run them (they come with the Docker image). */
+  available: boolean;
+  version: string | null;
+  /** Why it isn't available. */
+  error: string | null;
 }
 
 export interface IgProgress {
@@ -1082,6 +1110,7 @@ export interface DownloadsInfo {
   /** Where a download goes unless another folder is picked: ~/Downloads, or home. Null without SSH. */
   defaultDir: string | null;
   instagram: InstagramInfo;
+  video: VideoInfo;
 }
 
 export type TorrentStatus = 'downloading' | 'seeding' | 'done' | 'paused' | 'queued' | 'checking' | 'stalled' | 'metadata' | 'moving' | 'error';
@@ -1109,6 +1138,47 @@ export interface Torrent {
   savePath: string;
   /** The same folder on the server itself, for Files; null when QBIT_HOST_DIR isn't set or it's elsewhere. */
   hostDir: string | null;
+  /** qBittorrent's category ('' for none) and tags. */
+  category: string;
+  tags: string[];
+  /** Launchpad takes it out of qBittorrent, keeping its files, once it has seeded to this ratio; null to seed on. */
+  ratioLimit: number | null;
+}
+
+/** qBittorrent's speed caps in bytes a second (0 for none): the usual ones, and turtle mode's (its alternative limits). */
+export interface TorrentSpeed {
+  turtle: boolean;
+  dl: number;
+  up: number;
+  turtleDl: number;
+  turtleUp: number;
+}
+
+/** A torrent that reached its ratio and was taken out of qBittorrent, its files left where they are. */
+export interface RetiredTorrent {
+  name: string;
+  ratio: number;
+  at: string;
+  hostDir: string | null;
+}
+
+export interface TorrentFile {
+  /** qBittorrent's number for the file. */
+  index: number;
+  /** Its path inside the torrent. */
+  name: string;
+  size: number;
+  /** 0 to 1. */
+  progress: number;
+  priority: 'skip' | 'normal' | 'high';
+  /** The folder it's in on the server, for Files; null when that can't be known. */
+  hostDir: string | null;
+}
+
+/** What a torrent can be added with: qBittorrent's categories (each a save folder) and tags. */
+export interface TorrentOptions {
+  categories: { name: string; savePath: string; hostDir: string | null }[];
+  tags: string[];
 }
 
 export interface TorrentsInfo {
@@ -1121,6 +1191,9 @@ export interface TorrentsInfo {
   version: string | null;
   /** Where finished torrents land on the server (QBIT_HOST_DIR), if known. */
   hostDir: string | null;
+  speed: TorrentSpeed | null;
+  /** Taken out of qBittorrent at their ratio since Launchpad started, newest first. */
+  retired: RetiredTorrent[];
 }
 
 export interface ServerStats {

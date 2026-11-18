@@ -1,19 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cleanIgLimit, IG_DEFAULT_LIMIT, IG_MAX_LIMIT, parseInstagram } from '../../../shared/instagram';
-import type { DownloadJob, DownloadsInfo, InstagramInfo, Torrent, TorrentsInfo, TorrentStatus } from '../../../shared/types';
-import { api, localGet, localSet } from '../api';
+import { cleanVideoFormat, VIDEO_FORMATS, videoLink, videoNoun, type VideoSite } from '../../../shared/video';
+import type { DownloadJob, DownloadsInfo, InstagramInfo, Torrent, TorrentFile, TorrentOptions, TorrentsInfo, TorrentSpeed, TorrentStatus, VideoFormat, VideoInfo } from '../../../shared/types';
+import { api, localGet, localSet, type TorrentAdd } from '../api';
 import { fmtBytes, hm } from '../util';
 import { Copyable } from './Copyable';
 
 const POLL = 2000;
 
-/** Where a pasted link goes: qBittorrent for magnets and .torrent files, Instagram's posts and profiles through instaloader, otherwise straight to a folder. */
-export function linkKind(text: string): 'torrent' | 'http' | 'instagram' | null {
+/**
+ * Where a pasted link goes: qBittorrent for magnets and .torrent files, Instagram's posts and profiles through
+ * instaloader, YouTube, X, TikTok, Reddit and SoundCloud through yt-dlp, otherwise straight to a folder.
+ */
+export function linkKind(text: string): 'torrent' | 'http' | 'instagram' | 'video' | null {
   const ig = parseInstagram(text);
   if (ig) return 'error' in ig ? null : 'instagram';
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (!lines.length) return null;
   if (lines.every((l) => /^magnet:\?/i.test(l) || /^https?:\/\/\S+\.torrent(\?\S*)?$/i.test(l))) return 'torrent';
+  if (lines.length === 1 && videoLink(lines[0])) return 'video';
   if (lines.length === 1 && /^https?:\/\/\S+$/i.test(lines[0])) return 'http';
   return null;
 }
@@ -83,6 +88,7 @@ export function DownloadsPanel({ shellReady, onOpenFolder }: {
         defaultDir={dl?.defaultDir ?? null}
         torrentsOn={!!tor?.configured}
         instagram={dl?.instagram ?? null}
+        video={dl?.video ?? null}
         onInstagram={(instagram) => setDl((d) => d && { ...d, instagram })}
         onAdded={loadDl}
         onTorrents={setTor}
@@ -97,12 +103,16 @@ export function DownloadsPanel({ shellReady, onOpenFolder }: {
 
 // ---------- adding ----------
 
-function AddBox({ shellReady, defaultDir, torrentsOn, instagram, onInstagram, onAdded, onTorrents }: {
+/** The category picker's choice for making a new one. */
+const NEW_CATEGORY = '\u0000new';
+
+function AddBox({ shellReady, defaultDir, torrentsOn, instagram, video, onInstagram, onAdded, onTorrents }: {
   shellReady: boolean;
   defaultDir: string | null;
   torrentsOn: boolean;
   /** Null until the list has loaded. */
   instagram: InstagramInfo | null;
+  video: VideoInfo | null;
   onInstagram: (i: InstagramInfo) => void;
   onAdded: () => void;
   onTorrents: (t: TorrentsInfo) => void;
@@ -114,81 +124,183 @@ function AddBox({ shellReady, defaultDir, torrentsOn, instagram, onInstagram, on
   const [igOpen, setIgOpen] = useState(false);
   const [igLimit, setIgLimit] = useState(() => localGet('igLimit') ?? String(IG_DEFAULT_LIMIT));
   const [igMeta, setIgMeta] = useState(() => localGet('igMeta') === '1');
+  const [format, setFormat] = useState<VideoFormat>(() => cleanVideoFormat(localGet('videoFormat')));
+  /** What yt-dlp said about the last other site's link: the site it knows it as, or null. */
+  const [site, setSite] = useState<{ url: string; site: string | null } | null>(null);
+  const [useVideo, setUseVideo] = useState(true);
+  /** A .torrent file picked or dropped, added when Download is pressed. */
+  const [torFile, setTorFile] = useState<File | null>(null);
+  const [torOpts, setTorOpts] = useState<TorrentOptions | null>(null);
+  const [torOptsError, setTorOptsError] = useState('');
+  const [category, setCategory] = useState('');
+  const [newCategory, setNewCategory] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagDraft, setTagDraft] = useState('');
+  const [ratio, setRatio] = useState(() => localGet('torRatio') ?? '');
   const file = useRef<HTMLInputElement>(null);
-  const kind = linkKind(text);
-  const ig = parseInstagram(text);
+
+  const kind0 = torFile ? 'torrent' : linkKind(text);
+  const ig = torFile ? null : parseInstagram(text);
   const igTarget = ig && !('error' in ig) ? ig : null;
+  const vlink = kind0 === 'video' ? videoLink(text.trim()) : null;
+  const httpUrl = kind0 === 'http' ? text.trim() : '';
+  const videoReady = !!video?.available;
+  // Links to other sites: ask yt-dlp whether it knows the site, once typing stops.
+  useEffect(() => {
+    if (!httpUrl || !videoReady || site?.url === httpUrl) return;
+    const t = window.setTimeout(() => {
+      api
+        .videoSite(httpUrl)
+        .then((r) => setSite({ url: httpUrl, site: r.site }))
+        .catch(() => setSite({ url: httpUrl, site: null }));
+    }, 450);
+    return () => clearTimeout(t);
+  }, [httpUrl, videoReady, site?.url]);
+  const otherSite = httpUrl && site?.url === httpUrl ? site.site : null;
+  const asking = !!httpUrl && videoReady && site?.url !== httpUrl;
+  const kind = kind0 === 'http' && otherSite && useVideo ? 'video' : kind0;
+  const audioOnly = !!vlink?.audio;
+  const fmt: VideoFormat = audioOnly && format === '1080p' ? 'best' : format;
   const folder = dir.trim() || defaultDir || '';
   const igReady = !!instagram?.available;
 
+  // Categories and tags, once there's a torrent to add.
+  const wantOpts = kind === 'torrent' && torrentsOn;
+  useEffect(() => {
+    if (!wantOpts || torOpts) return;
+    api
+      .torrentOptions()
+      .then((o) => {
+        setTorOpts(o);
+        setTorOptsError('');
+      })
+      .catch((e: Error) => setTorOptsError(e.message));
+  }, [wantOpts, torOpts]);
+
   const done = (msg: string) => {
     setText('');
+    setTorFile(null);
     setNote({ text: msg, failed: false });
   };
   const failed = (e: Error) => setNote({ text: e.message, failed: true });
 
+  const torAdd = (): TorrentAdd | null => {
+    const r = ratio.trim();
+    if (r && !(Number(r) > 0 && Number(r) <= 100)) {
+      setNote({ text: 'A ratio to seed to is a number more than 0, like 1 or 2.5.', failed: true });
+      return null;
+    }
+    const cat = category === NEW_CATEGORY ? newCategory.trim() : category;
+    if (category === NEW_CATEGORY && !cat) {
+      setNote({ text: 'Give the new category a name, or pick another.', failed: true });
+      return null;
+    }
+    const draft = tagDraft.trim().replace(/,+$/, '');
+    return { category: cat || undefined, tags: [...new Set([...tags, ...(draft ? [draft] : [])])], ratio: r ? Number(r) : null };
+  };
+
   const add = () => {
     if (!kind || busy) return;
+    let p: Promise<unknown>;
+    if (kind === 'torrent') {
+      const o = torAdd();
+      if (!o) return;
+      const f = torFile;
+      p = (f ? api.addTorrentFile(f, o) : api.addTorrents(text, o)).then((t) => {
+        onTorrents(t);
+        localSet('torRatio', ratio.trim());
+        setTags([]);
+        setTagDraft('');
+        setCategory('');
+        setNewCategory('');
+        // A category or tag made just now is in the lists next time.
+        setTorOpts(null);
+        const seed = o.ratio ? ` Once it has seeded to ratio ${o.ratio}, it leaves qBittorrent and its files stay.` : '';
+        done(f ? `Added ${f.name} to qBittorrent.${seed}` : text.trim().includes('\n') ? `Added to qBittorrent.${seed}` : `Added to qBittorrent. It shows below once it has the torrent’s details.${seed}`);
+      });
+    } else if (kind === 'video') {
+      const url = vlink?.href ?? text.trim();
+      p = api.startDownload(url, folder, { via: 'video', format: fmt }).then((j) => {
+        if (dir.trim()) localSet('dlDir', dir.trim());
+        localSet('videoFormat', format);
+        onAdded();
+        done(`Saving ${j.name} into ${j.dir}.`);
+      });
+    } else {
+      p = api.startDownload(text.trim(), folder, kind === 'instagram' ? { limit: cleanIgLimit(igLimit), metadata: igMeta } : undefined).then((j) => {
+        if (dir.trim()) localSet('dlDir', dir.trim());
+        onAdded();
+        if (!j.ig) done(`Downloading ${j.name} into ${j.dir}.`);
+        else {
+          localSet('igLimit', String(cleanIgLimit(igLimit)));
+          localSet('igMeta', igMeta ? '1' : '0');
+          done(j.ig.queued ? `${j.name} starts when the Instagram download before it is done.` : `Saving ${j.name} into ${j.dir}.`);
+        }
+      });
+    }
     setBusy(true);
-    const p =
-      kind === 'torrent'
-        ? api.addTorrents(text).then((t) => {
-            onTorrents(t);
-            done(text.trim().includes('\n') ? 'Added to qBittorrent.' : 'Added to qBittorrent. It shows below once it has the torrent’s details.');
-          })
-        : api.startDownload(text.trim(), folder, kind === 'instagram' ? { limit: cleanIgLimit(igLimit), metadata: igMeta } : undefined).then((j) => {
-            if (dir.trim()) localSet('dlDir', dir.trim());
-            onAdded();
-            if (!j.ig) done(`Downloading ${j.name} into ${j.dir}.`);
-            else {
-              localSet('igLimit', String(cleanIgLimit(igLimit)));
-              localSet('igMeta', igMeta ? '1' : '0');
-              done(j.ig.queued ? `${j.name} starts when the Instagram download before it is done.` : `Saving ${j.name} into ${j.dir}.`);
-            }
-          });
     p.catch(failed).finally(() => setBusy(false));
   };
 
-  const addFile = (f: File | undefined) => {
+  const pickFile = (f: File | undefined) => {
+    if (file.current) file.current.value = '';
     if (!f) return;
-    setBusy(true);
-    api
-      .addTorrentFile(f)
-      .then((t) => {
-        onTorrents(t);
-        done(`Added ${f.name} to qBittorrent.`);
-      })
-      .catch(failed)
-      .finally(() => {
-        setBusy(false);
-        if (file.current) file.current.value = '';
-      });
+    setTorFile(f);
+    setNote(null);
   };
 
   const into = folder || 'your home folder';
+  const one = audioOnly ? 'track' : 'video';
+  const videoWhat =
+    fmt === 'mp3'
+      ? audioOnly
+        ? `Saves the track as an MP3 into ${into}.`
+        : `Saves the video’s sound as an MP3 into ${into}.`
+      : fmt === '1080p'
+        ? `Saves the video as an MP4, 1080p at most, into ${into}.`
+        : `Saves the ${one} at its best into ${into}.`;
+  const what = !vlink
+    ? `${videoWhat} One video, even from a playlist.`
+    : vlink.playlist === 'only'
+      ? `That’s a ${vlink.site} ${vlink.site === 'YouTube' ? 'playlist or channel' : vlink.site === 'SoundCloud' ? 'playlist or artist' : 'playlist'}: only its first ${one} downloads. ${videoWhat}`
+      : `A ${videoNoun(vlink.site)}. ${videoWhat}${vlink.playlist === 'also' ? ` Just this ${one}, not the rest of the playlist.` : ''}`;
+  const ratioNote = ratio.trim() && Number(ratio) > 0 ? ` Once it has seeded to ratio ${Number(ratio)}, Launchpad takes it out of qBittorrent and leaves its files where they are.` : '';
   const hint =
     ig && 'error' in ig
       ? ig.error
       : kind === 'torrent'
         ? torrentsOn
-          ? 'Goes to qBittorrent.'
+          ? torFile
+            ? `Adds ${torFile.name} to qBittorrent when you press Download.${ratioNote}`
+            : `Goes to qBittorrent.${ratioNote}`
           : 'That’s a torrent: set up qBittorrent below to download it.'
-        : !shellReady && (kind === 'http' || kind === 'instagram')
+        : !shellReady && (kind === 'http' || kind === 'instagram' || kind === 'video')
           ? 'Set up the terminal’s SSH login first: downloads are written over it.'
-          : kind === 'http'
-            ? `Saves into ${into}.`
-            : igTarget
-              ? !instagram
-                ? 'Checking Instagram downloads are set up…'
-                : !igReady
-                  ? instagram.error || 'Instagram downloads aren’t set up on this server.'
-                  : igTarget.profile
-                    ? `Saves the newest posts of @${igTarget.profile} into ${into}/${igTarget.profile}.${instagram.account ? '' : ' Public profiles only until you sign in.'}`
-                    : `Saves ${igTarget.posts.length === 1 ? 'the post’s' : `the ${igTarget.posts.length} posts’`} photos and videos into ${into}, in a folder for each account.`
-              : text.trim()
-                ? 'Paste an https:// link, Instagram links one a line, or magnet links one a line.'
-                : 'An https:// link downloads straight to the server, an Instagram post or profile saves its photos and videos, and a magnet link goes to qBittorrent.';
-  const blocked = !kind || (kind === 'torrent' ? !torrentsOn : !shellReady || (kind === 'instagram' && !igReady));
+          : kind === 'video'
+            ? !video
+              ? 'Checking video downloads are set up…'
+              : !videoReady
+                ? video.error || 'Video downloads aren’t set up on this server.'
+                : what
+            : kind === 'http'
+              ? otherSite && !useVideo
+                ? `Saves the link itself into ${into}, not the video on the page.`
+                : asking
+                  ? `Saves into ${into}. Checking whether it’s a video yt-dlp can get…`
+                  : `Saves into ${into}.`
+              : igTarget
+                ? !instagram
+                  ? 'Checking Instagram downloads are set up…'
+                  : !igReady
+                    ? instagram.error || 'Instagram downloads aren’t set up on this server.'
+                    : igTarget.profile
+                      ? `Saves the newest posts of @${igTarget.profile} into ${into}/${igTarget.profile}.${instagram.account ? '' : ' Public profiles only until you sign in.'}`
+                      : `Saves ${igTarget.posts.length === 1 ? 'the post’s' : `the ${igTarget.posts.length} posts’`} photos and videos into ${into}, in a folder for each account.`
+                : text.trim()
+                  ? 'Paste an https:// link, Instagram links one a line, or magnet links one a line.'
+                  : 'An https:// link downloads straight to the server, a YouTube, X, TikTok, Reddit or SoundCloud link saves the video or its sound, an Instagram post or profile its photos and videos, and a magnet link goes to qBittorrent.';
+  const blocked = !kind || (kind === 'torrent' ? !torrentsOn : !shellReady || (kind === 'instagram' && !igReady) || (kind === 'video' && !videoReady));
+  const icon = busy ? 'ph-circle-notch spin' : kind === 'torrent' ? 'ph-magnet' : kind === 'instagram' ? 'ph-instagram-logo' : kind === 'video' ? siteIcon(vlink?.site ?? null, fmt) : 'ph-download-simple';
 
   return (
     <section className="panel srv-panel dl-add" aria-label="Download to the server">
@@ -209,7 +321,7 @@ function AddBox({ shellReady, defaultDir, torrentsOn, instagram, onInstagram, on
             )}
             {torrentsOn && (
               <>
-                <input ref={file} type="file" accept=".torrent,application/x-bittorrent" hidden onChange={(e) => addFile(e.target.files?.[0])} />
+                <input ref={file} type="file" accept=".torrent,application/x-bittorrent" hidden onChange={(e) => pickFile(e.target.files?.[0])} />
                 <button className="btn btn-secondary btn-small" disabled={busy} onClick={() => file.current?.click()}>
                   <i className="ph-duotone ph-file-arrow-up" />
                   Add a .torrent file
@@ -226,32 +338,44 @@ function AddBox({ shellReady, defaultDir, torrentsOn, instagram, onInstagram, on
           add();
         }}
       >
-        <textarea
-          className="input mono dl-link"
-          rows={text.includes('\n') ? 4 : 1}
-          value={text}
-          placeholder="https://…, an Instagram link, or magnet:?xt=…"
-          onChange={(e) => {
-            setText(e.target.value);
-            // What the last one said gives way to what this one will do.
-            if (e.target.value.trim()) setNote(null);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              add();
-            }
-          }}
-          onDrop={(e) => {
-            const f = e.dataTransfer.files?.[0];
-            if (f && /\.torrent$/i.test(f.name)) {
-              e.preventDefault();
-              addFile(f);
-            }
-          }}
-          aria-label="Link to download"
-          spellCheck={false}
-        />
+        {torFile ? (
+          <div className="input dl-link dl-picked" role="group" aria-label="Torrent file to add">
+            <i className="ph-duotone ph-file-arrow-up" />
+            <span className="mono">{torFile.name}</span>
+            <span className="meta tnum">{fmtBytes(torFile.size)}</span>
+            <button type="button" className="icon-btn" title="Don’t add it" aria-label={`Don’t add ${torFile.name}`} onClick={() => setTorFile(null)}>
+              <i className="ph-duotone ph-x" />
+            </button>
+          </div>
+        ) : (
+          <textarea
+            className="input mono dl-link"
+            rows={text.includes('\n') ? 4 : 1}
+            value={text}
+            placeholder="https://…, a YouTube or Instagram link, or magnet:?xt=…"
+            onChange={(e) => {
+              setText(e.target.value);
+              setUseVideo(true);
+              // What the last one said gives way to what this one will do.
+              if (e.target.value.trim()) setNote(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                add();
+              }
+            }}
+            onDrop={(e) => {
+              const f = e.dataTransfer.files?.[0];
+              if (f && /\.torrent$/i.test(f.name)) {
+                e.preventDefault();
+                pickFile(f);
+              }
+            }}
+            aria-label="Link to download"
+            spellCheck={false}
+          />
+        )}
         {kind !== 'torrent' && (
           <label className="dl-dir">
             <i className="ph-duotone ph-folder-simple" />
@@ -259,7 +383,7 @@ function AddBox({ shellReady, defaultDir, torrentsOn, instagram, onInstagram, on
           </label>
         )}
         <button className="btn btn-primary" disabled={blocked || busy}>
-          <i className={'ph-duotone ' + (busy ? 'ph-circle-notch spin' : kind === 'torrent' ? 'ph-magnet' : kind === 'instagram' ? 'ph-instagram-logo' : 'ph-download-simple')} />
+          <i className={'ph-duotone ' + icon} />
           Download
         </button>
       </form>
@@ -291,11 +415,139 @@ function AddBox({ shellReady, defaultDir, torrentsOn, instagram, onInstagram, on
           </span>
         </div>
       )}
+      {((kind === 'video' && videoReady) || (kind0 === 'http' && otherSite)) && (
+        <div className="dl-ig-opts dl-video-opts">
+          {otherSite && (
+            <span className="dl-ig-toggle">
+              <button type="button" role="switch" aria-checked={useVideo} aria-labelledby="dl-use-video" className={'switch' + (useVideo ? ' on' : '')} onClick={() => setUseVideo(!useVideo)}>
+                <span />
+              </button>
+              <span id="dl-use-video" onClick={() => setUseVideo(!useVideo)}>
+                The video on {hostOf(httpUrl)}, with yt-dlp
+              </span>
+            </span>
+          )}
+          {kind === 'video' && (
+            <div className="segmented" role="radiogroup" aria-label="Format">
+              {VIDEO_FORMATS.filter((f) => !audioOnly || f.audio).map((f) => (
+                <button key={f.key} type="button" role="radio" aria-checked={fmt === f.key} className={fmt === f.key ? 'on' : ''} onClick={() => setFormat(f.key)}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {kind === 'torrent' && torrentsOn && (
+        <TorrentAddOptions
+          opts={torOpts}
+          error={torOptsError}
+          category={category}
+          onCategory={setCategory}
+          newCategory={newCategory}
+          onNewCategory={setNewCategory}
+          tags={tags}
+          onTags={setTags}
+          tagDraft={tagDraft}
+          onTagDraft={setTagDraft}
+          ratio={ratio}
+          onRatio={setRatio}
+        />
+      )}
       <span className="meta" role="status" style={note?.failed || (!note && ig && 'error' in ig) ? { color: 'var(--wn)' } : undefined}>
         {note?.text ?? hint}
       </span>
       {igOpen && instagram && igReady && <IgSession info={instagram} onInfo={onInstagram} onClose={() => setIgOpen(false)} />}
     </section>
+  );
+}
+
+/** A link's site, as the page names it: example.com. */
+const hostOf = (url: string) => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return 'the page';
+  }
+};
+
+/** A torrent's category, tags and ratio to seed to, as it's added. */
+function TorrentAddOptions(p: {
+  opts: TorrentOptions | null;
+  error: string;
+  category: string;
+  onCategory: (c: string) => void;
+  newCategory: string;
+  onNewCategory: (c: string) => void;
+  tags: string[];
+  onTags: (t: string[]) => void;
+  tagDraft: string;
+  onTagDraft: (t: string) => void;
+  ratio: string;
+  onRatio: (r: string) => void;
+}) {
+  const known = p.opts?.tags ?? [];
+  const all = [...known, ...p.tags.filter((t) => !known.includes(t))];
+  const addDraft = () => {
+    const t = p.tagDraft.trim().replace(/,+$/, '').trim();
+    if (t && !p.tags.includes(t)) p.onTags([...p.tags, t]);
+    p.onTagDraft('');
+  };
+  const cat = p.opts?.categories.find((c) => c.name === p.category);
+  return (
+    <div className="dl-tor-opts">
+      <label className="dl-opt">
+        <span>Category</span>
+        <select className="input sm" value={p.category} onChange={(e) => p.onCategory(e.target.value)} disabled={!p.opts} aria-label="Category">
+          <option value="">None</option>
+          {p.opts?.categories.map((c) => (
+            <option key={c.name} value={c.name}>
+              {c.name}
+            </option>
+          ))}
+          <option value={NEW_CATEGORY}>New category…</option>
+        </select>
+        {p.category === NEW_CATEGORY && (
+          <input className="input sm" value={p.newCategory} onChange={(e) => p.onNewCategory(e.target.value)} placeholder="Its name, and its folder’s" aria-label="New category’s name" maxLength={60} autoFocus />
+        )}
+      </label>
+      <div className="dl-opt dl-tags" role="group" aria-label="Tags">
+        <span>Tags</span>
+        {all.map((t) => {
+          const on = p.tags.includes(t);
+          return (
+            <button key={t} type="button" className={'chip ' + (on ? 'chip-accent' : 'chip-muted')} aria-pressed={on} onClick={() => p.onTags(on ? p.tags.filter((x) => x !== t) : [...p.tags, t])}>
+              {on && <i className="ph-duotone ph-check" />}
+              {t}
+            </button>
+          );
+        })}
+        <input
+          className="input sm dl-tag-new"
+          value={p.tagDraft}
+          onChange={(e) => (e.target.value.endsWith(',') ? (p.onTagDraft(e.target.value), setTimeout(addDraft)) : p.onTagDraft(e.target.value))}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && p.tagDraft.trim()) {
+              e.preventDefault();
+              addDraft();
+            }
+          }}
+          onBlur={() => p.tagDraft.trim() && addDraft()}
+          placeholder="New tag"
+          aria-label="New tag"
+          maxLength={50}
+        />
+      </div>
+      <label className="dl-opt">
+        <span>Seed to ratio</span>
+        <input className="input sm tnum dl-ratio" type="number" min={0.1} max={100} step={0.1} value={p.ratio} onChange={(e) => p.onRatio(e.target.value)} placeholder="Keep seeding" aria-label="Ratio to seed to before it leaves qBittorrent" />
+      </label>
+      {(p.error || cat?.savePath) && (
+        <span className="meta" style={p.error ? { color: 'var(--wn)' } : undefined}>
+          {p.error || `Saved in ${cat!.hostDir ?? cat!.savePath}.`}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -344,7 +596,9 @@ function DownloadList({ info, error, shellReady, onChanged, onOpenFolder }: {
               key={j.id}
               j={j}
               onCancel={() => act(api.cancelDownload(j.id))}
-              onRetry={() => act(api.startDownload(j.url, j.dir, j.ig ? { limit: j.ig.limit ?? undefined, metadata: j.ig.metadata } : undefined))}
+              onRetry={() =>
+                act(api.startDownload(j.url, j.dir, j.video ? { via: 'video', format: j.video.format } : j.ig ? { limit: j.ig.limit ?? undefined, metadata: j.ig.metadata } : undefined))
+              }
               onOpenFolder={() => onOpenFolder(j.ig?.folder ?? j.dir)}
             />
           ))}
@@ -388,26 +642,72 @@ export function igPercent(ig: NonNullable<DownloadJob['ig']>): number | null {
   return Math.min(100, ((ig.postsDone + part) / ig.want) * 100);
 }
 
+const STEPS: Record<NonNullable<NonNullable<DownloadJob['video']>['step']>, string> = {
+  join: 'Joining the picture and sound…',
+  mp3: 'Making the MP3…',
+  mp4: 'Making it an MP4…',
+  fix: 'Tidying up the file…',
+  tags: 'Adding its title and artist…',
+};
+
+/** A video job's line under its name: where it's got to, or where it went. */
+export function videoDetail(j: DownloadJob): string {
+  const v = j.video!;
+  const bytes = j.total ? `${fmtBytes(j.received)} of ${fmtBytes(j.total)}` : j.received ? fmtBytes(j.received) : '';
+  if (j.state === 'starting' || j.state === 'downloading') {
+    if (v.phase === 'finding') return v.site === 'SoundCloud' || v.site === 'Soundcloud' ? 'Finding the track…' : 'Finding the video…';
+    if (v.phase === 'processing') return v.step ? STEPS[v.step] : 'Working on the file…';
+    if (v.phase === 'saving') return [`Saving into ${j.dir}`, bytes].filter(Boolean).join(' · ');
+    const left = j.total && j.bps ? (j.total - j.received) / j.bps : null;
+    return [bytes, fmtRate(j.bps), left !== null ? `${fmtEta(left)} left` : ''].filter(Boolean).join(' · ') || 'Downloading…';
+  }
+  if (j.state === 'failed') return j.error || 'Failed';
+  if (j.state === 'cancelled') return 'Cancelled';
+  return [fmtBytes(j.received), `in ${j.dir}`, v.playlist ? 'the first of the playlist' : ''].filter(Boolean).join(' · ');
+}
+
+/** How far through a video job is, downloading and then copying; null while it's finding it or ffmpeg is at work. */
+export function videoPercent(j: DownloadJob): number | null {
+  const v = j.video!;
+  if ((v.phase !== 'downloading' && v.phase !== 'saving') || !j.total) return null;
+  return Math.min(100, (j.received / j.total) * 100);
+}
+
+/** A video's icon: its site's, or a note for an MP3. */
+export function siteIcon(site: VideoSite | string | null, format: VideoFormat): string {
+  if (format === 'mp3') return 'ph-music-note';
+  const s = (site ?? '').toLowerCase();
+  if (s === 'youtube') return 'ph-youtube-logo';
+  if (s === 'x' || s === 'twitter') return 'ph-x-logo';
+  if (s === 'tiktok') return 'ph-tiktok-logo';
+  if (s === 'reddit') return 'ph-reddit-logo';
+  if (s === 'soundcloud') return 'ph-soundcloud-logo';
+  return 'ph-film-strip';
+}
+
 function JobRow({ j, onCancel, onRetry, onOpenFolder }: { j: DownloadJob; onCancel: () => void; onRetry: () => void; onOpenFolder: () => void }) {
   const going = j.state === 'starting' || j.state === 'downloading';
-  const pct = j.ig ? igPercent(j.ig) : j.total ? (j.received / j.total) * 100 : null;
+  const pct = j.video ? videoPercent(j) : j.ig ? igPercent(j.ig) : j.total ? (j.received / j.total) * 100 : null;
   const left = j.total && j.bps ? (j.total - j.received) / j.bps : null;
-  const detail = j.ig
-    ? igDetail(j)
-    : going
-      ? [j.total ? `${fmtBytes(j.received)} of ${fmtBytes(j.total)}` : fmtBytes(j.received), fmtRate(j.bps), left !== null ? `${fmtEta(left)} left` : ''].filter(Boolean).join(' · ')
-      : j.state === 'done'
-        ? `${fmtBytes(j.received)} · in ${j.dir}`
-        : j.state === 'cancelled'
-          ? 'Cancelled'
-          : j.error || 'Failed';
+  const detail = j.video
+    ? videoDetail(j)
+    : j.ig
+      ? igDetail(j)
+      : going
+        ? [j.total ? `${fmtBytes(j.received)} of ${fmtBytes(j.total)}` : fmtBytes(j.received), fmtRate(j.bps), left !== null ? `${fmtEta(left)} left` : ''].filter(Boolean).join(' · ')
+        : j.state === 'done'
+          ? `${fmtBytes(j.received)} · in ${j.dir}`
+          : j.state === 'cancelled'
+            ? 'Cancelled'
+            : j.error || 'Failed';
   // Some of an Instagram job's posts couldn't be read: done, but worth a look.
   const partly = j.state === 'done' && !!j.ig?.failed;
   const folder = j.ig?.folder ?? j.dir;
+  const kindIcon = j.video ? siteIcon(j.video.site, j.video.format) : j.ig ? 'ph-instagram-logo' : 'ph-download-simple';
   return (
     <div className="dl-item">
       <i
-        className={'ph-duotone ' + (j.state === 'done' ? (partly ? 'ph-warning-circle' : 'ph-check-circle') : j.state === 'failed' ? 'ph-warning-circle' : j.state === 'cancelled' ? 'ph-x-circle' : j.ig ? 'ph-instagram-logo' : 'ph-download-simple')}
+        className={'ph-duotone ' + (j.state === 'done' ? (partly ? 'ph-warning-circle' : 'ph-check-circle') : j.state === 'failed' ? 'ph-warning-circle' : j.state === 'cancelled' ? 'ph-x-circle' : kindIcon)}
         style={{ color: j.state === 'failed' || partly ? 'var(--wn)' : j.state === 'done' ? 'var(--ac)' : 'var(--t3)' }}
       />
       <div className="dl-item-main">
@@ -557,6 +857,27 @@ const STATUS: Record<TorrentStatus, { text: string; cls: string }> = {
 /** A torrent that's running can be paused; a paused or finished one started again. */
 export const canResume = (t: Pick<Torrent, 'state'>) => /^(paused|stopped)/.test(t.state);
 
+/** What the speed caps are now, in a line: turtle mode's when it's on, the usual ones otherwise; null when nothing's capped. */
+export function speedLine(s: TorrentSpeed): string | null {
+  const caps = (dl: number, up: number) =>
+    [dl ? `downloads up to ${fmtRate(dl)}` : 'downloads at full speed', up ? `uploads up to ${fmtRate(up)}` : 'uploads at full speed'].join(', ');
+  if (s.turtle) return `Turtle mode: ${caps(s.turtleDl, s.turtleUp)}.`;
+  if (!s.dl && !s.up) return null;
+  return `Capped: ${caps(s.dl, s.up)}.`;
+}
+
+/** A cap (bytes a second, 0 for none) as the MB/s the box shows; '' for none. */
+export const capText = (bps: number) => (bps > 0 ? String(Math.round((bps / 1e6) * 1000) / 1000) : '');
+
+/** MB/s typed in a cap's box, in bytes a second: 0 when it's blank, null when it isn't a speed. */
+export function capValue(text: string): number | null {
+  const t = text.trim().replace(',', '.');
+  if (!t || Number(t) === 0) return 0;
+  const n = Number(t);
+  if (!Number.isFinite(n) || n < 0.001 || n > 2000) return null;
+  return Math.round(n * 1e6);
+}
+
 function Torrents({ info, error, onInfo, onOpenFolder }: { info: TorrentsInfo | null; error: string; onInfo: (t: TorrentsInfo) => void; onOpenFolder?: (path: string) => void }) {
   const [actError, setActError] = useState('');
   const act = (p: Promise<TorrentsInfo>) =>
@@ -567,19 +888,49 @@ function Torrents({ info, error, onInfo, onOpenFolder }: { info: TorrentsInfo | 
       })
       .catch((e: Error) => setActError(e.message));
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  const [capsOpen, setCapsOpen] = useState(false);
+  const [turtleBusy, setTurtleBusy] = useState(false);
 
   const list = info?.torrents ?? [];
+  const sp = info?.configured && !info.error ? info.speed : null;
+  const line = sp ? speedLine(sp) : null;
+  const recent = (info?.retired ?? []).filter((r) => Date.now() - Date.parse(r.at) < 24 * 3_600_000).slice(0, 3);
   return (
     <section className="panel srv-panel torrents" aria-label="Torrents">
       <div className="panel-head">
         <h2 className="panel-title">Torrents</h2>
         {info?.configured && !info.error && (
-          <span className="meta tnum" style={{ display: 'inline-flex', gap: 10 }}>
-            <span title="Download speed">↓ {fmtRate(info.dlBps) || '0 B/s'}</span>
-            <span title="Upload speed">↑ {fmtRate(info.upBps) || '0 B/s'}</span>
+          <span className="tor-head-tools">
+            <span className="meta tnum tor-speeds">
+              <span title="Download speed">↓ {fmtRate(info.dlBps) || '0 B/s'}</span>
+              <span title="Upload speed">↑ {fmtRate(info.upBps) || '0 B/s'}</span>
+            </span>
+            {sp && (
+              <>
+                <button
+                  className={'btn btn-secondary btn-small tor-turtle' + (sp.turtle ? ' on' : '')}
+                  aria-pressed={sp.turtle}
+                  disabled={turtleBusy}
+                  title={sp.turtle ? 'Turtle mode is on: qBittorrent’s slower, alternative speed limits. Press for full speed.' : 'Turtle mode: switch qBittorrent to its slower, alternative speed limits.'}
+                  onClick={() => {
+                    setTurtleBusy(true);
+                    act(api.setTurtle(!sp.turtle)).finally(() => setTurtleBusy(false));
+                  }}
+                >
+                  <i className={'ph-duotone ' + (turtleBusy ? 'ph-circle-notch spin' : 'ph-gauge')} />
+                  Turtle
+                </button>
+                <button className="icon-btn" title="Speed caps" aria-label="Speed caps" aria-expanded={capsOpen} onClick={() => setCapsOpen(!capsOpen)}>
+                  <i className="ph-duotone ph-sliders-horizontal" />
+                </button>
+              </>
+            )}
           </span>
         )}
       </div>
+      {line && !capsOpen && <span className="meta tor-limits">{line}</span>}
+      {capsOpen && sp && <SpeedCaps speed={sp} onInfo={onInfo} onClose={() => setCapsOpen(false)} />}
       {(error || actError || info?.error) && <div className="status-line" style={{ margin: 0 }}>{actError || error || info?.error}</div>}
       {info && !info.configured ? (
         <TorrentSetup />
@@ -597,17 +948,18 @@ function Torrents({ info, error, onInfo, onOpenFolder }: { info: TorrentsInfo | 
               t.dlBps ? `↓ ${fmtRate(t.dlBps)}` : '',
               t.upBps ? `↑ ${fmtRate(t.upBps)}` : '',
               t.etaSec !== null ? `${fmtEta(t.etaSec)} left` : '',
-              going ? `${t.seeds} seeds · ${t.peers} peers` : `ratio ${t.ratio}`,
+              going ? `${t.seeds} seeds · ${t.peers} peers` : t.ratioLimit !== null ? `ratio ${t.ratio} of ${t.ratioLimit}` : `ratio ${t.ratio}`,
             ]
               .filter(Boolean)
               .join(' · ');
+            const expanded = open === t.hash;
             return (
-              <div key={t.hash} className="dl-item torrent">
+              <div key={t.hash} className={'dl-item torrent' + (expanded ? ' open' : '')}>
                 <span className={'chip ' + st.cls}>{st.text}</span>
                 <div className="dl-item-main">
-                  <span className="dl-name" title={t.name}>
+                  <button type="button" className="dl-name tor-name" title={t.name} aria-expanded={expanded} onClick={() => setOpen(expanded ? null : t.hash)}>
                     {t.name}
-                  </span>
+                  </button>
                   {going && (
                     <div className="dl-bar">
                       <span style={{ width: `${t.progress * 100}%`, background: t.status === 'paused' || t.status === 'stalled' ? 'var(--t3)' : undefined }} />
@@ -617,8 +969,26 @@ function Torrents({ info, error, onInfo, onOpenFolder }: { info: TorrentsInfo | 
                     {going ? `${Math.floor(t.progress * 1000) / 10}% · ` : ''}
                     {detail}
                   </span>
+                  {(t.category || t.tags.length > 0) && (
+                    <span className="tor-labels">
+                      {t.category && (
+                        <span className="meta" title="Category">
+                          <i className="ph-duotone ph-folder-simple" />
+                          {t.category}
+                        </span>
+                      )}
+                      {t.tags.map((g) => (
+                        <span key={g} className="chip chip-muted">
+                          {g}
+                        </span>
+                      ))}
+                    </span>
+                  )}
                 </div>
                 <span className="dl-tools">
+                  <button className="icon-btn" title={expanded ? 'Hide its files' : 'Its files'} aria-label={`${expanded ? 'Hide' : 'Show'} the files of ${t.name}`} aria-expanded={expanded} onClick={() => setOpen(expanded ? null : t.hash)}>
+                    <i className={'ph-duotone ' + (expanded ? 'ph-caret-up' : 'ph-caret-down')} />
+                  </button>
                   <button
                     className="icon-btn"
                     title={canResume(t) ? 'Resume' : 'Pause'}
@@ -650,13 +1020,231 @@ function Torrents({ info, error, onInfo, onOpenFolder }: { info: TorrentsInfo | 
                     </button>
                   </div>
                 )}
+                {expanded && <TorrentDetail t={t} onInfo={onInfo} onOpenFolder={onOpenFolder} />}
               </div>
             );
           })}
         </div>
       )}
+      {recent.map((r) => (
+        <span key={r.at + r.name} className="meta tor-retired">
+          <i className="ph-duotone ph-check-circle" style={{ color: 'var(--ac)' }} /> {r.name} seeded to ratio {r.ratio} and left qBittorrent at {hm(new Date(r.at))}. Its files are still {r.hostDir ? <>in <span className="mono">{r.hostDir}</span></> : 'where they were'}.
+        </span>
+      ))}
       {info?.configured && info.hostDir && <span className="meta">Saved in <span className="mono">{info.hostDir}</span> on the server.</span>}
     </section>
+  );
+}
+
+/** Setting qBittorrent's speed caps, the usual ones and turtle mode's, in MB/s. */
+function SpeedCaps({ speed, onInfo, onClose }: { speed: TorrentSpeed; onInfo: (t: TorrentsInfo) => void; onClose: () => void }) {
+  const [v, setV] = useState(() => ({ dl: capText(speed.dl), up: capText(speed.up), turtleDl: capText(speed.turtleDl), turtleUp: capText(speed.turtleUp) }));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const bad = (Object.keys(v) as (keyof typeof v)[]).filter((k) => capValue(v[k]) === null);
+  const save = () => {
+    if (bad.length || busy) return;
+    setBusy(true);
+    setError('');
+    api
+      .setSpeedCaps({ dl: capValue(v.dl)!, up: capValue(v.up)!, turtleDl: capValue(v.turtleDl)!, turtleUp: capValue(v.turtleUp)! })
+      .then((t) => {
+        onInfo(t);
+        onClose();
+      })
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setBusy(false));
+  };
+  const box = (k: keyof typeof v, label: string) => (
+    <input
+      className={'input sm tnum' + (bad.includes(k) ? ' bad' : '')}
+      inputMode="decimal"
+      value={v[k]}
+      onChange={(e) => setV({ ...v, [k]: e.target.value })}
+      placeholder="No cap"
+      aria-label={label}
+      onKeyDown={(e) => e.key === 'Enter' && save()}
+    />
+  );
+  return (
+    <div className="tor-caps" role="group" aria-label="Speed caps">
+      <div className="tor-caps-grid">
+        <span />
+        <span className="meta">Download, MB/s</span>
+        <span className="meta">Upload, MB/s</span>
+        <span>Usually</span>
+        {box('dl', 'Usual download cap in MB/s')}
+        {box('up', 'Usual upload cap in MB/s')}
+        <span>Turtle mode</span>
+        {box('turtleDl', 'Turtle mode’s download cap in MB/s')}
+        {box('turtleUp', 'Turtle mode’s upload cap in MB/s')}
+      </div>
+      <span className="meta" style={error || bad.length ? { color: 'var(--wn)' } : undefined}>
+        {error || (bad.length ? 'A cap is a number of MB/s, like 2 or 0.5 (500 KB/s), or blank for none.' : 'Blank is no cap. These are qBittorrent’s own settings, the same as in its options.')}
+      </span>
+      <div className="dl-ig-actions">
+        <button className="btn btn-primary btn-small" disabled={busy || bad.length > 0} onClick={save}>
+          <i className={'ph-duotone ' + (busy ? 'ph-circle-notch spin' : 'ph-check')} />
+          Save
+        </button>
+        <button className="btn btn-secondary btn-small" onClick={onClose}>
+          Close
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** The folder every one of a torrent's files is in (its own folder, usually), so it needn't be on every line; '' when there isn't one. */
+export function sharedFolder(names: string[]): string {
+  const first = names[0]?.split('/')[0] ?? '';
+  return first && names.every((n) => n.startsWith(first + '/')) ? first : '';
+}
+
+const PRIORITIES: { key: TorrentFile['priority']; label: string }[] = [
+  { key: 'skip', label: 'Skip' },
+  { key: 'normal', label: 'Normal' },
+  { key: 'high', label: 'High' },
+];
+/** Files shown before "Show all". */
+const FIRST_FILES = 200;
+
+/** An open torrent: its files, each with its progress and priority, and the ratio it seeds to. */
+function TorrentDetail({ t, onInfo, onOpenFolder }: { t: Torrent; onInfo: (t: TorrentsInfo) => void; onOpenFolder?: (path: string) => void }) {
+  const [files, setFiles] = useState<TorrentFile[] | null>(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [all, setAll] = useState(false);
+  const [ratio, setRatio] = useState(t.ratioLimit === null ? '' : String(t.ratioLimit));
+  const [ratioNote, setRatioNote] = useState<{ text: string; failed: boolean } | null>(null);
+  const load = useCallback(() => {
+    api
+      .torrentFiles(t.hash)
+      .then((f) => {
+        setFiles(f);
+        setError('');
+      })
+      .catch((e: Error) => setError(e.message));
+  }, [t.hash]);
+  usePoll(load, POLL * 2);
+
+  const prio = (ids: number[], priority: TorrentFile['priority']) => {
+    setBusy(true);
+    api
+      .setFilePriority(t.hash, ids, priority)
+      .then((f) => {
+        setFiles(f);
+        setError('');
+      })
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setBusy(false));
+  };
+  const saveRatio = () => {
+    const r = ratio.trim();
+    if (r && !(Number(r) > 0 && Number(r) <= 100)) return setRatioNote({ text: 'A ratio is a number more than 0, like 1 or 2.5.', failed: true });
+    const n = r ? Math.round(Number(r) * 100) / 100 : null;
+    api
+      .setTorrentRatio(t.hash, n)
+      .then((info) => {
+        onInfo(info);
+        setRatioNote({
+          text: n === null ? 'It seeds on until you stop it.' : t.progress >= 1 && t.ratio >= n ? `It has seeded to ${t.ratio} already, so it leaves qBittorrent now. Its files stay.` : `Once it has seeded to ${n}, it leaves qBittorrent. Its files stay.`,
+          failed: false,
+        });
+      })
+      .catch((e: Error) => setRatioNote({ text: e.message, failed: true }));
+  };
+
+  const shown = files ? (all ? files : files.slice(0, FIRST_FILES)) : [];
+  const same = files?.length ? files.every((f) => f.priority === files[0].priority) : false;
+  const root = files ? sharedFolder(files.map((f) => f.name)) : '';
+  return (
+    <div className="tor-detail" role="group" aria-label={`${t.name}: files and seeding`}>
+      <form
+        className="tor-ratio"
+        onSubmit={(e) => {
+          e.preventDefault();
+          saveRatio();
+        }}
+      >
+        <label>
+          Seed to ratio
+          <input className="input sm tnum dl-ratio" type="number" min={0.1} max={100} step={0.1} value={ratio} onChange={(e) => (setRatio(e.target.value), setRatioNote(null))} placeholder="Keep seeding" aria-label={`Ratio for ${t.name} to seed to`} />
+        </label>
+        {ratio.trim() !== (t.ratioLimit === null ? '' : String(t.ratioLimit)) && (
+          <button className="btn btn-secondary btn-small">
+            <i className="ph-duotone ph-check" />
+            Save
+          </button>
+        )}
+        <span className="meta" style={ratioNote?.failed ? { color: 'var(--wn)' } : undefined}>
+          {ratioNote?.text ?? (t.ratioLimit !== null ? `Leaves qBittorrent at ratio ${t.ratioLimit}, keeping its files.` : 'Then it leaves qBittorrent, keeping its files.')}
+        </span>
+      </form>
+      {error && <span className="meta" style={{ color: 'var(--wn)' }}>{error}</span>}
+      {!files ? (
+        !error && <span className="meta">Loading its files…</span>
+      ) : !files.length ? (
+        <span className="meta">qBittorrent doesn’t know its files yet. They show once it has the torrent’s details.</span>
+      ) : (
+        <>
+          <div className="tor-files-head">
+            <span className="meta tor-files-count" title={root || undefined}>
+              {count(files.length, 'file')}
+              {root ? ` in ${root}` : ''}
+            </span>
+            {files.length > 1 && (
+              <label className="meta">
+                All:
+                <select className="input sm" value={same ? files[0].priority : ''} disabled={busy} onChange={(e) => e.target.value && prio(files.map((f) => f.index), e.target.value as TorrentFile['priority'])} aria-label="Priority of all its files">
+                  {!same && <option value="">Mixed</option>}
+                  {PRIORITIES.map((p) => (
+                    <option key={p.key} value={p.key}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
+          <div className="tor-files">
+            {shown.map((f) => {
+              const rel = root ? f.name.slice(root.length + 1) : f.name;
+              const slash = rel.lastIndexOf('/');
+              return (
+                <div key={f.index} className={'tor-file' + (f.priority === 'skip' ? ' skipped' : '')}>
+                  <span className="tor-file-name" title={f.name}>
+                    {slash > 0 && <span className="tor-file-dir">{rel.slice(0, slash + 1)}</span>}
+                    {rel.slice(slash + 1)}
+                  </span>
+                  <span className="meta tnum tor-file-size">{fmtBytes(f.size)}</span>
+                  <span className="meta tnum tor-file-pct">{f.priority === 'skip' && f.progress < 1 ? 'skipped' : `${Math.floor(f.progress * 1000) / 10}%`}</span>
+                  <select className="input sm" value={f.priority} disabled={busy} onChange={(e) => prio([f.index], e.target.value as TorrentFile['priority'])} aria-label={`Priority of ${f.name}`}>
+                    {PRIORITIES.map((p) => (
+                      <option key={p.key} value={p.key}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                  {onOpenFolder && f.hostDir && (f.progress > 0 || t.progress >= 1) ? (
+                    <button className="icon-btn" title="Open its folder in Files" aria-label={`Open the folder of ${f.name} in Files`} onClick={() => onOpenFolder(f.hostDir!)}>
+                      <i className="ph-duotone ph-folder-open" />
+                    </button>
+                  ) : (
+                    <span className="tor-file-nofolder" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {files.length > shown.length && (
+            <button className="btn btn-secondary btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => setAll(true)}>
+              Show all {files.length} files
+            </button>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 

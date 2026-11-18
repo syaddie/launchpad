@@ -42,7 +42,8 @@ import { explainLog, explainStatus } from './explain';
 import { cancelDownload, clearDownloads, listDownloads, startDownload } from './downloads';
 import { instagramInfo, signInInstagram, signOutInstagram, startInstagram } from './instagram';
 import { parseInstagram } from '../../shared/instagram';
-import { addTorrentFile, addTorrentLinks, MAX_TORRENT_FILE, QbitError, torrentAction, torrents } from './qbit';
+import { addTorrentFile, addTorrentLinks, MAX_TORRENT_FILE, QbitError, setFilePriority, setRatio, setSpeedCaps, setTurtle, startTorrentWatch, torrentAction, torrentFiles, torrentOptions, torrents } from './qbit';
+import { startVideo, videoInfo, videoSite } from './ytdlp';
 import { containerLogs, DockerError, restartContainer } from './docker';
 import { diskHealth } from './disks';
 import { startCleanup } from './cleanup';
@@ -1013,17 +1014,21 @@ app.post('/api/minecraft/:id/explain', async (c) => {
 // ---------- downloads and torrents ----------
 
 app.get('/api/downloads', async (c) => {
-  const [list, instagram] = await Promise.all([listDownloads(), instagramInfo()]);
-  return c.json({ ...list, instagram } satisfies DownloadsInfo);
+  const [list, instagram, video] = await Promise.all([listDownloads(), instagramInfo(), videoInfo()]);
+  return c.json({ ...list, instagram, video } satisfies DownloadsInfo);
 });
 
-/** Fetch a link into a folder on the server, or an Instagram post's or profile's photos and videos; the page polls the list for progress. */
+/** Fetch a link into a folder on the server, an Instagram post's or profile's photos and videos, or (via: 'video') a video with yt-dlp; the page polls the list for progress. */
 app.post('/api/downloads', async (c) => {
   const body = await c.req.json();
+  if (body?.via === 'video') return c.json(await startVideo(body));
   const ig = typeof body?.url === 'string' ? parseInstagram(body.url) : null;
   if (ig && 'error' in ig) throw new FileError(ig.error);
   return c.json(ig ? startInstagram(body, ig) : startDownload(body));
 });
+
+/** Whether yt-dlp knows the site a link is on (worked out without fetching it). */
+app.get('/api/downloads/video', async (c) => c.json(await videoSite(c.req.query('url'))));
 
 /** Sign Instagram downloads in with a browser's session cookie, checked with Instagram first. */
 app.post('/api/downloads/instagram', async (c) => c.json(await signInInstagram((await c.req.json())?.cookie)));
@@ -1039,19 +1044,48 @@ app.get('/api/torrents', async (c) => c.json(await torrents()));
 /** Magnet links (or links to .torrent files), one a line. */
 app.post('/api/torrents', async (c) => {
   const body = await c.req.json();
-  await addTorrentLinks(body?.urls, body?.paused === true);
+  await addTorrentLinks(body?.urls, { paused: body?.paused === true, category: body?.category, tags: body?.tags, ratio: body?.ratio });
   return c.json(await torrents());
 });
 
-/** A .torrent file, its bytes as the body. */
+/** A .torrent file, its bytes as the body; its category, tags (comma-separated) and ratio in the query. */
 app.post(
   '/api/torrents/file',
   bodyLimit({ maxSize: MAX_TORRENT_FILE, onError: (c) => c.json({ error: 'That .torrent file is over 10 MB.' }, 413) }),
   async (c) => {
-    await addTorrentFile(await c.req.arrayBuffer(), c.req.query('name') ?? 'file.torrent');
+    await addTorrentFile(await c.req.arrayBuffer(), c.req.query('name') ?? 'file.torrent', { category: c.req.query('category'), tags: c.req.query('tags'), ratio: c.req.query('ratio') });
     return c.json(await torrents());
   },
 );
+
+/** qBittorrent's categories and tags, to add a torrent with. */
+app.get('/api/torrents/options', async (c) => c.json(await torrentOptions()));
+
+/** Turtle mode (qBittorrent's alternative speed limits) on or off. */
+app.post('/api/torrents/turtle', async (c) => {
+  await setTurtle((await c.req.json())?.on);
+  return c.json(await torrents());
+});
+
+/** Speed caps in bytes a second, 0 for none: dl, up, turtleDl, turtleUp (only the ones given change). */
+app.post('/api/torrents/caps', async (c) => {
+  await setSpeedCaps(await c.req.json());
+  return c.json(await torrents());
+});
+
+app.get('/api/torrents/:hash/files', async (c) => c.json(await torrentFiles(c.req.param('hash'))));
+
+/** Skip a torrent's files, or download them at normal or high priority. */
+app.post('/api/torrents/:hash/files', async (c) => {
+  const body = await c.req.json();
+  return c.json(await setFilePriority(c.req.param('hash'), body?.ids, body?.priority));
+});
+
+/** The ratio a torrent seeds to before Launchpad takes it out of qBittorrent (its files kept), or null to seed on. */
+app.post('/api/torrents/:hash/ratio', async (c) => {
+  await setRatio(c.req.param('hash'), (await c.req.json())?.ratio);
+  return c.json(await torrents());
+});
 
 app.post('/api/torrents/action', async (c) => {
   const body = await c.req.json();
@@ -1313,6 +1347,7 @@ startMcWatch();
 startReviewNotes();
 startSampler();
 startCleanup();
+startTorrentWatch();
 startSnapshots(copyDailyToDrive);
 startLinkChecks();
 startAlerts();

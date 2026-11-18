@@ -2165,3 +2165,69 @@ button.m-stat { cursor: default; }
 .dl-ig-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 640px; }
 .dl-ig-form .input { flex: 1 1 260px; min-width: 0; box-sizing: border-box; }
 .dl-ig-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+/* Server › Downloads: a picked .torrent file, a video's format, a torrent's category, tags and
+   ratio, turtle mode and the speed caps, and an open torrent's files. */
+.dl-picked { display: flex; align-items: center; gap: 8px; height: 40px; }
+.dl-picked > i { flex: none; color: var(--t3); }
+.dl-picked .mono { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl-picked .meta { flex: none; }
+.dl-picked .icon-btn { margin-left: auto; }
+.dl-video-opts .segmented { flex-wrap: wrap; }
+.dl-video-opts .segmented button { white-space: nowrap; padding-inline: 12px; }
+.dl-tor-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; font-size: 13px; color: var(--t2); }
+.dl-tor-opts > .meta { flex-basis: 100%; }
+.dl-opt { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; max-width: 100%; }
+.dl-opt select.input { width: auto; max-width: 220px; padding: 0 6px; }
+.dl-opt > .input:not(select) { width: 190px; max-width: 100%; box-sizing: border-box; }
+.dl-tags .chip { display: inline-flex; align-items: center; gap: 3px; padding: 3px 9px; border: none; font-family: inherit; font-size: 12px; cursor: pointer; }
+.dl-tags .chip i { font-size: 10px; }
+.dl-opt > .input.dl-tag-new { width: 110px; }
+.dl-opt > .input.dl-ratio, .tor-ratio .dl-ratio { width: calc(13ch + 24px); box-sizing: border-box; text-align: right; }
+.torrents > .panel-head { flex-wrap: wrap; row-gap: 6px; }
+.tor-head-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px 10px; }
+.tor-speeds { display: inline-flex; gap: 10px; }
+.tor-turtle.on { border-color: transparent; background: var(--act); color: var(--acd); }
+.tor-limits { margin-top: -4px; }
+.tor-caps { display: flex; flex-direction: column; gap: 10px; padding: 12px 0; border-top: 1px solid var(--ln); border-bottom: 1px solid var(--ln); font-size: 13px; color: var(--t2); }
+.tor-caps-grid { display: grid; grid-template-columns: auto minmax(0, 150px) minmax(0, 150px); align-items: center; gap: 6px 10px; }
+.tor-caps-grid .input { width: 100%; min-width: 0; box-sizing: border-box; text-align: right; }
+.tor-name { display: block; padding: 0; border: none; background: none; color: var(--tx); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.tor-name:hover { text-decoration: underline; text-underline-offset: 2px; }
+.tor-labels { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
+.tor-labels .meta { display: inline-flex; align-items: center; gap: 3px; min-width: 0; }
+.dl-item.torrent.open, .dl-item.torrent.open:hover { background: var(--hv); }
+.tor-detail { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 4px 0 2px; container-type: inline-size; }
+.tor-ratio { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 13px; color: var(--t2); }
+.tor-ratio label { display: inline-flex; align-items: center; gap: 8px; }
+.tor-files-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tor-files-head label { display: inline-flex; align-items: center; gap: 6px; }
+.tor-files-head select.input, .tor-file select.input { width: auto; height: 28px; padding: 0 6px; font-size: 12px; }
+.tor-files { display: flex; flex-direction: column; max-height: 420px; overflow: auto; overscroll-behavior: contain; border-top: 1px solid var(--ln); }
+.tor-file { display: grid; grid-template-columns: minmax(0, 1fr) 70px 58px auto 26px; grid-template-areas: 'name size pct prio dir'; align-items: center; gap: 4px 8px; padding: 5px 0; border-bottom: 1px solid var(--ln); font-size: 13px; }
+.tor-file-name { grid-area: name; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tor-file-dir { color: var(--t3); }
+.tor-file-size { grid-area: size; text-align: right; }
+.tor-file-pct { grid-area: pct; text-align: right; }
+.tor-file select { grid-area: prio; }
+.tor-file > .icon-btn, .tor-file-nofolder { grid-area: dir; }
+.tor-file.skipped .tor-file-name { color: var(--t3); }
+@container (max-width: 440px) {
+  .tor-file { grid-template-columns: minmax(0, 1fr) auto auto 26px; grid-template-areas: 'name name name name' 'size pct prio dir'; }
+  .tor-file-size { text-align: left; }
+}
+.tor-retired i { vertical-align: -2px; }
+/* A narrow Torrents panel (a phone, or a split view): a torrent's name and progress get the
+   whole width, with its status and buttons on the line below. */
+.torrents { container-type: inline-size; }
+@container (max-width: 540px) {
+  .dl-item.torrent { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'main main' 'chip tools'; row-gap: 6px; }
+  .dl-item.torrent > .chip { grid-area: chip; }
+  .dl-item.torrent > .dl-item-main { grid-area: main; }
+  .dl-item.torrent > .dl-tools { grid-area: tools; }
+  .dl-item.torrent > .dl-confirm, .dl-item.torrent > .tor-detail { grid-column: 1 / -1; }
+}
+.tor-files-count { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Console's capitals are wider: its status chips need more room than 96px. */
+@container (min-width: 541px) {
+  [data-design='console'] .dl-item.torrent { grid-template-columns: 128px minmax(0, 1fr) auto; }
+}

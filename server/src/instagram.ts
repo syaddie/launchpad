@@ -7,16 +7,14 @@
 // Signing in is optional (public posts work without it): the session cookie of a browser
 // that's signed in to Instagram, kept in DATA_DIR/instagram-session.json, readable only by
 // Launchpad, never sent to the page and not part of backups. It reaches the helper on stdin.
-import { spawn } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import readline from 'node:readline';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import type { SFTPWrapper } from 'ssh2';
 import { config } from './config';
+import { HelperError, runHelper as runPython, type Helper, type HelperOptions } from './helper';
 import { addJob, counter, downloadDir, fetchError, newJob, safeName, STALL, view, type Job } from './downloads';
 import { call, FileError, kindOf, moveInto, noteUploadDir, partPath, sftpError, sftpSession, stat } from './shell';
 import { cleanIgLimit, igFileName, igLabel, type IgTarget } from '../../shared/instagram';
@@ -51,78 +49,18 @@ type HelperEvent =
   | { type: 'error'; error: string; code: string }
   | { type: 'done' };
 
-/** What the helper said went wrong; `code` is login, private, notfound, limited, missing or other. */
-export class HelperError extends Error {
-  constructor(
-    message: string,
-    readonly code: string,
-  ) {
-    super(message);
-  }
-}
+export { HelperError };
 
-/** The last line of what the helper printed to stderr, as the reason when it stops without saying why. */
-function lastLine(text: string): string {
-  return text.trim().split(/\r?\n/).pop()?.trim().slice(0, 400) ?? '';
-}
+const HELPER: Helper = {
+  python: config.instaloaderPython,
+  script: SCRIPT,
+  missing: MISSING,
+  slow: 'Instagram took too long to answer. Try again in a while.',
+  name: 'Instagram',
+};
 
-/**
- * Run the helper with `req` and hand each line it prints to `onEvent`, one at a time (the next
- * waits until it's done). Resolves when the helper finishes; rejects with what it said went
- * wrong, or the signal's reason once aborted.
- */
-async function runHelper(req: object, onEvent: (e: HelperEvent) => unknown, opts: { signal?: AbortSignal; timeout?: number } = {}): Promise<void> {
-  if (opts.signal?.aborted) throw opts.signal.reason;
-  const child = spawn(config.instaloaderPython, [SCRIPT], {
-    cwd: os.tmpdir(),
-    stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUNBUFFERED: '1', PYTHONDONTWRITEBYTECODE: '1' },
-    windowsHide: true,
-  });
-  let stderr = '';
-  child.stderr.on('data', (d: Buffer) => (stderr = (stderr + d.toString()).slice(-4000)));
-  child.stdin.on('error', () => {});
-  const exited = new Promise<number | null>((resolve) => child.once('close', (code) => resolve(code)));
-  let timedOut = false;
-  const kill = () => child.kill();
-  opts.signal?.addEventListener('abort', kill);
-  const timer = opts.timeout
-    ? setTimeout(() => {
-        timedOut = true;
-        kill();
-      }, opts.timeout)
-    : undefined;
-  try {
-    await new Promise<void>((resolve, reject) => {
-      child.once('spawn', resolve);
-      child.once('error', (e) => reject(new HelperError(`${MISSING} (${(e as Error).message})`, 'missing')));
-    });
-    child.stdin.end(JSON.stringify(req));
-    let failed: HelperError | null = null;
-    for await (const line of readline.createInterface({ input: child.stdout, crlfDelay: Infinity })) {
-      let ev: HelperEvent;
-      try {
-        ev = JSON.parse(line);
-      } catch {
-        continue;
-      }
-      if (ev.type === 'error') failed = new HelperError(ev.code === 'missing' ? MISSING : ev.error, ev.code);
-      else await onEvent(ev);
-    }
-    const code = await exited;
-    if (opts.signal?.aborted) throw opts.signal.reason;
-    if (timedOut) throw new HelperError('Instagram took too long to answer. Try again in a while.', 'other');
-    if (failed) throw failed;
-    if (code !== 0) throw new HelperError(lastLine(stderr) || `The Instagram helper stopped (exit ${code}).`, 'other');
-  } catch (e) {
-    if (opts.signal?.aborted) throw opts.signal.reason;
-    throw e;
-  } finally {
-    clearTimeout(timer);
-    opts.signal?.removeEventListener('abort', kill);
-    if (child.exitCode === null && child.signalCode === null) child.kill();
-  }
-}
+/** Run instagram.py with `req`; see runHelper. `code` is login, private, notfound, limited, missing or other. */
+const runHelper = (req: object, onEvent: (e: HelperEvent) => unknown, opts: HelperOptions = {}) => runPython<HelperEvent>(HELPER, req, onEvent, opts);
 
 // ---------- is it installed ----------
 
