@@ -1993,8 +1993,7 @@ button.m-stat { cursor: default; }
 .mc-console.empty { align-items: center; justify-content: center; }
 .mc-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
 .mc-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mc-tools { display: flex; gap: 6px; }
-.mc-where { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-tools { display: flex; flex-wrap: wrap; gap: 6px; }
 .mc-log { flex: 1 1 auto; min-height: 260px; margin: 0; }
 [data-layout='narrow'] .mc-log { flex: none; height: 55vh; }
 .mc-line { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -2046,6 +2045,83 @@ button.m-stat { cursor: default; }
 .mc-field .input { width: 100%; box-sizing: border-box; }
 .mc-field-row { display: flex; gap: 12px; }
 .mc-field-row select.input { width: auto; padding: 0 6px; }
+
+/* ---------- Server › Minecraft: meters, players, backups, crashes ---------- */
+.mc-where { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 12px; min-width: 0; }
+.mc-where-dir { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-meters { display: flex; flex-wrap: wrap; gap: 2px 10px; }
+.mc-meter { font-size: 12px; color: var(--t2); white-space: nowrap; }
+.mc-meter.warn { color: var(--wn); }
+.mc-views { flex: none; }
+.mc-log[hidden] { display: none; }
+.mc-line.quiet { color: var(--t3); }
+.mc-view { flex: 1 1 auto; min-height: 260px; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
+[data-layout='narrow'] .mc-view { flex: none; min-height: 0; overflow: visible; }
+.mc-view-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.mc-view-where { flex: 1 1 200px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* No hover on a phone to read the rest, so it wraps. */
+[data-layout='narrow'] .mc-view-where { white-space: normal; overflow-wrap: anywhere; }
+.mc-note { margin: 0; text-wrap: pretty; }
+.mc-note.warn { color: var(--wn); }
+.mc-section { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 1px solid var(--ln); }
+.mc-players, .mc-wl, .mc-backups, .mc-restarts, .mc-crashes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.mc-player { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 6px 8px; border-radius: var(--r); }
+.mc-player:hover { background: var(--hv); }
+.mc-player-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.mc-player-name { min-width: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-player-tools { display: flex; flex-wrap: wrap; gap: 4px; }
+.mc-face { flex: none; width: 28px; height: 28px; border-radius: 4px; image-rendering: pixelated; background: var(--hv); }
+.mc-face-none { display: grid; place-items: center; font-size: 12px; font-weight: 600; color: var(--t3); }
+.mc-tp { flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 2px 0 2px 38px; }
+.mc-tp select.input { width: auto; max-width: 100%; padding: 0 6px; }
+[data-layout='narrow'] .mc-tp { padding-left: 0; }
+.mc-wl-row { display: flex; align-items: center; gap: 10px; padding: 3px 8px; }
+.mc-wl-row .mc-player-name { flex: 1; font-weight: 500; }
+.mc-wl-add { display: flex; align-items: center; gap: 8px; max-width: 420px; }
+.mc-wl-add .input { flex: 1; min-width: 0; }
+.mc-job { flex: none; display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--ln); border-radius: 6px; font-size: 13px; }
+.mc-job > i { flex: none; margin-top: 1px; font-size: 18px; color: var(--acd); }
+.mc-job.failed > i { color: var(--wn); }
+.mc-job-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; text-wrap: pretty; overflow-wrap: anywhere; }
+.mc-backup { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: var(--r); }
+.mc-backup:hover { background: var(--hv); }
+.mc-backup > i { flex: none; font-size: 18px; color: var(--t3); }
+.mc-backup-text { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 13px; }
+.mc-backup-text .meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-backup-when { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; }
+.mc-backup-when > span:first-child { white-space: nowrap; }
+.mc-backup-tools { flex: none; display: flex; align-items: center; gap: 4px; }
+.mc-auto { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mc-auto-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; text-wrap: pretty; }
+.mc-restart { display: grid; grid-template-columns: 16px auto minmax(0, 1fr); align-items: baseline; gap: 8px; padding: 2px 8px; font-size: 13px; text-wrap: pretty; }
+.mc-restart > i { color: var(--t3); }
+.mc-restart.crash > i, .mc-restart.gave-up > i { color: var(--wn); }
+[data-layout='narrow'] .mc-restart { grid-template-columns: 16px minmax(0, 1fr); }
+[data-layout='narrow'] .mc-restart > span { grid-column: 2; }
+.mc-crash-row { width: 100%; display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: none; border-radius: var(--r); background: none; color: var(--tx); font: inherit; text-align: left; cursor: pointer; }
+.mc-crash-row:hover { background: var(--hv); }
+.mc-crash-row > i { flex: none; font-size: 18px; color: var(--t3); }
+.mc-crash-text { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 13px; }
+.mc-crash-text .meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-report { flex: 1 1 auto; min-height: 200px; margin: 0; padding: 10px; overflow: auto; font-size: 11px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border-radius: var(--r); }
+[data-layout='narrow'] .mc-report { flex: none; max-height: 70vh; }
+.mc-diag-crash { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--ln); font-size: 13px; text-wrap: pretty; }
+
+/* ---------- Explain this log (Minecraft and the containers' logs) ---------- */
+.explain { flex: 0 0 auto; max-height: 360px; overflow: auto; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--ln); border-radius: 6px; font-size: 13px; }
+[data-layout='narrow'] .explain { max-height: none; }
+.explain-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.explain-head .drawer-label { display: inline-flex; align-items: center; gap: 5px; }
+.explain-summary { margin: 0; font-weight: 600; text-wrap: pretty; }
+.explain-text { margin: 2px 0 0; text-wrap: pretty; }
+.explain-fix { margin: 2px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 3px; overflow-wrap: anywhere; }
+.explain summary { cursor: pointer; }
+.explain-pre { margin: 6px 0 0; padding: 8px; max-height: 200px; overflow: auto; font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--hv); border-radius: var(--r); }
+.logs-explain { flex: none; padding: 0 30px 10px; }
+/* In the console, Diagnosis and the explanation give way (each scrolls) so the log and the command line stay inside the panel. */
+.mc-console > .mc-diag, .mc-console > .explain { flex: 0 1 auto; min-height: 96px; }
+[data-layout='narrow'] .mc-console > .mc-diag, [data-layout='narrow'] .mc-console > .explain { flex: none; min-height: 0; }
+.logs-explain .explain { max-height: 40vh; }
 
 /* ---------- Server › Downloads ---------- */
 .server > .dl-view { flex: 1 0 auto; display: flex; flex-direction: column; gap: 20px; }

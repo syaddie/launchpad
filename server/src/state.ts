@@ -142,8 +142,9 @@ export const KEY_FIELDS: Record<string, Field[]> = {
   uploadDirs: [],
   // The terminal fetches its snippets itself.
   snippets: [],
-  // So does the Minecraft tab its servers.
+  // So does the Minecraft tab its servers, and its restarts after a crash.
   minecraftServers: [],
+  mcWatch: [],
   // Settings › Alerts fetches these itself; the topic stays out of the page's state.
   alertTopic: [],
   alertMemory: [],

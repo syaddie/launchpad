@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { MON } from '../../../shared/dates';
 import type { ContainerInfo, LogLine } from '../../../shared/types';
 import { api, localGet, localSet } from '../api';
+import { ExplainBox, ExplainButton, useExplain, useExplainStatus } from './Explain';
 
 const SELF_NOTE = 'This is Launchpad itself, which can’t restart itself from here. On the server: docker compose restart launchpad';
 
@@ -137,6 +138,9 @@ export function LogsDrawer({ c, canRestart, onClose, onRestarted }: { c: Contain
   const atBottom = useRef(true);
   const search = useRef<HTMLInputElement>(null);
   const chip = chipOf(c);
+  const explainStatus = useExplainStatus();
+  const ex = useExplain(explainStatus);
+  const explain = () => ex.start(() => api.explainContainer(c.id, c.name));
 
   const show = (next: LogLine[]) => {
     linesRef.current = next;
@@ -262,8 +266,14 @@ export function LogsDrawer({ c, canRestart, onClose, onRestarted }: { c: Contain
             <i className={'ph-duotone ' + (loading ? 'ph-circle-notch spin' : 'ph-arrow-clockwise')} />
             Refresh
           </button>
+          <ExplainButton status={explainStatus} busy={!!ex.state?.busy} onClick={explain} />
         </div>
         {error && <div className="status-line" style={{ margin: '0 30px 8px' }}>{error}</div>}
+        {ex.state && (
+          <div className="logs-explain">
+            <ExplainBox state={ex.state} onClose={ex.close} onRetry={explain} />
+          </div>
+        )}
         <div
           ref={scroller}
           className="logs-body mono"
