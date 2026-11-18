@@ -12,6 +12,7 @@ export const CLAUDE_FEATURES: Record<string, string> = {
   briefing: 'Daily briefing',
   ask: '⌘K',
   review: 'Weekly review',
+  explain: 'Explain this log',
   other: 'Other',
 };
 

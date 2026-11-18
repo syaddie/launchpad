@@ -80,6 +80,8 @@ describe('parseDiag', () => {
       recentCrash: '/home/me/survival/crash-reports/crash-2026-11-13.txt',
       pane: 'bash: ./start.sh: Permission denied',
       log: '[12:00:00] [Server thread/INFO]: Starting',
+      // No crash report at all, so none to show.
+      crash: null,
     });
   });
   it('treats an empty answer as everything missing, not as a crash', () => {

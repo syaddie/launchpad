@@ -1,4 +1,5 @@
 import type { DownloadJob, DownloadsInfo, InstagramInfo, McDiagnosis, McLog, McServer, McStatus, TorrentsInfo } from '../../shared/types';
+import type { ExplainResult, ExplainStatus, McBackups, McCrashes, McMeters, McPlayerAction, McPlayers } from '../../shared/types';
 import type { AppState, Backup, BackupSnapshot, CalEvent, Countdown, Craving, DirListing, DisksReport, LinkCheck, LogLine, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
 import type { AskResult } from '../../shared/ask';
 import type { UsageReport } from '../../shared/claudeUsage';
@@ -269,6 +270,23 @@ export const api = {
   mcCommand: (id: string, command: string) => req('POST', `/api/minecraft/${encodeURIComponent(id)}/command`, { command }, false, undefined, 30_000),
   mcStart: (id: string) => req('POST', `/api/minecraft/${encodeURIComponent(id)}/start`, {}, false, undefined, 30_000),
   mcDiagnose: (id: string) => req<McDiagnosis>('GET', `/api/minecraft/${encodeURIComponent(id)}/diagnose`, undefined, false, undefined, 40_000),
+  /** Who's online; `fresh` asks the console's list again even when the ping's count hasn't changed. */
+  mcPlayers: (id: string, fresh = false) => req<McPlayers>('GET', `/api/minecraft/${encodeURIComponent(id)}/players${fresh ? '?fresh=1' : ''}`, undefined, false, undefined, 40_000),
+  mcPlayerAction: (id: string, action: McPlayerAction, name: string, to?: string) => req('POST', `/api/minecraft/${encodeURIComponent(id)}/players`, { action, name, to }, false, undefined, 30_000),
+  /** `tps`: the server may be asked for its TPS (typed into its console, at most every couple of minutes). */
+  mcMeters: (id: string, tps: boolean) => req<McMeters>('GET', `/api/minecraft/${encodeURIComponent(id)}/meters${tps ? '?tps=1' : ''}`, undefined, false, undefined, 30_000),
+  mcBackups: (id: string) => req<McBackups>('GET', `/api/minecraft/${encodeURIComponent(id)}/backups`, undefined, false, undefined, 40_000),
+  // Measuring a big world (du) can take a while before the backup starts.
+  mcBackup: (id: string) => req<McBackups>('POST', `/api/minecraft/${encodeURIComponent(id)}/backups`, {}, false, undefined, 150_000),
+  mcRestore: (id: string, name: string) => req<McBackups>('POST', `/api/minecraft/${encodeURIComponent(id)}/backups/${encodeURIComponent(name)}/restore`, {}, false, undefined, 60_000),
+  mcDeleteBackup: (id: string, name: string) => req<McBackups>('DELETE', `/api/minecraft/${encodeURIComponent(id)}/backups/${encodeURIComponent(name)}`, undefined, false, undefined, 40_000),
+  mcDismissJob: (id: string) => req<McBackups>('POST', `/api/minecraft/${encodeURIComponent(id)}/backups/dismiss`, {}, false, undefined, 40_000),
+  mcCrashes: (id: string) => req<McCrashes>('GET', `/api/minecraft/${encodeURIComponent(id)}/crashes`, undefined, false, undefined, 30_000),
+  mcCrash: (id: string, name: string) => req<{ name: string; text: string; truncated: boolean }>('GET', `/api/minecraft/${encodeURIComponent(id)}/crashes/${encodeURIComponent(name)}`, undefined, false, undefined, 30_000),
+  explainStatus: () => req<ExplainStatus>('GET', '/api/explain'),
+  /** Explain the end of the server's log, or one crash report. */
+  mcExplain: (id: string, crash?: string) => req<ExplainResult>('POST', `/api/minecraft/${encodeURIComponent(id)}/explain`, crash ? { crash } : {}, false, undefined, 120_000),
+  explainContainer: (id: string, name: string) => req<ExplainResult>('POST', `/api/server/containers/${encodeURIComponent(id)}/explain`, { name }, false, undefined, 120_000),
   downloads: () => req<DownloadsInfo>('GET', '/api/downloads'),
   /** `ig` only matters for Instagram links: a profile's newest how many, and whether to save captions and details too. */
   startDownload: (url: string, dir: string, ig?: { limit?: number; metadata: boolean }) => req<DownloadJob>('POST', '/api/downloads', { url, dir, ...ig }),

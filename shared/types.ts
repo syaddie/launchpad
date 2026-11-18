@@ -795,6 +795,12 @@ export interface McServer {
   session: string;
   /** What to type in the session to start it, e.g. ./start.sh. Empty: no Start button. */
   start: string;
+  /** Start it again when it stops on its own (a crash). Needs a start command. Missing: off. */
+  autoRestart?: boolean;
+  /** How many of Launchpad's world backups to keep; older ones are removed after a new one. Missing: MC_KEEP_BACKUPS. */
+  keepBackups?: number;
+  /** Where world backups go. Missing: a backups folder inside `dir`. */
+  backupDir?: string;
 }
 
 export interface McStatus extends McServer {
@@ -804,7 +810,14 @@ export interface McStatus extends McServer {
   pid: number | null;
   /** It runs inside tmux or screen, so commands can be typed into it. */
   attached: boolean;
+  /** A backup or restore is under way. */
+  job?: 'backup' | 'restore';
+  /** Restart if it crashes gave up after too many crashes in a row. */
+  gaveUp?: boolean;
 }
+
+/** World backups kept per server unless the server says otherwise. */
+export const MC_KEEP_BACKUPS = 7;
 
 /** One thing the check found out about a server that won't start (or is misbehaving). */
 export interface McFinding {
@@ -824,6 +837,8 @@ export interface McDiagnosis {
   running: boolean;
   /** When the check ran (ms since epoch). */
   at: number;
+  /** The newest report in crash-reports/, however old. */
+  crash?: McCrashSummary | null;
 }
 
 /** New lines of a server's logs/latest.log since `offset`. */
@@ -835,6 +850,145 @@ export interface McLog {
   reset: boolean;
   /** There's no logs/latest.log in the folder. */
   missing: boolean;
+}
+
+// ---------- Minecraft: players, meters, backups, crashes ----------
+
+export interface McPlayer {
+  name: string;
+  /** With dashes; null when nothing Launchpad read says. */
+  uuid: string | null;
+  op: boolean;
+  whitelisted: boolean;
+}
+
+/** Who's on, from a Server List Ping and, when that doesn't name everyone, the console's `list`. */
+export interface McPlayers {
+  running: boolean;
+  /** null when the server didn't answer the ping. */
+  online: number | null;
+  max: number | null;
+  players: McPlayer[];
+  /** whitelist.json. */
+  whitelist: { name: string; uuid: string | null }[];
+  /** white-list=true in server.properties. */
+  whitelistOn: boolean;
+  /** As the server reports it, e.g. "Paper 1.21.1". */
+  version: string | null;
+  /** Why some or all names are missing, when they are. */
+  note: string | null;
+  at: number;
+}
+
+export type McPlayerAction = 'kick' | 'op' | 'deop' | 'whitelist-add' | 'whitelist-remove' | 'tp';
+
+/** The Java process's memory and CPU, and TPS/MSPT where the server reports them. */
+export interface McMeters {
+  running: boolean;
+  /** Resident memory, bytes. */
+  rss: number | null;
+  /** Share of the whole machine, 0–100. */
+  cpu: number | null;
+  cores: number | null;
+  /** Seconds the process has been up. */
+  uptime: number | null;
+  online: number | null;
+  max: number | null;
+  /** Ticks per second and milliseconds per tick: null when the server can't say (vanilla before 1.20.3 without Spark). */
+  tps: number | null;
+  mspt: number | null;
+  tpsFrom: 'spark' | 'paper' | 'vanilla' | null;
+  /** When TPS was read (ms since epoch). */
+  tpsAt: number | null;
+  at: number;
+}
+
+export interface McBackup {
+  name: string;
+  size: number;
+  /** When it was taken (ISO). */
+  at: string;
+  /** Taken just before a restore, to undo it. */
+  beforeRestore: boolean;
+}
+
+/** A backup or restore under way, or the last one to finish. */
+export interface McJob {
+  kind: 'backup' | 'restore';
+  /** What it's doing now, as a short sentence. */
+  step: string;
+  startedAt: string;
+  endedAt: string | null;
+  ok: boolean | null;
+  /** How it went, once it's over. */
+  message: string | null;
+  file: string | null;
+  /** How big the backup is so far, while it's being packed. */
+  bytes: number | null;
+}
+
+export interface McBackups {
+  dir: string;
+  keep: number;
+  list: McBackup[];
+  job: McJob | null;
+  /** Free space where backups go, bytes; null when it can't be read. */
+  free: number | null;
+  /** Folders a restore left behind when it was cut off, in the server's folder. */
+  leftovers: string[];
+}
+
+export interface McCrashReport {
+  name: string;
+  at: string;
+  size: number;
+}
+
+export interface McCrashSummary extends McCrashReport {
+  description: string | null;
+  /** The exception and its first lines. */
+  lines: string[];
+}
+
+/** One thing Restart if it crashes noticed or did. */
+export interface McRestart {
+  at: string;
+  kind: 'crash' | 'restart' | 'gave-up';
+  reason: string;
+}
+
+/** What's kept per server for Restart if it crashes. */
+export interface McWatchRecord {
+  gaveUp: boolean;
+  /** Newest last. */
+  log: McRestart[];
+}
+
+export interface McCrashes {
+  reports: McCrashReport[];
+  /** Restart if it crashes, for saved servers. */
+  autoRestart: boolean;
+  gaveUp: boolean;
+  restarts: McRestart[];
+}
+
+/** What Claude made of the end of a log. */
+export interface ExplainResult {
+  summary: string;
+  cause: string;
+  fix: string[];
+  /** Exactly what was sent, secrets taken out. */
+  excerpt: string;
+  /** The log had a clear error in it, rather than only its last lines. */
+  foundError: boolean;
+}
+
+export interface ExplainStatus {
+  /** There's an API key; without one the button isn't shown at all. */
+  configured: boolean;
+  ready: boolean;
+  /** Why not, in a sentence, when it isn't. */
+  reason: string | null;
 }
 
 // ---------- downloads and torrents ----------

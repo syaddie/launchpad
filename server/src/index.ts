@@ -28,7 +28,10 @@ import { MAX_PHOTOS, MAX_PHOTO_BYTES, readPhoto, removePhotoFile, sniffImage, wr
 import { isRunning, newPackage, refreshPackage, refreshSummaries, refreshWeather, runAllGoogle, runIfStale, runSource, signOutGoogle, startScheduler } from './sync';
 import { attachTerminal, FileError, listDir, makeDir, MAX_TEXT, readFileStream, readText, remove, rename, shellInfo, trustHostKey, abandonUpload, uploadPiece, UPLOAD_CHUNK, writeText } from './shell';
 import { serverStats, startSampler } from './system';
-import { cleanMcServer, diagnose, MAX_MC, mcStatuses, readLog, sendCommand, startServer } from './minecraft';
+import { cleanMcServer, diagnose, findMc, listCrashes, MAX_MC, mcStatuses, readCrash, readLog, sendCommand, serverFacts, startMcWatch, startServer } from './minecraft';
+import { meters, playerAction, players } from './mc-players';
+import { backups, deleteBackup, dismissJob, startBackup, startRestore } from './mc-backups';
+import { explainLog, explainStatus } from './explain';
 import { cancelDownload, clearDownloads, listDownloads, startDownload } from './downloads';
 import { instagramInfo, signInInstagram, signOutInstagram, startInstagram } from './instagram';
 import { parseInstagram } from '../../shared/instagram';
@@ -615,6 +618,14 @@ app.use('/api/server/*', async (c, next) => (foreignOrigin(c.req.header('origin'
 /** A container's last lines (?tail=), or only those since a line's timestamp (?since=), for following along. */
 app.get('/api/server/containers/:id/logs', async (c) => c.json(await containerLogs(c.req.param('id'), c.req.query('tail'), c.req.query('since'))));
 
+/** Explain the end of a container's log. The page sends the name it shows, for Claude's context. */
+app.post('/api/server/containers/:id/explain', async (c) => {
+  const body = ((await c.req.json().catch(() => ({}))) ?? {}) as { name?: unknown };
+  const name = typeof body.name === 'string' && /^[\w./-]{1,128}$/.test(body.name) ? body.name : 'a Docker container';
+  const lines = await containerLogs(c.req.param('id'), 1000, undefined);
+  return c.json(await explainLog(`the Docker container ${name}`, lines.map((l) => (l.stream === 'err' ? '[stderr] ' : '') + l.text).join('\n')));
+});
+
 /** The only change Launchpad makes to Docker; see docker.ts. */
 app.post('/api/server/containers/:id/restart', async (c) => {
   await restartContainer(c.req.param('id'));
@@ -777,6 +788,50 @@ app.get('/api/minecraft/:id/diagnose', async (c) => c.json(await diagnose(c.req.
 app.post('/api/minecraft/:id/start', async (c) => {
   await startServer(c.req.param('id'));
   return c.json({ ok: true });
+});
+
+/** Who's online (?fresh=1 asks the console's list again), with ops and the whitelist. */
+app.get('/api/minecraft/:id/players', async (c) => c.json(await players(c.req.param('id'), c.req.query('fresh') === '1')));
+
+/** Kick, op, de-op, whitelist or teleport: one console command, built here from a checked name. */
+app.post('/api/minecraft/:id/players', async (c) => {
+  await playerAction(c.req.param('id'), (await c.req.json()) ?? {});
+  return c.json({ ok: true });
+});
+
+/** Memory and CPU, the ping's player count, and TPS where the server says (?tps=1 lets it be asked). */
+app.get('/api/minecraft/:id/meters', async (c) => c.json(await meters(c.req.param('id'), c.req.query('tps') === '1')));
+
+/** World backups: the list, and any backup or restore under way. */
+app.get('/api/minecraft/:id/backups', async (c) => c.json(await backups(c.req.param('id'))));
+app.post('/api/minecraft/:id/backups', async (c) => c.json(await startBackup(c.req.param('id'))));
+app.post('/api/minecraft/:id/backups/dismiss', async (c) => {
+  dismissJob(c.req.param('id'));
+  return c.json(await backups(c.req.param('id')));
+});
+app.post('/api/minecraft/:id/backups/:name/restore', async (c) => c.json(await startRestore(c.req.param('id'), c.req.param('name'))));
+app.delete('/api/minecraft/:id/backups/:name', async (c) => c.json(await deleteBackup(c.req.param('id'), c.req.param('name'))));
+
+/** Crash reports, newest first, and what Restart if it crashes has done. */
+app.get('/api/minecraft/:id/crashes', async (c) => c.json(await listCrashes(c.req.param('id'))));
+app.get('/api/minecraft/:id/crashes/:name', async (c) => c.json(await readCrash(c.req.param('id'), c.req.param('name'))));
+
+/** Whether Explain this log can run, and why not. */
+app.get('/api/explain', (c) => c.json(explainStatus()));
+
+/** Explain the end of the server's log, or one crash report ({ crash: name }). */
+app.post('/api/minecraft/:id/explain', async (c) => {
+  const body = ((await c.req.json().catch(() => ({}))) ?? {}) as { crash?: unknown };
+  const id = c.req.param('id');
+  const s = await findMc(id);
+  const kind = await serverFacts(s).then((f) => (f.spark ? 'with Spark' : f.paper ? 'Paper' : f.bukkit ? 'Spigot or Bukkit' : 'vanilla or modded'), () => 'unknown kind');
+  if (typeof body.crash === 'string') {
+    const r = await readCrash(id, body.crash);
+    return c.json(await explainLog(`the crash report ${r.name} of the Minecraft server "${s.name}" (${kind})`, r.text, { crashReport: true }));
+  }
+  const log = await readLog(id, undefined);
+  if (log.missing) throw new FileError(`There’s no logs/latest.log in ${s.dir || 'its folder'} to explain.`, 409);
+  return c.json(await explainLog(`logs/latest.log of the Minecraft server "${s.name}" (${kind}, ${s.running ? 'running' : 'stopped'})`, log.text));
 });
 
 // ---------- downloads and torrents ----------
@@ -1078,6 +1133,7 @@ server.on('upgrade', async (req, socket, head) => {
 });
 
 startScheduler();
+startMcWatch();
 startReviewNotes();
 startSampler();
 startCleanup();
