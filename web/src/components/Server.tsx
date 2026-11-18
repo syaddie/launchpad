@@ -33,8 +33,10 @@ const TABS: { key: Tab; name: string; icon: string }[] = [
 const pair = (t: Tab) => t === 'terminal' || t === 'files';
 
 /** The Server view: the machine's health at a glance, a shell on it, its files, its Minecraft servers and its downloads. */
-export function Server({ data, now, openTab, onOpenSettings, split }: {
+export function Server({ data, now, openTab, onOpenSettings, onPinFolders, split }: {
   data: AppState;
+  /** Save Files' pinned folders, in prefs. */
+  onPinFolders: (pins: string[]) => void;
   /** Terminal and Files open side by side (Console, Bento and Horizon on a wide enough screen). */
   split?: boolean;
   now: Date;
@@ -152,6 +154,8 @@ export function Server({ data, now, openTab, onOpenSettings, split }: {
           hidden={!both && tab !== 'files'}
           now={now}
           open={filesAt}
+          pins={data.prefs.pinnedFolders ?? []}
+          onPins={onPinFolders}
           onFailed={loadInfo}
           onOpenTerminal={(path) => {
             setCd((c) => ({ path, n: (c?.n ?? 0) + 1 }));

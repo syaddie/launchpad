@@ -1,11 +1,13 @@
 // Housekeeping that runs in the background: photo files nothing uses, images no note
-// has shown for a week, icons of sites no longer bookmarked, and the part files of
-// uploads that were given up on without the page saying so.
+// has shown for a week, icons of sites no longer bookmarked, the part files of
+// uploads that were given up on without the page saying so, and what Launchpad put
+// in the server's trash over a week ago.
 import { sweepFavicons } from './bookmarks';
 import { sweepNoteImages, usedImages } from './notes';
 import { sweepPhotos } from './photos';
 import { sweepUploads } from './shell';
 import { store } from './store';
+import { purgeTrash } from './trash';
 
 const HOUR = 60 * 60_000;
 
@@ -48,15 +50,26 @@ async function uploads() {
   }
 }
 
+async function trash() {
+  try {
+    const n = await purgeTrash();
+    if (n) console.log(`[cleanup] emptied ${n} item(s) from the server's trash, a week after they were deleted`);
+  } catch (e) {
+    console.warn('[cleanup] trash:', (e as Error).message);
+  }
+}
+
 export function startCleanup(): void {
   setTimeout(() => {
     photos();
     noteImages();
     favicons();
     uploads();
+    trash();
   }, 60_000);
   setInterval(photos, 24 * HOUR);
   setInterval(noteImages, 24 * HOUR);
   setInterval(favicons, 24 * HOUR);
   setInterval(uploads, 6 * HOUR);
+  setInterval(trash, 6 * HOUR);
 }

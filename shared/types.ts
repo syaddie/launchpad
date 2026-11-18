@@ -108,6 +108,8 @@ export interface Prefs {
   setsPerWeek: number;
   /** Exercise names always shown first in Training › Your lifts. */
   pinnedLifts: string[];
+  /** Folders on the server starred in Server › Files, in the order they were pinned. */
+  pinnedFolders: string[];
   /** What the gym costs a month, in dollars, for the cost of each session; 0 hides it. */
   gymMonthly: number;
   /** What a pack of cigarettes costs, in dollars, for what they cost; 0 hides it. */

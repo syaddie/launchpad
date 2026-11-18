@@ -78,6 +78,18 @@ describe('backup', () => {
     expect(store.minecraft()).toEqual([mc]);
   });
 
+  it('keeps the folders pinned in Server › Files', () => {
+    store.setPrefs({ ...DEFAULT_PREFS, pinnedFolders: ['/srv/media', '/home/me/projects'] });
+    const b = backup.exportBackup();
+    store.setPrefs({ ...DEFAULT_PREFS });
+    backup.restoreBackup(JSON.parse(JSON.stringify(b)));
+    expect(store.prefs().pinnedFolders).toEqual(['/srv/media', '/home/me/projects']);
+    // A backup from before pins existed leaves the ones there are.
+    const { pinnedFolders: _, ...older } = b.prefs!;
+    backup.restoreBackup({ ...JSON.parse(JSON.stringify(b)), prefs: older });
+    expect(store.prefs().pinnedFolders).toEqual(['/srv/media', '/home/me/projects']);
+  });
+
   it('restores an old bookmarks-and-notes backup without touching the rest', () => {
     store.setWeights({ '2026-11-02': 71 });
     const v1: Backup = { version: 1, exported: '2026-01-01T00:00:00Z', bookmarks: [{ id: 'g', name: 'Daily', items: [{ id: 'b', name: 'Mail', url: 'https://mail.example' }] }], notes: [{ id: 'n', name: 'N', text: 'hi' }] };

@@ -146,7 +146,7 @@ export class ConflictError extends Error {
   }
 }
 
-async function req<T>(method: string, url: string, body?: unknown, keepalive = false, extra?: Record<string, string>, timeoutMs?: number): Promise<T> {
+export async function req<T>(method: string, url: string, body?: unknown, keepalive = false, extra?: Record<string, string>, timeoutMs?: number): Promise<T> {
   const raw = body instanceof Blob;
   let res: Response;
   try {
