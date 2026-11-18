@@ -19,7 +19,7 @@ vi.mock('../server/src/shell', async (orig) => ({
 }));
 
 import {
-  classifyStop, cleanLevel, cleanMcServer, oneAtATime, cleanMcServers, COME_UP, diagScript, expectStop, GRACE, MAX_RESTARTS, NEW_MEM, onMcEvent, parseCrash, parseDiag, parseFacts, parseProps, stopScript, WATCH_EVERY, watchStep, watchTick, worldFolders, type McEvent,
+  classifyStop, cleanLevel, cleanMcServer, oneAtATime, cleanMcServers, COME_UP, diagScript, expectStop, GRACE, MAX_RESTARTS, NEW_MEM, onMcEvent, parseCrash, parseDiag, parseFacts, parseProps, stopScript, WATCH_EVERY, watchCrashesToo, watchStep, watchTick, worldFolders, type McEvent,
 } from '../server/src/minecraft';
 import { store } from '../server/src/store';
 import type { McServer } from '../shared/types';
@@ -347,6 +347,47 @@ describe('Restart if it crashes', () => {
     await look(false);
     expect(events).toEqual([]);
     expect(host.commands).toEqual([]);
+  });
+
+  it('watches the rest for crashes alone while asked to, and never starts them', async () => {
+    let wanted = true;
+    watchCrashesToo(() => wanted);
+    try {
+      serve('w8', { autoRestart: false });
+      await look(true);
+      host.log = 'java.lang.OutOfMemoryError';
+      await look(false);
+      await look(false);
+      expect(types()).toEqual(['crash']);
+      expect(events[0]).toMatchObject({ serverId: 'w8', reason: expect.stringMatching(/^It crashed/) });
+      expect(host.starts).toBe(0);
+      // A clean stop says nothing.
+      await look(true);
+      host.log = '[12:00:00] [Server thread/INFO]: Stopping the server';
+      await look(false);
+      await look(false);
+      expect(types()).toEqual(['crash']);
+      // Not asked any more (alerts turned off): no looking at all.
+      wanted = false;
+      host.commands = [];
+      await look(true);
+      expect(host.commands).toEqual([]);
+    } finally {
+      watchCrashesToo(() => false);
+    }
+  });
+
+  it('treats a check that throws as no', async () => {
+    watchCrashesToo(() => {
+      throw new Error('database is locked');
+    });
+    try {
+      serve('w9', { autoRestart: false });
+      await look(true);
+      expect(host.commands).toEqual([]);
+    } finally {
+      watchCrashesToo(() => false);
+    }
   });
 
   it('can stop listening', () => {
