@@ -13,7 +13,7 @@ import net from 'node:net';
 import path from 'node:path';
 import type { Duplex } from 'node:stream';
 import { config } from './config';
-import { askConsole, findMc, plainLog, readSmall, serverFacts, ssh, typeInto } from './minecraft';
+import { askConsole, findMc, mcBusy, plainLog, readSmall, serverFacts, ssh, typeInto } from './minecraft';
 import { FileError, sftpSession } from './shell';
 import type { McMeters, McPlayer, McPlayerAction, McPlayers, McStatus } from '../../shared/types';
 
@@ -423,7 +423,7 @@ export async function meters(id: string, wantTps: boolean): Promise<McMeters> {
   // TPS is typed into the console, so only for a server that's been up a minute, and not too often.
   const st = tpsState.get(s.id);
   const now = Date.now();
-  if (wantTps && s.attached && s.dir && (proc?.uptime ?? 0) > 60 && (!st || (now - st.at > TPS_EVERY && now > st.quietUntil))) void askTps(s);
+  if (wantTps && s.attached && s.dir && !mcBusy.get(s.id) && (proc?.uptime ?? 0) > 60 && (!st || (now - st.at > TPS_EVERY && now > st.quietUntil))) void askTps(s);
   const fresh = st && st.from && now - st.at < TPS_EVERY * 3 ? st : null;
   return {
     ...empty,

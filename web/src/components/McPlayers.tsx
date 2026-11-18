@@ -12,12 +12,12 @@ function Head({ p }: { p: { name: string; uuid: string | null } }) {
   const [failed, setFailed] = useState(false);
   if (failed) {
     return (
-      <span className="mc-head mc-head-none" aria-hidden>
+      <span className="mc-face mc-face-none" aria-hidden>
         {p.name.replace(/^[.*]/, '').slice(0, 1).toUpperCase()}
       </span>
     );
   }
-  return <img className="mc-head" src={headUrl(p)} alt="" width={28} height={28} loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
+  return <img className="mc-face" src={headUrl(p)} alt="" width={28} height={28} loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
 }
 
 /** The Minecraft console's Players: who's on, with kick, op, whitelist and teleport, and the whitelist itself. */

@@ -72,6 +72,7 @@ describe('secrets out', () => {
       ['DB_PASSWORD: s3cr3t!', 'DB_PASSWORD: [redacted]'],
       ['{"access_token": "abc.def", "user": "sam"}', '{"access_token": [redacted], "user": "sam"}'],
       ['GET /api?api_key=XYZ123&page=2', 'GET /api?api_key=[redacted]&page=2'],
+      ['Retrying in 10 s (token=abc123)', 'Retrying in 10 s (token=[redacted])'],
       ['x-api-key: 9f8e7d6c', 'x-api-key: [redacted]'],
       ['Authorization: Bearer abcdefghijklmnop', 'Authorization: Bearer [redacted]'],
       ['connecting to postgres://app:pa55w0rd@db:5432/app', 'connecting to postgres://[redacted]@db:5432/app'],

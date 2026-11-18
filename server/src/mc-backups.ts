@@ -2,16 +2,18 @@
 // from server.properties, and its _nether and _the_end beside it on Bukkit-style
 // servers) into a .tar.gz in the server's backups folder. A running server is told to
 // stop writing first (save-off, then save-all flush, waiting in the log until the save
-// is done) and to carry on afterwards (save-on), which the host's own shell types once
-// tar ends, so it happens even if Launchpad goes away halfway. Only files with
+// is done) and to carry on afterwards (save-on), whatever happened. Should Launchpad go
+// away while tar runs, the host's own shell types save-on when tar ends. Only files with
 // Launchpad's own names are listed, pruned or deleted.
 //
 // A restore needs the server stopped. It backs up the world as it is first, unpacks
 // the backup beside it, then swaps the folders, putting the old ones back if a move
 // fails; the backup from just before is how a restore is undone.
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { cleanLevel, findMc, forgetDetected, mcBusy, askConsole, sendLine, serverFacts, ssh, typeInto, worldFolders } from './minecraft';
 import { call, FileError, runCommand, sftpSession, shellQuote } from './shell';
+import { MON } from '../../shared/dates';
 import { MC_KEEP_BACKUPS } from '../../shared/types';
 import type { McBackup, McBackups, McJob, McServer, McStatus } from '../../shared/types';
 
@@ -27,13 +29,23 @@ const pad = (n: number) => String(n).padStart(2, '0');
 /** 20261118-143005, in UTC, so names sort by time wherever the host's clock is set. */
 export const stampOf = (d: Date) => `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}-${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}`;
 
-/** launchpad-<server id>-<stamp>[-before-restore].tar.gz */
-export const backupName = (id: string, d: Date, beforeRestore = false) => `launchpad-${id}-${stampOf(d)}${beforeRestore ? '-before-restore' : ''}.tar.gz`;
+/**
+ * Which server a backup is of: its folder's name and a short hash of the whole path. It's
+ * the folder, not Launchpad's id, so backups stay with the world when a found server is
+ * saved, or a saved one removed and added again; two servers' backups can share a folder.
+ */
+export function backupKey(dir: string): string {
+  const slug = path.posix.basename(dir).replace(/[^A-Za-z0-9_.-]+/g, '-').replace(/^[.-]+|-+$/g, '').slice(0, 40) || 'server';
+  return `${slug}-${crypto.createHash('sha1').update(dir).digest('hex').slice(0, 8)}`;
+}
 
-/** A backup of server `id` by its name, or null for anything else (someone else's file, another server's). */
-export function parseBackupName(id: string, name: string): { at: Date; beforeRestore: boolean } | null {
-  if (!/^[A-Za-z0-9_-]{1,64}$/.test(id) || !name.startsWith(`launchpad-${id}-`)) return null;
-  const m = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(-before-restore)?\.tar\.gz$/.exec(name.slice(`launchpad-${id}-`.length));
+/** launchpad-<key>-<stamp>[-before-restore].tar.gz */
+export const backupName = (key: string, d: Date, beforeRestore = false) => `launchpad-${key}-${stampOf(d)}${beforeRestore ? '-before-restore' : ''}.tar.gz`;
+
+/** A backup of the server with `key` by its name, or null for anything else (someone else's file, another server's). */
+export function parseBackupName(key: string, name: string): { at: Date; beforeRestore: boolean } | null {
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(key) || !name.startsWith(`launchpad-${key}-`)) return null;
+  const m = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(-before-restore)?\.tar\.gz$/.exec(name.slice(`launchpad-${key}-`.length));
   if (!m) return null;
   const at = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]));
   return Number.isNaN(at.getTime()) ? null : { at, beforeRestore: !!m[7] };
@@ -93,6 +105,9 @@ export function parseSpace(out: string): Space {
   };
 }
 
+/** Free KB where backups will go: the folder, or before the first backup the nearest folder above it that's there. */
+export const freeScript = (dir: string) => `d=${q(dir)}; while [ ! -d "$d" ] && [ "$d" != / ]; do d=$(dirname -- "$d"); done; df -Pk -- "$d" 2>/dev/null | tail -n 1 | awk '{print $4}'`;
+
 /** Room for `need` bytes in `free`, leaving some over. */
 export const fits = (need: number, free: number) => need * 1.05 + 200 * 1024 * 1024 <= free;
 
@@ -136,18 +151,24 @@ const MANIFEST = 'launchpad-worlds.txt';
 
 /**
  * Pack `worlds` (relative to dir) into `final`, through a hidden part file, with the manifest
- * first. `after` runs whatever tar did (save-on). Prints "packed" when the file is in place.
+ * first. Prints "packed" when the file is in place, "failed" when it isn't.
+ *
+ * `orphaned` runs only when nothing is reading what this prints any more: Launchpad went away
+ * while tar ran (a restart, a crash). It types save-on, so the server doesn't stay unsaved;
+ * while Launchpad is there it types save-on itself, one line after another with the rest.
  */
-export function packScript(dir: string, backupDir: string, worlds: string[], final: string, after = ''): string {
+export function packScript(dir: string, backupDir: string, worlds: string[], final: string, orphaned = ''): string {
   const part = path.posix.join(backupDir, `.${final}.part`);
   const meta = path.posix.join(backupDir, `.${final}.meta`);
   return [
+    // A closed connection makes the echo at the end fail rather than end the script.
+    "trap '' PIPE",
     `rm -rf -- ${q(meta)} && mkdir -p -- ${q(meta)} && printf '%s\\n' ${worlds.map(q).join(' ')} > ${q(path.posix.join(meta, MANIFEST))} || exit 3`,
     // tar's 1 is "a file changed as it was read": with saving paused that's only logs and the like.
     `nice -n 10 tar -czf ${q(part)} -C ${q(meta)} ${MANIFEST} -C ${q(dir)} -- ${worlds.map(q).join(' ')}; rc=$?`,
-    ...(after ? [`{ ${after}; } >/dev/null 2>&1`] : []),
     `rm -rf -- ${q(meta)}`,
-    `if [ $rc -le 1 ] && [ -s ${q(part)} ]; then mv -f -- ${q(part)} ${q(path.posix.join(backupDir, final))} && echo packed; else rm -f -- ${q(part)}; fi`,
+    `ok=failed; if [ $rc -le 1 ] && [ -s ${q(part)} ]; then mv -f -- ${q(part)} ${q(path.posix.join(backupDir, final))} && ok=packed; else rm -f -- ${q(part)}; fi`,
+    orphaned ? `echo "$ok" 2>/dev/null || { ${orphaned}; } >/dev/null 2>&1` : 'echo "$ok"',
     'exit $rc',
   ].join('\n');
 }
@@ -172,7 +193,8 @@ function finish(id: string, job: McJob, ok: boolean, message: string): void {
   console.log(`[minecraft] ${job.kind} of ${id}: ${ok ? 'done' : 'failed'}: ${message}`);
 }
 
-const fmtWhen = (d: Date) => d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+/** 18 Nov 14:30, as the page writes it, in the server's time zone. */
+const fmtWhen = (d: Date) => `${d.getDate()} ${MON[d.getMonth()]} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
 // ---------- listing ----------
 
@@ -187,7 +209,7 @@ async function listOf(s: McServer): Promise<{ list: McBackup[]; leftovers: strin
     });
   const [files, here] = await Promise.all([read(dir), s.dir ? read(s.dir).catch(() => [] as Entry[]) : Promise.resolve([] as Entry[])]);
   const list = files.flatMap((f) => {
-    const p = parseBackupName(s.id, f.filename);
+    const p = parseBackupName(backupKey(s.dir), f.filename);
     return p && (f.attrs.mode & 0o170000) === 0o100000 ? [{ name: f.filename, size: f.attrs.size, at: p.at.toISOString(), beforeRestore: p.beforeRestore }] : [];
   });
   list.sort((a, b) => b.at.localeCompare(a.at));
@@ -207,7 +229,7 @@ export async function backups(id: string): Promise<McBackups> {
     const part = path.posix.join(dir, `.${job.file}.part`);
     job.bytes = await call<{ size: number }>(part, (cb) => sftp.stat(part, cb)).then((st) => st.size, () => job.bytes);
   }
-  const r = await ssh(`df -Pk -- ${q(dir)} 2>/dev/null | tail -n 1 | awk '{print $4}'`, 10_000, 'Checking the free space').catch(() => null);
+  const r = await ssh(freeScript(dir), 10_000, 'Checking the free space').catch(() => null);
   const kb = r?.stdout.trim();
   return { dir, keep: keepOf(s), list, job, free: kb && /^\d+$/.test(kb) ? Number(kb) * 1024 : null, leftovers };
 }
@@ -217,10 +239,17 @@ export async function backups(id: string): Promise<McBackups> {
 /** Pause saving and flush, then pack, then saving back on. A stopped server is packed as it is. */
 async function runBackup(s: McStatus, job: McJob, worlds: string[], final: string): Promise<void> {
   const dir = backupDirOf(s);
-  let resumed = !s.running;
+  let paused = false;
+  // Saving goes back on whatever happens, before the backup says it's done.
+  const resume = async () => {
+    if (!paused) return;
+    paused = false;
+    await typeInto(s, 'save-on').catch((e) => console.error(`[minecraft] couldn’t turn saving back on for ${s.name}: ${(e as Error).message}`));
+  };
   try {
     if (s.running) {
       job.step = 'Pausing saving…';
+      paused = true;
       await typeInto(s, 'save-off');
       job.step = 'Saving the world to disk…';
       const msgs = await askConsole(s, 'save-all flush', (m) => m.some((l) => /Saved the (game|world)|All dimensions are saved/i.test(l)), SAVE_WAIT);
@@ -229,20 +258,18 @@ async function runBackup(s: McStatus, job: McJob, worlds: string[], final: strin
       }
     }
     job.step = `Packing ${worlds.join(', ')}…`;
-    // The host's shell types save-on as soon as tar ends, however it ends.
-    const after = s.running && s.session ? sendLine(s.mux, s.session, 'save-on') : '';
-    const r = await longRun(packScript(s.dir, dir, worlds, final, after), TAR_TIMEOUT);
-    resumed = true;
+    // Should Launchpad go away while tar runs, the host's shell types save-on itself.
+    const orphaned = paused && s.session ? sendLine(s.mux, s.session, 'save-on') : '';
+    const r = await longRun(packScript(s.dir, dir, worlds, final, orphaned), TAR_TIMEOUT);
+    await resume();
     if (!/^packed$/m.test(r.stdout)) throw new FileError(`Packing the world failed: ${complaint(r)}`);
     job.step = 'Clearing out old backups…';
     const pruned = await prune(s);
     const size = (await listOf(s)).list.find((b) => b.name === final)?.size;
     finish(s.id, job, true, `Backed up ${worlds.join(', ')}${size ? ` (${fmtBytes(size)})` : ''}.${pruned ? ` Removed ${pruned} older backup${pruned === 1 ? '' : 's'}, keeping ${keepOf(s)}.` : ''}`);
   } catch (e) {
+    await resume();
     finish(s.id, job, false, (e as Error).message);
-  } finally {
-    // Saving goes back on whatever happened before tar got to it.
-    if (!resumed) await typeInto(s, 'save-on').catch((e) => console.error(`[minecraft] couldn’t turn saving back on for ${s.name}: ${(e as Error).message}`));
   }
 }
 
@@ -279,7 +306,7 @@ export async function startBackup(id: string): Promise<McBackups> {
   const busy = mcBusy.get(id);
   if (busy) throw new FileError(`A ${busy} of ${s.name} is already under way.`, 409);
   if (s.running && !s.attached) throw new FileError(`${s.name} is running outside tmux or screen, so Launchpad can’t pause its saving for a clean copy. Stop it first, or run it in tmux or screen.`, 409);
-  const final = backupName(id, new Date());
+  const final = backupName(backupKey(s.dir), new Date());
   const job = begin(id, 'backup', final);
   try {
     job.step = 'Measuring the world…';
@@ -289,7 +316,9 @@ export async function startBackup(id: string): Promise<McBackups> {
     if (problem) throw new FileError(problem, 409);
     void runBackup(s, job, worlds, final);
   } catch (e) {
+    // Nothing started: the page shows the error it gets back, so no job is left to say it again.
     finish(id, job, false, (e as Error).message);
+    if (jobs.get(id) === job) jobs.delete(id);
     throw e;
   }
   return backups(id);
@@ -363,7 +392,7 @@ async function runRestore(s: McStatus, job: McJob, name: string, size: number): 
         throw new FileError(`Not enough space left in ${dir} to keep a copy of the world as it is (${fmtBytes(keep.size ?? 0)}), so nothing was changed.`);
       }
       job.step = 'Backing up the world as it is now…';
-      const safety = backupName(s.id, now, true);
+      const safety = backupName(backupKey(s.dir), now, true);
       const pk = await longRun(packScript(s.dir, dir, keep.worlds, safety), TAR_TIMEOUT);
       if (!/^packed$/m.test(pk.stdout)) throw new FileError(`Couldn’t back up the world as it is, so nothing was changed: ${complaint(pk)}`);
       undo = ` The world as it was is kept as the backup from ${fmtWhen(now)}, so this can be undone.`;
@@ -374,7 +403,7 @@ async function runRestore(s: McStatus, job: McJob, name: string, size: number): 
     const sw = await ssh(swapScript(s.dir, tmp, old, into), 120_000, 'Swapping the world folders');
     if (!/^swapped$/m.test(sw.stdout)) throw new FileError(`Couldn’t move the world folders into place, so they were put back as they were: ${complaint(sw)}`);
     unpacked = false;
-    const at = parseBackupName(s.id, name)?.at;
+    const at = parseBackupName(backupKey(s.dir), name)?.at;
     finish(s.id, job, true, `Restored ${into.join(', ')} from the backup of ${at ? fmtWhen(at) : name}.${undo}`);
   } catch (e) {
     finish(s.id, job, false, (e as Error).message);
@@ -386,8 +415,8 @@ async function runRestore(s: McStatus, job: McJob, name: string, size: number): 
 
 export async function startRestore(id: string, name: unknown): Promise<McBackups> {
   const s = await findMc(id, true);
-  if (typeof name !== 'string' || !parseBackupName(id, name)) throw new FileError('That isn’t one of this server’s backups.');
   if (!s.dir) throw new FileError(`Launchpad doesn’t know ${s.name}’s folder.`, 409);
+  if (typeof name !== 'string' || !parseBackupName(backupKey(s.dir), name)) throw new FileError('That isn’t one of this server’s backups.');
   const busy = mcBusy.get(id);
   if (busy) throw new FileError(`A ${busy} of ${s.name} is already under way.`, 409);
   if (s.running) throw new FileError(`Stop ${s.name} first: a world can’t be restored while the server is using it.`, 409);
@@ -400,7 +429,7 @@ export async function startRestore(id: string, name: unknown): Promise<McBackups
 
 export async function deleteBackup(id: string, name: unknown): Promise<McBackups> {
   const s = await findMc(id);
-  if (typeof name !== 'string' || !parseBackupName(id, name)) throw new FileError('That isn’t one of this server’s backups.');
+  if (!s.dir || typeof name !== 'string' || !parseBackupName(backupKey(s.dir), name)) throw new FileError('That isn’t one of this server’s backups.');
   if (mcBusy.get(id)) throw new FileError(`Wait for the ${mcBusy.get(id)} of ${s.name} to finish first.`, 409);
   const p = path.posix.join(backupDirOf(s), name);
   const { sftp } = await sftpSession();

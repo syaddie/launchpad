@@ -2,15 +2,15 @@ import { spawnSync } from 'node:child_process';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The watcher reaches the host only through runCommand; here a pretend host answers it.
-const host = vi.hoisted(() => ({ running: true, log: '', crash: null as null | { name: string; text: string }, starts: 0, commands: [] as string[] }));
+const host = vi.hoisted(() => ({ pid: 1000, running: true, log: '', crash: null as null | { name: string; text: string }, starts: 0, commands: [] as string[] }));
 vi.mock('../server/src/shell', async (orig) => ({
   ...(await orig<typeof import('../server/src/shell')>()),
   shellConfigured: () => true,
   runCommand: vi.fn(async (cmd: string) => {
     host.commands.push(cmd);
     if (cmd.includes('@@tmux')) {
-      const ps = [' 900 1 tmux new-session -d -s survival', ' 901 900 -bash', ...(host.running ? [' 1000 901 java -Xmx4G -jar paper.jar nogui'] : [])];
-      return { code: 0, stdout: [...ps, '@@tmux', '901\tsurvival', '@@screen', '@@java', ...(host.running ? ['1000\t/srv/mc/survival\tserver.properties'] : []), ''].join('\n'), stderr: '' };
+      const ps = [' 900 1 tmux new-session -d -s survival', ' 901 900 -bash', ...(host.running ? [` ${host.pid} 901 java -Xmx4G -jar paper.jar nogui`] : [])];
+      return { code: 0, stdout: [...ps, '@@tmux', '901\tsurvival', '@@screen', '@@java', ...(host.running ? [`${host.pid}\t/srv/mc/survival\tserver.properties`] : []), ''].join('\n'), stderr: '' };
     }
     if (cmd.includes('@@crashfile')) return { code: 0, stdout: `@@log\n${host.log}\n@@crashfile\n${host.crash?.name ?? ''}\n@@crashtext\n${host.crash?.text ?? ''}\n`, stderr: '' };
     if (cmd.includes('tmux has-session')) host.starts++;
@@ -19,7 +19,7 @@ vi.mock('../server/src/shell', async (orig) => ({
 }));
 
 import {
-  classifyStop, cleanLevel, cleanMcServer, cleanMcServers, COME_UP, diagScript, expectStop, GRACE, MAX_RESTARTS, NEW_MEM, onMcEvent, parseCrash, parseDiag, parseFacts, parseProps, stopScript, WATCH_EVERY, watchStep, watchTick, worldFolders, type McEvent,
+  classifyStop, cleanLevel, cleanMcServer, oneAtATime, cleanMcServers, COME_UP, diagScript, expectStop, GRACE, MAX_RESTARTS, NEW_MEM, onMcEvent, parseCrash, parseDiag, parseFacts, parseProps, stopScript, WATCH_EVERY, watchStep, watchTick, worldFolders, type McEvent,
 } from '../server/src/minecraft';
 import { store } from '../server/src/store';
 import type { McServer } from '../shared/types';
@@ -153,32 +153,59 @@ describe('telling a crash from a clean stop', () => {
   });
 });
 
+describe('typing into a session', () => {
+  it('types one line at a time, even when one fails', async () => {
+    const order: string[] = [];
+    const slow = (name: string, ms: number, fail = false) => () =>
+      new Promise<string>((res, rej) =>
+        setTimeout(() => {
+          order.push(name);
+          if (fail) rej(new Error(name));
+          else res(name);
+        }, ms),
+      );
+    const a = oneAtATime('tmux:s', slow('whitelist add Steve', 30));
+    const b = oneAtATime('tmux:s', slow('list', 1, true));
+    const c = oneAtATime('tmux:s', slow('tps', 1));
+    const other = oneAtATime('tmux:other', slow('other session', 1));
+    await expect(b).rejects.toThrow('list');
+    expect(await Promise.all([a, c, other])).toEqual(['whitelist add Steve', 'tps', 'other session']);
+    expect(order).toEqual(['other session', 'whitelist add Steve', 'list', 'tps']);
+  });
+});
+
 describe('watchStep', () => {
   const t0 = 1_000_000;
   it('does nothing on the first look', () => {
-    expect(watchStep(NEW_MEM, false, t0).act).toBe('none');
-    expect(watchStep(NEW_MEM, true, t0).mem).toMatchObject({ was: true, lastUp: t0 });
+    expect(watchStep(NEW_MEM, null, t0).act).toBe('none');
+    expect(watchStep(NEW_MEM, 1000, t0).mem).toMatchObject({ was: true, lastUp: t0 });
   });
   it('waits out the grace period after a stop, then looks into it', () => {
-    let m = watchStep(NEW_MEM, true, t0).mem;
-    const stopped = watchStep(m, false, t0 + 1000);
+    let m = watchStep(NEW_MEM, 1000, t0).mem;
+    const stopped = watchStep(m, null, t0 + 1000);
     expect(stopped.act).toBe('none');
     m = stopped.mem;
-    expect(watchStep(m, false, t0 + 1000 + GRACE - 1).act).toBe('none');
-    expect(watchStep(m, false, t0 + 1000 + GRACE).act).toBe('check');
+    expect(watchStep(m, null, t0 + 1000 + GRACE - 1).act).toBe('none');
+    expect(watchStep(m, null, t0 + 1000 + GRACE).act).toBe('check');
     // A start script that loops brought it back in time: nothing to do.
-    expect(watchStep(m, true, t0 + 2000).act).toBe('none');
+    expect(watchStep(m, 1000, t0 + 2000).act).toBe('none');
   });
   it('lets a stop Launchpad typed be', () => {
-    const m = watchStep(watchStep(NEW_MEM, true, t0).mem, false, t0 + 1000, t0 + 500).mem;
+    const m = watchStep(watchStep(NEW_MEM, 1000, t0).mem, false, t0 + 1000, t0 + 500).mem;
     expect(m.downAt).toBeNull();
-    expect(watchStep(m, false, t0 + 60_000).act).toBe('none');
+    expect(watchStep(m, null, t0 + 60_000).act).toBe('none');
+  });
+  it('doesn’t let a stop typed into an earlier run excuse a crash of the next one', () => {
+    // Stopped from Launchpad as process 1000, started again as 2000, which then crashes.
+    const m = watchStep(watchStep(NEW_MEM, 2000, t0).mem, null, t0 + 1000, { at: t0 - 60_000, pid: 1000 }).mem;
+    expect(m.downAt).toBe(t0 + 1000);
+    expect(watchStep(m, null, t0 + 1000 + GRACE).act).toBe('check');
   });
   it('gives a restart time to come up, then calls it failed', () => {
     const m = { ...NEW_MEM, was: false, restartedAt: t0 };
-    expect(watchStep(m, false, t0 + COME_UP - 1).act).toBe('none');
-    expect(watchStep(m, false, t0 + COME_UP).act).toBe('failed');
-    expect(watchStep(m, true, t0 + 5000).mem.restartedAt).toBeNull();
+    expect(watchStep(m, null, t0 + COME_UP - 1).act).toBe('none');
+    expect(watchStep(m, null, t0 + COME_UP).act).toBe('failed');
+    expect(watchStep(m, 1000, t0 + 5000).mem.restartedAt).toBeNull();
   });
 });
 
@@ -196,6 +223,7 @@ describe('Restart if it crashes', () => {
   beforeEach(() => {
     events = [];
     host.running = true;
+    host.pid = 1000;
     host.log = '';
     host.crash = null;
     host.starts = 0;
@@ -271,10 +299,26 @@ describe('Restart if it crashes', () => {
     expect(host.starts).toBe(0);
   });
 
+  it('looks into the next stop after a restart, even one soon after a stop from Launchpad', async () => {
+    serve('w8');
+    await look(true);
+    expectStop('w8', 1000, t);
+    await look(false);
+    await look(false);
+    expect(events).toEqual([]);
+    // Started again, as a new process, and then it crashes.
+    host.pid = 2000;
+    await look(true);
+    host.log = 'java.lang.OutOfMemoryError';
+    await look(false);
+    await look(false);
+    expect(types()).toEqual(['crash', 'restart']);
+  });
+
   it('leaves a stop from Launchpad alone, without even looking', async () => {
     serve('w5');
     await look(true);
-    expectStop('w5', t);
+    expectStop('w5', 1000, t);
     await look(false);
     await look(false);
     expect(events).toEqual([]);

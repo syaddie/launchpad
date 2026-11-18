@@ -87,7 +87,7 @@ function cut(lines: string[], max: number): string {
 
 /** Names a secret's value goes by: the end of a key such as db.password, access_token or x-api-key. */
 const SECRET_WORDS = 'pass(?:word|wd|phrase)|pwd|secret|token|api[_-]?key|access[_-]?key|secret[_-]?key|private[_-]?key|client[_-]?secret|authorization|cookie|session[_-]?(?:id|token|key)|license[_-]?key';
-const SECRET_PAIR = new RegExp(`(["']?)\\b((?:[A-Za-z0-9]+[._-])*(?:${SECRET_WORDS}))\\1(\\s*[:=]\\s*)("[^"]*"|'[^']*'|[^\\s,;&"'}\\]]+)`, 'gi');
+const SECRET_PAIR = new RegExp(`(["']?)\\b((?:[A-Za-z0-9]+[._-])*(?:${SECRET_WORDS}))\\1(\\s*[:=]\\s*)("[^"]*"|'[^']*'|[^\\s,;&"'})\\]]+)`, 'gi');
 /** Values that aren't secrets: empty, masked already, or the Bearer in front of a token taken out already. */
 const NOT_SECRET = /^["']?(null|none|true|false|bearer|basic|token|\*+|\[redacted\])?["']?$/i;
 

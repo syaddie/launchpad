@@ -291,6 +291,23 @@ async function run(cmd: string, what: string): Promise<void> {
   }
 }
 
+/**
+ * One line at a time per session. tmux takes the text and the Enter as two commands, so two
+ * lines typed at once (a refresh's list and a button's whitelist add) could run together
+ * into one ("whitelist add Steve" + "list" → "whitelist add Stevelist").
+ */
+const typing = new Map<string, Promise<unknown>>();
+
+export function oneAtATime<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const next = (typing.get(key) ?? Promise.resolve()).catch(() => {}).then(fn);
+  typing.set(key, next);
+  void next.catch(() => {}).finally(() => typing.get(key) === next && typing.delete(key));
+  return next;
+}
+
+/** screen's pid.name and the saved name are the same session. */
+const sessionKey = (s: Pick<McServer, 'mux' | 'session'>) => `${s.mux}:${s.session.replace(/^\d+\./, '')}`;
+
 /** Commands that shut the server down, so the watcher knows the stop was asked for. */
 const STOPS = /^(stop|end|restart)(\s|$)/i;
 
@@ -298,8 +315,8 @@ const STOPS = /^(stop|end|restart)(\s|$)/i;
 export async function typeInto(s: McStatus, cmd: string): Promise<void> {
   if (!s.running) throw new FileError(`${s.name} isn’t running.`, 409);
   if (!s.attached || !s.session) throw new FileError(`${s.name} isn’t running in tmux or screen, so Launchpad can’t type into its console.`, 409);
-  if (STOPS.test(cmd)) expectStop(s.id);
-  await run(sendLine(s.mux, s.session, cmd), `Couldn’t send it to ${s.mux} session ${s.session}`);
+  if (STOPS.test(cmd)) expectStop(s.id, s.pid);
+  await oneAtATime(sessionKey(s), () => run(sendLine(s.mux, s.session, cmd), `Couldn’t send it to ${s.mux} session ${s.session}`));
 }
 
 export async function sendCommand(id: string, command: unknown): Promise<void> {
@@ -318,7 +335,7 @@ export async function startServer(id: string): Promise<void> {
   if (job) throw new FileError(`${s.name} can’t start while its world is being ${job === 'backup' ? 'backed up' : 'restored'}.`, 409);
   const saved = store.minecraft().find((x) => x.id === id);
   if (!saved?.start) throw new FileError(`Add a start command to ${s.name} first.`, 409);
-  await run(startLine(saved), `Couldn’t start ${s.name}`);
+  await oneAtATime(sessionKey(saved), () => run(startLine(saved), `Couldn’t start ${s.name}`));
   cache = null;
   // A start from you is the answer to giving up.
   setWatch(id, (r) => ({ ...r, gaveUp: false }));
@@ -705,7 +722,8 @@ export function explain(f: DiagFacts, s: McServer, running: boolean): McFinding[
   else if (f.eula === 'missing' && !running) add('warn', 'There’s no eula.txt yet. The first run makes it, then it needs eula=true before the next one.');
   if (!running && f.portBusy) add('error', `Port ${f.port} is already in use, so a server can’t start on it. Another server may still be running.`, f.portBusy);
   if (f.diskFreeMb !== null && f.diskFreeMb < 200) add('warn', `Only ${f.diskFreeMb} MB is free on the disk.`);
-  if (f.recentCrash) add('warn', 'A crash report was written in the last 30 minutes.', f.recentCrash);
+  // The newest report, when there's one, is the one to look at; it's at least as new as the one found.
+  if (f.recentCrash) add('warn', 'A crash report was written in the last 30 minutes.', f.crash ? path.posix.join(crashDir(s), f.crash.name) : f.recentCrash);
 
   // The terminal and log, line by line, for known messages. Each message is reported once.
   // Without tmux or screen the "terminal" is only our own command's complaint, so it's left out.
@@ -788,29 +806,38 @@ export interface WatchMem {
   /** Running at the last look; null before the first. */
   was: boolean | null;
   lastUp: number;
+  /** The process it was last seen running as. */
+  pid: number | null;
   /** When it was first seen stopped, while waiting out GRACE. */
   downAt: number | null;
   /** When Launchpad typed the start command, while waiting for it to come up. */
   restartedAt: number | null;
 }
 
-export const NEW_MEM: WatchMem = { was: null, lastUp: 0, downAt: null, restartedAt: null };
+export const NEW_MEM: WatchMem = { was: null, lastUp: 0, pid: null, downAt: null, restartedAt: null };
+
+/** A stop Launchpad typed: when, and into which process (null when it didn't know). */
+export interface Expected {
+  at: number;
+  pid: number | null;
+}
 
 /**
- * One look at one server: what to remember and what to do. `check`: it stopped a while
- * ago and is still stopped, so read its log to see whether it crashed. `failed`: a restart
- * didn't come up in time. A stop Launchpad typed (`expectedAt`) isn't looked into.
+ * One look at one server, running as process `pid` or stopped (null): what to remember and
+ * what to do. `check`: it stopped a while ago and is still stopped, so read its log to see
+ * whether it crashed. `failed`: a restart didn't come up in time. A stop Launchpad typed
+ * into that same process isn't looked into; one typed into an earlier run doesn't count.
  */
-export function watchStep(m: WatchMem, running: boolean, now: number, expectedAt?: number): { mem: WatchMem; act: 'none' | 'check' | 'failed' } {
-  if (running) return { mem: { was: true, lastUp: now, downAt: null, restartedAt: null }, act: 'none' };
+export function watchStep(m: WatchMem, pid: number | null, now: number, expected?: Expected): { mem: WatchMem; act: 'none' | 'check' | 'failed' } {
+  if (pid !== null) return { mem: { was: true, lastUp: now, pid, downAt: null, restartedAt: null }, act: 'none' };
   if (m.was === null) return { mem: { ...m, was: false }, act: 'none' };
   if (m.restartedAt !== null) {
     if (now - m.restartedAt < COME_UP) return { mem: m, act: 'none' };
     return { mem: { ...m, restartedAt: null }, act: 'failed' };
   }
   if (m.was) {
-    const expected = expectedAt !== undefined && now - expectedAt < EXPECTED_FOR;
-    return { mem: { ...m, was: false, downAt: expected ? null : now }, act: 'none' };
+    const asked = !!expected && now - expected.at < EXPECTED_FOR && (expected.pid === null || expected.pid === m.pid);
+    return { mem: { ...m, was: false, downAt: asked ? null : now }, act: 'none' };
   }
   if (m.downAt !== null && now - m.downAt >= GRACE) return { mem: { ...m, downAt: null }, act: 'check' };
   return { mem: m, act: 'none' };
@@ -841,11 +868,11 @@ export function stopScript(s: McServer, minutes: number): string {
   ].join('\n');
 }
 
-const expected = new Map<string, number>();
+const expected = new Map<string, Expected>();
 const mems = new Map<string, WatchMem>();
 
-/** A stop Launchpad typed, or is about to: not a crash. */
-export const expectStop = (id: string, at = Date.now()) => void expected.set(id, at);
+/** A stop Launchpad typed, or is about to, into process `pid`: not a crash. */
+export const expectStop = (id: string, pid: number | null, at = Date.now()) => void expected.set(id, { at, pid });
 
 function setWatch(id: string, fn: (r: McWatchRecord) => McWatchRecord): McWatchRecord {
   const all = store.mcWatch();
@@ -879,10 +906,10 @@ async function restartAfter(s: McServer, now: number): Promise<boolean> {
   return true;
 }
 
-async function watchOne(s: McServer, running: boolean, now: number): Promise<void> {
-  if (running && store.mcWatch()[s.id]?.gaveUp) setWatch(s.id, (r) => ({ ...r, gaveUp: false }));
+async function watchOne(s: McServer, pid: number | null, now: number): Promise<void> {
+  if (pid !== null && store.mcWatch()[s.id]?.gaveUp) setWatch(s.id, (r) => ({ ...r, gaveUp: false }));
   const prev = mems.get(s.id) ?? NEW_MEM;
-  const { mem, act } = watchStep(prev, running, now, expected.get(s.id));
+  const { mem, act } = watchStep(prev, pid, now, expected.get(s.id));
   mems.set(s.id, mem);
   if (act === 'none' || busy.has(s.id) || store.mcWatch()[s.id]?.gaveUp) return;
   // Crash reports from this run only: since it was last seen up, or since the restart that never came up.
@@ -910,7 +937,7 @@ export async function watchTick(now = Date.now()): Promise<void> {
     const statuses = mergeStatuses(store.minecraft(), await detect(true));
     for (const s of on) {
       const st = statuses.find((x) => x.id === s.id);
-      if (st) await watchOne(s, st.running, now).catch((e) => console.error(`[minecraft] watching ${s.name}: ${(e as Error).message}`));
+      if (st) await watchOne(s, st.running ? (st.pid ?? -1) : null, now).catch((e) => console.error(`[minecraft] watching ${s.name}: ${(e as Error).message}`));
     }
   } catch {
     // SSH is down or slow: look again next time.

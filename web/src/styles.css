@@ -1954,8 +1954,8 @@ button.m-stat { cursor: default; }
 .mc-player-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .mc-player-name { min-width: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mc-player-tools { display: flex; flex-wrap: wrap; gap: 4px; }
-.mc-head { flex: none; width: 28px; height: 28px; border-radius: 4px; image-rendering: pixelated; background: var(--hv); }
-.mc-head-none { display: grid; place-items: center; font-size: 12px; font-weight: 600; color: var(--t3); }
+.mc-face { flex: none; width: 28px; height: 28px; border-radius: 4px; image-rendering: pixelated; background: var(--hv); }
+.mc-face-none { display: grid; place-items: center; font-size: 12px; font-weight: 600; color: var(--t3); }
 .mc-tp { flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 2px 0 2px 38px; }
 .mc-tp select.input { width: auto; max-width: 100%; padding: 0 6px; }
 [data-layout='narrow'] .mc-tp { padding-left: 0; }

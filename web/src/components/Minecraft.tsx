@@ -254,6 +254,15 @@ function Console({ s, onChanged, onSaved, onEdit }: { s: McStatus; onChanged: ()
     return () => clearInterval(iv);
   }, [poll]);
 
+  // "It's running" stops being true when it stops (a crash, a stop elsewhere): only a failure stays.
+  const startingRef = useRef(false);
+  startingRef.current = starting;
+  const wasRunning = useRef(s.running);
+  useEffect(() => {
+    if (wasRunning.current !== s.running && !startingRef.current) setNote((n) => (n?.failed ? n : null));
+    wasRunning.current = s.running;
+  }, [s.running]);
+
   // Memory, CPU and players online while it runs; TPS only where the server can say.
   useEffect(() => {
     if (!s.running) return setMeters(null);
@@ -652,7 +661,10 @@ function ServerForm({ start, onSave, onCancel, onDelete }: {
   });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const set = (k: 'name' | 'dir' | 'mux' | 'session' | 'start' | 'keepBackups' | 'backupDir') => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setV({ ...v, [k]: e.target.value });
+  const set = (k: 'name' | 'dir' | 'mux' | 'session' | 'start' | 'keepBackups' | 'backupDir') => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const val = e.target.value;
+    setV((p) => ({ ...p, [k]: val }));
+  };
   const act = (p: Promise<void>) => {
     setBusy(true);
     p.catch((e: Error) => setError(e.message)).finally(() => setBusy(false));
@@ -701,7 +713,7 @@ function ServerForm({ start, onSave, onCancel, onDelete }: {
           <span id="mc-form-auto">Restart it if it crashes</span>
           <span className="meta">{v.start.trim() ? 'Up to 3 times in 15 minutes, then it gives up and says so.' : 'Needs a start command.'}</span>
         </div>
-        <button type="button" role="switch" aria-checked={v.autoRestart && !!v.start.trim()} aria-labelledby="mc-form-auto" className={'switch' + (v.autoRestart && v.start.trim() ? ' on' : '')} disabled={!v.start.trim()} onClick={() => setV({ ...v, autoRestart: !v.autoRestart })} style={!v.start.trim() ? { opacity: 0.5, cursor: 'default' } : undefined}>
+        <button type="button" role="switch" aria-checked={v.autoRestart && !!v.start.trim()} aria-labelledby="mc-form-auto" className={'switch' + (v.autoRestart && v.start.trim() ? ' on' : '')} disabled={!v.start.trim()} onClick={() => setV((p) => ({ ...p, autoRestart: !p.autoRestart }))} style={!v.start.trim() ? { opacity: 0.5, cursor: 'default' } : undefined}>
           <span />
         </button>
       </div>

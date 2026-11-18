@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { backupDirOf, backupName, fits, keepOf, manifestWorlds, packScript, parseBackupName, parseSpace, spaceProblem, spaceScript, stampOf, swapScript, toPrune } from '../server/src/mc-backups';
+import { backupDirOf, backupKey, backupName, fits, keepOf, manifestWorlds, packScript, parseBackupName, parseSpace, spaceProblem, spaceScript, stampOf, swapScript, toPrune } from '../server/src/mc-backups';
 import { shellQuote } from '../server/src/shell';
 import { fmtSize, fmtTook, fmtWhen } from '../web/src/components/McBackups';
 import type { McBackup } from '../shared/types';
@@ -29,6 +29,15 @@ describe('backup names', () => {
     }
     expect(parseBackupName('abc', 'launchpad-abc-20261340-143005.tar.gz')).not.toBeNull();
     expect(parseBackupName('a b', 'launchpad-a b-20261118-143005.tar.gz')).toBeNull();
+  });
+  it('go by the server’s folder, so they stay with the world', () => {
+    expect(backupKey('/srv/mc/survival')).toMatch(/^survival-[0-9a-f]{8}$/);
+    expect(backupKey('/srv/mc/survival')).toBe(backupKey('/srv/mc/survival'));
+    expect(backupKey('/srv/other/survival')).not.toBe(backupKey('/srv/mc/survival'));
+    expect(backupKey("/srv/My World's (1)")).toMatch(/^My-World-s-1-[0-9a-f]{8}$/);
+    expect(backupKey('/')).toMatch(/^server-[0-9a-f]{8}$/);
+    const k = backupKey('/srv/mc/survival');
+    expect(parseBackupName(k, backupName(k, new Date(Date.UTC(2026, 0, 2, 3, 4, 5))))).toEqual({ at: new Date(Date.UTC(2026, 0, 2, 3, 4, 5)), beforeRestore: false });
   });
   it('default the folder and the count', () => {
     expect(backupDirOf({ dir: '/srv/mc' })).toBe('/srv/mc/backups');
@@ -110,15 +119,16 @@ describe.runIf(hasTools)('packing and restoring a world for real', { timeout: 60
   };
   const read = (rel: string) => fs.readFileSync(path.join(dir, rel), 'utf8');
 
-  it('packs the worlds, runs what comes after, and leaves no part file', () => {
+  it('packs the worlds and leaves no part file, with Launchpad there to turn saving on', () => {
     write('world/level.dat', 'overworld v1');
     write('world_nether/DIM-1/r.0.0.mca', 'nether v1');
     write('server.properties', 'level-name=world');
     fs.mkdirSync(backups, { recursive: true });
     const r = run(packScript(D, B, ['world', 'world_nether'], 'launchpad-a-20261118-120000.tar.gz', `echo save-on > ${shPath(path.join(root, 'after.txt'))}`));
-    expect(r.stdout).toContain('packed');
+    expect(r.stdout.trim()).toBe('packed');
     expect(r.status).toBe(0);
-    expect(fs.readFileSync(path.join(root, 'after.txt'), 'utf8').trim()).toBe('save-on');
+    // Launchpad read the answer, so it types save-on itself.
+    expect(fs.existsSync(path.join(root, 'after.txt'))).toBe(false);
     expect(fs.readdirSync(backups)).toEqual(['launchpad-a-20261118-120000.tar.gz']);
     const list = run(`tar -tzf ${shellQuote(B + '/launchpad-a-20261118-120000.tar.gz')}`).stdout.split('\n');
     expect(list[0]).toBe('launchpad-worlds.txt');
@@ -126,12 +136,20 @@ describe.runIf(hasTools)('packing and restoring a world for real', { timeout: 60
     expect(list).not.toContain('server.properties');
   });
 
-  it('says so when tar fails, still runs what comes after, and cleans up', () => {
+  it('turns saving on from the host when Launchpad went away while tar ran', () => {
+    // Nothing reads what the script prints: the connection closed under it.
+    const r = run(`(${packScript(D, B, ['world'], 'launchpad-a-20261118-121000.tar.gz', `echo save-on > ${shPath(path.join(root, 'after.txt'))}`)}) | true`);
+    expect(r.status).toBe(0);
+    expect(fs.readFileSync(path.join(root, 'after.txt'), 'utf8').trim()).toBe('save-on');
+    fs.rmSync(path.join(backups, 'launchpad-a-20261118-121000.tar.gz'));
+  });
+
+  it('says so when tar fails, and cleans up', () => {
     fs.rmSync(path.join(root, 'after.txt'), { force: true });
     const r = run(packScript(D, B, ['no-such-world'], 'launchpad-a-20261118-130000.tar.gz', `echo ran > ${shPath(path.join(root, 'after.txt'))}`));
-    expect(r.stdout).not.toContain('packed');
+    expect(r.stdout.trim()).toBe('failed');
     expect(r.status).not.toBe(0);
-    expect(fs.existsSync(path.join(root, 'after.txt'))).toBe(true);
+    expect(fs.existsSync(path.join(root, 'after.txt'))).toBe(false);
     expect(fs.readdirSync(backups)).toEqual(['launchpad-a-20261118-120000.tar.gz']);
   });
 
