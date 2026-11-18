@@ -6,8 +6,9 @@
 // start command, so they're listed (and can be started) while they're stopped.
 //
 // Also here: the crash reports, and Restart if it crashes, which watches the saved
-// servers that have it on and starts one again when it stops on its own. What it
-// notices goes out through onMcEvent. Players and meters are in mc-players.ts,
+// servers that have it on and starts one again when it stops on its own (and, while
+// Minecraft phone alerts are on, the other saved servers for their crashes alone, in
+// mc-alerts.ts). What it notices goes out through onMcEvent. Players and meters are in mc-players.ts,
 // world backups in mc-backups.ts.
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -758,7 +759,7 @@ export async function diagnose(id: string): Promise<McDiagnosis> {
 
 /** What onMcEvent subscribers hear. */
 export interface McEvent {
-  /** crash: a server with Restart if it crashes on stopped on its own. restart: it was started again. gave-up: too many crashes, so it was left stopped. */
+  /** crash: a watched server stopped on its own (with Restart if it crashes on, a restart or gave-up follows). restart: it was started again. gave-up: too many crashes, so it was left stopped. */
   type: 'crash' | 'restart' | 'gave-up';
   serverId: string;
   server: string;
@@ -922,14 +923,32 @@ async function watchOne(s: McServer, pid: number | null, now: number): Promise<v
   // A start that never came up and left nothing new in the log says so; a crash says what it was.
   const reason = act === 'failed' && !crash && !verdict.reason.startsWith('It crashed') ? 'It didn’t come back up after Launchpad started it again.' : verdict.reason;
   note(s, 'crash', reason, crash?.name ?? null, now);
+  if (!restarts(s)) return;
   if (await restartAfter(s, now)) mems.set(s.id, { ...mem, restartedAt: now });
 }
 
 let watching = false;
+let crashesWanted: () => boolean = () => false;
 
-/** One look at every saved server that has Restart if it crashes on. */
+/**
+ * Also watch the saved servers without Restart if it crashes, for their crashes alone, while
+ * this says so (phone alerts for Minecraft are on). They're never started again.
+ */
+export function watchCrashesToo(fn: () => boolean): void {
+  crashesWanted = fn;
+}
+
+const restarts = (s: McServer) => !!(s.autoRestart && s.start);
+
+/** One look at every saved server that has Restart if it crashes on, and at the rest while crashesWanted says so. */
 export async function watchTick(now = Date.now()): Promise<void> {
-  const on = store.minecraft().filter((s) => s.autoRestart && s.start);
+  let all = false;
+  try {
+    all = crashesWanted();
+  } catch {
+    // Read as no.
+  }
+  const on = store.minecraft().filter((s) => restarts(s) || (all && !!s.dir));
   for (const id of mems.keys()) if (!on.some((s) => s.id === id)) mems.delete(id);
   if (!on.length || !shellConfigured() || watching) return;
   watching = true;
