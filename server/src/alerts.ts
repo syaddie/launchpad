@@ -261,14 +261,6 @@ export async function carryOut(p: Plan): Promise<void> {
 
 // ---------- the loop ----------
 
-/**
- * Containers and SMART have only been tried in tests, not yet against a real Docker and
- * smartctl, so the watch leaves them out until they have been. containerCheck and diskCheck's
- * SMART half are ready for it.
- */
-const WATCH_CONTAINERS = false;
-const WATCH_SMART = false;
-
 const counters: Counters = new Map();
 let last: ContainerWatch['last'] = null;
 let checking = false;
@@ -286,11 +278,11 @@ export async function checkNow(): Promise<void> {
     const m = memory();
     const now = Date.now();
     const isOpen = (k: string) => !!m.open[k];
-    const docker = WATCH_CONTAINERS ? await within(containers(), { list: null, error: 'Timed out' }) : { list: null, error: null };
-    const watch: ContainerWatch = { ...docker, configured: WATCH_CONTAINERS && !!config.dockerHost, last };
+    const docker = await within(containers(), { list: null, error: 'Timed out' });
+    const watch: ContainerWatch = { ...docker, configured: !!config.dockerHost, last };
     const cont = containerCheck(watch, m.containers, isOpen, now);
     // SMART runs over SSH, so only when disk alerts are on; diskHealth keeps it for 30 minutes.
-    const smart = WATCH_SMART && kindOn('disks') ? await within(diskHealth(), null) : null;
+    const smart = kindOn('disks') ? await within(diskHealth(), null) : null;
     const check = merge(readHealth(), cont.check, diskCheck(dataDisk(), smart, isOpen), { ...empty(), cleared: removedNote(Object.keys(m.open), docker.list) });
     if (docker.list) last = { at: now, names: new Set(docker.list.map((x) => x.name)) };
     if (JSON.stringify(cont.memory) !== JSON.stringify(m.containers)) {
