@@ -1121,7 +1121,8 @@ button.pix-cell:hover { box-shadow: inset 0 0 0 1px var(--t3); }
 .term-wrap { position: relative; flex: 1; min-height: 0; min-width: 0; border-radius: var(--r); background: var(--rz); }
 .term-shell { position: absolute; inset: 0; }
 .term-box { position: absolute; inset: 8px 4px 8px 10px; }
-.snippets { flex: 0 0 280px; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+/* min-width: 0 keeps it 280px wide when a long snippet name won't fit (it ends in … instead). */
+.snippets { flex: 0 0 280px; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
 [data-layout='narrow'] .snippets { flex: none; max-height: 40vh; }
 .snippets-head { display: flex; align-items: center; justify-content: space-between; }
 .snippets-list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
@@ -1132,6 +1133,25 @@ button.pix-cell:hover { box-shadow: inset 0 0 0 1px var(--t3); }
 .snippet-form { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--ac); border-radius: var(--r); }
 .snippet-form .input { width: 100%; box-sizing: border-box; }
 .snippet-form textarea.input { height: auto; padding: 6px 8px; font-size: 12px; resize: vertical; }
+/* Ask for a command, at the top of the snippets bar, and Claude's answer above the snippets. */
+.cmd-ask { display: flex; flex-direction: column; gap: 6px; }
+.cmd-ask-row { position: relative; display: flex; align-items: center; margin: 0; }
+.cmd-ask-row > i { position: absolute; left: 9px; color: var(--ac); font-size: 15px; pointer-events: none; }
+.cmd-ask-row .input { flex: 1; min-width: 0; padding: 0 34px 0 30px; }
+.cmd-ask-row .icon-btn { position: absolute; right: 3px; }
+[data-layout='narrow'] .cmd-ask-row .input { font-size: 16px; }
+.cmd-ask-note, .cmd-ask-off { margin: 0; font-size: 12px; line-height: 1.4; text-wrap: pretty; }
+.cmd-ask-note { color: var(--wn); }
+.cmd-answer { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--ac); border-radius: var(--r); }
+.cmd-answer.risky { border-color: var(--wn); }
+.cmd-answer.failed { border-color: var(--ln); }
+.cmd-answer-top { display: flex; align-items: flex-start; gap: 4px; }
+.cmd-answer-top .icon-btn { flex: none; margin: -3px -6px 0 0; }
+.cmd-answer-cmd { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.45; color: var(--tx); }
+.cmd-answer-what, .cmd-answer-error { margin: 0; font-size: 12px; line-height: 1.4; color: var(--t2); text-wrap: pretty; }
+.cmd-answer-error { flex: 1; min-width: 0; }
+.cmd-answer-warn { display: flex; gap: 6px; margin: 0; padding: 6px 8px; border-radius: var(--r-s); background: var(--wnt); color: var(--wn); font-size: 12px; line-height: 1.4; }
+.cmd-answer-warn i { flex: none; font-size: 14px; margin-top: 1px; }
 .term-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 20px; border-radius: var(--r); background: color-mix(in srgb, var(--rz) 90%, transparent); text-align: center; }
 .term-overlay p { margin: 0; max-width: 520px; color: var(--t2); text-wrap: pretty; }
 .term-overlay .copy-block { width: min(640px, 100%); text-align: left; }

@@ -46,6 +46,7 @@ import { cleanCraving } from '../../shared/trackers';
 import { refreshTraining } from './training';
 import { ask, MAX_ASK } from './ask';
 import { claudeEnabled } from './claude';
+import { shellAskRequest, shellAskStatus } from './shellask';
 import { summariseUsage } from '../../shared/claudeUsage';
 import type { DownloadsInfo, Mood, NewsLists, Package, Photo, Prefs, SavedDoc, SourceKey } from '../../shared/types';
 
@@ -652,6 +653,13 @@ app.get('/api/shell', (c) => c.json(shellInfo(accessOn)));
 app.post('/api/shell/trust', (c) => {
   trustHostKey();
   return c.json(shellInfo(accessOn));
+});
+
+// The terminal's "Ask for a command": one command back for the page to type at the prompt. Nothing runs here.
+app.get('/api/shell/ask', (c) => c.json(shellAskStatus()));
+app.post('/api/shell/ask', async (c) => {
+  const [res, status] = await shellAskRequest(await c.req.json().catch(() => null));
+  return c.json(res, status);
 });
 
 // The terminal's saved commands, changed one at a time so two pages can't overwrite each other's.
