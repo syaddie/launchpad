@@ -118,6 +118,33 @@ export interface Prefs {
   claudeBudget?: number;
   /** Copy the daily database copies to Google Drive, once the Google sign-in allows it. */
   driveBackup: boolean;
+  /** Which kinds of phone alert are on (Settings › Alerts). Where they go is kept apart from prefs (server/src/notify.ts). */
+  alerts: Record<AlertKind, boolean>;
+}
+
+/** What a phone alert is about; each has its own switch in Settings › Alerts. */
+export type AlertKind = 'health' | 'containers' | 'disks' | 'minecraft';
+export const ALERT_KINDS: AlertKind[] = ['health', 'containers', 'disks', 'minecraft'];
+
+/** One alert sent to the phone, for Settings › Alerts. */
+export interface AlertRecord {
+  at: string;
+  kind: AlertKind | 'test';
+  /** problem: something started going wrong. fixed: it cleared. paused: too many about one thing, so it's held back. event: a one-off (a crash). */
+  type: 'problem' | 'fixed' | 'paused' | 'event' | 'test';
+  title: string;
+}
+
+/** GET /api/alerts: where alerts go and how sending is going. */
+export interface AlertsInfo {
+  /** The ntfy topic's address, or '' when alerts aren't set up. */
+  topicUrl: string;
+  /** Problems the phone has been told about that haven't cleared yet. */
+  open: { kind: AlertKind; title: string; at: string }[];
+  /** Newest first, the last 20. */
+  recent: AlertRecord[];
+  /** The last send that failed, until one works again. */
+  lastError: { at: string; message: string } | null;
 }
 
 export interface CalendarInfo {

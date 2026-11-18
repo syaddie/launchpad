@@ -3,6 +3,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { Terminal as XTerm, type ITheme } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import { localGet, localSet } from '../api';
+import { folderFromOsc7, folderFromTitle } from '../../../shared/shellAsk';
 import { authorizeLine, Copyable, keyRefused } from './Copyable';
 import { SnippetsPanel } from './Snippets';
 
@@ -104,7 +105,7 @@ interface ShellHandle {
 }
 
 /** One shell on the server, over /api/terminal. It stays mounted while hidden so the screen is kept between tabs and views. */
-function Shell({ session, onSession, hidden, publicKey, onStatus, onFailed, ref }: {
+function Shell({ session, onSession, hidden, publicKey, onStatus, onFailed, onCwd, ref }: {
   session: string | null;
   onSession: (id: string | null) => void;
   hidden: boolean;
@@ -112,6 +113,8 @@ function Shell({ session, onSession, hidden, publicKey, onStatus, onFailed, ref 
   onStatus: (s: Status) => void;
   /** The connection was refused: the parent checks whether the host key changed. */
   onFailed: () => void;
+  /** The shell's folder, as its prompt reports it (OSC 7 or a "user@host: ~/dir" title); null for a new shell. */
+  onCwd: (cwd: string | null) => void;
   ref: Ref<ShellHandle>;
 }) {
   const box = useRef<HTMLDivElement>(null);
@@ -124,8 +127,8 @@ function Shell({ session, onSession, hidden, publicKey, onStatus, onFailed, ref 
   const [status, setStatus] = useState<Status>('connecting');
   const [error, setError] = useState('');
   // Read when connecting, so the latest values are used without reconnecting when they change.
-  const latest = useRef({ session, onSession, onFailed, onStatus });
-  latest.current = { session, onSession, onFailed, onStatus };
+  const latest = useRef({ session, onSession, onFailed, onStatus, onCwd });
+  latest.current = { session, onSession, onFailed, onStatus, onCwd };
 
   useEffect(() => latest.current.onStatus(status), [status]);
 
@@ -152,12 +155,14 @@ function Shell({ session, onSession, hidden, publicKey, onStatus, onFailed, ref 
         t.write(new Uint8Array(e.data as ArrayBuffer));
         return;
       }
-      const m = JSON.parse(e.data) as { type: string; id?: string; message?: string };
+      const m = JSON.parse(e.data) as { type: string; id?: string; message?: string; resumed?: boolean };
       if (m.type === 'session') {
         latest.current.session = m.id!;
         latest.current.onSession(m.id!);
         // A resumed shell replays its recent output next, so start from a clean screen either way.
         t.reset();
+        // A new shell hasn't said where it is yet; a resumed one says again as its output replays.
+        if (!m.resumed) latest.current.onCwd(null);
         retries.current = 0;
         setStatus('open');
         if (pendingCd.current) {
@@ -255,6 +260,17 @@ function Shell({ session, onSession, hidden, publicKey, onStatus, onFailed, ref 
     });
     const input = t.onData((d) => type(d));
     const resize = t.onResize(({ cols, rows }) => send(JSON.stringify({ type: 'resize', cols, rows })));
+    // Where the shell is, for Ask for a command: an OSC 7 report when the prompt sends one, or
+    // the window title many distros set at each prompt. A title that isn't a folder is ignored.
+    const osc7 = t.parser.registerOscHandler(7, (data) => {
+      const f = folderFromOsc7(data);
+      if (f) latest.current.onCwd(f);
+      return true;
+    });
+    const title = t.onTitleChange((s) => {
+      const f = folderFromTitle(s);
+      if (f) latest.current.onCwd(f);
+    });
     const refit = () => box.current?.offsetParent && f.fit();
     const ro = new ResizeObserver(refit);
     ro.observe(box.current!);
@@ -274,6 +290,8 @@ function Shell({ session, onSession, hidden, publicKey, onStatus, onFailed, ref 
       mo.disconnect();
       input.dispose();
       resize.dispose();
+      osc7.dispose();
+      title.dispose();
       const sock = ws.current;
       ws.current = null;
       sock?.close();
@@ -366,6 +384,8 @@ export function TerminalPanel({ target, publicKey, hidden, cd, onFailed }: {
 }) {
   const [saved, setSaved] = useState<SavedTabs>(loadTabs);
   const [statuses, setStatuses] = useState<Record<string, Status>>({});
+  /** Each tab's folder, when its shell reports it. */
+  const [cwds, setCwds] = useState<Record<string, string | null>>({});
   const [snippetsOpen, setSnippetsOpen] = useState(() => localGet('snippetsOpen') === '1');
   const handles = useRef(new Map<string, ShellHandle>());
   const { tabs, active } = saved;
@@ -483,12 +503,14 @@ export function TerminalPanel({ target, publicKey, hidden, cd, onFailed }: {
               publicKey={publicKey}
               onStatus={(s) => setStatuses((m) => (m[t.key] === s ? m : { ...m, [t.key]: s }))}
               onFailed={onFailed}
+              onCwd={(cwd) => setCwds((m) => ((m[t.key] ?? null) === cwd ? m : { ...m, [t.key]: cwd }))}
             />
           ))}
         </div>
         {snippetsOpen && (
           <SnippetsPanel
             canUse={status === 'open'}
+            cwd={cwds[active] ?? null}
             onInsert={(cmd) => handles.current.get(active)?.paste(cmd)}
             onRun={(cmd) => handles.current.get(active)?.run(cmd)}
             onClose={toggleSnippets}

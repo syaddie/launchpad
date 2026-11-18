@@ -144,6 +144,9 @@ export const KEY_FIELDS: Record<string, Field[]> = {
   snippets: [],
   // So does the Minecraft tab its servers.
   minecraftServers: [],
+  // Settings › Alerts fetches these itself; the topic stays out of the page's state.
+  alertTopic: [],
+  alertMemory: [],
 };
 
 /** The fields changed store keys feed, or null when one isn't known (then send everything). */
