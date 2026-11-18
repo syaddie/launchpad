@@ -50,6 +50,7 @@ import { startCleanup } from './cleanup';
 import { alertsInfo, sendTest, setTopicUrl } from './notify';
 import { startAlerts } from './alerts';
 import { startMcAlerts } from './mc-alerts';
+import { startUnpacking, unpackRecords } from './unpack';
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
 import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
@@ -1015,7 +1016,7 @@ app.post('/api/minecraft/:id/explain', async (c) => {
 
 app.get('/api/downloads', async (c) => {
   const [list, instagram, video] = await Promise.all([listDownloads(), instagramInfo(), videoInfo()]);
-  return c.json({ ...list, instagram, video } satisfies DownloadsInfo);
+  return c.json({ ...list, instagram, video, unpacks: unpackRecords() } satisfies DownloadsInfo);
 });
 
 /** Fetch a link into a folder on the server, an Instagram post's or profile's photos and videos, or (via: 'video') a video with yt-dlp; the page polls the list for progress. */
@@ -1352,3 +1353,4 @@ startSnapshots(copyDailyToDrive);
 startLinkChecks();
 startAlerts();
 startMcAlerts();
+startUnpacking();

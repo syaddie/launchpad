@@ -2136,6 +2136,17 @@ button.m-stat { cursor: default; }
 .dl-row { align-items: stretch; }
 .dl-row > .srv-panel { flex: 1 1 380px; min-width: 0; min-height: 260px; }
 .dl-row > .torrents { flex-grow: 1.5; }
+.dl-unpack { display: flex; flex-direction: column; gap: 10px; }
+.dl-unpacks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.dl-unpack-row { display: grid; grid-template-columns: 16px minmax(0, 0.8fr) minmax(0, 1.2fr) auto; align-items: center; gap: 8px; min-height: 32px; padding: 2px 8px; font-size: 13px; }
+.dl-unpack-row > i { color: var(--t3); }
+.dl-unpack-row.done > i { color: var(--ac); }
+.dl-unpack-row.failed > i, .dl-unpack-row.failed .dl-unpack-what { color: var(--wn); }
+.dl-unpack-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl-unpack-what { min-width: 0; text-wrap: pretty; }
+[data-layout='narrow'] .dl-unpack-row { grid-template-columns: 16px minmax(0, 1fr) auto; }
+[data-layout='narrow'] .dl-unpack-what { grid-column: 2; grid-row: 2; }
+[data-layout='narrow'] .dl-unpack-row > .icon-btn { grid-column: 3; grid-row: 1 / span 2; }
 .dl-items { display: flex; flex-direction: column; margin: 0 -8px; }
 .dl-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px; border-radius: var(--r); }
 .dl-item:hover { background: var(--hv); }

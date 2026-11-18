@@ -88,6 +88,7 @@ export function cleanPrefs(body: Partial<Prefs>, prev: Prefs): Prefs {
     pinnedLifts: Array.isArray(body.pinnedLifts) ? [...new Set(body.pinnedLifts.filter(isStr).map((t) => t.slice(0, 120)))].slice(0, 12) : prev.pinnedLifts,
     alerts: { ...DEFAULT_PREFS.alerts, ...prev.alerts, ...pickBools(body.alerts, ALERT_KINDS) },
     pinnedFolders: Array.isArray(body.pinnedFolders) ? cleanFolders(body.pinnedFolders) : prev.pinnedFolders ?? [],
+    autoUnpack: typeof body.autoUnpack === 'boolean' ? body.autoUnpack : prev.autoUnpack ?? false,
   };
   if (!next.searchEngines.length) next.searchEngines = DEFAULT_ENGINES;
   return next;

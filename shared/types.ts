@@ -122,6 +122,8 @@ export interface Prefs {
   driveBackup: boolean;
   /** Which kinds of phone alert are on (Settings › Alerts). Where they go is kept apart from prefs (server/src/notify.ts). */
   alerts: Record<AlertKind, boolean>;
+  /** Unpack archives (a link, or what's in a torrent) next to them when they finish downloading. Missing in older saved prefs. */
+  autoUnpack?: boolean;
 }
 
 /** What a phone alert is about; each has its own switch in Settings › Alerts. */
@@ -1111,6 +1113,22 @@ export interface DownloadsInfo {
   defaultDir: string | null;
   instagram: InstagramInfo;
   video: VideoInfo;
+  /** Archives unpacked after they finished downloading, newest first, since Launchpad started. */
+  unpacks: UnpackRecord[];
+}
+
+/** One archive unpacked (or being unpacked) because it finished downloading. */
+export interface UnpackRecord {
+  id: string;
+  /** When it was queued, then when it finished. */
+  at: string;
+  /** The archive on the server. */
+  file: string;
+  from: 'link' | 'torrent';
+  state: 'waiting' | 'unpacking' | 'done' | 'failed';
+  /** The folder it went into, also when it failed partway. */
+  folder?: string;
+  message?: string;
 }
 
 export type TorrentStatus = 'downloading' | 'seeding' | 'done' | 'paused' | 'queued' | 'checking' | 'stalled' | 'metadata' | 'moving' | 'error';

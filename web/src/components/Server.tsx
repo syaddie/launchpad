@@ -33,10 +33,12 @@ const TABS: { key: Tab; name: string; icon: string }[] = [
 const pair = (t: Tab) => t === 'terminal' || t === 'files';
 
 /** The Server view: the machine's health at a glance, a shell on it, its files, its Minecraft servers and its downloads. */
-export function Server({ data, now, openTab, onOpenSettings, onPinFolders, split }: {
+export function Server({ data, now, openTab, onOpenSettings, onPinFolders, onAutoUnpack, split }: {
   data: AppState;
   /** Save Files' pinned folders, in prefs. */
   onPinFolders: (pins: string[]) => void;
+  /** Save Downloads' "Unpack archives when they finish", in prefs. */
+  onAutoUnpack: (on: boolean) => void;
   /** Terminal and Files open side by side (Console, Bento and Horizon on a wide enough screen). */
   split?: boolean;
   now: Date;
@@ -141,6 +143,8 @@ export function Server({ data, now, openTab, onOpenSettings, onPinFolders, split
         <ErrorBoundary label="Downloads">
           <DownloadsPanel
             shellReady={info ? ready : null}
+            autoUnpack={!!data.prefs.autoUnpack}
+            onAutoUnpack={onAutoUnpack}
             onOpenFolder={(path) => {
               setFilesAt((f) => ({ path, n: (f?.n ?? 0) + 1 }));
               setTab('files');

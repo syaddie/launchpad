@@ -197,7 +197,7 @@ async function pickDefaultDir(): Promise<string | null> {
   return defaultDir;
 }
 
-export async function listDownloads(): Promise<Omit<DownloadsInfo, 'instagram' | 'video'>> {
+export async function listDownloads(): Promise<Omit<DownloadsInfo, 'instagram' | 'video' | 'unpacks'>> {
   return { jobs: jobs.map(view), defaultDir: await pickDefaultDir().catch(() => null) };
 }
 
