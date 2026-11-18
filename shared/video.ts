@@ -61,6 +61,16 @@ export function videoLink(text: string): VideoLink | null {
   return { site: hit.site, href: u.href, audio: hit.site === 'SoundCloud', playlist };
 }
 
+/**
+ * Whether a POST to /api/downloads is for yt-dlp: when the page says so, and for the sites above
+ * whatever it says, so a page from before videos (still open since the deploy) can't save YouTube's
+ * watch page as a file called "watch".
+ */
+export function wantsVideo(body: { via?: unknown; url?: unknown } | null | undefined): boolean {
+  if (body?.via === 'video') return true;
+  return typeof body?.url === 'string' && !!videoLink(body.url);
+}
+
 /** What the page calls the thing a link is to. */
 export function videoNoun(site: VideoSite): string {
   return site === 'SoundCloud' ? 'SoundCloud track' : site === 'X' ? 'post on X' : site === 'Reddit' ? 'Reddit video' : site === 'TikTok' ? 'TikTok' : 'YouTube video';

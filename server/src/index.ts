@@ -44,6 +44,7 @@ import { instagramInfo, signInInstagram, signOutInstagram, startInstagram } from
 import { parseInstagram } from '../../shared/instagram';
 import { addTorrentFile, addTorrentLinks, MAX_TORRENT_FILE, QbitError, setFilePriority, setRatio, setSpeedCaps, setTurtle, startTorrentWatch, torrentAction, torrentFiles, torrentOptions, torrents } from './qbit';
 import { startVideo, videoInfo, videoSite } from './ytdlp';
+import { wantsVideo } from '../../shared/video';
 import { containerLogs, DockerError, restartContainer } from './docker';
 import { diskHealth } from './disks';
 import { startCleanup } from './cleanup';
@@ -1022,7 +1023,7 @@ app.get('/api/downloads', async (c) => {
 /** Fetch a link into a folder on the server, an Instagram post's or profile's photos and videos, or (via: 'video') a video with yt-dlp; the page polls the list for progress. */
 app.post('/api/downloads', async (c) => {
   const body = await c.req.json();
-  if (body?.via === 'video') return c.json(await startVideo(body));
+  if (wantsVideo(body)) return c.json(await startVideo(body));
   const ig = typeof body?.url === 'string' ? parseInstagram(body.url) : null;
   if (ig && 'error' in ig) throw new FileError(ig.error);
   return c.json(ig ? startInstagram(body, ig) : startDownload(body));
