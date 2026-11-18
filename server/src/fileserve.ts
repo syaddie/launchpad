@@ -41,8 +41,9 @@ export const ifRangeOk = (ifRange: string | undefined, etag: string) => !ifRange
 /**
  * For anything shown inline. The CSP gives the response an opaque origin and runs nothing
  * in it, so even if a browser did treat it as a page it couldn't reach the API. PDFs leave
- * the sandbox out: browsers refuse to show a PDF under one, and their viewers never run a
- * PDF's script on the page's origin anyway.
+ * the sandbox out: a sandboxed page may not load plugins, and Safari shows PDFs with one, so
+ * it would show nothing (Chrome shows them either way). No browser's PDF viewer runs a PDF's
+ * script on the page's origin, and nosniff keeps a PDF from ever being read as a page.
  */
 export function inlineHeaders(name: string): Record<string, string> | null {
   const p = previewOf(name);
