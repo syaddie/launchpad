@@ -4,7 +4,7 @@
 // of Launchpad call notify() for one-off events, like a Minecraft server crashing. Caps keep a
 // problem that comes and goes from flooding the phone. Messages say what's wrong in Launchpad's
 // own words: no error text, tokens or file contents.
-import { checkUrl, fetchFailure, FetchError, USER_AGENT } from './outbound';
+import { blockedIp, checkUrl, fetchFailure, FetchError, USER_AGENT } from './outbound';
 import { store } from './store';
 import { DEFAULT_PREFS } from '../../shared/defaults';
 import { ALERT_KINDS, type AlertKind, type AlertRecord, type AlertsInfo } from '../../shared/types';
@@ -133,9 +133,12 @@ export function gate(m: AlertMemory, o: Outgoing, now: number): { ok: true } | {
   return { ok: true };
 }
 
+/** A long run that's a key, token or id: all hex (ids, hashes), or upper case, lower case and digits mixed. A long container name is neither. */
+const secretLike = (run: string) => /^[0-9a-f]+$/i.test(run) || (/[A-Z]/.test(run) && /[a-z]/.test(run) && /\d/.test(run));
+
 /**
  * Text made safe to send: web addresses keep only their host and path, and anything that looks
- * like a key, token or id (a long run of letters, digits and symbols) is cut out. Capped at `max`.
+ * like a key, token or id (a run of 32 or more that secretLike says is one) is cut out. Capped at `max`.
  */
 export function scrub(text: string, max: number): string {
   const out = text
@@ -147,7 +150,7 @@ export function scrub(text: string, max: number): string {
         return '[address]';
       }
     })
-    .replace(/[A-Za-z0-9+/_=-]{32,}/g, '…')
+    .replace(/[A-Za-z0-9+/_=-]{32,}/g, (run) => (secretLike(run) ? '…' : run))
     // eslint-disable-next-line no-control-regex
     .replace(/[\x00-\x08\x0b-\x1f\x7f]/g, ' ')
     .trim();
@@ -215,11 +218,15 @@ export async function publish(topicUrl: string, msg: Message): Promise<void> {
   }
 }
 
-/** A topic address as it's saved: '' (off), or an http(s) address whose last part is the topic. Throws with what's wrong. */
+/**
+ * A topic address as it's saved: '' (off), or an http(s) address whose last part is the topic.
+ * "ntfy.sh/topic", as the ntfy app shows it, gets https:// in front. Throws with what's wrong.
+ */
 export function cleanTopicUrl(raw: unknown): string {
   if (typeof raw !== 'string') throw new Error('That isn’t a web address.');
-  const s = raw.trim();
+  let s = raw.trim();
   if (!s) return '';
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(s)) s = 'https://' + s;
   let url: URL;
   try {
     url = new URL(s);
@@ -229,6 +236,9 @@ export function cleanTopicUrl(raw: unknown): string {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('Only http and https addresses work.');
   if (url.username || url.password) throw new Error('Addresses with a login in them aren’t supported.');
   if (s.length > 300) throw new Error('That address is too long.');
+  // Never works (publish checks again, names included): said now rather than at the first send.
+  const host = url.hostname.replace(/^\[|\]$/g, '');
+  if (/^localhost$|\.localhost$/i.test(host) || blockedIp(host)) throw new Error('That’s Launchpad’s own server, which it doesn’t send to. Use the ntfy server’s network address.');
   const topic = url.pathname.split('/').filter(Boolean).pop() ?? '';
   // ntfy's own rule for topic names.
   if (!/^[-_A-Za-z0-9]{1,64}$/.test(topic)) throw new Error('The address needs a topic at the end, like https://ntfy.sh/your-topic. Topics are letters, digits, - and _.');
@@ -275,11 +285,22 @@ export function topicUrl(): string {
   return lastTopic;
 }
 
+/**
+ * Save where alerts go. A new topic hasn't heard about anything yet, so problems going on now
+ * are sent to it on the next checks, and the last failure (to the old one) is forgotten.
+ */
 export function setTopicUrl(raw: unknown): string {
   const url = cleanTopicUrl(raw);
+  const changed = url !== topicUrl();
   store.setAlertTopic(url);
   lastTopic = url;
   retryAt = 0;
+  if (changed) {
+    const m = memory();
+    m.open = {};
+    m.lastError = null;
+    saveMemory();
+  }
   return url;
 }
 

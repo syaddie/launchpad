@@ -70,7 +70,8 @@ export function AlertSettings({ prefs, onPrefs, now }: { prefs: Prefs; onPrefs: 
       const i = await api.setAlertTopic(next.trim());
       setInfo(i);
       setUrl(i.topicUrl);
-      setMsg({ text: i.topicUrl ? 'Saved. Send a test to check it reaches your phone.' : 'Alerts are off.', warn: false });
+      // Turned off: the status line below says so.
+      setMsg(i.topicUrl ? { text: 'Saved. Send a test to check it reaches your phone.', warn: false } : null);
     } catch (e) {
       setMsg({ text: (e as Error).message, warn: true });
     } finally {
@@ -157,7 +158,8 @@ export function AlertSettings({ prefs, onPrefs, now }: { prefs: Prefs; onPrefs: 
           </div>
         )}
         <div className="meta">Anyone who knows the topic can read your alerts, so keep it hard to guess. It stays out of backup files and Drive copies.</div>
-        {status && <div style={{ fontSize: 12, color: status.warn ? 'var(--wn)' : 'var(--t2)' }}>{status.text}</div>}
+        {/* A failure just above already says why. */}
+        {status && !(status.warn && msg?.warn) && <div style={{ fontSize: 12, color: status.warn ? 'var(--wn)' : 'var(--t2)' }}>{status.text}</div>}
       </div>
 
       <div className="drawer-section" style={{ gap: 0 }}>

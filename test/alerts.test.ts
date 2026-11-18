@@ -71,16 +71,23 @@ describe('topic address', () => {
     expect(notify.cleanTopicUrl('https://example.com/ntfy/home_alerts?auth=xyz')).toBe('https://example.com/ntfy/home_alerts?auth=xyz');
     expect(notify.cleanTopicUrl('')).toBe('');
     expect(notify.cleanTopicUrl('   ')).toBe('');
+    // As the ntfy app shows it.
+    expect(notify.cleanTopicUrl('ntfy.sh/launchpad-abc123')).toBe('https://ntfy.sh/launchpad-abc123');
   });
 
   it('says what’s wrong with one it won’t take', () => {
-    expect(() => notify.cleanTopicUrl('ntfy.sh/topic')).toThrow(/isn’t a web address/);
+    expect(() => notify.cleanTopicUrl('not an address')).toThrow(/isn’t a web address/);
     expect(() => notify.cleanTopicUrl('ftp://ntfy.sh/topic')).toThrow(/http/);
     expect(() => notify.cleanTopicUrl('https://ntfy.sh/')).toThrow(/topic at the end/);
     expect(() => notify.cleanTopicUrl('https://ntfy.sh/has space')).toThrow(/topic at the end/);
     expect(() => notify.cleanTopicUrl('https://me:pw@ntfy.sh/topic')).toThrow(/login/);
     expect(() => notify.cleanTopicUrl('https://ntfy.sh/' + 'a'.repeat(65))).toThrow(/topic/);
     expect(() => notify.cleanTopicUrl(42)).toThrow();
+    // The server itself never works, so it's refused when saved, not at the first send.
+    expect(() => notify.cleanTopicUrl('http://localhost:8080/alerts')).toThrow(/own server/);
+    expect(() => notify.cleanTopicUrl('http://127.0.0.1/alerts')).toThrow(/own server/);
+    expect(() => notify.cleanTopicUrl('http://[::1]:80/alerts')).toThrow(/own server/);
+    expect(() => notify.cleanTopicUrl('http://169.254.169.254/alerts')).toThrow(/own server/);
   });
 
   it('is kept apart from prefs: out of the page’s state, the JSON backup and the Drive copy', () => {
@@ -141,8 +148,11 @@ describe('alert switches in prefs', () => {
 describe('what goes in a message', () => {
   it('keeps addresses to their host and path, and cuts out tokens and ids', () => {
     expect(notify.scrub('Feed https://example.com/rss?token=abc123secret failed', 200)).toBe('Feed https://example.com/rss failed');
-    expect(notify.scrub('key sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789 leaked', 200)).toBe('key … leaked');
-    expect(notify.scrub('a'.repeat(64), 200)).toBe('…');
+    expect(notify.scrub('key sk-ant-api03-Xk9fQ2LmZp7RtV4wYb8NcJ1hGd6SaE3u leaked', 200)).toBe('key … leaked');
+    expect(notify.scrub('token ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8 there', 200)).toBe('token … there');
+    expect(notify.scrub('id ' + 'a3f9'.repeat(16), 200)).toBe('id …');
+    // A long container name isn't a secret.
+    expect(notify.scrub('my-awesome-media-server-stack-plex-1 stopped', 200)).toBe('my-awesome-media-server-stack-plex-1 stopped');
     expect(notify.scrub('line\u0000one\nline two', 200)).toBe('line one\nline two');
     expect(notify.scrub('x'.repeat(10) + ' ' + 'y'.repeat(10), 12)).toBe('xxxxxxxxxx…');
   });
@@ -562,6 +572,24 @@ describe('the watcher end to end', () => {
     expect(posts.map((p) => p.title)).toEqual(['plex stopped', 'plex stopped']);
     expect(notify.alertsInfo().lastError).toBeNull();
     expect(notify.alertsInfo().open).toHaveLength(1);
+  });
+
+  it('tells a new topic about what’s going on now; saving the same one again changes nothing', async () => {
+    let t = Date.parse('2026-11-18T10:00:00Z');
+    const c = counters();
+    const step = async () => {
+      vi.setSystemTime((t += MIN));
+      await alerts.carryOut(alerts.plan(problemCheck(true), notify.memory().open, c, () => true));
+    };
+    await step();
+    await step();
+    expect(posts.map((p) => p.url)).toEqual([TOPIC]);
+    notify.setTopicUrl(TOPIC);
+    await step();
+    expect(posts).toHaveLength(1);
+    notify.setTopicUrl('http://203.0.113.5/launchpad-new');
+    await step();
+    expect(posts.map((p) => [p.url, p.title])).toEqual([[TOPIC, 'plex stopped'], ['http://203.0.113.5/launchpad-new', 'plex stopped']]);
   });
 
   it('checkNow does nothing at all without a topic', async () => {
