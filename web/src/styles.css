@@ -1300,7 +1300,7 @@ i.file-pinned { color: var(--ac); }
 /* The viewer: an image or video fits the panel; click an image for its actual size. */
 .files-viewer { position: relative; flex: 1; min-height: 360px; border-radius: var(--r); background: var(--rz); overflow: hidden; }
 [data-layout='narrow'] .files-viewer { flex: none; height: 65vh; min-height: 300px; }
-.files-viewer > img, .files-viewer > video { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.files-viewer > img, .files-viewer > video, .files-viewer > iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .files-viewer > img { object-fit: contain; cursor: zoom-in; }
 .files-viewer.zoomed { overflow: auto; }
 .files-viewer.zoomed > img { position: static; width: auto; height: auto; max-width: none; cursor: zoom-out; }
