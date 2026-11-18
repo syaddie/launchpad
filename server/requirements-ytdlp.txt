@@ -1,0 +1,13 @@
+# Video downloads (Server › Downloads): installed into the Docker image by the Dockerfile, in a
+# Python environment of its own. Pinned so a cached image layer and a fresh build agree.
+#
+# Sites change all the time, and yt-dlp keeps up: when a site's videos stop downloading
+# ("Unable to extract…", "Sign in to confirm…", 403s), a newer yt-dlp usually fixes it.
+# To bump it, check https://github.com/yt-dlp/yt-dlp/releases (or `pip index versions yt-dlp`)
+# for the newest, set both lines below to what that release asks for (its
+# yt-dlp-ejs version is the "yt-dlp-ejs==" line under Requires-Dist on
+# https://pypi.org/project/yt-dlp/, or in `pip show yt-dlp` once it's installed), and push:
+# the image is rebuilt with it.
+yt-dlp==2026.10.26
+# The JavaScript yt-dlp runs (with Node.js) to work out YouTube's player. Must match yt-dlp's.
+yt-dlp-ejs==0.8.0

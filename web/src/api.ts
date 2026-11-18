@@ -1,8 +1,16 @@
 import type { DownloadJob, DownloadsInfo, InstagramInfo, McDiagnosis, McLog, McServer, McStatus, TorrentsInfo } from '../../shared/types';
+import type { TorrentFile, TorrentOptions, TorrentSpeed, VideoFormat } from '../../shared/types';
 import type { AppState, Backup, BackupSnapshot, CalEvent, Countdown, Craving, DirListing, DisksReport, LinkCheck, LogLine, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
 import type { AskResult } from '../../shared/ask';
 import type { UsageReport } from '../../shared/claudeUsage';
 import { kvGet, kvSet } from './idb';
+
+/** What a torrent is added with: a category (made if it's new), tags, and a ratio to seed to. */
+export interface TorrentAdd {
+  category?: string;
+  tags?: string[];
+  ratio?: number | null;
+}
 
 /** Where the state was kept before it moved to IndexedDB; still used where IndexedDB isn't available. */
 const STATE_KEY = 'launchpad:state';
@@ -270,15 +278,24 @@ export const api = {
   mcStart: (id: string) => req('POST', `/api/minecraft/${encodeURIComponent(id)}/start`, {}, false, undefined, 30_000),
   mcDiagnose: (id: string) => req<McDiagnosis>('GET', `/api/minecraft/${encodeURIComponent(id)}/diagnose`, undefined, false, undefined, 40_000),
   downloads: () => req<DownloadsInfo>('GET', '/api/downloads'),
-  /** `ig` only matters for Instagram links: a profile's newest how many, and whether to save captions and details too. */
-  startDownload: (url: string, dir: string, ig?: { limit?: number; metadata: boolean }) => req<DownloadJob>('POST', '/api/downloads', { url, dir, ...ig }),
+  /** `opts`: for Instagram links, a profile's newest how many and whether to save captions and details too; for videos, yt-dlp and the format. */
+  startDownload: (url: string, dir: string, opts?: { limit?: number; metadata: boolean } | { via: 'video'; format: VideoFormat }) => req<DownloadJob>('POST', '/api/downloads', { url, dir, ...opts }),
+  /** The site yt-dlp knows a link as, or null when it would only fetch the link itself. */
+  videoSite: (url: string) => req<{ site: string | null }>('GET', `/api/downloads/video?url=${encodeURIComponent(url)}`, undefined, false, undefined, 40_000),
   instagramSignIn: (cookie: string) => req<InstagramInfo>('POST', '/api/downloads/instagram', { cookie }),
   instagramSignOut: () => req<InstagramInfo>('DELETE', '/api/downloads/instagram'),
   cancelDownload: (id: string) => req<DownloadJob>('POST', `/api/downloads/${encodeURIComponent(id)}/cancel`, {}),
   clearDownloads: () => req<DownloadJob[]>('POST', '/api/downloads/clear', {}),
   torrents: () => req<TorrentsInfo>('GET', '/api/torrents'),
-  addTorrents: (urls: string) => req<TorrentsInfo>('POST', '/api/torrents', { urls }),
-  addTorrentFile: (f: File) => req<TorrentsInfo>('POST', `/api/torrents/file?name=${encodeURIComponent(f.name)}`, f),
+  addTorrents: (urls: string, o: TorrentAdd = {}) => req<TorrentsInfo>('POST', '/api/torrents', { urls, ...o }),
+  addTorrentFile: (f: File, o: TorrentAdd = {}) =>
+    req<TorrentsInfo>('POST', `/api/torrents/file?${new URLSearchParams({ name: f.name, category: o.category ?? '', tags: (o.tags ?? []).join(','), ratio: o.ratio == null ? '' : String(o.ratio) })}`, f),
+  torrentOptions: () => req<TorrentOptions>('GET', '/api/torrents/options'),
+  torrentFiles: (hash: string) => req<TorrentFile[]>('GET', `/api/torrents/${encodeURIComponent(hash)}/files`),
+  setFilePriority: (hash: string, ids: number[], priority: TorrentFile['priority']) => req<TorrentFile[]>('POST', `/api/torrents/${encodeURIComponent(hash)}/files`, { ids, priority }),
+  setTorrentRatio: (hash: string, ratio: number | null) => req<TorrentsInfo>('POST', `/api/torrents/${encodeURIComponent(hash)}/ratio`, { ratio }),
+  setTurtle: (on: boolean) => req<TorrentsInfo>('POST', '/api/torrents/turtle', { on }),
+  setSpeedCaps: (caps: Partial<Omit<TorrentSpeed, 'turtle'>>) => req<TorrentsInfo>('POST', '/api/torrents/caps', caps),
   torrentAction: (hashes: string[], action: 'stop' | 'start' | 'delete' | 'deleteFiles') => req<TorrentsInfo>('POST', '/api/torrents/action', { hashes, action }),
   /** Take a copy now and upload it to Google Drive; resolves once it's there (or failed, in `drive.lastError`). */
   copyToDrive: () => req<AppState>('POST', '/api/backup/drive', {}),
