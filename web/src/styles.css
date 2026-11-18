@@ -1247,6 +1247,7 @@ i.file-pinned { color: var(--ac); }
 /* Search: a bar under the head, then results in the list's place. */
 .files-search { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .files-search > .input { flex: 1 1 200px; min-width: 0; }
+.files-search-mode { flex: none; }
 .files-search-mode .tab { font-size: 12px; padding: 3px 10px; }
 /* Search and trash rows have columns of their own, and their buttons always show: the list's
    narrower-panel rules (floating buttons, fewer columns) are for folder rows. */
