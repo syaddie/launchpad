@@ -42,6 +42,8 @@ export const DEFAULT_PREFS: Prefs = {
   gymMonthly: 0,
   claudeBudget: 0,
   driveBackup: true,
+  // On, but nothing is sent until a topic is set in Settings › Alerts.
+  alerts: { health: true, containers: true, disks: true, minecraft: true },
   packPrice: 0,
   packSize: 20,
 };

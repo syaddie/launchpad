@@ -61,7 +61,8 @@ export async function checkUrl(raw: string): Promise<URL> {
   return url;
 }
 
-function fetchFailure(e: unknown): FetchError {
+/** What went wrong reaching an address, as a FetchError the page can show. */
+export function fetchFailure(e: unknown): FetchError {
   if (e instanceof FetchError) return e;
   const err = e as Error & { cause?: { code?: string } };
   if (err.name === 'TimeoutError' || err.name === 'AbortError') return new FetchError('timeout', 'Didn’t answer in time.');

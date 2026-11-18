@@ -1,5 +1,6 @@
 import type { DownloadJob, DownloadsInfo, InstagramInfo, McDiagnosis, McLog, McServer, McStatus, TorrentsInfo } from '../../shared/types';
 import type { AppState, Backup, BackupSnapshot, CalEvent, Countdown, Craving, DirListing, DisksReport, LinkCheck, LogLine, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
+import type { AlertsInfo } from '../../shared/types';
 import type { AskResult } from '../../shared/ask';
 import type { UsageReport } from '../../shared/claudeUsage';
 import { kvGet, kvSet } from './idb';
@@ -282,6 +283,12 @@ export const api = {
   torrentAction: (hashes: string[], action: 'stop' | 'start' | 'delete' | 'deleteFiles') => req<TorrentsInfo>('POST', '/api/torrents/action', { hashes, action }),
   /** Take a copy now and upload it to Google Drive; resolves once it's there (or failed, in `drive.lastError`). */
   copyToDrive: () => req<AppState>('POST', '/api/backup/drive', {}),
+  /** Settings › Alerts: where alerts go, what's going on and what was sent lately. */
+  alerts: () => req<AlertsInfo>('GET', '/api/alerts'),
+  /** Save the ntfy topic's address; '' turns alerts off. Refused with what's wrong with it. */
+  setAlertTopic: (topicUrl: string) => req<AlertsInfo>('PUT', '/api/alerts', { topicUrl }),
+  /** Send a test alert now; refused with why it didn't go. */
+  testAlert: () => req<AlertsInfo>('POST', '/api/alerts/test', {}),
 };
 
 /** Count an open of a bookmark (a tile, a search result, ⌘K, 1–9), for ranking results. Nothing waits on it. */
