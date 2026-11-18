@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cleanIgLimit, IG_DEFAULT_LIMIT, IG_MAX_LIMIT, parseInstagram } from '../../../shared/instagram';
 import { cleanVideoFormat, VIDEO_FORMATS, videoLink, videoNoun, type VideoSite } from '../../../shared/video';
-import type { DownloadJob, DownloadsInfo, InstagramInfo, Torrent, TorrentFile, TorrentOptions, TorrentsInfo, TorrentSpeed, TorrentStatus, VideoFormat, VideoInfo } from '../../../shared/types';
+import type { DownloadJob, DownloadsInfo, InstagramInfo, UnpackRecord, Torrent, TorrentFile, TorrentOptions, TorrentsInfo, TorrentSpeed, TorrentStatus, VideoFormat, VideoInfo } from '../../../shared/types';
 import { api, localGet, localSet, type TorrentAdd } from '../api';
 import { fmtBytes, hm } from '../util';
 import { Copyable } from './Copyable';
@@ -49,10 +49,13 @@ function usePoll(fn: () => void, every: number) {
 }
 
 /** The Server view's Downloads tab: links fetched straight to the server, and qBittorrent's torrents. */
-export function DownloadsPanel({ shellReady, onOpenFolder }: {
+export function DownloadsPanel({ shellReady, onOpenFolder, autoUnpack, onAutoUnpack }: {
   /** The SSH login works, so links can be written to the server's folders; null while that's being checked. */
   shellReady: boolean | null;
   onOpenFolder: (path: string) => void;
+  /** Unpack archives when they finish (prefs). */
+  autoUnpack: boolean;
+  onAutoUnpack: (on: boolean) => void;
 }) {
   const [dl, setDl] = useState<DownloadsInfo | null>(null);
   const [dlError, setDlError] = useState('');
@@ -97,7 +100,56 @@ export function DownloadsPanel({ shellReady, onOpenFolder }: {
         <DownloadList info={dl} error={dlError} shellReady={shellReady} onChanged={loadDl} onOpenFolder={onOpenFolder} />
         <Torrents info={tor} error={torError} onInfo={setTor} onOpenFolder={shellReady ? onOpenFolder : undefined} />
       </div>
+      <Unpacking on={autoUnpack} onToggle={() => onAutoUnpack(!autoUnpack)} records={dl?.unpacks ?? []} onOpenFolder={shellReady ? onOpenFolder : undefined} />
     </div>
+  );
+}
+
+// ---------- unpacking ----------
+
+const UNPACK_ICON: Record<UnpackRecord['state'], string> = { waiting: 'ph-hourglass', unpacking: 'ph-circle-notch spin', done: 'ph-check-circle', failed: 'ph-warning' };
+
+const baseName = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
+const dirName = (p: string) => p.replace(/\/[^/]*$/, '') || '/';
+
+/** What happened to one archive, in a line. */
+export function unpackLine(r: UnpackRecord): string {
+  if (r.state === 'waiting') return 'Waiting to unpack';
+  if (r.state === 'unpacking') return 'Unpacking…';
+  if (r.state === 'done') return `Unpacked into ${baseName(r.folder ?? '')}`;
+  return r.message || 'Couldn’t unpack it.';
+}
+
+/** The switch for unpacking finished archives, and what it's done since Launchpad started. */
+function Unpacking({ on, onToggle, records, onOpenFolder }: { on: boolean; onToggle: () => void; records: UnpackRecord[]; onOpenFolder?: (path: string) => void }) {
+  return (
+    <section className="panel srv-panel dl-unpack" aria-label="Unpacking">
+      <div className="mc-auto">
+        <div className="mc-auto-text">
+          <span id="dl-unpack-label">Unpack archives when they finish</span>
+          <span className="meta">A .zip, .tar.gz, .7z or .rar link, or the archives in a torrent, unpack into a new folder beside them. The archive stays, so torrents keep seeding.</span>
+        </div>
+        <button type="button" role="switch" aria-checked={on} aria-labelledby="dl-unpack-label" className={'switch' + (on ? ' on' : '')} onClick={onToggle}>
+          <span />
+        </button>
+      </div>
+      {!!records.length && (
+        <ul className="dl-unpacks">
+          {records.map((r) => (
+            <li key={r.id} className={'dl-unpack-row ' + r.state}>
+              <i className={'ph-duotone ' + UNPACK_ICON[r.state]} aria-hidden />
+              <span className="dl-unpack-name" title={r.file}>{baseName(r.file)}</span>
+              <span className="meta dl-unpack-what">{unpackLine(r)}</span>
+              {onOpenFolder && (r.state === 'done' || r.state === 'failed') && (
+                <button className="icon-btn" title="Show in Files" aria-label={`Show ${baseName(r.folder ?? r.file)} in Files`} onClick={() => onOpenFolder(r.state === 'done' && r.folder ? r.folder : dirName(r.file))}>
+                  <i className="ph-duotone ph-folder-open" />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
