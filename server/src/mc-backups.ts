@@ -164,8 +164,15 @@ export function packScript(dir: string, backupDir: string, worlds: string[], fin
     // A closed connection makes the echo at the end fail rather than end the script.
     "trap '' PIPE",
     `rm -rf -- ${q(meta)} && mkdir -p -- ${q(meta)} && printf '%s\\n' ${worlds.map(q).join(' ')} > ${q(path.posix.join(meta, MANIFEST))} || exit 3`,
-    // tar's 1 is "a file changed as it was read": with saving paused that's only logs and the like.
-    `nice -n 10 tar -czf ${q(part)} -C ${q(meta)} ${MANIFEST} -C ${q(dir)} -- ${worlds.map(q).join(' ')}; rc=$?`,
+    // BusyBox tar (Alpine hosts) keeps only the last -C and exits 1 on any error. There the
+    // worlds are linked into the meta folder and followed (-h), and its 1 counts as a failure.
+    `if tar --help 2>&1 | head -n 1 | grep -q BusyBox; then`,
+    `  for w in ${worlds.map(q).join(' ')}; do mkdir -p -- "$(dirname -- ${q(meta)}/"$w")" && ln -s -- ${q(dir)}/"$w" ${q(meta)}/"$w" || { rm -rf -- ${q(meta)}; exit 3; }; done`,
+    `  nice -n 10 tar -czhf ${q(part)} -C ${q(meta)} -- ${MANIFEST} ${worlds.map(q).join(' ')}; rc=$?; [ $rc -eq 1 ] && rc=2`,
+    'else',
+    // GNU tar's 1 is "a file changed as it was read": with saving paused that's only logs and the like.
+    `  nice -n 10 tar -czf ${q(part)} -C ${q(meta)} ${MANIFEST} -C ${q(dir)} -- ${worlds.map(q).join(' ')}; rc=$?`,
+    'fi',
     `rm -rf -- ${q(meta)}`,
     `ok=failed; if [ $rc -le 1 ] && [ -s ${q(part)} ]; then mv -f -- ${q(part)} ${q(path.posix.join(backupDir, final))} && ok=packed; else rm -f -- ${q(part)}; fi`,
     orphaned ? `echo "$ok" 2>/dev/null || { ${orphaned}; } >/dev/null 2>&1` : 'echo "$ok"',
