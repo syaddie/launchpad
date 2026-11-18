@@ -1992,7 +1992,7 @@ button.m-stat { cursor: default; }
 .dl-tags .chip { display: inline-flex; align-items: center; gap: 3px; padding: 3px 9px; border: none; font-family: inherit; font-size: 12px; cursor: pointer; }
 .dl-tags .chip i { font-size: 10px; }
 .dl-opt > .input.dl-tag-new { width: 110px; }
-.dl-opt > .input.dl-ratio, .tor-ratio .dl-ratio { width: 120px; box-sizing: border-box; text-align: right; }
+.dl-opt > .input.dl-ratio, .tor-ratio .dl-ratio { width: calc(13ch + 24px); box-sizing: border-box; text-align: right; }
 .torrents > .panel-head { flex-wrap: wrap; row-gap: 6px; }
 .tor-head-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px 10px; }
 .tor-speeds { display: inline-flex; gap: 10px; }
@@ -2026,3 +2026,18 @@ button.m-stat { cursor: default; }
   .tor-file-size { text-align: left; }
 }
 .tor-retired i { vertical-align: -2px; }
+/* A narrow Torrents panel (a phone, or a split view): a torrent's name and progress get the
+   whole width, with its status and buttons on the line below. */
+.torrents { container-type: inline-size; }
+@container (max-width: 540px) {
+  .dl-item.torrent { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'main main' 'chip tools'; row-gap: 6px; }
+  .dl-item.torrent > .chip { grid-area: chip; }
+  .dl-item.torrent > .dl-item-main { grid-area: main; }
+  .dl-item.torrent > .dl-tools { grid-area: tools; }
+  .dl-item.torrent > .dl-confirm, .dl-item.torrent > .tor-detail { grid-column: 1 / -1; }
+}
+.tor-files-count { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Console's capitals are wider: its status chips need more room than 96px. */
+@container (min-width: 541px) {
+  [data-design='console'] .dl-item.torrent { grid-template-columns: 128px minmax(0, 1fr) auto; }
+}

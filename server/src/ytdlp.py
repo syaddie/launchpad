@@ -19,6 +19,7 @@ and one JSON object a line goes out on stdout:
     {"type": "progress", "part", "downloaded", "total", "speed", "eta"}
     {"type": "step", "step": "Merger" | "ExtractAudio" | …}   ffmpeg is working on it
     {"type": "file", "path"}                    the finished file
+    {"type": "retry"}                           YouTube turned it away (403): starting again, once
     {"type": "error", "error", "code"}          the last line when it failed
     {"type": "done"}                            the last line otherwise
 """
@@ -82,8 +83,8 @@ def clean_error(text):
     t = re.sub(r"^ERROR:\s*", "", t)
     t = re.sub(r"^\[[^\]]+\]\s*(?:[^:\s]+:\s*)?", "", t)
     t = re.split(r";\s*please report this issue", t, flags=re.I)[0]
-    t = re.split(r"\s*\(caused by ", t)[0]
-    return t.strip().rstrip(".") + "." if t.strip() else "yt-dlp stopped without saying why."
+    t = re.split(r"\s*\(caused by ", t)[0].strip().rstrip(".")
+    return t[:1].upper() + t[1:] + "." if t else "yt-dlp stopped without saying why."
 
 
 def error_code(text):
@@ -200,10 +201,20 @@ def download(req):
     }
     if req.get("ffmpeg"):
         opts["ffmpeg_location"] = req["ffmpeg"]
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        ydl.add_post_processor(AnnouncePP(ydl), when="before_dl")
-        ydl.add_post_processor(FinishedPP(ydl), when="after_move")
-        ydl.download([req["url"]])
+    # YouTube now and then turns a download's address away (HTTP 403). A fresh look at the video
+    # usually gets one that works, so that's tried once before giving up.
+    for attempt in range(2):
+        state.update(part=0, last=None, at=0.0, step=None)
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                ydl.add_post_processor(AnnouncePP(ydl), when="before_dl")
+                ydl.add_post_processor(FinishedPP(ydl), when="after_move")
+                ydl.download([req["url"]])
+            return
+        except DownloadError as e:
+            if attempt or "HTTP Error 403" not in str(e):
+                raise
+            emit({"type": "retry"})
 
 
 def check(url):

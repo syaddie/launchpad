@@ -25,7 +25,7 @@ import {
   toSpeed,
   toTorrent,
 } from '../server/src/qbit';
-import { capText, capValue, speedLine } from '../web/src/components/Downloads';
+import { capText, capValue, sharedFolder, speedLine } from '../web/src/components/Downloads';
 
 const H1 = 'a'.repeat(40);
 const H2 = 'b'.repeat(40);
@@ -104,6 +104,16 @@ describe('what torrents are added with', () => {
     expect(() => cleanSpeedCaps({ dl: 3_000_000_000 })).toThrow();
     expect(() => cleanSpeedCaps({})).toThrow();
     expect(() => cleanSpeedCaps({ up: 'fast' })).toThrow();
+  });
+});
+
+describe('a torrent’s files on the page', () => {
+  it('leaves off the folder they’re all in', () => {
+    expect(sharedFolder(['Album/CD1/01.flac', 'Album/cover.jpg'])).toBe('Album');
+    expect(sharedFolder(['Album/a', 'Other/b'])).toBe('');
+    expect(sharedFolder(['ubuntu.iso'])).toBe('');
+    expect(sharedFolder(['Album', 'Album/a'])).toBe('');
+    expect(sharedFolder([])).toBe('');
   });
 });
 

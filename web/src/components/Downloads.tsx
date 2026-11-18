@@ -250,10 +250,20 @@ function AddBox({ shellReady, defaultDir, torrentsOn, instagram, video, onInstag
   };
 
   const into = folder || 'your home folder';
-  const videoWhat = (noun: string) =>
-    fmt === 'mp3' ? `Saves the ${noun}’s sound as an MP3 into ${into}.` : fmt === '1080p' ? `Saves the ${noun} as an MP4, 1080p at most, into ${into}.` : `Saves the ${noun} at its best into ${into}.`;
   const one = audioOnly ? 'track' : 'video';
-  const playlistNote = vlink?.playlist === 'only' ? ` That’s a playlist: only its first ${one} downloads.` : vlink?.playlist === 'also' ? ` Just this ${one}, not the rest of the playlist.` : '';
+  const videoWhat =
+    fmt === 'mp3'
+      ? audioOnly
+        ? `Saves the track as an MP3 into ${into}.`
+        : `Saves the video’s sound as an MP3 into ${into}.`
+      : fmt === '1080p'
+        ? `Saves the video as an MP4, 1080p at most, into ${into}.`
+        : `Saves the ${one} at its best into ${into}.`;
+  const what = !vlink
+    ? `${videoWhat} One video, even from a playlist.`
+    : vlink.playlist === 'only'
+      ? `That’s a ${vlink.site} ${vlink.site === 'YouTube' ? 'playlist or channel' : vlink.site === 'SoundCloud' ? 'playlist or artist' : 'playlist'}: only its first ${one} downloads. ${videoWhat}`
+      : `A ${videoNoun(vlink.site)}. ${videoWhat}${vlink.playlist === 'also' ? ` Just this ${one}, not the rest of the playlist.` : ''}`;
   const ratioNote = ratio.trim() && Number(ratio) > 0 ? ` Once it has seeded to ratio ${Number(ratio)}, Launchpad takes it out of qBittorrent and leaves its files where they are.` : '';
   const hint =
     ig && 'error' in ig
@@ -271,9 +281,7 @@ function AddBox({ shellReady, defaultDir, torrentsOn, instagram, video, onInstag
               ? 'Checking video downloads are set up…'
               : !videoReady
                 ? video.error || 'Video downloads aren’t set up on this server.'
-                : vlink
-                  ? `A ${videoNoun(vlink.site)}. ${videoWhat(audioOnly ? 'track' : 'video')}${playlistNote}`
-                  : `${videoWhat('video')} One video, even from a playlist.`
+                : what
             : kind === 'http'
               ? otherSite && !useVideo
                 ? `Saves the link itself into ${into}, not the video on the page.`
@@ -509,7 +517,7 @@ function TorrentAddOptions(p: {
           const on = p.tags.includes(t);
           return (
             <button key={t} type="button" className={'chip ' + (on ? 'chip-accent' : 'chip-muted')} aria-pressed={on} onClick={() => p.onTags(on ? p.tags.filter((x) => x !== t) : [...p.tags, t])}>
-              {on && <i className="ph-bold ph-check" />}
+              {on && <i className="ph-duotone ph-check" />}
               {t}
             </button>
           );
@@ -1087,6 +1095,12 @@ function SpeedCaps({ speed, onInfo, onClose }: { speed: TorrentSpeed; onInfo: (t
   );
 }
 
+/** The folder every one of a torrent's files is in (its own folder, usually), so it needn't be on every line; '' when there isn't one. */
+export function sharedFolder(names: string[]): string {
+  const first = names[0]?.split('/')[0] ?? '';
+  return first && names.every((n) => n.startsWith(first + '/')) ? first : '';
+}
+
 const PRIORITIES: { key: TorrentFile['priority']; label: string }[] = [
   { key: 'skip', label: 'Skip' },
   { key: 'normal', label: 'Normal' },
@@ -1143,6 +1157,7 @@ function TorrentDetail({ t, onInfo, onOpenFolder }: { t: Torrent; onInfo: (t: To
 
   const shown = files ? (all ? files : files.slice(0, FIRST_FILES)) : [];
   const same = files?.length ? files.every((f) => f.priority === files[0].priority) : false;
+  const root = files ? sharedFolder(files.map((f) => f.name)) : '';
   return (
     <div className="tor-detail" role="group" aria-label={`${t.name}: files and seeding`}>
       <form
@@ -1174,7 +1189,10 @@ function TorrentDetail({ t, onInfo, onOpenFolder }: { t: Torrent; onInfo: (t: To
       ) : (
         <>
           <div className="tor-files-head">
-            <span className="meta">{count(files.length, 'file')}</span>
+            <span className="meta tor-files-count" title={root || undefined}>
+              {count(files.length, 'file')}
+              {root ? ` in ${root}` : ''}
+            </span>
             {files.length > 1 && (
               <label className="meta">
                 All:
@@ -1191,12 +1209,13 @@ function TorrentDetail({ t, onInfo, onOpenFolder }: { t: Torrent; onInfo: (t: To
           </div>
           <div className="tor-files">
             {shown.map((f) => {
-              const slash = f.name.lastIndexOf('/');
+              const rel = root ? f.name.slice(root.length + 1) : f.name;
+              const slash = rel.lastIndexOf('/');
               return (
                 <div key={f.index} className={'tor-file' + (f.priority === 'skip' ? ' skipped' : '')}>
                   <span className="tor-file-name" title={f.name}>
-                    {slash > 0 && <span className="tor-file-dir">{f.name.slice(0, slash + 1)}</span>}
-                    {f.name.slice(slash + 1)}
+                    {slash > 0 && <span className="tor-file-dir">{rel.slice(0, slash + 1)}</span>}
+                    {rel.slice(slash + 1)}
                   </span>
                   <span className="meta tnum tor-file-size">{fmtBytes(f.size)}</span>
                   <span className="meta tnum tor-file-pct">{f.priority === 'skip' && f.progress < 1 ? 'skipped' : `${Math.floor(f.progress * 1000) / 10}%`}</span>

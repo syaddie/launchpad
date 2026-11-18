@@ -28,6 +28,7 @@ type Event =
   | { type: 'info'; title: string; site: string | null; id: string; playlist: boolean; parts: { size: number | null }[] }
   | { type: 'progress'; part: number; downloaded: number; total: number | null; speed: number; eta: number | null }
   | { type: 'step'; step: string }
+  | { type: 'retry' }
   | { type: 'file'; path: string }
   | { type: 'done' };
 
@@ -208,6 +209,12 @@ async function runVideo(job: Job): Promise<void> {
       { cmd: 'download', url: job.url, format: v.format, dir: tmp, ffmpeg: config.ytdlpFfmpeg, node: process.execPath },
       (e) => {
         job.lastByteAt = Date.now();
+        if (e.type === 'retry' || e.type === 'info') {
+          // Starting again (or for the first time): nothing of it is downloaded yet.
+          done.length = 0;
+          Object.assign(job, { received: 0, bps: 0 });
+          Object.assign(v, { phase: 'finding', part: 0, step: null });
+        }
         if (e.type === 'info') {
           v.title = e.title || null;
           v.site = e.site ?? v.site;
