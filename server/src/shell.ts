@@ -78,6 +78,9 @@ function connectError(e: Error & { level?: string; code?: string }, keyMismatch:
   return new Error(`Couldn’t connect to ${where}: ${e.message}`);
 }
 
+/** A new SSH connection of its own, for work that outlives a request (see remote.ts). The caller ends it. */
+export const openSsh = (): Promise<Client> => connect();
+
 function connect(): Promise<Client> {
   if (!shellConfigured()) return Promise.reject(new Error('SSH isn’t set up: set SSH_HOST and SSH_USER.'));
   return new Promise((resolve, reject) => {
@@ -318,14 +321,20 @@ export async function homeDir(): Promise<string> {
   return call<string>('~', (cb) => sftp.realpath('.', cb));
 }
 
-/** A file to send to the browser as a stream. */
-export async function readFileStream(p: unknown): Promise<{ name: string; size: number; body: ReadableStream }> {
+/** A file to send to the browser as a stream, or the part of it a Range header asked for (see fileserve.ts). */
+export async function readFileStream(
+  p: unknown,
+  range?: (size: number, mtime: number) => { start: number; end: number } | 'unsatisfiable' | null,
+): Promise<{ name: string; size: number; mtime: number; part: { start: number; end: number } | 'unsatisfiable' | null; body: ReadableStream | null }> {
   const abs = cleanPath(p);
   const { sftp } = await sftpSession();
   const st = await stat(sftp, abs);
   if (kindOf(st.mode) !== 'file') throw new FileError(`${abs} isn’t a file.`);
-  const stream = sftp.createReadStream(abs);
-  return { name: path.posix.basename(abs), size: st.size, body: Readable.toWeb(stream) as ReadableStream };
+  const part = range ? range(st.size, st.mtime) : null;
+  if (part === 'unsatisfiable') return { name: path.posix.basename(abs), size: st.size, mtime: st.mtime, part, body: null };
+  // ssh2 reads from an offset itself: `end` is inclusive.
+  const stream = part ? sftp.createReadStream(abs, { start: part.start, end: part.end }) : sftp.createReadStream(abs);
+  return { name: path.posix.basename(abs), size: st.size, mtime: st.mtime, part, body: Readable.toWeb(stream) as ReadableStream };
 }
 
 export const MAX_TEXT = 1024 * 1024;
@@ -553,7 +562,7 @@ export async function runCommand(cmd: string, timeout = 30_000): Promise<{ code:
 
 export const shellQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 
-/** Delete a file, or a folder and everything in it. */
+/** Delete a file, or a folder and everything in it, for good. Deleting from the page moves things to the trash instead (trash.ts). */
 export async function remove(p: unknown): Promise<void> {
   const abs = cleanPath(p);
   if (abs === '/') throw new FileError('Launchpad won’t delete the root folder.');

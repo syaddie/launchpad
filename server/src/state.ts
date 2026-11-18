@@ -145,6 +145,9 @@ export const KEY_FIELDS: Record<string, Field[]> = {
   // So does the Minecraft tab its servers, and its restarts after a crash.
   minecraftServers: [],
   mcWatch: [],
+  // Settings › Alerts fetches these itself; the topic stays out of the page's state.
+  alertTopic: [],
+  alertMemory: [],
 };
 
 /** The fields changed store keys feed, or null when one isn't known (then send everything). */

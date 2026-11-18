@@ -1,7 +1,9 @@
 import type { DownloadJob, DownloadsInfo, InstagramInfo, McDiagnosis, McLog, McServer, McStatus, TorrentsInfo } from '../../shared/types';
 import type { ExplainResult, ExplainStatus, McBackups, McCrashes, McMeters, McPlayerAction, McPlayers } from '../../shared/types';
 import type { AppState, Backup, BackupSnapshot, CalEvent, Countdown, Craving, DirListing, DisksReport, LinkCheck, LogLine, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
+import type { AlertsInfo } from '../../shared/types';
 import type { AskResult } from '../../shared/ask';
+import type { ShellAskResult, ShellAskStatus } from '../../shared/shellAsk';
 import type { UsageReport } from '../../shared/claudeUsage';
 import { kvGet, kvSet } from './idb';
 
@@ -145,7 +147,7 @@ export class ConflictError extends Error {
   }
 }
 
-async function req<T>(method: string, url: string, body?: unknown, keepalive = false, extra?: Record<string, string>, timeoutMs?: number): Promise<T> {
+export async function req<T>(method: string, url: string, body?: unknown, keepalive = false, extra?: Record<string, string>, timeoutMs?: number): Promise<T> {
   const raw = body instanceof Blob;
   let res: Response;
   try {
@@ -260,6 +262,9 @@ export const api = {
   addSnippet: (s: Omit<Snippet, 'id'>) => req<Snippet[]>('POST', '/api/shell/snippets', s),
   editSnippet: (s: Snippet) => req<Snippet[]>('PUT', `/api/shell/snippets/${encodeURIComponent(s.id)}`, { name: s.name, command: s.command }),
   deleteSnippet: (id: string) => req<Snippet[]>('DELETE', `/api/shell/snippets/${encodeURIComponent(id)}`),
+  shellAskStatus: () => req<ShellAskStatus>('GET', '/api/shell/ask'),
+  /** A plain-English request → one command to put at the prompt; `cwd` is the shell's folder when it's known. */
+  shellAsk: (text: string, cwd: string | null) => req<ShellAskResult>('POST', '/api/shell/ask', { text, cwd }, false, undefined, 60_000),
   /** Saved Minecraft servers and any others running; `fresh` looks again rather than using the last few seconds' look. */
   minecraft: (fresh = false) => req<McStatus[]>('GET', `/api/minecraft${fresh ? '?fresh=1' : ''}`, undefined, false, undefined, 30_000),
   addMcServer: (s: Omit<McServer, 'id'>) => req<McStatus[]>('POST', '/api/minecraft/servers', s),
@@ -300,6 +305,12 @@ export const api = {
   torrentAction: (hashes: string[], action: 'stop' | 'start' | 'delete' | 'deleteFiles') => req<TorrentsInfo>('POST', '/api/torrents/action', { hashes, action }),
   /** Take a copy now and upload it to Google Drive; resolves once it's there (or failed, in `drive.lastError`). */
   copyToDrive: () => req<AppState>('POST', '/api/backup/drive', {}),
+  /** Settings › Alerts: where alerts go, what's going on and what was sent lately. */
+  alerts: () => req<AlertsInfo>('GET', '/api/alerts'),
+  /** Save the ntfy topic's address; '' turns alerts off. Refused with what's wrong with it. */
+  setAlertTopic: (topicUrl: string) => req<AlertsInfo>('PUT', '/api/alerts', { topicUrl }),
+  /** Send a test alert now; refused with why it didn't go. */
+  testAlert: () => req<AlertsInfo>('POST', '/api/alerts/test', {}),
 };
 
 /** Count an open of a bookmark (a tile, a search result, ⌘K, 1–9), for ranking results. Nothing waits on it. */

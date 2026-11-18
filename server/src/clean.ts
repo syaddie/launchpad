@@ -1,10 +1,11 @@
 // Checks for what the page sends, shared by the save routes and backup restore,
 // so a restored file can't put anything in the store a normal save couldn't.
-import { DEFAULT_ENGINES, HIDEABLE_KEYS } from '../../shared/defaults';
+import path from 'node:path';
+import { DEFAULT_ENGINES, DEFAULT_PREFS, HIDEABLE_KEYS } from '../../shared/defaults';
 import { MAX_JOURNAL } from '../../shared/trackers';
 import { parseNewsSource } from '../../shared/news';
 import { cleanKg } from '../../shared/training';
-import { DESIGN_KEYS } from '../../shared/types';
+import { ALERT_KINDS, DESIGN_KEYS } from '../../shared/types';
 import type { BookmarkGroup, Countdown, DesignKey, Mood, Note, Package, Prefs, SearchEngine, Snippet } from '../../shared/types';
 
 export const isStr = (v: unknown): v is string => typeof v === 'string';
@@ -85,9 +86,22 @@ export function cleanPrefs(body: Partial<Prefs>, prev: Prefs): Prefs {
     claudeBudget: typeof body.claudeBudget === 'number' && Number.isFinite(body.claudeBudget) ? Math.min(10_000, Math.max(0, Math.round(body.claudeBudget * 100) / 100)) : prev.claudeBudget ?? 0,
     driveBackup: typeof body.driveBackup === 'boolean' ? body.driveBackup : prev.driveBackup ?? true,
     pinnedLifts: Array.isArray(body.pinnedLifts) ? [...new Set(body.pinnedLifts.filter(isStr).map((t) => t.slice(0, 120)))].slice(0, 12) : prev.pinnedLifts,
+    alerts: { ...DEFAULT_PREFS.alerts, ...prev.alerts, ...pickBools(body.alerts, ALERT_KINDS) },
+    pinnedFolders: Array.isArray(body.pinnedFolders) ? cleanFolders(body.pinnedFolders) : prev.pinnedFolders ?? [],
   };
   if (!next.searchEngines.length) next.searchEngines = DEFAULT_ENGINES;
   return next;
+}
+
+/** Most folders Server › Files keeps pinned. */
+export const MAX_PINNED_FOLDERS = 30;
+
+/** Absolute paths, normalised, without repeats; at most 30, each up to 1,024 characters. */
+export function cleanFolders(v: unknown[]): string[] {
+  const out = v
+    .filter((p): p is string => isStr(p) && p.startsWith('/') && !p.includes('\0') && p.length <= 1024)
+    .map((p) => path.posix.normalize(p).replace(/(.)\/+$/, '$1'));
+  return [...new Set(out)].slice(0, MAX_PINNED_FOLDERS);
 }
 
 /** Only the given keys, and only where they're true or false. */

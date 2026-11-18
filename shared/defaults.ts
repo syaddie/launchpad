@@ -39,9 +39,12 @@ export const DEFAULT_PREFS: Prefs = {
   speedPlanMbps: 0,
   setsPerWeek: 10,
   pinnedLifts: [],
+  pinnedFolders: [],
   gymMonthly: 0,
   claudeBudget: 0,
   driveBackup: true,
+  // On, but nothing is sent until a topic is set in Settings › Alerts.
+  alerts: { health: true, containers: true, disks: true, minecraft: true },
   packPrice: 0,
   packSize: 20,
 };

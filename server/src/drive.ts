@@ -68,7 +68,8 @@ export function driveCopy(file: string): Buffer {
     fs.copyFileSync(file, copy);
     const db = new DatabaseSync(copy);
     try {
-      db.prepare("DELETE FROM docs WHERE key = 'google'").run();
+      // The alerts topic too: anyone with it can read the alerts.
+      db.prepare("DELETE FROM docs WHERE key IN ('google', 'alertTopic')").run();
       db.exec('VACUUM');
     } finally {
       db.close();
