@@ -29,12 +29,18 @@ export function SlotCalendar({
   today,
   codes,
   places,
+  watched,
+  jump,
   detail,
 }: {
   view: SlotView;
   today: string;
   codes: Record<string, string>;
   places: { key: string; short: string }[];
+  /** Days with a slot being watched, for a bell by the date. */
+  watched?: Set<string>;
+  /** A day to show, picked elsewhere (the list of watched slots); n changes each time. */
+  jump?: { date: string; n: number } | null;
   detail: (day: SlotDay) => ReactNode;
 }) {
   const byDate = useMemo(() => new Map(view.days.map((d) => [d.date, d])), [view.days]);
@@ -63,6 +69,12 @@ export function SlotCalendar({
     setSel(date);
     return true;
   };
+
+  useEffect(() => {
+    if (jump) pick(jump.date, 'click');
+    // Only when a day is picked from outside, not when the data changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jump]);
 
   const onKey = (e: KeyboardEvent) => {
     if (!picked) return;
@@ -95,7 +107,7 @@ export function SlotCalendar({
             {weeks.map((w) => (
               <div key={w[0]} className="nac-cal-row" role="row">
                 {w.map((date) => (
-                  <Cell key={date} date={date} day={byDate.get(date)} today={today} first={date === weeks[0][0]} on={picked?.date === date} codes={codes} onPick={() => pick(date, 'click')} />
+                  <Cell key={date} date={date} day={byDate.get(date)} today={today} first={date === weeks[0][0]} on={picked?.date === date} watched={!!watched?.has(date)} codes={codes} onPick={() => pick(date, 'click')} />
                 ))}
               </div>
             ))}
@@ -110,7 +122,7 @@ export function SlotCalendar({
   );
 }
 
-function Cell({ date, day, today, first, on, codes, onPick }: { date: string; day: SlotDay | undefined; today: string; first: boolean; on: boolean; codes: Record<string, string>; onPick: () => void }) {
+function Cell({ date, day, today, first, on, watched, codes, onPick }: { date: string; day: SlotDay | undefined; today: string; first: boolean; on: boolean; watched: boolean; codes: Record<string, string>; onPick: () => void }) {
   const n = Number(date.slice(8, 10));
   // The month goes by the 1st, and by the first day of all, so each month is named once.
   const num = (
@@ -132,7 +144,7 @@ function Cell({ date, day, today, first, on, codes, onPick }: { date: string; da
   const none = !chips.length;
   return (
     <div className="nac-cell-at" role="gridcell" aria-selected={on}>
-      <button type="button" className={cls + (on ? ' on' : '') + (none ? ' none' : '')} data-date={date} tabIndex={on ? 0 : -1} onClick={onPick} aria-label={dayLabel(day, rel)}>
+      <button type="button" className={cls + (on ? ' on' : '') + (none ? ' none' : '')} data-date={date} tabIndex={on ? 0 : -1} onClick={onPick} aria-label={dayLabel(day, rel) + (watched ? '; a slot is watched' : '')}>
         <span className="nac-cell-top">
           {num}
           {/* Cells too narrow for "★PLQ" put the star by the date instead (styles.css). */}
@@ -141,6 +153,7 @@ function Cell({ date, day, today, first, on, codes, onPick }: { date: string; da
               ★
             </span>
           )}
+          {watched && <i className="ph-duotone ph-bell-ringing nac-cell-bell" aria-hidden="true" />}
         </span>
         <span className="nac-chips" aria-hidden="true">
           {chips.map((r) => (

@@ -7,7 +7,7 @@ import { streamSSE, type SSEStreamingApi } from 'hono/streaming';
 import { changes } from './store';
 
 /** Store keys that aren't in the page's state, or change without anything on screen changing. */
-const QUIET = new Set(['gmailSeen', 'billSeen', 'registered17', 'speedTests', 'uploadDirs', 'google', 'nacPlaces']);
+const QUIET = new Set(['gmailSeen', 'billSeen', 'registered17', 'speedTests', 'uploadDirs', 'google', 'nacPlaces', 'nacWatches']);
 
 /** Writes are gathered for this long, so a sync's data and its status arrive as one message. */
 const GATHER = 300;

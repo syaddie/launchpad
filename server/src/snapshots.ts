@@ -10,7 +10,7 @@ import { snapshotDb } from './store';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
 import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
-import { cleanNacPlaces } from '../../shared/nac';
+import { cleanNacPlaces, cleanNacWatches } from '../../shared/nac';
 import { cleanDigest } from '../../shared/digest';
 import { cleanNewsLists } from '../../shared/news';
 import { cleanTraining } from '../../shared/training';
@@ -118,6 +118,7 @@ export function snapshotBackup(id: string): Backup {
       snippets: get('snippets', []),
       // Never changed then: config's four, so putting it back undoes a list changed since.
       nacPlaces: cleanNacPlaces(get('nacPlaces', null)) ?? config.nac.locations,
+      nacWatches: cleanNacWatches(get('nacWatches', [])),
     };
   } finally {
     db.close();

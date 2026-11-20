@@ -41,7 +41,7 @@ const TOPIC = 'http://203.0.113.5/launchpad-test';
 const MIN = 60_000;
 const HOUR = 60 * MIN;
 
-interface Post { url: string; title: string; body: string; priority: string; tags: string }
+interface Post { url: string; title: string; body: string; priority: string; tags: string; click?: string }
 let posts: Post[] = [];
 let answer: () => Response = () => new Response('{}', { status: 200 });
 
@@ -51,7 +51,7 @@ function stubNtfy() {
   vi.stubGlobal('fetch', vi.fn(async (url: URL | string, init: RequestInit) => {
     const h = init.headers as Record<string, string>;
     const title = h.Title.startsWith('=?UTF-8?B?') ? Buffer.from(h.Title.slice(10, -2), 'base64').toString('utf8') : h.Title;
-    posts.push({ url: String(url), title, body: String(init.body), priority: h.Priority, tags: h.Tags });
+    posts.push({ url: String(url), title, body: String(init.body), priority: h.Priority, tags: h.Tags, ...(h.Click ? { click: h.Click } : {}) });
     return answer();
   }));
 }
@@ -118,10 +118,10 @@ describe('topic address', () => {
 
 describe('alert switches in prefs', () => {
   it('are on by default and pass cleanPrefs field by field', () => {
-    expect(DEFAULT_PREFS.alerts).toEqual({ health: true, containers: true, disks: true, minecraft: true });
+    expect(DEFAULT_PREFS.alerts).toEqual({ health: true, containers: true, disks: true, minecraft: true, busking: true });
     expect(clean.cleanPrefs({}, DEFAULT_PREFS).alerts).toEqual(DEFAULT_PREFS.alerts);
     const off = clean.cleanPrefs({ alerts: { containers: false } as never }, DEFAULT_PREFS).alerts;
-    expect(off).toEqual({ health: true, containers: false, disks: true, minecraft: true });
+    expect(off).toEqual({ health: true, containers: false, disks: true, minecraft: true, busking: true });
     // Junk is dropped; what was there stays.
     const junk = clean.cleanPrefs({ alerts: { containers: 'no', disks: false, evil: true } as never }, { ...DEFAULT_PREFS, alerts: off });
     expect(junk).toMatchObject({ alerts: { health: true, containers: false, disks: false, minecraft: true } });
@@ -174,6 +174,16 @@ describe('publishing to ntfy', () => {
     expect(posts).toEqual([{ url: TOPIC, title: 'plex stopped', body: 'Docker says: Exited (1).', priority: '4', tags: 'warning' }]);
     await notify.publish(TOPIC, { title: 'plex is running again', body: '', type: 'fixed' });
     expect(posts[1]).toMatchObject({ priority: '3', tags: 'white_check_mark', body: 'plex is running again' });
+  });
+
+  it('adds a link to open when it’s tapped, only a plain https one', async () => {
+    const nac = 'https://eservices.nac.gov.sg/Busking/locations/c6f63ddc-3926-4a83-b59f-e7904989c7a0/events';
+    await notify.publish(TOPIC, { title: 'Busking slot free', body: '2 PM – 4 PM', type: 'event', click: nac });
+    expect(posts[0].click).toBe(nac);
+    for (const click of ['http://example.com/', 'javascript:alert(1)', 'https://a b', 'https://x.test/' + 'a'.repeat(600)]) {
+      await notify.publish(TOPIC, { title: 't', body: '', type: 'event', click });
+      expect(posts[posts.length - 1].click).toBeUndefined();
+    }
   });
 
   it('never sends to the server itself', async () => {

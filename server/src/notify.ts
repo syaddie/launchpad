@@ -31,6 +31,8 @@ export interface Outgoing {
   type: 'problem' | 'fixed' | 'event';
   title: string;
   body?: string;
+  /** An https address the phone opens when the alert is tapped. */
+  click?: string;
 }
 
 /** What the phone has been told, kept in the store so a restart doesn't repeat it. */
@@ -166,7 +168,12 @@ export interface Message {
   title: string;
   body: string;
   type: AlertRecord['type'];
+  /** An https address the phone opens when it's tapped (ntfy's Click); anything else is left out. */
+  click?: string;
 }
+
+/** `click` when it's a plain https address, for ntfy's Click header. */
+export const clickUrl = (click: string | undefined) => (click && /^https:\/\/[^\s"'<>]+$/.test(click) && click.length <= 500 ? click : null);
 
 /**
  * Post one message to an ntfy topic. Goes through the same checks as every address Launchpad
@@ -188,6 +195,7 @@ export async function publish(topicUrl: string, msg: Message): Promise<void> {
           Title: encodeHeader(scrub(msg.title, 200)),
           Priority: msg.type === 'problem' || msg.type === 'event' ? '4' : '3',
           Tags: TAGS[msg.type],
+          ...(clickUrl(msg.click) ? { Click: clickUrl(msg.click)! } : {}),
         },
         body: scrub(msg.body, 1000) || scrub(msg.title, 200),
       });
@@ -358,7 +366,7 @@ export function deliver(o: Outgoing, onSent?: (m: AlertMemory) => void): Promise
       return 'capped';
     }
     try {
-      await publish(url, { title: o.title, body: o.body ?? '', type: o.type });
+      await publish(url, { title: o.title, body: o.body ?? '', type: o.type, click: o.click });
     } catch (e) {
       failed(m, e, now);
       return 'failed';
@@ -389,14 +397,14 @@ export type NotifyResult = 'sent' | 'off' | 'no-topic' | 'repeat' | 'capped' | '
  * again within 10 minutes is dropped, and the caps count per key. Nothing is sent while
  * alerts of this kind are off or no topic is set. Never throws.
  */
-export async function notify(a: { kind: AlertKind; key: string; title: string; body?: string }): Promise<NotifyResult> {
+export async function notify(a: { kind: AlertKind; key: string; title: string; body?: string; click?: string }): Promise<NotifyResult> {
   try {
     if (!kindOn(a.kind)) return 'off';
     if (!topicUrl()) return 'no-topic';
     const now = Date.now();
     const last = lastEvents.get(a.key);
     if (last && last.title === a.title && now - last.at < REPEAT_AFTER) return 'repeat';
-    const r = await deliver({ key: a.key, kind: a.kind, type: 'event', title: a.title, body: a.body });
+    const r = await deliver({ key: a.key, kind: a.kind, type: 'event', title: a.title, body: a.body, click: a.click });
     if (r === 'sent') lastEvents.set(a.key, { title: a.title, at: now });
     return r;
   } catch (e) {

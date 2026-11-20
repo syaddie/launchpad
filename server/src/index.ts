@@ -53,7 +53,7 @@ import { alertsInfo, sendTest, setTopicUrl } from './notify';
 import { startAlerts } from './alerts';
 import { startMcAlerts } from './mc-alerts';
 import { startUnpacking, unpackRecords } from './unpack';
-import { addPlace, editPlaces, lookupPlace, NacError, nacStatus, requestNacCheck, startNac } from './nac';
+import { addPlace, addWatch, editPlaces, lookupPlace, NacError, nacStatus, removeWatch, requestNacCheck, startNac } from './nac';
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
 import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
@@ -1361,6 +1361,14 @@ app.put('/api/nac/places', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   return nacTry(c, () => (editPlaces(body?.places), c.json(nacStatus())));
 });
+
+/** Watch a slot: the phone is told once when any of it frees up (nac.ts alertWatches). */
+app.post('/api/nac/watches', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  return nacTry(c, () => (addWatch(body ?? {}), c.json(nacStatus())));
+});
+
+app.delete('/api/nac/watches/:id', (c) => (removeWatch(c.req.param('id')), c.json(nacStatus())));
 
 // ---------- errors ----------
 

@@ -46,7 +46,7 @@ export const DEFAULT_PREFS: Prefs = {
   claudeBudget: 0,
   driveBackup: true,
   // On, but nothing is sent until a topic is set in Settings › Alerts.
-  alerts: { health: true, containers: true, disks: true, minecraft: true },
+  alerts: { health: true, containers: true, disks: true, minecraft: true, busking: true },
   autoUnpack: false,
   packPrice: 0,
   packSize: 20,
