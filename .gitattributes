@@ -1,0 +1,4 @@
+# Saved responses are data, not text to tidy: every checkout gets the same bytes (CRLF line
+# endings and all), so the tests read the same pages on Windows and on Linux.
+test/fixtures/nac/**/*.html -text
+test/fixtures/nac/**/*-more.json -text
