@@ -811,14 +811,67 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .dg-card .icon-btn.on { background: transparent; color: var(--ac); }
 .dg-body { display: flex; flex-direction: column; gap: 10px; padding: 0 10px; }
 .dg-body p { margin: 0; line-height: 1.55; text-wrap: pretty; color: var(--t2); }
+.dg-lead { display: flex; flex-direction: column; gap: 3px; }
 .dg-title { margin: 0; font-family: var(--f-display); font-size: 24px; font-weight: 600; line-height: 1.2; letter-spacing: -0.01em; color: var(--tx); text-wrap: balance; }
-.dg-body p.dg-hook { font-size: 15px; color: var(--tx); }
-.dg-example { padding: 10px 12px; border-radius: var(--r-m); background: var(--hv); }
-.dg-example .label { margin-bottom: 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--t3); }
+.dg-body p.dg-hook { font-size: 14px; color: var(--t3); }
+.dg-body p.dg-gist { font-size: 15px; line-height: 1.5; color: var(--tx); }
+/* A formula on its own line; a long one scrolls sideways rather than pushing the card wider. */
+.dg-formula { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; padding: 4px 12px 8px; border-radius: var(--r-m); background: var(--hv); color: var(--tx); }
+.dg-formula > .tex-display { align-self: stretch; }
+.dg-body p.dg-where { font-size: 12px; line-height: 1.45; color: var(--t3); text-align: center; }
+.dg-example { min-width: 0; padding: 10px 12px; border-radius: var(--r-m); background: var(--hv); }
 .dg-body .dg-example p { white-space: pre-wrap; color: var(--tx); }
-.dg-body .dg-example p.dg-code { font-family: var(--f-mono); font-size: 12px; line-height: 1.6; overflow-x: auto; overflow-wrap: normal; white-space: pre; }
+.dg-example pre.dg-code { margin: 0; font-family: var(--f-mono); font-size: 12px; line-height: 1.6; color: var(--tx); overflow-x: auto; overflow-wrap: normal; white-space: pre; }
+/* On a phone a long line wraps rather than hiding off the edge. */
+[data-layout='narrow'] .dg-example pre.dg-code { white-space: pre-wrap; overflow-wrap: anywhere; }
 .dg-body p.dg-takeaway { display: flex; gap: 8px; font-weight: 500; color: var(--tx); }
 .dg-takeaway i { flex: none; margin-top: 3px; font-size: 16px; color: var(--ac); }
+
+/* The quick check under the gist: three short answers, one tap. */
+.dg-check { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; border: 1px solid var(--ln); border-radius: var(--r-m); }
+.dg-body p.dg-check-q { font-size: 14px; line-height: 1.45; color: var(--tx); }
+.dg-check-label { display: block; margin-bottom: 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--t3); }
+/* Short answers share a line; a long one takes the row. */
+.dg-check-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.dg-option.sm { flex: 1 1 auto; align-items: center; gap: 7px; max-width: 100%; padding: 5px 10px 5px 6px; border-radius: 999px; font-size: 13px; line-height: 1.35; }
+.dg-option.sm .dg-letter { width: 18px; height: 18px; font-size: 10px; }
+.dg-option.sm > i { margin-top: 0; font-size: 16px; }
+.dg-body p.dg-check-why { font-size: 13px; line-height: 1.5; }
+.dg-check.right .dg-check-why b { color: var(--acd); }
+.dg-check.wrong .dg-check-why b { color: var(--wn); }
+
+/* More on a lesson, one part at a time: how it works, an example, follow-up questions. */
+.dg-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.dg-pill { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 3px 11px; border: 1px solid var(--ln); border-radius: 999px; background: transparent; color: var(--t2); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; transition: background 0.12s, border-color 0.12s, color 0.12s; }
+.dg-pill:hover { background: var(--hv); color: var(--tx); }
+.dg-pill.on { border-color: transparent; background: var(--act); color: var(--acd); }
+.dg-pill i { font-size: 14px; }
+.dg-pill .tab-count { margin-left: 1px; }
+.dg-pill.on .tab-count { background: var(--bg); }
+.dg-section { display: flex; flex-direction: column; gap: 8px; min-width: 0; animation: dgOpen 0.16s var(--ease); }
+@keyframes dgOpen { from { opacity: 0; transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .dg-section { animation: none; } }
+.dg-points { margin: 0; padding: 0 0 0 18px; gap: 6px; }
+.dg-points li { padding-left: 2px; line-height: 1.5; color: var(--t2); text-wrap: pretty; }
+.dg-points li::marker { color: var(--ac); }
+.dg-ask { gap: 10px; }
+.dg-qa { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding-left: 10px; border-left: 2px solid var(--ac); }
+.dg-body p.dg-qa-q { font-size: 13px; font-weight: 600; color: var(--tx); }
+.dg-body p.dg-qa-a { font-size: 13px; line-height: 1.5; white-space: pre-line; }
+.dg-body p.dg-thinking { display: flex; align-items: center; gap: 6px; color: var(--t3); }
+.dg-ask-ideas { display: flex; flex-wrap: wrap; gap: 6px; }
+.dg-ask-form { display: flex; gap: 6px; }
+.dg-ask-form .input { flex: 1; min-width: 0; }
+.dg-ask-form .btn { flex: none; }
+.dg-body p.dg-ask-error { display: flex; gap: 6px; font-size: 12px; color: var(--wn); }
+.dg-ask-error i { flex: none; margin-top: 2px; }
+
+/* Maths (KaTeX). Its own fonts, at the size of the text around it, in the text's colour. */
+.digest .katex { font-size: 1.1em; }
+.digest .tex-display { display: block; max-width: 100%; overflow-x: auto; overflow-y: hidden; }
+.digest .tex-display .katex-display { margin: 0.35em 0; }
+.digest .dg-formula .katex { font-size: 1.3em; }
+.tex-raw { font-family: var(--f-mono); font-size: 0.9em; overflow-wrap: anywhere; }
 .dg-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; margin-top: 14px; padding: 10px 6px 0; border-top: 1px solid var(--ln); }
 .dg-rate { display: inline-flex; flex-wrap: wrap; gap: 2px; }
 .dg-foot .btn.on { background: var(--act); color: var(--acd); }

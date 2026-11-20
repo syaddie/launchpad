@@ -243,28 +243,57 @@ export interface DigestRecall {
 /** "Too basic" or "Too deep" on a lesson; Claude pitches the subject's next ones from it. */
 export type DigestFeedback = '' | 'basic' | 'deep';
 
-/** One lesson in the daily digest (shared/digest.ts). */
+/** A follow-up question asked on a lesson, with Claude's short answer. */
+export interface DigestAsk {
+  q: string;
+  /** Plain text, maths in LaTeX between $…$ (shared/math.ts). */
+  a: string;
+  at: string;
+}
+
+/**
+ * One lesson in the daily digest (shared/digest.ts). Lessons written before the digest went
+ * short have `body` paragraphs and a `takeaway` but no `gist`, `points` or `check`; newer ones
+ * the other way round. Text may have maths in LaTeX between $…$ (shared/math.ts).
+ */
 export interface DigestCard {
   id: string;
   /** What it was written for, as in prefs.digestSubjects. */
   subject: string;
   /** The concept's usual name. */
   title: string;
-  /** One sentence on why it's worth knowing. */
+  /** A one-line teaser: why it's worth a look. */
   hook: string;
-  /** Short paragraphs explaining it. */
+  /** The idea in a sentence or two ('' on lessons from before). */
+  gist: string;
+  /** Its key formula in LaTeX, without dollar signs, or ''. */
+  formula: string;
+  /** What the formula's symbols stand for, one line. */
+  where: string;
+  /** Two or three short lines on how it works ([] on lessons from before). */
+  points: string[];
+  /** Lessons from before: short paragraphs explaining it. */
   body: string[];
   /** A small worked example, as plain text (it may be a few lines of code or a sum). */
   example: string;
-  /** One line to remember. */
+  /** The example is code: shown in the mono font, with no maths read from it. */
+  exampleCode: boolean;
+  /** Lessons from before: one line to remember. */
   takeaway: string;
   /** Words to look it up by, for "Go deeper". */
   search: string;
+  /** The quick question on the card itself, answered there and then. */
+  check: DigestQuiz | null;
+  /** The option picked in `check`, or -1 before it's answered. */
+  checked: number;
+  /** The question Quick recall asks a few days later. */
   quiz: DigestQuiz | null;
   starred: boolean;
   feedback: DigestFeedback;
   /** Oldest first. */
   recalls: DigestRecall[];
+  /** Follow-up questions, oldest first. */
+  asks: DigestAsk[];
 }
 
 export interface DigestDay {

@@ -18,6 +18,8 @@ export const config = {
   anthropicKey: env.ANTHROPIC_API_KEY || '',
   /** Claude model that writes the daily digest's lessons. Opus by default: they teach, so they have to be right, and it's one call a day. */
   digestModel: env.DIGEST_MODEL || 'claude-opus-5-5',
+  /** Claude model that answers follow-up questions on a lesson. Sonnet: quick, and each question is a call of its own. */
+  digestAskModel: env.DIGEST_ASK_MODEL || 'claude-sonnet-5-5',
   /** Claude model that writes the inbox digests. */
   inboxModel: env.INBOX_MODEL || 'claude-haiku-5-5',
   /** Claude model that labels exercises and writes the training note. */

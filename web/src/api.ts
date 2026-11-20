@@ -2,7 +2,7 @@ import type { DownloadJob, DownloadsInfo, InstagramInfo, McDiagnosis, McLog, McS
 import type { ExplainResult, ExplainStatus, McBackups, McCrashes, McMeters, McPlayerAction, McPlayers } from '../../shared/types';
 import type { TorrentFile, TorrentOptions, TorrentSpeed, VideoFormat } from '../../shared/types';
 import type { ArchiveCard } from '../../shared/digest';
-import type { AppState, Backup, BackupSnapshot, CalEvent, Countdown, Craving, DigestFeedback, DirListing, DisksReport, LinkCheck, LogLine, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
+import type { AppState, Backup, BackupSnapshot, CalEvent, Countdown, Craving, DigestCard, DigestFeedback, DirListing, DisksReport, LinkCheck, LogLine, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
 import type { AlertsInfo } from '../../shared/types';
 import type { AskResult } from '../../shared/ask';
 import type { ShellAskResult, ShellAskStatus } from '../../shared/shellAsk';
@@ -221,8 +221,11 @@ export const api = {
   keepNoteVersion: (id: string) => req<NoteVersion[]>('POST', `/api/notes/${encodeURIComponent(id)}/history`, {}),
   /** Start checking every bookmark for ones that no longer open; the result comes through the change stream. */
   checkLinks: () => req<LinkCheck>('POST', '/api/bookmarks/check', {}),
-  /** Star a lesson in the daily digest, or say it was too basic or too deep ('' clears that). */
-  markLesson: (id: string, patch: { starred?: boolean; feedback?: DigestFeedback }) => req<Partial<AppState>>('PATCH', `/api/digest/cards/${encodeURIComponent(id)}`, patch),
+  /** Star a lesson in the daily digest, say it was too basic or too deep ('' clears that), or answer its quick check. */
+  markLesson: (id: string, patch: { starred?: boolean; feedback?: DigestFeedback; checked?: number }) => req<Partial<AppState>>('PATCH', `/api/digest/cards/${encodeURIComponent(id)}`, patch),
+  /** A follow-up question on a lesson; Claude answers in a few seconds. The lesson comes back with it. */
+  askLesson: (id: string, question: string) =>
+    req<Partial<AppState> & { lesson: DigestCard }>('POST', `/api/digest/cards/${encodeURIComponent(id)}/ask`, { question }, false, undefined, 90_000),
   /** Today's lesson on that subject, written again on another concept. Claude takes a little while. */
   swapLesson: (id: string) => req<Partial<AppState>>('POST', `/api/digest/cards/${encodeURIComponent(id)}/swap`, {}, false, undefined, 120_000),
   answerRecall: (cardId: string, choice: number) => req<Partial<AppState>>('POST', '/api/digest/recall', { cardId, choice }),

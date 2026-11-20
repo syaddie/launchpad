@@ -1,9 +1,11 @@
-// The daily digest: one short lesson a day for each subject followed (prefs.digestSubjects),
-// written by Claude on the server (server/src/digest.ts). Every day is kept, so past lessons
-// can be searched and starred, and Quick recall asks one question a day about a lesson from
-// a few days back: right answers push its next turn further out, a wrong one brings it back soon.
+// The daily digest: one bite-sized lesson a day for each subject followed (prefs.digestSubjects),
+// written by Claude on the server (server/src/digest.ts): the idea in a sentence or two, its
+// formula if it has one, a quick question to answer on the spot, and more for whoever taps in,
+// with follow-up questions answered by Claude. Every day is kept, so past lessons can be searched
+// and starred, and Quick recall asks one question a day about a lesson from a few days back:
+// right answers push its next turn further out, a wrong one brings it back soon.
 import { addDays, dayDiff, parseYmd, startOfDay, ymd } from './dates';
-import type { DigestCard, DigestDay, DigestFeedback, DigestQuiz, DigestRecall, DigestStore, RecallQuestion } from './types';
+import type { DigestAsk, DigestCard, DigestDay, DigestFeedback, DigestQuiz, DigestRecall, DigestStore, RecallQuestion } from './types';
 
 /** The subjects a new Launchpad follows. */
 export const DEFAULT_SUBJECTS = ['Software engineering', 'Data science and ML', 'Mechanical and aerospace', 'Anything curious'];
@@ -22,6 +24,10 @@ export const FIRST_RECALL_DAYS = 3;
 export const RECALL_GAPS = [7, 21, 60];
 /** Days to the next recall after a wrong answer. */
 export const RETRY_DAYS = 2;
+/** Follow-up questions kept on a lesson (the newest), and how long each question and answer can be. */
+export const MAX_ASKS = 12;
+export const MAX_ASK_LEN = 300;
+export const MAX_ANSWER_LEN = 1500;
 
 export const EMPTY_DIGEST: DigestStore = { days: [], skipped: [], error: null };
 
@@ -52,6 +58,17 @@ function cleanQuiz(v: unknown): DigestQuiz | null {
   return { question, options, answer, why: text(q.why, 600) };
 }
 
+function cleanAsks(v: unknown): DigestAsk[] {
+  return (Array.isArray(v) ? v : [])
+    .filter((a): a is DigestAsk => !!a && isTime(a.at))
+    .map((a) => ({ q: text(a.q, MAX_ASK_LEN), a: text(a.a, MAX_ANSWER_LEN), at: a.at }))
+    .filter((a) => a.q && a.a)
+    .slice(-MAX_ASKS);
+}
+
+/** Lines that look like code (indentation, brackets, operators): for lessons written before Claude said which examples are. */
+export const looksLikeCode = (s: string) => s.split('\n').filter((l) => /^\s{2,}\S|[{};]\s*$|=>|==|\w+\(.*\)\s*$/.test(l)).length >= 2;
+
 function cleanRecalls(v: unknown, options: number): DigestRecall[] {
   return (Array.isArray(v) ? v : [])
     .filter((r): r is DigestRecall => !!r && isTime(r.at) && typeof r.right === 'boolean')
@@ -60,31 +77,47 @@ function cleanRecalls(v: unknown, options: number): DigestRecall[] {
     .slice(-20);
 }
 
+const lines = (v: unknown, max: number, n: number) => (Array.isArray(v) ? v : []).map((p) => text(p, max)).filter(Boolean).slice(0, n);
+
 /**
  * One lesson, as the store keeps it, or null when it's missing what the page needs (a subject,
- * a title, something to read). `id` is kept when it's there; Claude's new cards are given one first.
+ * a title, something to read: the gist, or the paragraphs of a lesson from before).
+ * `id` is kept when it's there; Claude's new cards are given one first.
  */
 export function cleanCard(v: unknown): DigestCard | null {
   const c = (v && typeof v === 'object' ? v : {}) as Partial<DigestCard>;
   const id = text(c.id, 40);
   const subject = text(c.subject, MAX_SUBJECT_LEN);
   const title = text(c.title, 120);
-  const body = (Array.isArray(c.body) ? c.body : []).map((p) => text(p, 2000)).filter(Boolean).slice(0, 6);
-  if (!id || !subject || !title || !body.length) return null;
+  const gist = text(c.gist, 600);
+  const body = lines(c.body, 2000, 6);
+  if (!id || !subject || !title || (!gist && !body.length)) return null;
+  const formula = text(c.formula, 400);
+  const example = text(c.example, 2500);
   const quiz = cleanQuiz(c.quiz);
+  const check = cleanQuiz(c.check);
+  const checked = check && typeof c.checked === 'number' && Number.isInteger(c.checked) && c.checked >= 0 && c.checked < check.options.length ? c.checked : -1;
   return {
     id,
     subject,
     title,
     hook: text(c.hook, 400),
+    gist,
+    formula,
+    where: formula ? text(c.where, 400) : '',
+    points: lines(c.points, 400, 4),
     body,
-    example: text(c.example, 2500),
+    example,
+    exampleCode: typeof c.exampleCode === 'boolean' ? c.exampleCode : looksLikeCode(example),
     takeaway: text(c.takeaway, 400),
     search: text(c.search, 120) || title,
+    check,
+    checked,
     quiz,
     starred: c.starred === true,
     feedback: (['basic', 'deep'] as const).includes(c.feedback as 'basic') ? (c.feedback as DigestFeedback) : '',
     recalls: quiz ? cleanRecalls(c.recalls, quiz.options.length) : [],
+    asks: cleanAsks(c.asks),
   };
 }
 
@@ -183,7 +216,7 @@ export function recallQuestion(digest: DigestStore, now: Date): RecallQuestion |
     title: r.card.title,
     question: quiz.question,
     options: quiz.options,
-    answered: r.answered && { choice: r.answered.choice, right: r.answered.right, answer: quiz.answer, why: quiz.why, takeaway: r.card.takeaway },
+    answered: r.answered && { choice: r.answered.choice, right: r.answered.right, answer: quiz.answer, why: quiz.why, takeaway: r.card.takeaway || r.card.gist },
   };
 }
 
@@ -191,7 +224,7 @@ export function recallQuestion(digest: DigestStore, now: Date): RecallQuestion |
 export const isLearnt = (card: DigestCard) => !!card.quiz && card.recalls.length > RECALL_GAPS.length && card.recalls.slice(-RECALL_GAPS.length - 1).every((r) => r.right);
 
 export interface ArchiveQuery {
-  /** Words to find in the subject, title, hook, text, example or takeaway. */
+  /** Words to find anywhere in a lesson: its subject, title, text, example, questions or follow-ups. */
   q?: string;
   subject?: string;
   starred?: boolean;
@@ -211,7 +244,7 @@ export function searchArchive(digest: DigestStore, query: ArchiveQuery): { cards
       if (query.subject && !sameSubject(c.subject, query.subject)) continue;
       if (query.starred && !c.starred) continue;
       if (words.length) {
-        const hay = [c.subject, c.title, c.hook, ...c.body, c.example, c.takeaway].join('\n').toLowerCase();
+        const hay = [c.subject, c.title, c.hook, c.gist, c.formula, c.where, ...c.points, ...c.body, c.example, c.takeaway, ...c.asks.flatMap((a) => [a.q, a.a])].join('\n').toLowerCase();
         if (!words.every((w) => hay.includes(w))) continue;
       }
       matches.push({ ...c, date: d.date });
