@@ -56,7 +56,7 @@ export const DEFAULT_PREFS: Prefs = {
 export const HIDEABLE = {
   panel: ['today', 'briefing', 'tasks', 'notes', 'packages', 'photos', 'bookmarks'],
   top: ['weather', 'air', 'cig', 'training', 'countdown'],
-  view: ['digest', 'inbox', 'you', 'training', 'learn', 'money', 'server', 'review'],
+  view: ['digest', 'inbox', 'you', 'training', 'learn', 'money', 'server', 'review', 'music'],
 } as const;
 
 export const HIDEABLE_KEYS: string[] = Object.entries(HIDEABLE).flatMap(([k, v]) => v.map((x) => `${k}:${x}`));

@@ -296,6 +296,7 @@ a.hz-row:hover .hz-grow { text-decoration: underline; }
   --t-peri: #dfe1ff; --i-peri: #2b3480;
   --t-mint: #cdf3dc; --i-mint: #0f5132;
   --t-slate: #e1e7ee; --i-slate: #1f3347;
+  --t-teal: #c8f0ec; --i-teal: #0b4f4a;
   color-scheme: light;
 }
 :root[data-design='bento'][data-mode='dark'][data-accent] {
@@ -324,6 +325,7 @@ a.hz-row:hover .hz-grow { text-decoration: underline; }
   --t-peri: #23264a; --i-peri: #c5c9ff;
   --t-mint: #153325; --i-mint: #9fe6bd;
   --t-slate: #1f2833; --i-slate: #c4d2e2;
+  --t-teal: #12302d; --i-teal: #9fe3da;
   color-scheme: dark;
 }
 .lp-root[data-design='bento'] { --tint: var(--sf); --ink: var(--tx); }
@@ -335,6 +337,7 @@ a.hz-row:hover .hz-grow { text-decoration: underline; }
 .lp-root[data-design='bento'][data-view='money'] { --tint: var(--t-mint); --ink: var(--i-mint); }
 .lp-root[data-design='bento'][data-view='server'] { --tint: var(--t-slate); --ink: var(--i-slate); }
 .lp-root[data-design='bento'][data-view='review'] { --tint: var(--t-lilac); --ink: var(--i-lilac); }
+.lp-root[data-design='bento'][data-view='music'] { --tint: var(--t-teal); --ink: var(--i-teal); }
 /* Each view's accents take its colour. */
 .lp-root[data-design='bento']:not([data-view='home']) { --act: var(--tint); --acd: var(--ink); }
 
@@ -400,6 +403,7 @@ a.hz-row:hover .hz-grow { text-decoration: underline; }
 [data-design='bento'] .rail-btn[data-view='money'] .rail-dot { background: #7fdba6; }
 [data-design='bento'] .rail-btn[data-view='server'] .rail-dot { background: #b7c3d0; }
 [data-design='bento'] .rail-btn[data-view='review'] .rail-dot { background: #d9c4ff; }
+[data-design='bento'] .rail-btn[data-view='music'] .rail-dot { background: #7fd6cc; }
 [data-design='bento'] .rail-badge { position: static; order: 3; background: var(--wn); color: #fff; }
 [data-design='bento'] .rail-sep { width: 1px; height: auto; margin: 8px 4px; background: #3a3d45; }
 [data-design='bento'] .lp-inner, [data-design='bento'] .lp-shell > .lp-inner { height: 100%; padding: 18px 24px 84px; gap: 12px; }
@@ -902,6 +906,38 @@ a.hz-row:hover .hz-grow { text-decoration: underline; }
 [data-design='poster'] .rail-sep { background: color-mix(in srgb, var(--bg) 30%, transparent); }
 .lp-root[data-design='poster']:not([data-layout='narrow']) .lp-shell > .lp-inner { padding-left: 30px; }
 [data-layout='wide'][data-design='poster'] .lp-shell > .lp-inner { padding-left: 64px; }
-.lp-root[data-layout='narrow'][data-design='poster'] .rail { background: var(--tx); backdrop-filter: none; box-shadow: none; }
+/* As heavy a selector as the phones' sticky rail under Broadsheet (and later), or that one's pale
+   background wins and the pale buttons on it can't be seen. */
+.lp-root[data-layout='narrow'][data-design='poster']:not([data-design='console']) .rail { background: var(--tx); backdrop-filter: none; box-shadow: none; }
+/* Its capitals are wider than a phone's 42px buttons; the row scrolls, so each takes what its name needs. */
+.lp-root[data-layout='narrow'][data-design='poster'] .rail-btn { width: auto; min-width: 46px; padding: 0 6px; }
 /* The quick check on a lesson: a right answer in ink too. */
 [data-design='poster'] .dg-check.right .dg-check-why b { color: var(--tx); }
+
+/* ---------- Music › Busking slots in each design (base styles in styles.css) ---------- */
+
+[data-design='console'] .nac-day, [data-design='console'] .nac-free, [data-design='console'] .nac-new, [data-design='console'] .nac-warn { border-radius: 0; }
+[data-design='console'] .nac-day { box-shadow: inset 0 0 0 1px var(--ln); }
+[data-design='console'] .nac-date { font-size: 12.5px; }
+[data-design='console'] .nac-row { font-size: 12.5px; }
+/* Bento: the panel takes the view's colour; the days are white tiles on it. */
+[data-design='bento'] .nac-day { background: var(--sf); color: var(--tx); box-shadow: none; border-radius: 16px; }
+[data-design='bento'] .nac-free { border-radius: 8px; }
+[data-design='bento'] .nac-new { border-radius: 6px; }
+[data-design='bento'] .nac-warn { border-radius: 14px; }
+/* Horizon: each day under a rule, like its home's columns. */
+[data-design='horizon'] .nac-day { box-shadow: none; border: 1px solid var(--ln); border-top: 2px solid var(--tx); border-radius: 0 0 8px 8px; }
+[data-design='horizon'] .nac-day.none { border-top-color: var(--ln); }
+[data-design='horizon'] .nac-date { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+/* Vista: lighter glass on the panel's glass. */
+[data-design='vista'] .nac-day { background: color-mix(in srgb, var(--rz) 34%, transparent); }
+[data-design='vista'] .nac-free { border-radius: 999px; padding: 0 9px; }
+/* Poster: a rule over each day, capitals, and free slots boxed in ink (its red is for what's new). */
+[data-design='poster'] .nac-day { box-shadow: none; border-top: 3px solid var(--tx); border-radius: 0; padding: 10px 2px 4px; }
+[data-design='poster'] .nac-day.none { border-top-color: var(--ln); }
+[data-design='poster'] .nac-date { font-size: 13px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+[data-design='poster'] .nac-rel { color: var(--ac); }
+[data-design='poster'] .nac-free { background: transparent; box-shadow: inset 0 0 0 2px var(--tx); color: var(--tx); }
+[data-design='poster'] .nac-new { border-radius: 0; }
+[data-design='poster'] .nac-mine { color: var(--tx); }
+[data-design='poster'] .nac-mine > [aria-hidden] { color: var(--ac); }

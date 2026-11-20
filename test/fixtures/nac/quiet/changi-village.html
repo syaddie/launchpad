@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Busking - Public Location</title>
+    <link href="/Busking/Content/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="/Busking/Content/css/style.css" rel="stylesheet" />
+</head>
+<body>
+    <div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="profile-details">
+                <div class="row">
+                    <div class="col-12 col-lg-1">
+
+                    </div>
+                    <div class="col-12 col-lg-3">
+                        <figure>
+
+            <img src="/Busking/booking/GetAppImage?id=8f102e44-7f8d-45bc-a1da-50aa8a6202fc" alt="Location.png" class="img-fluid" id="profileImage" onerror="this.onerror=null; this.src='~/Content/images/userprofile-default.jpg'" />
+
+                        </figure>
+                    </div>
+                    <div class="col-12 col-lg-7">
+                        <div class="profile-details-content">
+                            <div class="align-self-center">
+                                <div id="div-header">
+                                    <h2>
+                                        CHANGI VILLAGE - SPACE BETWEEN BLK 2 &amp; 3
+                                    </h2>
+                                    <span><img src="/Busking/Content/images/feather-icon.png" alt="">East</span>
+                                    <p>
+                                        <strong class='highlight-orange'>Orange zone</strong> - Maximum sound level of 75db (measured at the source/ amplifier). Made-up text for a test page.
+                                    </p>
+                                    <ul>
+                                        <li class="dash-bx-times">
+                                            <img src="/Busking/Content/images/tem-location.png" class="img-fluid" alt="" />  Changi Village Road, between Blk 2 and Blk 3.
+                                        </li>
+                                        <li class="dash-bx-times">
+                                            <img src="/Busking/Content/images/red-clock.png" class="img-fluid" alt="" />
+                                            10:00:AM - 10:00:PM
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-lg-1">
+
+                    </div>
+                </div>
+                <div class="public-bg upcoming-events br-2" id="div-bookinglist">
+                    <div class="fadeInDown animated">
+
+                            <div id="div-booking-result-view" class="row mt-4 row-cuttor">
+
+
+                            </div>
+                            <div class="text-center mt-4">
+                                <button type="button" class="btn btn-light" id="div-load-booking-grid-more" style="width:250px">Load more</button>
+                            </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <input type="hidden" id="locationId" value="8f102e44-7f8d-45bc-a1da-50aa8a6202fc" />
+    <input type="hidden" id="skip" value="12" />
+    <input type="hidden" id="take" value="12" />
+    </div>
+    <footer>
+        <p>©2026 Government of Singapore</p>
+    </footer>
+    <input type="hidden" id="baseUrl" value="https://eservices.nac.gov.sg/Busking" />
+    <input type="hidden" name="zone" id="zone" value="Internet" />
+        <script src="/Busking/Content/vendor/jquery/jquery.min.js" nonce="00000000"></script>
+            <script src="/Busking/Content/js/app/PublicLocation.js" nonce="00000000"></script>
+        <script src="/Busking/Content/js/app/SharedEventView.js?v=1.2" nonce="00000000"></script>
+</body>
+</html>

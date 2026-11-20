@@ -114,6 +114,7 @@ export function paletteItems(c: PaletteContext): PaletteItem[] {
       ? [{ id: 'a:event', group: 'Actions', label: 'Add a calendar event', icon: 'ph-calendar-plus', words: 'google calendar meeting appointment schedule', sub: 'Or type “event”, then what and when', run: c.openAddEvent }]
       : []),
     { id: 'a:lessons', group: 'Actions', label: 'Search past lessons', icon: 'ph-lightbulb', words: 'digest learn archive concepts starred', run: () => c.openDigestTab('archive') },
+    { id: 'a:slots', group: 'Actions', label: 'Find a free busking slot', icon: 'ph-music-notes', words: 'music nac busk busking slot slots book booking free tampines pasir ris paya lebar changi village', run: () => setView('music') },
     ...readingItems(c),
     // Notepads by name, tag or anything in them, once something's typed.
     ...data.notes.map((n) => ({

@@ -68,7 +68,7 @@ export type DesignKey = 'broadsheet' | 'console' | 'bento' | 'horizon' | 'vista'
 export const DESIGN_KEYS: DesignKey[] = ['broadsheet', 'console', 'bento', 'horizon', 'vista', 'focus', 'poster'];
 export type GoogleSource = 'calendar' | 'tasks' | 'gmail';
 export type SourceKey = GoogleSource | 'carriers' | 'digest' | 'inbox' | 'weather' | 'speedtest';
-export type ViewKey = 'home' | 'digest' | 'inbox' | 'you' | 'training' | 'learn' | 'money' | 'server' | 'review';
+export type ViewKey = 'home' | 'digest' | 'inbox' | 'you' | 'training' | 'learn' | 'money' | 'server' | 'review' | 'music';
 
 /** One place to search: "yt lofi" opens url with %s replaced by "lofi". The first engine is the default. */
 export interface SearchEngine {
@@ -1484,4 +1484,82 @@ export interface BackupSnapshot {
   reason: 'daily' | 'before-restore' | 'manual';
   /** Bytes. */
   size: number;
+}
+
+// ---------- NAC Slot Finder (server/src/nac.ts; docs/nac-slot-finder-spec.md §6) ----------
+// The field names follow the spec's JSON. Times are Singapore time: dates YYYY-MM-DD,
+// times "HH:MM", moments ISO with +08:00. No busker's name or profile ID is ever in here.
+
+/** A run of free 1-hour blocks at one location on one day. */
+export interface NacFree {
+  start: string;
+  end: string;
+  /** Wasn't free at the check before (a cancellation, or a date newly open for booking). */
+  new: boolean;
+}
+
+/** A run of booked 1-hour blocks with one status. */
+export interface NacBooked {
+  start: string;
+  end: string;
+  /** NAC's word for the booking ("Published", "Confirmed"); any other word still counts as taken. */
+  status: string;
+}
+
+export interface NacDay {
+  date: string;
+  free: NacFree[];
+  /** Your own bookings (matched by NAC_BUSKER_ID). */
+  mine: NacBooked[];
+  taken: NacBooked[];
+}
+
+export interface NacLocation {
+  key: string;
+  /** Display name, e.g. "Paya Lebar Square". */
+  name: string;
+  /** For tight rows, e.g. "Paya Lebar". */
+  short: string;
+  /** NAC's own name for it, read from its page. */
+  nac_name: string;
+  /** Its public page on the NAC portal. */
+  url: string;
+  /** Open hours, read from its page on every check. */
+  open: string;
+  close: string;
+  /** The latest booking date seen there; later days are unknown, not free. Null when no bookings were seen at all. */
+  horizon_end: string | null;
+  /** Bookings read from its page on that check, past ones included. */
+  bookings: number;
+  /** From the day of the check to horizon_end. That day only has the blocks that hadn't ended. */
+  days: NacDay[];
+}
+
+/** The Slot Finder's result, kept in DATA_DIR/nac/snapshot.json. */
+export interface NacSlots {
+  /** When NAC was last asked; null before the first check. */
+  checked_at: string | null;
+  /** That check worked. When false, `locations` is still the last good data (from `last_good_at`). */
+  ok: boolean;
+  /** Why it failed. */
+  error: string | null;
+  /** When `locations` was read; null until a check has worked. */
+  last_good_at: string | null;
+  /** When the next check is due: :15 or :45, later after failures. */
+  next_check: string | null;
+  /** Checks that failed in a row; each one waits longer before the next. */
+  failures: number;
+  /** Statuses on that check that aren't Published, Confirmed or Passed. They count as taken. */
+  unknown_statuses: string[];
+  /** NAC_BUSKER_ID was set, so your own bookings were told apart. */
+  mine_on: boolean;
+  locations: NacLocation[];
+}
+
+/** GET /api/nac: the result, plus what the page needs before there is one. */
+export interface NacStatus extends NacSlots {
+  /** The locations in config, in order. */
+  watching: { key: string; name: string; short: string; url: string }[];
+  /** Read from saved test pages (NAC_FIXTURES), not from NAC. */
+  fixtures: boolean;
 }

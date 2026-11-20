@@ -2397,3 +2397,45 @@ button.m-stat { cursor: default; }
 @container (min-width: 541px) {
   [data-design='console'] .dl-item.torrent { grid-template-columns: 128px minmax(0, 1fr) auto; }
 }
+
+/* ---------- music › busking slots (components/music/SlotFinder.tsx) ---------- */
+
+/* The view is a column of panels like You's; the slots fill what's left of it. */
+.music > .nac { flex: 1 0 auto; }
+.nac-head { align-items: center; flex-wrap: wrap; row-gap: 6px; }
+.nac-when { display: inline-flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 4px 10px; min-width: 0; }
+.nac-warn { display: flex; align-items: flex-start; gap: 8px; padding: 10px 14px; border-radius: var(--r-m); background: var(--wnt); color: var(--wn); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+.nac-warn i { flex: none; margin-top: 1px; font-size: 17px; }
+.nac-warn b { font-weight: 600; }
+.nac-notes { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--t2); }
+.nac-notes li { display: flex; align-items: flex-start; gap: 6px; text-wrap: pretty; }
+.nac-notes i { flex: none; margin-top: 2px; font-size: 15px; color: var(--t3); }
+.nac-sum { margin: 0; font-size: 14px; text-wrap: pretty; }
+.nac-sum b { font-weight: 600; }
+.nac-empty { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.nac-empty p { margin: 0; color: var(--t2); }
+.nac-note-line, .nac-foot { margin: 0; }
+/* Days as cards: as many across as fit, one under another on a phone. */
+.nac-days { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
+[data-layout='wide'] .nac-days { grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 16px; }
+[data-layout='narrow'] .nac-days { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.nac-day { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 12px 14px; border-radius: var(--r-m); box-shadow: inset 0 0 0 1px var(--ln); }
+.nac-date { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; margin: 0; font-size: 14px; font-weight: 600; }
+.nac-day.none .nac-date { color: var(--t3); }
+.nac-rel { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--acd); }
+.nac-rows { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.nac-row { display: grid; grid-template-columns: minmax(76px, 34%) minmax(0, 1fr); align-items: baseline; gap: 4px 10px; font-size: 13px; line-height: 20px; }
+.nac-loc { min-width: 0; color: var(--t2); overflow-wrap: anywhere; }
+.nac-loc:hover { color: var(--tx); }
+.nac-row.unknown .nac-loc, .nac-row.done .nac-loc { color: var(--t3); }
+.nac-slots { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; min-width: 0; }
+.nac-free { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 0 5px; max-width: 100%; padding: 0 7px; border-radius: var(--r-s); background: var(--act); color: var(--acd); font-weight: 600; }
+.nac-range, .nac-hours { white-space: nowrap; }
+.nac-hours { font-weight: 400; opacity: 0.85; }
+.nac-new { align-self: center; padding: 0 5px; border-radius: 4px; background: var(--ac); color: var(--on); font-size: 10px; font-weight: 700; line-height: 16px; letter-spacing: 0.06em; }
+.nac-note { color: var(--t3); }
+.nac-mine { color: var(--acd); font-weight: 600; }
+.nac-mine .tnum { white-space: nowrap; }
+.nac-status { font-weight: 400; color: var(--t3); }
+/* From a failed check's last good run: still shown, a little quieter, under the warning. */
+.nac.stale .nac-free { opacity: 0.72; }

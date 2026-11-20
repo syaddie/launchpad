@@ -1,4 +1,5 @@
 import type { ViewKey } from '../../../shared/types';
+import { useActiveTabInView } from '../hooks/useActiveTabInView';
 
 export const VIEWS: { key: ViewKey; name: string; icon: string; letter: string }[] = [
   { key: 'home', name: 'Home', icon: 'ph-house', letter: 'H' },
@@ -10,6 +11,8 @@ export const VIEWS: { key: ViewKey; name: string; icon: string; letter: string }
   { key: 'money', name: 'Money', icon: 'ph-wallet', letter: 'M' },
   { key: 'server', name: 'Server', icon: 'ph-hard-drives', letter: 'S' },
   { key: 'review', name: 'Review', icon: 'ph-calendar-check', letter: 'R' },
+  // Last, so Console's F-keys for the others stay where they were.
+  { key: 'music', name: 'Music', icon: 'ph-music-notes', letter: 'U' },
 ];
 
 /** The view switcher down the left edge (across the top on a phone). Hidden views stay reachable from ⌘K.
@@ -24,8 +27,10 @@ export function Rail({ view, hidden, badges, onView, onPalette, onSettings }: {
   onSettings: () => void;
 }) {
   const views = VIEWS.filter((v) => v.key === 'home' || v.key === view || !hidden.includes(`view:${v.key}`));
+  // On a phone the rail (Bento's dock, Console's F-key bar) scrolls sideways: keep the view you're on in sight.
+  const ref = useActiveTabInView<HTMLElement>(view, '.rail-btn.on', true);
   return (
-    <nav className="rail" aria-label="Views">
+    <nav ref={ref} className="rail" aria-label="Views">
       {views.map((v) => (
         <button
           key={v.key}

@@ -53,6 +53,7 @@ import { alertsInfo, sendTest, setTopicUrl } from './notify';
 import { startAlerts } from './alerts';
 import { startMcAlerts } from './mc-alerts';
 import { startUnpacking, unpackRecords } from './unpack';
+import { nacStatus, startNac } from './nac';
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
 import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
@@ -1319,6 +1320,11 @@ app.post('/api/auth/google/disconnect', async (c) => {
 
 app.get('/api/carriers', (c) => c.json(CARRIERS));
 
+// ---------- Music › Busking slots (NAC Slot Finder) ----------
+
+/** The last check's free slots, or why it failed. Checks only run on their schedule (nac.ts), never from here, so nothing here can make Launchpad ask NAC more often. */
+app.get('/api/nac', (c) => c.json(nacStatus()));
+
 // ---------- errors ----------
 
 app.onError((err, c) => {
@@ -1377,3 +1383,4 @@ startLinkChecks();
 startAlerts();
 startMcAlerts();
 startUnpacking();
+startNac();

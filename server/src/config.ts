@@ -2,6 +2,15 @@ import path from 'node:path';
 
 const env = process.env;
 
+/** A busking location the Slot Finder checks. `nac` is NAC's name for it; `name` matches streamlit-portfolio's data/nac_locations.csv. */
+export interface NacPlace {
+  key: string;
+  id: string;
+  nac: string;
+  name: string;
+  short: string;
+}
+
 export const config = {
   port: Number(env.PORT || 8787),
   dataDir: path.resolve(env.DATA_DIR || './data'),
@@ -60,6 +69,22 @@ export const config = {
   /** Video downloads: a Python with yt-dlp and yt-dlp-ejs installed, and ffmpeg's path if it isn't on the PATH. The Docker image sets the Python to its own. */
   ytdlpPython: env.YTDLP_PYTHON || 'python3',
   ytdlpFfmpeg: env.YTDLP_FFMPEG || '',
+  /** Music › Busking slots: free NAC busking slots (server/src/nac.ts, docs/nac-slot-finder-spec.md). */
+  nac: {
+    /** Optional: your NAC busker profile ID (the id in your public profile's address, or the whole address), so your own bookings show as yours. Without it they count as taken. */
+    buskerId: (env.NAC_BUSKER_ID || '').match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)?.[0].toLowerCase() ?? '',
+    /** Set, but with no profile ID in it. */
+    buskerIdInvalid: !!(env.NAC_BUSKER_ID || '').trim() && !/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(env.NAC_BUSKER_ID || ''),
+    /** Development only: read saved pages from this folder (e.g. test/fixtures/nac) instead of asking NAC. See test/fixtures/nac/README.md. */
+    fixtures: env.NAC_FIXTURES ? path.resolve(env.NAC_FIXTURES) : '',
+    /** The locations it checks, one line each. The id is the one in the location page's address; open hours are read from the page. */
+    locations: [
+      { key: 'tampines', id: '9c962e64-ae46-40d2-9506-eb71639b274d', nac: 'MRT STATION - DTL TAMPINES', name: 'Tampines Interchange', short: 'Tampines' },
+      { key: 'pasir-ris', id: '2df197be-cf61-4981-8aef-ebda3f353ec2', nac: 'MRT STATION - EWL PASIR RIS', name: 'Pasir Ris MRT', short: 'Pasir Ris' },
+      { key: 'paya-lebar', id: 'c6f63ddc-3926-4a83-b59f-e7904989c7a0', nac: 'PAYA LEBAR SQUARE', name: 'Paya Lebar Square', short: 'Paya Lebar' },
+      { key: 'changi-village', id: '8f102e44-7f8d-45bc-a1da-50aa8a6202fc', nac: 'CHANGI VILLAGE - SPACE BETWEEN BLK 2 & 3', name: 'Changi Village', short: 'Changi Village' },
+    ] as NacPlace[],
+  },
   /** Optional: verify Cloudflare Access JWTs so only your Access login can reach the app. */
   access: {
     teamDomain: (env.CF_ACCESS_TEAM_DOMAIN || '').replace(/^https?:\/\//, '').replace(/\/+$/, ''),

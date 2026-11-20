@@ -51,6 +51,7 @@ const loadServer = () => import('./components/Server');
 const loadTerminal = () => import('./components/Terminal');
 const loadTraining = () => import('./components/Training');
 const loadYou = () => import('./components/You');
+const loadMusic = () => import('./components/music/MusicView');
 const Inbox = lazy(() => loadInbox().then((m) => ({ default: m.Inbox })));
 const LearnView = lazy(() => loadLearn().then((m) => ({ default: m.LearnView })));
 const CourseDrawer = lazy(() => loadLearn().then((m) => ({ default: m.CourseDrawer })));
@@ -61,9 +62,10 @@ const Server = lazy(() => loadServer().then((m) => ({ default: m.Server })));
 const TrainingView = lazy(() => loadTraining().then((m) => ({ default: m.TrainingView })));
 const ExerciseDrawer = lazy(() => loadTraining().then((m) => ({ default: m.ExerciseDrawer })));
 const You = lazy(() => loadYou().then((m) => ({ default: m.You })));
+const MusicView = lazy(() => loadMusic().then((m) => ({ default: m.MusicView })));
 
 function preloadViews() {
-  for (const load of [loadDigest, loadInbox, loadLearn, loadMoney, loadReview, loadServer, loadTerminal, loadTraining, loadYou]) load().catch(() => {});
+  for (const load of [loadDigest, loadInbox, loadLearn, loadMoney, loadMusic, loadReview, loadServer, loadTerminal, loadTraining, loadYou]) load().catch(() => {});
 }
 
 type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings' } | { type: 'exercise'; title: string } | { type: 'course'; id: string; item?: string } | null;
@@ -755,6 +757,8 @@ export function App({ cached }: { cached: AppState | null }) {
           />
         ) : view === 'money' ? (
           <MoneyView money={data.money} now={now} saved={moneySaved} onChange={setMoney} onImport={importMoney} notify={showToast} together={design !== 'broadsheet' && layout !== 'narrow'} />
+        ) : view === 'music' ? (
+          <MusicView now={now} />
         ) : view === 'server' ? (
           <Server data={data} now={now} openTab={serverTab} onOpenSettings={() => setDrawer({ type: 'settings' })} onPinFolders={(pinnedFolders) => setPrefs({ ...data.prefs, pinnedFolders })} onAutoUnpack={(autoUnpack) => setPrefs({ ...data.prefs, autoUnpack })} split={design !== 'broadsheet' && layout !== 'narrow'} />
         ) : (
