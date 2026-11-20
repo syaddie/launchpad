@@ -12,6 +12,7 @@ import type { StoredPhoto } from './photos';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
 import { cleanOpens } from '../../shared/bookmarks';
 import type { UsageLog } from '../../shared/claudeUsage';
+import { cleanDigest } from '../../shared/digest';
 import { cleanLearn } from '../../shared/learn';
 import { cleanNewsLists } from '../../shared/news';
 import { cleanHistory } from '../../shared/notes';
@@ -19,7 +20,7 @@ import { cleanMoney } from '../../shared/money';
 import { cleanCravings } from '../../shared/trackers';
 import { cleanTraining } from '../../shared/training';
 import type {
-  BillSuggestion, BookmarkGroup, BookmarkOpens, CalEvent, LinkCheck, CalendarInfo, Countdown, Craving, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsLists, NewsTopic, Note, NoteVersion, McServer, McWatchRecord, Package, Prefs, ReviewNote, Snippet, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
+  BillSuggestion, BookmarkGroup, BookmarkOpens, CalEvent, LinkCheck, CalendarInfo, Countdown, Craving, DigestStore, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NewsLists, Note, NoteVersion, McServer, McWatchRecord, Package, Prefs, ReviewNote, Snippet, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
 } from '../../shared/types';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
@@ -114,8 +115,6 @@ const EMPTY_DRIVE: DriveBackupState = { lastSuccess: null, lastAttempt: null, la
 
 export interface CalendarCache { calendars: CalendarInfo[]; events: CalEvent[] }
 export interface TasksCache { lists: TaskList[]; tasks: Task[] }
-/** Keyed by lower-cased topic. `summarisedUrls` are the headlines the current stories came from. */
-export type NewsCache = Record<string, NewsTopic & { summarisedUrls: string[] }>;
 
 /**
  * `emailIds` are the emails each digest was written from. `archived` are emails archived from
@@ -157,7 +156,9 @@ export const store = {
 
   prefs: (): Prefs => {
     const p = get<Partial<Prefs>>('prefs', {});
-    return { ...DEFAULT_PREFS, ...p, sources: { ...DEFAULT_PREFS.sources, ...p.sources }, alerts: { ...DEFAULT_PREFS.alerts, ...p.alerts } };
+    // News became the daily digest: a News view switched off stays off as the Digest view.
+    const hidden = Array.isArray(p.hidden) ? [...new Set(p.hidden.map((h) => (h === 'view:news' ? 'view:digest' : h)))] : DEFAULT_PREFS.hidden;
+    return { ...DEFAULT_PREFS, ...p, hidden, sources: { ...DEFAULT_PREFS.sources, ...p.sources }, alerts: { ...DEFAULT_PREFS.alerts, ...p.alerts } };
   },
   setPrefs: (v: Prefs) => set('prefs', v),
 
@@ -185,8 +186,9 @@ export const store = {
   packages: () => get<Package[]>('packages', []),
   setPackages: (v: Package[]) => set('packages', v),
 
-  news: () => get<NewsCache>('news', {}),
-  setNews: (v: NewsCache) => set('news', v),
+  /** Every day's lessons in the daily digest (shared/digest.ts). */
+  digest: (): DigestStore => cleanDigest(get<unknown>('digest', null)),
+  setDigest: (v: DigestStore) => set('digest', cleanDigest(v)),
 
   /** The reading list, hidden headlines and muted sources. */
   newsLists: (): NewsLists => cleanNewsLists(get<unknown>('newsLists', null)),
@@ -277,7 +279,7 @@ export const store = {
       tasks: s.tasks || EMPTY_SYNC,
       gmail: s.gmail || EMPTY_SYNC,
       carriers: s.carriers || EMPTY_SYNC,
-      news: s.news || EMPTY_SYNC,
+      digest: s.digest || EMPTY_SYNC,
       inbox: s.inbox || EMPTY_SYNC,
       weather: s.weather || EMPTY_SYNC,
       speedtest: s.speedtest || EMPTY_SYNC,

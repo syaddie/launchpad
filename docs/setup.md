@@ -107,18 +107,18 @@ SingPost status works out of the box. For Ninja Van, J&T, DHL, UPS, FedEx and Qx
 
 Without a key, those packages still appear (manually or from Gmail) with a "Track on …" link to the carrier's site.
 
-## 7. Optional: news, inbox and training summaries (Anthropic API)
+## 7. Optional: the daily digest, inbox and training summaries (Anthropic API)
 
-The News view (in the rail on the left, or press `N`) works without this and lists headlines for each topic, and the Inbox view (`G` then `I`) lists your last week of email. To get a short digest instead:
+The Digest view (in the rail on the left, or press `D`) needs this: Claude writes its lessons. The Inbox view (`G` then `I`) works without it and lists your last week of email; with it you get a short digest instead. To set it up:
 
 1. Create an API key at <https://platform.claude.com/> (Settings → API keys) and add some credit.
 2. Add it to `.env` and `docker compose up -d`:
    ```
    ANTHROPIC_API_KEY=sk-ant-...
    ```
-3. Optional: `NEWS_MODEL`, `INBOX_MODEL`, `TRAINING_MODEL`, `LEARN_MODEL`, `ASK_MODEL` (⌘K’s Ask Launchpad), `REVIEW_MODEL` (the weekly recap in Review) and `EXPLAIN_MODEL` (Explain this log, in the Minecraft tab and the containers’ logs) pick the models. The default for all of them, `claude-haiku-5-5`, costs a few cents a month for news, training, and ⌘K and at most a dollar or two for the inbox (Server › Claude usage shows the real numbers); `claude-opus-5-5` writes richer summaries at about 40 times the price.
+3. Optional: `DIGEST_MODEL`, `INBOX_MODEL`, `TRAINING_MODEL`, `LEARN_MODEL`, `ASK_MODEL` (⌘K’s Ask Launchpad), `REVIEW_MODEL` (the weekly recap in Review) and `EXPLAIN_MODEL` (Explain this log, in the Minecraft tab and the containers’ logs) pick the models. The digest's default is `claude-opus-5-5`, about $2–3 a month for four subjects, since the lessons teach and have to be right; the others default to `claude-haiku-5-5`, which costs a few cents a month for training and ⌘K and at most a dollar or two for the inbox (Server › Claude usage shows the real numbers); `claude-opus-5-5` writes richer summaries at about 40 times the price.
 
-News summaries are written from headlines only, at most every 3 hours per topic and only when new headlines have appeared.
+The digest is written once a day, on the first hourly check after midnight (or when you open the view first), with one lesson per subject; adding a subject or pressing Another one writes one more. Claude is sent the date, Settings › About me, the titles each subject has covered and your Too basic / Too deep ratings. Hide the Digest view in Settings › Panels to stop it.
 
 The same key turns on two things in the Training view (`G` then `T`). Claude reads what each exercise in your Hevy export trains, once per new exercise name, and writes a short note on your training after each import that brings in a newer workout, or when you press refresh.
 
@@ -249,7 +249,7 @@ A server started some other way (systemd, `nohup`) shows up with its log, but La
 
 Everything is in one SQLite file inside the `launchpad-data` volume, with photos in a `photos` folder beside it, images pasted into notes in `note-images` and bookmark icons in `favicons` (a cache, fetched again when missing). Settings → General → **Backup** has:
 
-- **Download backup**: one JSON file with everything you've entered (bookmarks, notes, settings, countdowns, the cigarette, mood and weight logs, the money tracker, courses and study time, workouts, exercise muscles, packages, the photo list, notepads' earlier versions, the news reading list with hidden headlines and muted sources, how often each bookmark's been opened, the terminal's snippets and the saved Minecraft servers). It leaves out what sync fetches again (calendar, tasks, mail, news, weather) and the Google sign-in.
+- **Download backup**: one JSON file with everything you've entered (bookmarks, notes, settings, countdowns, the cigarette, mood and weight logs, the money tracker, courses and study time, workouts, exercise muscles, packages, the photo list, notepads' earlier versions, the daily digest's lessons with their stars, ratings and recall answers, the reading list kept from the old News view, how often each bookmark's been opened, the terminal's snippets and the saved Minecraft servers). It leaves out what sync fetches again (calendar, tasks, mail, weather) and the Google sign-in.
 - **With photos (.zip)**: the same backup plus every photo file and every image the notes show, in one .zip.
 - **Restore…** takes either file (and the older bookmarks-and-notes files from **Export JSON**). Each part it holds replaces what's there; parts it doesn't hold are kept. From a .zip, photos and note images missing here are put back. Cloudflare refuses uploads over 100 MB, so a bigger .zip has to be restored over the LAN address.
 - **Database (.db)**: a consistent copy of the whole SQLite database, safe to take while Launchpad runs. It includes the Google sign-in, so keep it private. To put it back by hand, stop the container, replace `launchpad.db` in the volume (and delete any `launchpad.db-wal` and `launchpad.db-shm` beside it), then start it.

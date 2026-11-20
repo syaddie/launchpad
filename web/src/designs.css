@@ -327,7 +327,7 @@ a.hz-row:hover .hz-grow { text-decoration: underline; }
   color-scheme: dark;
 }
 .lp-root[data-design='bento'] { --tint: var(--sf); --ink: var(--tx); }
-.lp-root[data-design='bento'][data-view='news'] { --tint: var(--t-lemon); --ink: var(--i-lemon); }
+.lp-root[data-design='bento'][data-view='digest'] { --tint: var(--t-lemon); --ink: var(--i-lemon); }
 .lp-root[data-design='bento'][data-view='inbox'] { --tint: var(--t-sky); --ink: var(--i-sky); }
 .lp-root[data-design='bento'][data-view='you'] { --tint: var(--t-pink); --ink: var(--i-pink); }
 .lp-root[data-design='bento'][data-view='training'] { --tint: var(--t-orange); --ink: var(--i-orange); }
@@ -392,7 +392,7 @@ a.hz-row:hover .hz-grow { text-decoration: underline; }
 [data-design='bento'] .rail-btn.on { background: #fff; color: #16181d; }
 [data-design='bento'] .rail-dot { display: block; width: 10px; height: 10px; border-radius: 5px; background: #fff; }
 [data-design='bento'] .rail-btn[data-view='home'].on .rail-dot { background: #16181d; }
-[data-design='bento'] .rail-btn[data-view='news'] .rail-dot { background: #ffe066; }
+[data-design='bento'] .rail-btn[data-view='digest'] .rail-dot { background: #ffe066; }
 [data-design='bento'] .rail-btn[data-view='inbox'] .rail-dot { background: #8cc8ff; }
 [data-design='bento'] .rail-btn[data-view='you'] .rail-dot { background: #ff9ec0; }
 [data-design='bento'] .rail-btn[data-view='training'] .rail-dot { background: #ffb07a; }
@@ -860,6 +860,10 @@ a.hz-row:hover .hz-grow { text-decoration: underline; }
 }
 [data-design='poster'] .check { border-width: 2px; border-color: var(--tx); }
 [data-design='poster'] .check.on { background: var(--ac); border-color: var(--ac); }
+/* Poster's accent is red: a right answer in Quick recall is marked in ink, so it can't read as wrong. */
+[data-design='poster'] .dg-option.right { border-color: var(--tx); background: var(--hv); }
+[data-design='poster'] .dg-option.right .dg-letter { background: var(--tx); color: var(--bg); }
+[data-design='poster'] .dg-option.right > i, [data-design='poster'] .dg-result.right b { color: var(--tx); }
 [data-design='poster'] .pkg-seg { height: 5px; border-radius: 0; }
 [data-design='poster'] .popover { box-shadow: var(--sh); }
 [data-design='poster'] .drawer { box-shadow: -4px 0 0 var(--tx); }

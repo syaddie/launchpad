@@ -67,8 +67,8 @@ export type DesignKey = 'broadsheet' | 'console' | 'bento' | 'horizon' | 'vista'
 /** Every design, for checking a saved or sent one is still known. */
 export const DESIGN_KEYS: DesignKey[] = ['broadsheet', 'console', 'bento', 'horizon', 'vista', 'focus', 'poster'];
 export type GoogleSource = 'calendar' | 'tasks' | 'gmail';
-export type SourceKey = GoogleSource | 'carriers' | 'news' | 'inbox' | 'weather' | 'speedtest';
-export type ViewKey = 'home' | 'news' | 'inbox' | 'you' | 'training' | 'learn' | 'money' | 'server' | 'review';
+export type SourceKey = GoogleSource | 'carriers' | 'digest' | 'inbox' | 'weather' | 'speedtest';
+export type ViewKey = 'home' | 'digest' | 'inbox' | 'you' | 'training' | 'learn' | 'money' | 'server' | 'review';
 
 /** One place to search: "yt lofi" opens url with %s replaced by "lofi". The first engine is the default. */
 export interface SearchEngine {
@@ -88,7 +88,9 @@ export interface Prefs {
   hiddenCalendars: string[];
   /** Per-source on/off switches from Settings. */
   sources: Record<GoogleSource, boolean>;
-  /** Search terms for the News tab, in display order. */
+  /** What the daily digest teaches, one lesson a day each (shared/digest.ts). */
+  digestSubjects: string[];
+  /** What the old News view followed. Nothing reads it any more; kept so nothing typed in is lost. */
   newsTopics: string[];
   /** 2-hour forecast area for the weather beside the clock (e.g. "Bishan"); empty hides it. */
   weatherArea: string;
@@ -222,32 +224,86 @@ export interface Package {
   trackingError: string | null;
 }
 
-export interface NewsArticle {
+/** A multiple-choice question on a lesson, for Quick recall. `answer` is the index of the right option. */
+export interface DigestQuiz {
+  question: string;
+  options: string[];
+  answer: number;
+  /** Why the right answer is right. */
+  why: string;
+}
+
+/** One time a lesson came up in Quick recall. `choice` is -1 when it isn't known. */
+export interface DigestRecall {
+  at: string;
+  choice: number;
+  right: boolean;
+}
+
+/** "Too basic" or "Too deep" on a lesson; Claude pitches the subject's next ones from it. */
+export type DigestFeedback = '' | 'basic' | 'deep';
+
+/** One lesson in the daily digest (shared/digest.ts). */
+export interface DigestCard {
+  id: string;
+  /** What it was written for, as in prefs.digestSubjects. */
+  subject: string;
+  /** The concept's usual name. */
   title: string;
-  url: string;
-  source: string;
-  /** ISO date-time. */
-  publishedAt: string;
+  /** One sentence on why it's worth knowing. */
+  hook: string;
+  /** Short paragraphs explaining it. */
+  body: string[];
+  /** A small worked example, as plain text (it may be a few lines of code or a sum). */
+  example: string;
+  /** One line to remember. */
+  takeaway: string;
+  /** Words to look it up by, for "Go deeper". */
+  search: string;
+  quiz: DigestQuiz | null;
+  starred: boolean;
+  feedback: DigestFeedback;
+  /** Oldest first. */
+  recalls: DigestRecall[];
 }
 
-export interface NewsStory {
-  headline: string;
-  summary: string;
-  /** The headlines this story was written from. */
-  links: { source: string; url: string }[];
+export interface DigestDay {
+  /** YYYY-MM-DD, the server's day (Asia/Singapore). */
+  date: string;
+  cards: DigestCard[];
 }
 
-export interface NewsTopic {
-  /** What's followed, as in prefs.newsTopics (see shared/news.ts). */
-  topic: string;
-  /** A feed's own title, once it's been fetched. */
-  title?: string;
+/** Every day's lessons, as the store keeps them. */
+export interface DigestStore {
   /** Newest first. */
-  articles: NewsArticle[];
-  /** Claude's digest of the headlines, or null before the first one (or without an API key). */
-  stories: NewsStory[] | null;
-  summarisedAt: string | null;
-  fetchedAt: string | null;
+  days: DigestDay[];
+  /** "subject: title" of lessons swapped out with "Another one", so they aren't written again. */
+  skipped: string[];
+  /** Why the last try at writing lessons failed, until one works. */
+  error: string | null;
+}
+
+/** Today's question in Quick recall. The answer comes once it's been given. */
+export interface RecallQuestion {
+  cardId: string;
+  /** The day the lesson was written. */
+  date: string;
+  subject: string;
+  title: string;
+  question: string;
+  options: string[];
+  answered: { choice: number; right: boolean; answer: number; why: string; takeaway: string } | null;
+}
+
+/** The digest as the page gets it: the last two weeks, with the rest in the archive's search. */
+export interface DigestState {
+  /** Newest first. */
+  days: DigestDay[];
+  /** Lessons in the whole archive. */
+  total: number;
+  /** Subjects in the archive with how many lessons each, most first. */
+  subjects: { subject: string; count: number }[];
+  recall: RecallQuestion | null;
   error: string | null;
 }
 
@@ -1306,9 +1362,9 @@ export interface AppState {
   sync: Record<SourceKey, SyncStatus>;
   /** Carriers that get live status (SingPost always; others with a 17TRACK key). */
   tracking: { allCarriers: boolean };
-  news: NewsTopic[];
+  digest: DigestState;
   newsLists: NewsLists;
-  /** ANTHROPIC_API_KEY is set, so news topics and the inbox get summaries and not just lists. */
+  /** ANTHROPIC_API_KEY is set, so there's a daily digest and the inbox gets summaries and not just lists. */
   newsSummaries: boolean;
   inbox: InboxState;
   /** Latest reading for prefs.weatherArea, and the areas Settings can offer. */
@@ -1377,6 +1433,8 @@ export interface Backup {
   photos?: Photo[];
   /** The reading list, hidden headlines and muted sources. */
   newsLists?: NewsLists;
+  /** Every day's lessons in the daily digest, with stars, ratings and recall answers. */
+  digest?: DigestStore;
   /** How often each bookmark's been opened, for ranking. */
   bookmarkOpens?: BookmarkOpens;
   /** Earlier versions of each notepad, by its id. The images notes show come in a .zip backup. */

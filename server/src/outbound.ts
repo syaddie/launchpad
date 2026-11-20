@@ -1,5 +1,4 @@
-// Fetching addresses the owner typed in (news feeds) or saved (bookmarks, for the link
-// check and their icons). Only http(s), never the server itself, with every redirect
+// Fetching addresses the owner saved (bookmarks, for the link check and their icons). Only http(s), never the server itself, with every redirect
 // checked the same way, a time limit and a size cap.
 import dns from 'node:dns/promises';
 import net from 'node:net';

@@ -1,22 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { cleanNewsLists, newsSourceFromInput, normUrl, parseNewsSource, visibleArticles, visibleStories } from '../shared/news';
-import type { NewsArticle, NewsLists } from '../shared/types';
+import { cleanNewsLists, normUrl, parseNewsSource } from '../shared/news';
 import { cleanTopics } from '../server/src/clean';
-import { parseFeed } from '../server/src/news';
 import { blockedIp, checkUrl } from '../server/src/outbound';
 
-describe('what the News view follows', () => {
-  it('reads what was typed as a topic or a feed', () => {
-    expect(newsSourceFromInput('Formula 1')).toBe('Formula 1');
-    expect(newsSourceFromInput('https://example.com/feed.xml')).toBe('rss:https://example.com/feed.xml');
-    expect(newsSourceFromInput('blog.example.com/rss')).toBe('rss:https://blog.example.com/rss');
-    expect(newsSourceFromInput('r/singapore')).toBe('r/singapore');
-    expect(newsSourceFromInput('https://www.reddit.com/r/programming/')).toBe('r/programming');
-    expect(newsSourceFromInput('hn')).toBe('hn:front');
-    expect(newsSourceFromInput('Hacker News best')).toBe('hn:best');
-    expect(newsSourceFromInput('https://news.ycombinator.com/')).toBe('hn:front');
-  });
-
+// The News view became the daily digest; what it followed is still kept in prefs.newsTopics, and its reading list stays.
+describe('what the old News view followed', () => {
   it('names each kind', () => {
     expect(parseNewsSource('rss:https://www.example.com/feed')).toMatchObject({ kind: 'rss', label: 'example.com' });
     expect(parseNewsSource('hn:best')).toMatchObject({ kind: 'hn', value: 'best' });
@@ -36,55 +24,8 @@ describe('what the News view follows', () => {
   });
 });
 
-describe('reading feeds', () => {
-  it('reads RSS with its title, guids as links and escaped HTML in titles', () => {
-    const xml = `<?xml version="1.0"?><rss><channel><title>Example Blog</title>
-      <item><title>First &amp;lt;b&amp;gt;post&amp;lt;/b&amp;gt;</title><link>https://example.com/1</link><pubDate>Tue, 27 Oct 2026 01:00:00 GMT</pubDate></item>
-      <item><title><![CDATA[Second post]]></title><guid isPermaLink="true">https://example.com/2</guid><pubDate>Wed, 28 Oct 2026 01:00:00 GMT</pubDate></item>
-      <item><title>No link</title><guid isPermaLink="false">abc</guid></item>
-    </channel></rss>`;
-    const f = parseFeed(xml);
-    expect(f.title).toBe('Example Blog');
-    expect(f.articles.map((a) => a.title)).toEqual(['Second post', 'First post']);
-    expect(f.articles[0]).toMatchObject({ url: 'https://example.com/2', source: 'Example Blog', publishedAt: '2026-10-28T01:00:00.000Z' });
-  });
-
-  it('reads Atom, picking the page link over others', () => {
-    const xml = `<feed xmlns="http://www.w3.org/2005/Atom"><title type="text">Dev Notes</title><link href="https://dev.example/"/>
-      <entry><title>Release 2.0</title><link rel="self" href="https://dev.example/feed/2"/><link rel="alternate" href="https://dev.example/2"/><updated>2026-11-01T10:00:00Z</updated></entry>
-      <entry><title>Release 1.0</title><link href='https://dev.example/1'/><published>2026-10-01T10:00:00Z</published></entry>
-    </feed>`;
-    const f = parseFeed(xml, 'r/dev');
-    expect(f.title).toBe('Dev Notes');
-    expect(f.articles).toEqual([
-      { title: 'Release 2.0', url: 'https://dev.example/2', source: 'r/dev', publishedAt: '2026-11-01T10:00:00.000Z' },
-      { title: 'Release 1.0', url: 'https://dev.example/1', source: 'r/dev', publishedAt: '2026-10-01T10:00:00.000Z' },
-    ]);
-  });
-
-  it('gives nothing for something that isn’t a feed', () => {
-    expect(parseFeed('<html><head><title>Hi</title></head><body>no</body></html>').articles).toEqual([]);
-  });
-});
-
-describe('hiding, muting and saving', () => {
-  const art = (url: string, source = 'CNA'): NewsArticle => ({ title: url, url, source, publishedAt: '2026-11-01T00:00:00.000Z' });
+describe('the reading list', () => {
   const now = Date.parse('2026-11-12T00:00:00Z');
-  const lists: NewsLists = { saved: [], hidden: { 'k-pop': [{ url: 'https://a.example/1?utm_source=x', at: '2026-11-11T00:00:00Z' }] }, muted: ['the onion'] };
-
-  it('leaves out hidden headlines, in their topic only, and muted sources everywhere', () => {
-    const list = [art('https://www.a.example/1/'), art('https://a.example/2'), art('https://a.example/3', 'The Onion')];
-    expect(visibleArticles('K-pop', list, lists).map((a) => a.url)).toEqual(['https://a.example/2']);
-    expect(visibleArticles('Games', list, lists).map((a) => a.url)).toEqual(['https://www.a.example/1/', 'https://a.example/2']);
-  });
-
-  it('hides a story once every headline it came from is hidden', () => {
-    const stories = [
-      { headline: 'A', summary: '', links: [{ source: 'CNA', url: 'https://a.example/1' }] },
-      { headline: 'B', summary: '', links: [{ source: 'CNA', url: 'https://a.example/1' }, { source: 'ST', url: 'https://b.example/1' }] },
-    ];
-    expect(visibleStories('k-pop', stories, lists).map((s) => s.headline)).toEqual(['B']);
-  });
 
   it('treats tracking tags, the fragment and a trailing slash as the same address', () => {
     expect(normUrl('https://www.x.example/a/?utm_medium=y#top')).toBe(normUrl('https://x.example/a'));
