@@ -38,7 +38,7 @@ NAC_FIXTURES=test/fixtures/nac npm run dev:server
 ```
 
 With it set, the Slot Finder reads the folder instead of NAC, checks once at startup as well
-as on :15 and :45, writes `DATA_DIR/nac/snapshot-fixtures.json` (never the real
+as on :15 and :45 (and on Check now, 10 minutes after the last check), writes `DATA_DIR/nac/snapshot-fixtures.json` (never the real
 `snapshot.json`), and the page marks the data as test data. Dates move so the fixtures'
 Fri 20 Nov is today. Point it at `later/` and restart to see new windows, or at `blocked/` for
 a failed check. Set `NAC_BUSKER_ID` to the made-up ID in `meta.json` to see yours.
