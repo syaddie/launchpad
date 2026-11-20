@@ -1472,6 +1472,8 @@ export interface Backup {
   snippets?: Snippet[];
   /** The Minecraft servers saved in the Server view. */
   minecraft?: McServer[];
+  /** The busking locations Music › Busking slots checks, in order. */
+  nacPlaces?: NacPlace[];
 }
 
 export type BackupPart = Exclude<keyof Backup, 'version' | 'exported'>;
@@ -1556,10 +1558,42 @@ export interface NacSlots {
   locations: NacLocation[];
 }
 
+/**
+ * A busking location the Slot Finder checks. The four in server/src/config.ts are where it
+ * starts; Music › Busking slots › Locations adds, renames, orders and removes them (store key
+ * `nacPlaces`). `nac` is NAC's name for it; `name` and `short` are yours.
+ */
+export interface NacPlace {
+  /** Stays the same through renames; the snapshot matches locations by it. */
+  key: string;
+  /** The id in the location page's address. */
+  id: string;
+  nac: string;
+  name: string;
+  short: string;
+}
+
+/** POST /api/nac/lookup: what a location's NAC page says, before it's added. */
+export interface NacLookup {
+  id: string;
+  /** NAC's own name for it. */
+  nac: string;
+  url: string;
+  open: string;
+  close: string;
+  /** Names to start from, tidied from NAC's. */
+  name: string;
+  short: string;
+  /** Already on the list, under this name. */
+  watched: string | null;
+}
+
 /** GET /api/nac: the result, plus what the page needs before there is one. */
 export interface NacStatus extends NacSlots {
-  /** The locations in config, in order. */
-  watching: { key: string; name: string; short: string; url: string }[];
+  /** The locations it checks, in order. `locations` only holds these, named as they are now. */
+  watching: { key: string; name: string; short: string; nac: string; url: string }[];
+  /** At most this many locations: each one adds two requests and tens of MB to every check. */
+  max_places: number;
   /** Read from saved test pages (NAC_FIXTURES), not from NAC. */
   fixtures: boolean;
 }

@@ -941,3 +941,37 @@ a.hz-row:hover .hz-grow { text-decoration: underline; }
 [data-design='poster'] .nac-new { border-radius: 0; }
 [data-design='poster'] .nac-mine { color: var(--tx); }
 [data-design='poster'] .nac-mine > [aria-hidden] { color: var(--ac); }
+
+/* The calendar and Locations (SlotCalendar.tsx, NacPlaces.tsx) in each design. */
+[data-design='console'] .nac-cell, [data-design='console'] .nac-chip, [data-design='console'] .nac-cell.today .nac-cell-num, [data-design='console'] .nac-places, [data-design='console'] .nac-place, [data-design='console'] .nac-place > .nac-code, [data-design='console'] .nac-found { border-radius: 0; }
+[data-design='console'] .nac-cal-title { font-size: 12.5px; }
+/* Bento: days are tiles like the selected day's, on the panel's colour. */
+[data-design='bento'] .nac-cell { background: var(--sf); box-shadow: none; border-radius: 12px; }
+[data-design='bento'] button.nac-cell:hover { background: color-mix(in srgb, var(--sf) 88%, var(--tx)); }
+[data-design='bento'] .nac-cell.on { box-shadow: inset 0 0 0 2px var(--ac); }
+[data-design='bento'] .nac-cell.out { background: color-mix(in srgb, var(--sf) 35%, transparent); }
+[data-design='bento'] .nac-chip { border-radius: 7px; }
+[data-design='bento'] .nac-places { background: var(--sf); box-shadow: none; border-radius: 16px; }
+[data-design='bento'] .nac-found { background: color-mix(in srgb, var(--hv) 60%, var(--sf)); box-shadow: none; border-radius: 12px; }
+/* Horizon: the picked day under the rule its day card has. */
+[data-design='horizon'] .nac-cell.on { box-shadow: inset 0 2px 0 var(--tx), inset 0 0 0 1px var(--ln); background: color-mix(in srgb, var(--act) 50%, transparent); }
+[data-design='horizon'] .nac-cal-title { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+/* Vista: the same lighter glass as the day card. */
+[data-design='vista'] .nac-cell:not(.out) { background: color-mix(in srgb, var(--rz) 22%, transparent); }
+[data-design='vista'] .nac-cell.on { background: color-mix(in srgb, var(--rz) 40%, transparent); }
+[data-design='vista'] .nac-chip { border-radius: 999px; }
+/* Rounder chips need more room at the ends, which a phone's cells don't have. */
+@container (min-width: 561px) {
+  [data-design='vista'] .nac-chip { padding-left: 7px; padding-right: 7px; }
+  [data-design='vista'] .nac-chip.new { padding-right: 13px; }
+}
+[data-design='vista'] .nac-places { background: color-mix(in srgb, var(--rz) 22%, transparent); }
+/* Poster: square, inked like its free slots; the red stays for today and what's new. */
+[data-design='poster'] .nac-cell, [data-design='poster'] .nac-chip, [data-design='poster'] .nac-cell.today .nac-cell-num, [data-design='poster'] .nac-places, [data-design='poster'] .nac-place, [data-design='poster'] .nac-place > .nac-code, [data-design='poster'] .nac-found { border-radius: 0; }
+[data-design='poster'] .nac-chip { background: transparent; box-shadow: inset 0 0 0 1.5px var(--tx); color: var(--tx); }
+[data-design='poster'] .nac-chip.mine-only { box-shadow: inset 0 0 0 1.5px var(--ln); }
+[data-design='poster'] .nac-chip-star { color: var(--ac); }
+[data-design='poster'] .nac-cell.on { box-shadow: inset 0 3px 0 var(--tx), inset 0 0 0 1px var(--ln); background: var(--hv); }
+[data-design='poster'] .nac-cal-title { font-size: 13px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+[data-design='poster'] .nac-code { color: var(--tx); }
+[data-design='poster'] .nac-place > .nac-code { background: transparent; box-shadow: inset 0 0 0 1.5px var(--tx); }

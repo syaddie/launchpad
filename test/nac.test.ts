@@ -247,7 +247,7 @@ describe('a check', () => {
   it('works out free, taken and yours, from now to each location’s last booking', async () => {
     const { result } = await check('.');
     expect(result).toMatchObject({ checked_at: '2026-11-20T12:20:00+08:00', last_good_at: '2026-11-20T12:20:00+08:00', ok: true, error: null, failures: 0, mine_on: true, unknown_statuses: [] });
-    expect(result.next_check).toBe('2026-11-20T12:45:00+08:00');
+    expect(result.next_check).toBe('2026-11-20T12:25:00+08:00');
     expect(result.locations.map((l) => [l.key, l.open, l.close, l.horizon_end, l.days[0].date, l.days[l.days.length - 1].date])).toEqual([
       ['tampines', '10:00', '14:00', '2026-12-14', '2026-11-20', '2026-12-14'],
       ['pasir-ris', '10:00', '14:00', '2026-12-11', '2026-11-20', '2026-12-11'],
@@ -322,14 +322,14 @@ describe('a check', () => {
     expect(result).toMatchObject({ ok: false, failures: 1, checked_at: '2026-11-20T12:45:00+08:00', last_good_at: '2026-11-20T12:20:00+08:00' });
     expect(result.error).toBe('Tampines: NAC didn’t return JSON, so it may be blocking Launchpad');
     expect(result.locations).toEqual(good.locations);
-    // Skips the 13:15 slot.
+    // Waits an hour, not 10 minutes.
     expect(result.next_check).toBe('2026-11-20T13:45:00+08:00');
     const twice = (await check('blocked', { file, now: new Date('2026-11-20T13:45:00+08:00') })).result;
     expect(twice).toMatchObject({ failures: 2, next_check: '2026-11-20T15:15:00+08:00', last_good_at: '2026-11-20T12:20:00+08:00' });
     expect(twice.locations).toEqual(good.locations);
-    // Working again: back to every slot, compared with the last good data.
+    // Working again: back to every 10 minutes, compared with the last good data.
     const back = (await check('.', { file, now: new Date('2026-11-20T15:15:00+08:00') })).result;
-    expect(back).toMatchObject({ ok: true, failures: 0, error: null, next_check: '2026-11-20T15:45:00+08:00' });
+    expect(back).toMatchObject({ ok: true, failures: 0, error: null, next_check: '2026-11-20T15:25:00+08:00' });
   });
 
   it('fails the first check without inventing any data', async () => {
@@ -449,18 +449,22 @@ describe('asking NAC', () => {
 // ---------- schedule and snapshot ----------
 
 describe('when it checks', () => {
-  it('checks on :15 and :45, out of schedule-sync’s :00 and :30', () => {
+  it('checks every 10 minutes on :05, :15 … :55, out of schedule-sync’s :00 and :30', () => {
     const at = (s: string) => nextSlot(new Date(s)).toISOString();
-    expect(at('2026-11-20T12:20:00+08:00')).toBe(new Date('2026-11-20T12:45:00+08:00').toISOString());
-    expect(at('2026-11-20T12:44:59+08:00')).toBe(new Date('2026-11-20T12:45:00+08:00').toISOString());
-    expect(at('2026-11-20T12:45:00+08:00')).toBe(new Date('2026-11-20T13:15:00+08:00').toISOString());
-    expect(at('2026-11-20T23:50:00+08:00')).toBe(new Date('2026-11-21T00:15:00+08:00').toISOString());
+    expect(at('2026-11-20T12:20:00+08:00')).toBe(new Date('2026-11-20T12:25:00+08:00').toISOString());
+    expect(at('2026-11-20T12:24:59+08:00')).toBe(new Date('2026-11-20T12:25:00+08:00').toISOString());
+    expect(at('2026-11-20T12:25:00+08:00')).toBe(new Date('2026-11-20T12:35:00+08:00').toISOString());
+    expect(at('2026-11-20T12:55:00+08:00')).toBe(new Date('2026-11-20T13:05:00+08:00').toISOString());
+    expect(at('2026-11-20T23:58:00+08:00')).toBe(new Date('2026-11-21T00:05:00+08:00').toISOString());
+    // Never on the hour or half past.
+    for (let m = 0; m < 60; m++) expect([0, 30]).not.toContain(new Date(at(`2026-11-20T12:${String(m).padStart(2, '0')}:00+08:00`)).getUTCMinutes());
   });
 
   it('waits longer after each failure in a row', () => {
     const after = (f: number) => nextCheck(new Date('2026-11-20T12:20:00+08:00'), f).toISOString();
     const t = (s: string) => new Date(`2026-11-20T${s}:00+08:00`).toISOString();
-    expect([0, 1, 2, 3, 4, 9].map(after)).toEqual([t('12:45'), t('13:15'), t('13:45'), t('14:45'), t('16:45'), t('16:45')]);
+    // The next slot, then about 1 h, 1.5 h, 2.5 h and 4.5 h on, as when it checked every 30 minutes.
+    expect([0, 1, 2, 3, 4, 9].map(after)).toEqual([t('12:25'), t('13:15'), t('13:45'), t('14:45'), t('16:45'), t('16:45')]);
   });
 
   it('writes the snapshot whole, then renames it into place', () => {

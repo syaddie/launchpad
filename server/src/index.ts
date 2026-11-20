@@ -53,7 +53,7 @@ import { alertsInfo, sendTest, setTopicUrl } from './notify';
 import { startAlerts } from './alerts';
 import { startMcAlerts } from './mc-alerts';
 import { startUnpacking, unpackRecords } from './unpack';
-import { nacStatus, startNac } from './nac';
+import { addPlace, editPlaces, lookupPlace, NacError, nacStatus, startNac } from './nac';
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
 import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
@@ -1324,6 +1324,34 @@ app.get('/api/carriers', (c) => c.json(CARRIERS));
 
 /** The last check's free slots, or why it failed. Checks only run on their schedule (nac.ts), never from here, so nothing here can make Launchpad ask NAC more often. */
 app.get('/api/nac', (c) => c.json(nacStatus()));
+
+/** A NacError is something to tell the page (a bad link, NAC blocking the lookup), not a crash. */
+const nacTry = async (c: Context, fn: () => Promise<Response> | Response) => {
+  try {
+    return await fn();
+  } catch (e) {
+    if (e instanceof NacError) return c.json({ error: e.message }, 400);
+    throw e;
+  }
+};
+
+/** Reads one location's NAC page, so it can be added: what NAC calls it, its hours and names to start from. One request, in turn with the checks'. */
+app.post('/api/nac/lookup', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  return nacTry(c, async () => c.json(await lookupPlace(String(body?.link ?? ''))));
+});
+
+/** Adds a location that was just looked up; it's checked from the next check on. */
+app.post('/api/nac/places', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  return nacTry(c, () => (addPlace(body ?? {}), c.json(nacStatus())));
+});
+
+/** The list's order and names; locations left out are removed. */
+app.put('/api/nac/places', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  return nacTry(c, () => (editPlaces(body?.places), c.json(nacStatus())));
+});
 
 // ---------- errors ----------
 
