@@ -282,6 +282,8 @@ export const api = {
   server: (iface?: string) => req<ServerStats>('GET', `/api/server${iface ? `?iface=${encodeURIComponent(iface)}` : ''}`),
   /** Music › Busking slots: the last check of NAC's free slots (the server checks on its own schedule). */
   nacSlots: () => req<NacStatus>('GET', '/api/nac'),
+  /** Check now: when the check will start. Refused (with why) within 5 minutes of the last, or while it's backing off. */
+  checkNac: () => req<{ at: string }>('POST', '/api/nac/check', {}),
   /** Reads one location's NAC page (one request), so it can be added. */
   nacLookup: (link: string) => req<NacLookup>('POST', '/api/nac/lookup', { link }),
   nacAddPlace: (p: { id: string; name: string; short: string }) => req<NacStatus>('POST', '/api/nac/places', p),

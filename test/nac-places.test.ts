@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { config } from '../server/src/config';
-import { addPlace, editPlaces, fixtureFetcher, lookupPlace, NacError, nacPlaces, nacStatus, runCheck, snapshotFile, writeSnapshot, type Fetcher } from '../server/src/nac';
+import { addPlace, editPlaces, fixtureFetcher, lookupPlace, NacError, nacPlaces, nacStatus, requestNacCheck, runCheck, snapshotFile, writeSnapshot, type Fetcher } from '../server/src/nac';
 import { store } from '../server/src/store';
 import { calendarWeeks, cleanNacPlaces, freeHours, guessNacNames, monthsLabel, NAC_MAX_PLACES, nacCodes, nacPlaceId, nacPlaceKey } from '../shared/nac';
 import type { NacPlace, NacSlots } from '../shared/types';
@@ -155,7 +155,8 @@ describe('ordering, renaming and removing', () => {
     editPlaces([]);
     expect(nacPlaces()).toEqual([]);
     const s = nacStatus(NOW);
-    expect(s).toMatchObject({ watching: [], locations: [], next_check: null });
+    expect(s).toMatchObject({ watching: [], locations: [], next_check: null, can_check: 'There are no locations on the list to check.' });
+    expect(requestNacCheck()).toEqual({ ok: false, error: 'There are no locations on the list to check.' });
   });
 
   it('shows only what’s on the list, in its order and under its names, straight away', async () => {

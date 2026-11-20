@@ -1,5 +1,5 @@
 import { useId, useState, type FormEvent } from 'react';
-import { ampm, fmtClock, NAC_MAX_PLACES, NAC_NAME_MAX, NAC_SHORT_MAX, sgtYmd } from '../../../../shared/nac';
+import { ampm, fmtClock, NAC_MAX_PLACES, NAC_NAME_MAX, NAC_SHORT_MAX } from '../../../../shared/nac';
 import type { NacLookup, NacStatus } from '../../../../shared/types';
 import { api } from '../../api';
 
@@ -24,7 +24,7 @@ export function NacPlaces({ s, codes, now, onSaved, onClose }: { s: NacStatus; c
   // A reading cached before there was a most.
   const most = s.max_places ?? NAC_MAX_PLACES;
   const full = places.length >= most;
-  const next = s.next_check ? fmtClock(s.next_check, sgtYmd(now)) : '';
+  const next = s.next_check ? fmtClock(s.next_check, now) : '';
 
   const run = <T,>(kind: 'save' | 'lookup' | 'add', p: Promise<T>, then: (v: T) => void) => {
     setBusy(kind);

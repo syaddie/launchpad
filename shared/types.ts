@@ -1547,7 +1547,7 @@ export interface NacSlots {
   error: string | null;
   /** When `locations` was read; null until a check has worked. */
   last_good_at: string | null;
-  /** When the next check is due: :15 or :45, later after failures. */
+  /** When the next check is due: :05, :15 … :55, later after failures. */
   next_check: string | null;
   /** Checks that failed in a row; each one waits longer before the next. */
   failures: number;
@@ -1596,4 +1596,10 @@ export interface NacStatus extends NacSlots {
   max_places: number;
   /** Read from saved test pages (NAC_FIXTURES), not from NAC. */
   fixtures: boolean;
+  /** A check is running now. */
+  running: boolean;
+  /** When a check asked for (or the first one) will start, waiting for schedule-sync's :00 or :30 to pass; null when none is waiting. */
+  queued_at: string | null;
+  /** Why Check now can't be used at the moment (one's running, the last was under 5 minutes ago, or it's backing off, or there are no locations), or null when it can. */
+  can_check: string | null;
 }

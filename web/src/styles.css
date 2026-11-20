@@ -2436,6 +2436,10 @@ button.m-stat { cursor: default; }
 .nac-status { font-weight: 400; color: var(--t3); }
 /* From a failed check's last good run: still shown, a little quieter, under the warning. */
 .nac.stale .nac-free { opacity: 0.72; }
+/* Check now: dimmed while it can't be used, but still pressable, so a phone can say why. */
+.nac-check { flex: none; }
+.nac-check.off { opacity: 0.55; }
+.nac-check:disabled { cursor: default; }
 .nac.stale .nac-chip { opacity: 0.72; }
 
 /* The calendar (SlotCalendar.tsx): weeks from Monday, each day's locations with free time as

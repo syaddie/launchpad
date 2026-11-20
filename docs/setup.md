@@ -247,11 +247,13 @@ A server started some other way (systemd, `nohup`) shows up with its log, but La
 
 ## 13. Music: busking slots (NAC)
 
-**Music** shows which busking slots are still free at the NAC locations listed in `server/src/config.ts` (`nac.locations`, one line each). It works with nothing set: the server reads NAC's public location pages on :15 and :45 every hour (streamlit-portfolio's schedule-sync takes :00 and :30), one request at a time about 2 s apart, and keeps the result in `nac/snapshot.json` in the `launchpad-data` volume. The first check is at the next :15 or :45 after the container starts.
+**Music** shows which busking slots are still free at your NAC locations: the four in `server/src/config.ts` (`nac.locations`) to start with, then whatever Music › Busking slots › **Locations** has (kept in the database and in backups). It works with nothing set: the server reads NAC's public location pages every 10 minutes, on :05, :15, :25, :35, :45 and :55 (streamlit-portfolio's schedule-sync takes :00 and :30), one request at a time about 2 s apart, and keeps the result in `nac/snapshot.json` in the `launchpad-data` volume. The very first check runs as soon as the container starts (a couple of minutes later if that's on :00 or :30), and **Check now** in Music asks for one in between, but not within 5 minutes of the last check or while it's waiting after a failure.
+
+- **Adding a location.** Open the location on the NAC portal, copy its address (it has `/locations/` and a long id in it) and paste it into Locations. Launchpad reads that page once to check it's a real location and to get NAC's name and hours, then you name it. Up to 8 locations: each one adds two requests and tens of MB to every check.
 
 - **Your own bookings.** Set `NAC_BUSKER_ID` in `.env` to your busker profile ID, the id at the end of your public NAC profile's address (the same value schedule-sync uses), then `docker compose up -d launchpad`. Without it your bookings count as taken, never as free. Only bookings with that profile ID are marked yours; no other busker's name or ID is stored or shown.
 - **When NAC fails or blocks it** (anything but a plain 200, or a page that isn't the usual one), the check stops there, the last good data stays with a warning saying when it's from, and the next tries wait longer: 1 h, 1.5 h, 2.5 h, then every 4.5 h until one works. It never tries to get around NAC's bot protection.
-- **What a check costs NAC.** About 8 requests, but NAC's load-more answers carry every busker's photo inline, so a check downloads tens of MB (about 77 MB across the four locations on 20 Nov 2026).
+- **What a check costs NAC.** About 2 requests per location, but NAC's load-more answers carry every busker's photo inline, so a check downloads tens of MB (about 77 MB across the four locations on 20 Nov 2026). Every 10 minutes that's about 11 GB a day for four locations.
 - **Running it without NAC** (development): `NAC_FIXTURES=test/fixtures/nac` reads saved pages instead; see test/fixtures/nac/README.md.
 
 ## Backups
