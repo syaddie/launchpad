@@ -6,6 +6,7 @@ import { fmtUsd } from '../../../shared/claudeUsage';
 import type { AccentKey, AppState, Backup, BackupSnapshot, DesignKey, DriveStatus, GoogleSource, Package, Photo, Prefs, SearchEngine, ThemeMode } from '../../../shared/types';
 import { api, BACKUP_URL, DB_BACKUP_URL, snapshotUrl, ZIP_BACKUP_URL } from '../api';
 import { PhotoSettings } from './Photos';
+import { AlertSettings } from './AlertSettings';
 import { STEP_LABELS, ago, chipOf, fmtStamp, hm, segColor, statusText } from '../util';
 
 export function Drawer({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
@@ -318,6 +319,7 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
       {tab === 'panels' && <PanelSettings prefs={p} onPrefs={onPrefs} photoCount={data.photos.length} />}
       {tab === 'search' && <SearchSettings prefs={p} onPrefs={onPrefs} />}
       {tab === 'trackers' && <TrackerSettings prefs={p} onPrefs={onPrefs} />}
+      {tab === 'alerts' && <AlertSettings prefs={p} onPrefs={onPrefs} now={now} />}
       {tab === 'photos' && <PhotoSettings photos={data.photos} onAdd={onAddPhotos} onRemove={onRemovePhoto} onFocus={onPhotoFocus} />}
       {tab === 'general' && (
       <>
@@ -534,7 +536,7 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
           {importMsg || (
             <>
               The backup is one JSON file with your bookmarks, notes, settings, countdowns, cigarette, mood and weight logs, money tracker, courses, workouts and packages; the .zip adds your photos. Restore takes either, and older bookmarks-and-notes backups still work.
-              The database copy has everything except photos, the Google sign-in included, so keep it private.
+              The phone alerts topic is left out, like the Google sign-in. The database copy has everything except photos, the Google sign-in and alerts topic included, so keep it private.
             </>
           )}
         </div>
@@ -654,7 +656,7 @@ function DriveCopies({ drive, needsReconnect, prefs, onPrefs, now }: { drive?: D
         </button>
       </div>
       <div style={{ fontSize: 12, color: 'var(--t3)' }}>
-        Each daily copy also goes to a <b style={{ fontWeight: 500 }}>Launchpad backups</b> folder in your Drive, off this server, and the last 14 are kept there. Launchpad can only see files it put there itself. The Google sign-in is taken out of those copies, so after putting one back you connect Google again.
+        Each daily copy also goes to a <b style={{ fontWeight: 500 }}>Launchpad backups</b> folder in your Drive, off this server, and the last 14 are kept there. Launchpad can only see files it put there itself. The Google sign-in and the alerts topic are taken out of those copies, so after putting one back you connect Google and set the topic again.
       </div>
       <div style={{ fontSize: 12, color: drive.on && drive.allowed && drive.lastError ? 'var(--wn)' : 'var(--t2)' }}>{status}</div>
       {drive.on && drive.allowed && (
@@ -672,7 +674,7 @@ function DriveCopies({ drive, needsReconnect, prefs, onPrefs, now }: { drive?: D
 
 const fmtSize = (b: number) => (b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`);
 
-type SettingsTab = 'general' | 'layout' | 'panels' | 'search' | 'trackers' | 'photos';
+type SettingsTab = 'general' | 'layout' | 'panels' | 'search' | 'trackers' | 'photos' | 'alerts';
 const SETTINGS_TABS: { key: SettingsTab; name: string }[] = [
   { key: 'general', name: 'General' },
   { key: 'layout', name: 'Layout' },
@@ -680,6 +682,7 @@ const SETTINGS_TABS: { key: SettingsTab; name: string }[] = [
   { key: 'search', name: 'Search' },
   { key: 'trackers', name: 'Trackers' },
   { key: 'photos', name: 'Photos' },
+  { key: 'alerts', name: 'Alerts' },
 ];
 
 export const DESIGNS: { key: DesignKey; name: string; blurb: string }[] = [
@@ -782,7 +785,7 @@ export const PANEL_ROWS: { section: string; hint?: string; rows: { key: string; 
     section: 'Views',
     hint: 'In the rail on the left',
     rows: [
-      { key: 'view:news', name: 'News' },
+      { key: 'view:digest', name: 'Digest', meta: 'A short lesson a day on each subject you pick, by Claude' },
       { key: 'view:inbox', name: 'Inbox', meta: 'Claude’s digest of your Gmail' },
       { key: 'view:you', name: 'You', meta: 'Countdowns, cigarettes and cravings, mood and journal' },
       { key: 'view:training', name: 'Training', meta: 'Workouts from your Hevy export' },

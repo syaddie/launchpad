@@ -5,6 +5,8 @@ import { addDays, pad2, startOfDay, ymd } from './dates';
 
 /** The features that call Claude. Others still count, under their own name. */
 export const CLAUDE_FEATURES: Record<string, string> = {
+  digest: 'Daily digest',
+  // Before the digest took its place; kept so earlier months still say what they were.
   news: 'News',
   inbox: 'Inbox',
   training: 'Training',
@@ -12,6 +14,7 @@ export const CLAUDE_FEATURES: Record<string, string> = {
   briefing: 'Daily briefing',
   ask: '⌘K',
   review: 'Weekly review',
+  explain: 'Explain this log',
   other: 'Other',
 };
 

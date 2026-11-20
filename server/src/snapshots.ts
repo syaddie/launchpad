@@ -10,6 +10,7 @@ import { snapshotDb } from './store';
 import { DEFAULT_PREFS, STARTER_BOOKMARKS, STARTER_NOTES } from '../../shared/defaults';
 import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
+import { cleanDigest } from '../../shared/digest';
 import { cleanNewsLists } from '../../shared/news';
 import { cleanTraining } from '../../shared/training';
 import type { Backup, BackupSnapshot } from '../../shared/types';
@@ -110,6 +111,7 @@ export function snapshotBackup(id: string): Backup {
       packages: get('packages', []),
       photos: get('photos', []),
       newsLists: cleanNewsLists(get('newsLists', null)),
+      digest: cleanDigest(get('digest', null)),
       bookmarkOpens: get('bookmarkOpens', {}),
       noteHistory: get('noteHistory', {}),
       snippets: get('snippets', []),

@@ -31,7 +31,7 @@ describe('state for changed keys', () => {
     expect(st.fieldsFor(['inbox'])!.sort()).toEqual(['google', 'inbox']);
     // The health warnings are worked out from the syncs, and the Drive switch is in prefs.
     expect(st.fieldsFor(['sync'])).toEqual(['sync', 'health']);
-    expect(st.fieldsFor(['prefs'])!.sort()).toEqual(['drive', 'health', 'news', 'prefs']);
+    expect(st.fieldsFor(['prefs'])!.sort()).toEqual(['drive', 'health', 'prefs']);
     expect(st.fieldsFor(['driveBackup'])!.sort()).toEqual(['drive', 'health']);
     expect(st.fieldsFor(['money', 'smokes'])!.sort()).toEqual(['money', 'smokeDays', 'smokes']);
     // Two keys feeding the same field send it once.

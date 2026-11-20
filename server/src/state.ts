@@ -8,11 +8,23 @@ import { smokeDaysFrom } from '../../shared/trackers';
 import { driveStatus } from './drive';
 import { missingScopes } from './google';
 import { currentWarnings } from './health';
-import { sourceKey } from '../../shared/news';
 import { monthCost } from '../../shared/claudeUsage';
-import type { AppState, NewsTopic, Photo, SavedDoc } from '../../shared/types';
+import { archiveSubjects, RECENT_DAYS, recallQuestion } from '../../shared/digest';
+import type { AppState, DigestState, Photo, SavedDoc } from '../../shared/types';
 
 type Field = Exclude<keyof AppState, 'versions'>;
+
+/** The last two weeks of lessons (the archive's search has the rest) and today's recall question. */
+function digestState(now = new Date()): DigestState {
+  const d = store.digest();
+  return {
+    days: d.days.slice(0, RECENT_DAYS),
+    total: d.days.reduce((n, day) => n + day.cards.length, 0),
+    subjects: archiveSubjects(d),
+    recall: recallQuestion(d, now),
+    error: d.error,
+  };
+}
 
 /** Bodies and the ids behind each digest stay on the server. */
 function inboxState(): AppState['inbox'] {
@@ -53,16 +65,7 @@ const FIELDS: { [F in Field]: () => AppState[F] } = {
   packages: () => store.packages().filter((p) => !p.archived),
   sync: () => store.sync(),
   tracking: () => ({ allCarriers: !!config.seventeenTrackKey }),
-  // In the order of the topics in prefs; ones not fetched yet show as loading.
-  news: () => {
-    const news = store.news();
-    return store.prefs().newsTopics.map((topic): NewsTopic => {
-      const n = news[sourceKey(topic)];
-      return n
-        ? { topic, title: n.title, articles: n.articles, stories: n.stories, summarisedAt: n.summarisedAt, fetchedAt: n.fetchedAt, error: n.error }
-        : { topic, articles: [], stories: null, summarisedAt: null, fetchedAt: null, error: null };
-    });
-  },
+  digest: () => digestState(),
   newsLists: () => store.newsLists(),
   newsSummaries: () => claudeEnabled(),
   inbox: inboxState,
@@ -104,15 +107,15 @@ export const KEY_FIELDS: Record<string, Field[]> = {
   bookmarkOpens: ['bookmarkOpens'],
   linkCheck: ['linkCheck'],
   notes: ['notes'],
-  // News comes in the order of the topics in prefs. The Drive switch is in prefs, and so are some syncs' switches and intervals.
-  prefs: ['prefs', 'news', 'drive', 'health'],
+  // The Drive switch is in prefs, and so are some syncs' switches and intervals.
+  prefs: ['prefs', 'drive', 'health'],
   // Whether Google allows Drive.
   google: ['google', 'drive', 'health'],
   googleSignedOut: ['google'],
   calendar: ['calendars', 'events', 'google'],
   tasks: ['taskLists', 'tasks', 'google'],
   packages: ['packages', 'delivered'],
-  news: ['news'],
+  digest: ['digest'],
   newsLists: ['newsLists'],
   inbox: ['inbox', 'google'],
   weather: ['weather'],
@@ -142,8 +145,12 @@ export const KEY_FIELDS: Record<string, Field[]> = {
   uploadDirs: [],
   // The terminal fetches its snippets itself.
   snippets: [],
-  // So does the Minecraft tab its servers.
+  // So does the Minecraft tab its servers, and its restarts after a crash.
   minecraftServers: [],
+  mcWatch: [],
+  // Settings › Alerts fetches these itself; the topic stays out of the page's state.
+  alertTopic: [],
+  alertMemory: [],
 };
 
 /** The fields changed store keys feed, or null when one isn't known (then send everything). */

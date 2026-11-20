@@ -1,7 +1,8 @@
 """Server › Downloads' Instagram helper, run by server/src/instagram.ts.
 
 It finds what Instagram posts are made of, with instaloader, and leaves the downloading
-to Launchpad, which writes the files to the server over SSH like any other download.
+to Launchpad, which writes the files to the server over SSH like any other download. When
+Instagram won't answer instaloader about a post, it reads the post's embed page instead.
 
 One JSON request comes in on stdin (so the session cookie never shows in `ps`):
 
@@ -25,6 +26,7 @@ import json
 import re
 import sys
 import time
+from datetime import datetime, timezone
 from itertools import islice
 
 try:
@@ -130,6 +132,148 @@ def describe(err):
     return text, "other"
 
 
+class Failed(Exception):
+    """A request that failed with a reason already worded for the page."""
+
+    def __init__(self, msg, kind):
+        super().__init__(msg)
+        self.msg, self.kind = msg, kind
+
+
+# ---------- the embed page, when Instagram won't answer instaloader ----------
+#
+# Instagram sometimes turns away the API calls instaloader makes from an IP it doesn't like (an
+# empty answer, or 401 "Please wait a few minutes"), even for public posts. The page it serves
+# for embedding a post on other sites still answers, and to anything that isn't a browser it
+# carries the post's data in the page: every slide at full size, the caption and the owner.
+
+EMBED_URL = "https://www.instagram.com/p/{}/embed/captioned/"
+CONTEXT_KEY = '"contextJSON":'
+# Instagram's media IDs start with when they were made, in milliseconds since this moment.
+IG_EPOCH_MS = 1314220021721
+MISSING = object()  # the embed page says there's no such post
+
+
+def embed_media(html):
+    """The post in an embed page: its shortcode_media, MISSING, or None when the page can't be read."""
+    i = html.find(CONTEXT_KEY)
+    if i < 0:
+        return None
+    try:
+        raw, _ = json.JSONDecoder().raw_decode(html, i + len(CONTEXT_KEY))
+        if raw is None:
+            return MISSING
+        media = ((json.loads(raw) or {}).get("gql_data") or {}).get("shortcode_media")
+    except (ValueError, AttributeError, TypeError):
+        return None
+    return media if isinstance(media, dict) and media.get("shortcode") else MISSING
+
+
+def media_date(media):
+    """When it was posted: Instagram's own time when the page has it, otherwise read from the ID."""
+    ts = media.get("taken_at_timestamp")
+    if isinstance(ts, (int, float)) and ts > 0:
+        return datetime.fromtimestamp(ts, timezone.utc)
+    try:
+        when = datetime.fromtimestamp(((int(media.get("id")) >> 23) + IG_EPOCH_MS) / 1000, timezone.utc)
+    except (TypeError, ValueError, OverflowError, OSError):
+        when = None
+    now = datetime.now(timezone.utc)
+    # IDs from before Instagram's current scheme don't hold a time; fall back to now.
+    return when if when and datetime(2012, 1, 1, tzinfo=timezone.utc) < when <= now else now
+
+
+def media_url(node):
+    """A slide's file: the video if it is one, else the largest photo."""
+    if node.get("is_video") and node.get("video_url"):
+        return node["video_url"], True
+    sizes = [r for r in node.get("display_resources") or [] if isinstance(r, dict) and r.get("src")]
+    if sizes:
+        return max(sizes, key=lambda r: r.get("config_width") or 0)["src"], False
+    return node.get("display_url"), False
+
+
+def count_of(media, *keys):
+    for key in keys:
+        n = (media.get(key) or {}).get("count")
+        if isinstance(n, int):
+            return n
+    return None
+
+
+def embed_event(media):
+    """A post event, the same as post_event's, from an embed page's shortcode_media."""
+    children = [e.get("node") or {} for e in (media.get("edge_sidecar_to_children") or {}).get("edges") or []]
+    items = []
+    for node in children or [media]:
+        url, video = media_url(node)
+        if url:
+            items.append({"url": url, "ext": ext_of(url, video)})
+    edges = (media.get("edge_media_to_caption") or {}).get("edges") or []
+    caption = ((edges[0].get("node") or {}).get("text") or "") if edges else ""
+    owner = (media.get("owner") or {}).get("username") or ""
+    when = media_date(media)
+    shortcode = media["shortcode"]
+    return {
+        "type": "post",
+        "shortcode": shortcode,
+        "owner": owner,
+        "stem": when.strftime("%Y-%m-%d_%H-%M-%S") + "_UTC",
+        "caption": caption,
+        "info": {
+            "shortcode": shortcode,
+            "url": f"https://www.instagram.com/p/{shortcode}/",
+            "owner": owner,
+            "taken_at_utc": when.replace(tzinfo=None, microsecond=0).isoformat() + "Z",
+            "caption": caption,
+            "likes": count_of(media, "edge_liked_by", "edge_media_preview_like"),
+            "comments": count_of(media, "edge_media_to_comment", "edge_media_preview_comment"),
+            "type": media.get("__typename") or ("GraphSidecar" if children else "GraphImage"),
+            "media": len(items),
+            "via": "embed",
+        },
+        "items": items,
+    }
+
+
+def fetch_embed(code):
+    """The post from its embed page: a post event, MISSING, or None when that didn't work either."""
+    import requests  # comes with instaloader
+
+    try:
+        # A fresh session with requests' own User-Agent: to a browser's, Instagram sends a page
+        # that builds itself in JavaScript instead, without the data.
+        resp = requests.get(EMBED_URL.format(code), timeout=30, allow_redirects=True)
+    except requests.RequestException:
+        return None
+    if resp.status_code == 404:
+        return MISSING
+    if resp.status_code != 200:
+        return None
+    media = embed_media(resp.text)
+    if media is None or media is MISSING:
+        return media
+    event = embed_event(media)
+    return event if event["items"] and event["owner"] else None
+
+
+def fallback(code, err):
+    """After instaloader failed on a post: the post from its embed page, or Failed saying why not."""
+    msg, kind = describe(err)
+    if kind in ("login", "private"):
+        raise Failed(msg, kind)
+    found = fetch_embed(code)
+    if isinstance(found, dict):
+        return found
+    if found is MISSING or isinstance(err, ex.QueryReturnedNotFoundException):
+        raise Failed("Instagram couldn’t find that post. It may be deleted, or on a private account.", "notfound")
+    if kind == "notfound":
+        # instaloader got an empty answer and the embed page didn't help: Instagram turning the
+        # server away looks just like this, so don't call the post missing.
+        raise Failed("Instagram wouldn’t show that post to the server. Try later, or sign in.", "limited")
+    raise Failed(msg, kind)
+
+
 def post_event(post):
     """What a post is made of: the photo or video of each slide, in order."""
     if post.typename == "GraphSidecar":
@@ -183,13 +327,15 @@ def resolve(req):
             emit({"type": "skip", "target": code, "error": "That isn’t an Instagram post link.", "code": "other"})
             continue
         try:
-            emit(post_event(instaloader.Post.from_shortcode(loader.context, code)))
-        except ex.InstaloaderException as err:
-            msg, kind = describe(err)
+            try:
+                emit(post_event(instaloader.Post.from_shortcode(loader.context, code)))
+            except ex.InstaloaderException as err:
+                emit(fallback(code, err))
+        except Failed as err:
             # One post is the whole request: say so as the error rather than a skip.
             if len(posts) == 1 and not profile:
                 raise
-            emit({"type": "skip", "target": code, "error": msg, "code": kind})
+            emit({"type": "skip", "target": code, "error": err.msg, "code": err.kind})
 
     if profile:
         if not isinstance(profile, str) or not USERNAME.match(profile):
@@ -235,6 +381,9 @@ def main():
         else:
             emit({"type": "error", "error": f"Unknown command {cmd!r}.", "code": "other"})
             return 2
+    except Failed as err:
+        emit({"type": "error", "error": err.msg, "code": err.kind})
+        return 1
     except ex.InstaloaderException as err:
         msg, kind = describe(err)
         emit({"type": "error", "error": msg, "code": kind})

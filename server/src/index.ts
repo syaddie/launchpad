@@ -16,26 +16,43 @@ import { copyDailyToDrive, copyToDriveNow, driveOn } from './drive';
 import { health } from './health';
 import { dbSnapshot, describeRestored, exportBackup, readBackupUpload, restoreBackup, RestoreError, zipBackup } from './backup';
 import { listSnapshots, removeSnapshot, snapshotBackup, snapshotFile, startSnapshots, takeSnapshot } from './snapshots';
-import { cleanCountdowns, cleanMood, cleanPrefs, cleanSnippet, cleanTopics, isStr, isYmd, MAX_SNIPPETS, validBookmarks, validNotes } from './clean';
-import { checkSource } from './news';
+import { cleanCountdowns, cleanMood, cleanPrefs, cleanSnippet, isStr, isYmd, MAX_SNIPPETS, validBookmarks, validNotes } from './clean';
+import { answerRecall, askCard, DigestError, markCard, swapCard } from './digest';
 import { checkLinks, favicon, startLinkChecks } from './bookmarks';
 import { keepVersion, MAX_NOTE_IMAGE, readNoteImage, recordVersions, writeNoteImage } from './notes';
 import { bumpOpen, cleanOpens } from '../../shared/bookmarks';
-import { sameUrl, sourceKey } from '../../shared/news';
+import { sameUrl } from '../../shared/news';
+import { searchArchive } from '../../shared/digest';
 import { eventStream, tabOf } from './events';
 import { recentSmokes, state, stateFor } from './state';
 import { MAX_PHOTOS, MAX_PHOTO_BYTES, readPhoto, removePhotoFile, sniffImage, writePhoto } from './photos';
 import { isRunning, newPackage, refreshPackage, refreshSummaries, refreshWeather, runAllGoogle, runIfStale, runSource, signOutGoogle, startScheduler } from './sync';
-import { attachTerminal, FileError, listDir, makeDir, MAX_TEXT, readFileStream, readText, remove, rename, shellInfo, trustHostKey, abandonUpload, uploadPiece, UPLOAD_CHUNK, writeText } from './shell';
+import { attachTerminal, cleanPath, FileError, listDir, makeDir, MAX_TEXT, readFileStream, readText, rename, sftpSession, shellInfo, trustHostKey, abandonUpload, uploadPiece, UPLOAD_CHUNK, writeText } from './shell';
+import { downloadHeaders, etagOf, ifRangeOk, inlineHeaders, parseRange, rangeHeaders } from './fileserve';
+import { cleanPaths, deleteItems, emptyTrash, listTrash, restoreItems, trashPaths } from './trash';
+import { checkCompress, checkExtract, compressPaths, extractArchive } from './archive';
+import { cancelJob, dismissJob, listJobs, startJob } from './filejobs';
+import { deleteForGood, folderSizes, takeTicket, transfer, zipTicket } from './fileops';
+import { zipPaths } from './zipstream';
+import { cancelSearch, cleanQuery, searchFiles } from './filesearch';
 import { serverStats, startSampler } from './system';
-import { cleanMcServer, diagnose, MAX_MC, mcStatuses, readLog, sendCommand, startServer } from './minecraft';
+import { cleanMcServer, diagnose, findMc, listCrashes, MAX_MC, mcStatuses, readCrash, readLog, sendCommand, serverFacts, startMcWatch, startServer } from './minecraft';
+import { meters, playerAction, players } from './mc-players';
+import { backups, deleteBackup, dismissJob as dismissMcJob, startBackup, startRestore } from './mc-backups';
+import { explainLog, explainStatus } from './explain';
 import { cancelDownload, clearDownloads, listDownloads, startDownload } from './downloads';
 import { instagramInfo, signInInstagram, signOutInstagram, startInstagram } from './instagram';
 import { parseInstagram } from '../../shared/instagram';
-import { addTorrentFile, addTorrentLinks, MAX_TORRENT_FILE, QbitError, torrentAction, torrents } from './qbit';
+import { addTorrentFile, addTorrentLinks, MAX_TORRENT_FILE, QbitError, setFilePriority, setRatio, setSpeedCaps, setTurtle, startTorrentWatch, torrentAction, torrentFiles, torrentOptions, torrents } from './qbit';
+import { startVideo, videoInfo, videoSite } from './ytdlp';
+import { wantsVideo } from '../../shared/video';
 import { containerLogs, DockerError, restartContainer } from './docker';
 import { diskHealth } from './disks';
 import { startCleanup } from './cleanup';
+import { alertsInfo, sendTest, setTopicUrl } from './notify';
+import { startAlerts } from './alerts';
+import { startMcAlerts } from './mc-alerts';
+import { startUnpacking, unpackRecords } from './unpack';
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
 import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
@@ -46,6 +63,7 @@ import { cleanCraving } from '../../shared/trackers';
 import { refreshTraining } from './training';
 import { ask, MAX_ASK } from './ask';
 import { claudeEnabled } from './claude';
+import { shellAskRequest, shellAskStatus } from './shellask';
 import { summariseUsage } from '../../shared/claudeUsage';
 import type { DownloadsInfo, Mood, NewsLists, Package, Photo, Prefs, SavedDoc, SourceKey } from '../../shared/types';
 
@@ -204,19 +222,92 @@ app.put('/api/prefs', async (c) => {
   return c.json(next);
 });
 
-// ---------- news: feeds, the reading list, hidden headlines, muted sources ----------
+// ---------- phone alerts (notify.ts, alerts.ts) ----------
 
-/** Try a feed before following it; says what's wrong with one that doesn't work. */
-app.post('/api/news/check', async (c) => {
+// The test sends to an outside address, so a page from another site can't ask for it.
+app.use('/api/alerts/*', async (c, next) => (foreignOrigin(c.req.header('origin'), c.req.header('host')) ? c.json({ error: 'Cross-site request refused' }, 403) : next()));
+app.use('/api/alerts', async (c, next) => (foreignOrigin(c.req.header('origin'), c.req.header('host')) ? c.json({ error: 'Cross-site request refused' }, 403) : next()));
+
+/** Where alerts go and how sending is going. The topic isn't in the page's state, so Settings › Alerts asks for it here. */
+app.get('/api/alerts', (c) => c.json(alertsInfo()));
+
+app.put('/api/alerts', async (c) => {
   const body = await c.req.json().catch(() => ({}));
-  const [source] = isStr(body.source) ? cleanTopics([body.source]) : [];
-  if (!source) return c.json({ error: 'That isn’t a feed address, a subreddit or Hacker News.' }, 400);
   try {
-    return c.json({ source, ...(await checkSource(source)) });
+    setTopicUrl(body.topicUrl);
   } catch (e) {
     return c.json({ error: (e as Error).message }, 400);
   }
+  return c.json(alertsInfo());
 });
+
+app.post('/api/alerts/test', async (c) => {
+  try {
+    await sendTest();
+  } catch (e) {
+    // Not 502: the page reads that as Launchpad itself being down.
+    return c.json({ error: (e as Error).message }, 422);
+  }
+  return c.json(alertsInfo());
+});
+
+// ---------- the daily digest ----------
+
+async function digestReply(c: Context, run: () => void | Promise<void>): Promise<Response> {
+  try {
+    await run();
+    return c.json(stateFor(['digest']));
+  } catch (e) {
+    return e instanceof DigestError ? c.json({ error: e.message }, e.status) : c.json({ error: (e as Error).message }, 422);
+  }
+}
+
+/** Star a lesson, say it was too basic or too deep, or answer its quick check. */
+app.patch('/api/digest/cards/:id', async (c) => {
+  const b = await c.req.json().catch(() => ({}));
+  return digestReply(c, () => markCard(c.req.param('id'), b));
+});
+
+/** Today's lesson on that subject, on a different concept. Not 502 when Claude fails: the page reads that as Launchpad being down. */
+app.post('/api/digest/cards/:id/swap', async (c) => {
+  if (!claudeEnabled()) return c.json({ error: 'The digest needs ANTHROPIC_API_KEY on the server.' }, 400);
+  return digestReply(c, () => swapCard(c.req.param('id')));
+});
+
+/** A follow-up question on a lesson. The lesson comes back too: older ones aren't in the page's state. */
+app.post('/api/digest/cards/:id/ask', async (c) => {
+  if (!claudeEnabled()) return c.json({ error: 'Follow-up questions need ANTHROPIC_API_KEY on the server.' }, 400);
+  const b = await c.req.json().catch(() => ({}));
+  try {
+    const lesson = await askCard(c.req.param('id'), b.question);
+    return c.json({ ...stateFor(['digest']), lesson });
+  } catch (e) {
+    return e instanceof DigestError ? c.json({ error: e.message }, e.status) : c.json({ error: (e as Error).message }, 422);
+  }
+});
+
+/** An answer to today's Quick recall question. */
+app.post('/api/digest/recall', async (c) => {
+  const b = await c.req.json().catch(() => ({}));
+  if (!isStr(b.cardId)) return c.json({ error: 'Which question?' }, 400);
+  return digestReply(c, () => answerRecall(b.cardId, b.choice));
+});
+
+/** Past lessons: words to find, a subject, starred only, and where to carry on from. */
+app.get('/api/digest/archive', (c) => {
+  const q = c.req.query();
+  return c.json(
+    searchArchive(store.digest(), {
+      q: (q.q ?? '').slice(0, 200),
+      subject: q.subject ? q.subject.slice(0, 100) : undefined,
+      starred: q.starred === '1',
+      offset: Number(q.offset) || 0,
+      limit: Number(q.limit) || 40,
+    }),
+  );
+});
+
+// ---------- the reading list kept from the old News view ----------
 
 const updateLists = (fn: (l: NewsLists) => NewsLists) => {
   store.setNewsLists(fn(store.newsLists()));
@@ -251,29 +342,6 @@ app.patch('/api/news/saved/:id', async (c) => {
 app.delete('/api/news/saved/:id', (c) => {
   const id = c.req.param('id');
   return c.json(updateLists((l) => ({ ...l, saved: l.saved.filter((s) => s.id !== id) })));
-});
-
-/** Hide headlines (a story's, or one) from a topic; `hide: false` puts them back. */
-app.post('/api/news/hidden', async (c) => {
-  const b = await c.req.json().catch(() => ({}));
-  if (!isStr(b.topic) || !Array.isArray(b.urls)) return c.json({ error: 'A topic and the headlines to hide are needed.' }, 400);
-  const urls: string[] = b.urls.filter((u: unknown) => isStr(u) && /^https?:\/\//i.test(u)).slice(0, 50);
-  const key = sourceKey(b.topic);
-  const at = new Date().toISOString();
-  return c.json(
-    updateLists((l) => {
-      const rest = (l.hidden[key] ?? []).filter((h) => !urls.some((u) => sameUrl(u, h.url)));
-      return { ...l, hidden: { ...l.hidden, [key]: b.hide === false ? rest : [...rest, ...urls.map((url) => ({ url, at }))] } };
-    }),
-  );
-});
-
-/** Mute a source everywhere, or unmute it. */
-app.post('/api/news/muted', async (c) => {
-  const b = await c.req.json().catch(() => ({}));
-  if (!isStr(b.source) || !b.source.trim()) return c.json({ error: 'Which source?' }, 400);
-  const name = b.source.trim();
-  return c.json(updateLists((l) => ({ ...l, muted: [...l.muted.filter((m) => m.toLowerCase() !== name.toLowerCase()), ...(b.muted === false ? [] : [name])] })));
 });
 
 // ---------- tasks ----------
@@ -615,6 +683,14 @@ app.use('/api/server/*', async (c, next) => (foreignOrigin(c.req.header('origin'
 /** A container's last lines (?tail=), or only those since a line's timestamp (?since=), for following along. */
 app.get('/api/server/containers/:id/logs', async (c) => c.json(await containerLogs(c.req.param('id'), c.req.query('tail'), c.req.query('since'))));
 
+/** Explain the end of a container's log. The page sends the name it shows, for Claude's context. */
+app.post('/api/server/containers/:id/explain', async (c) => {
+  const body = ((await c.req.json().catch(() => ({}))) ?? {}) as { name?: unknown };
+  const name = typeof body.name === 'string' && /^[\w./-]{1,128}$/.test(body.name) ? body.name : 'a Docker container';
+  const lines = await containerLogs(c.req.param('id'), 1000, undefined);
+  return c.json(await explainLog(`the Docker container ${name}`, lines.map((l) => (l.stream === 'err' ? '[stderr] ' : '') + l.text).join('\n')));
+});
+
 /** The only change Launchpad makes to Docker; see docker.ts. */
 app.post('/api/server/containers/:id/restart', async (c) => {
   await restartContainer(c.req.param('id'));
@@ -654,6 +730,13 @@ app.post('/api/shell/trust', (c) => {
   return c.json(shellInfo(accessOn));
 });
 
+// The terminal's "Ask for a command": one command back for the page to type at the prompt. Nothing runs here.
+app.get('/api/shell/ask', (c) => c.json(shellAskStatus()));
+app.post('/api/shell/ask', async (c) => {
+  const [res, status] = await shellAskRequest(await c.req.json().catch(() => null));
+  return c.json(res, status);
+});
+
 // The terminal's saved commands, changed one at a time so two pages can't overwrite each other's.
 app.get('/api/shell/snippets', (c) => c.json(store.snippets()));
 
@@ -683,15 +766,22 @@ app.delete('/api/shell/snippets/:id', (c) => {
 
 app.get('/api/files/list', async (c) => c.json(await listDir(c.req.query('path'))));
 
-app.get('/api/files/download', async (c) => {
-  const f = await readFileStream(c.req.query('path'));
-  return c.body(f.body, 200, {
-    'Content-Type': 'application/octet-stream',
-    'Content-Length': String(f.size),
-    'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(f.name)}`,
-    'X-Content-Type-Options': 'nosniff',
-  });
-});
+/** A file, or the part a Range header asks for, so big downloads can resume and videos can seek. */
+async function sendFile(c: Context, inline: boolean) {
+  const p = cleanPath(c.req.query('path'));
+  const kind = inline ? inlineHeaders(path.posix.basename(p)) : downloadHeaders(path.posix.basename(p));
+  if (!kind) throw new FileError('That kind of file can’t be shown here. Download it instead.', 415);
+  // A Range for a version of the file that's since changed gets the whole new file.
+  const f = await readFileStream(p, (size, mtime) => (ifRangeOk(c.req.header('if-range'), etagOf(size, mtime)) ? parseRange(c.req.header('range'), size) : null));
+  const { status, headers } = rangeHeaders(f.size, f.part, f.mtime);
+  if (status === 416 || !f.body) return c.body(null, 416, { ...kind, ...headers });
+  return c.body(f.body, status, { ...kind, ...headers });
+}
+
+app.get('/api/files/download', (c) => sendFile(c, false));
+
+/** Images, PDFs, audio and video, shown in the page; see fileserve.ts for what's allowed and the headers that keep it safe. */
+app.get('/api/files/preview', (c) => sendFile(c, true));
 
 app.get('/api/files/text', async (c) => c.json(await readText(c.req.query('path'))));
 
@@ -730,9 +820,131 @@ app.post('/api/files/rename', async (c) => {
   return c.json({ ok: true });
 });
 
+/** To the trash (trash.ts), or with `permanent` for good, as a job. Takes `paths`, or one `path`. */
 app.post('/api/files/delete', async (c) => {
   const body = await c.req.json();
-  await remove(body?.path);
+  const paths = body?.paths ?? body?.path;
+  if (body?.permanent === true) return c.json({ job: deleteForGood(paths) });
+  return c.json(await trashPaths(paths));
+});
+
+app.get('/api/files/trash', async (c) => c.json(await listTrash()));
+
+app.post('/api/files/trash/restore', async (c) => c.json(await restoreItems((await c.req.json())?.items)));
+
+/** Items in the trash, for good; a job, as a big folder takes a while. */
+app.post('/api/files/trash/delete', async (c) => {
+  const items = (await c.req.json())?.items;
+  const n = Array.isArray(items) ? items.length : 0;
+  const what = n === 1 ? 'one thing' : `${n} things`;
+  return c.json({ job: startJob('empty', `Deleting ${what} from the trash`, '', async (ctx) => (await deleteItems(items, ctx.signal), { message: `Deleted ${what} for good.` })) });
+});
+
+app.post('/api/files/trash/empty', (c) =>
+  c.json({
+    job: startJob('empty', 'Emptying the trash', '', async (ctx) => {
+      ctx.progress('Deleting everything in the trash…');
+      await emptyTrash(ctx.signal);
+      return { message: 'The trash is empty.' };
+    }),
+  }),
+);
+
+/** Folder sizes from du, for up to 50 folders at once. */
+app.post('/api/files/size', async (c) => c.json(await folderSizes((await c.req.json())?.paths, c.req.raw.signal)));
+
+/** Copy or move into a folder; a move on one disk is done at once, anything else is a job. */
+app.post('/api/files/transfer', async (c) => {
+  const body = await c.req.json();
+  if (body?.mode !== 'copy' && body?.mode !== 'move') return c.json({ error: 'Copy or move?' }, 400);
+  return c.json(await transfer(body.mode, body.paths, body.to));
+});
+
+app.post('/api/files/extract', async (c) => {
+  const file = cleanPath((await c.req.json())?.path);
+  const dir = path.posix.dirname(file);
+  await checkExtract(file);
+  return c.json({
+    job: startJob('extract', `Unpacking ${path.posix.basename(file)}`, dir, async (ctx) => {
+      const r = await extractArchive(file, dir, { signal: ctx.signal, progress: ctx.progress });
+      return { message: `Unpacked into ${path.posix.basename(r.folder)}.`, result: r.folder };
+    }),
+  });
+});
+
+app.post('/api/files/compress', async (c) => {
+  const body = await c.req.json();
+  const paths = cleanPaths(body?.paths);
+  const format = body?.format === 'tar.gz' ? 'tar.gz' : 'zip';
+  const dir = path.posix.dirname(paths[0]);
+  const what = paths.length === 1 ? path.posix.basename(paths[0]) : `${paths.length} items`;
+  await checkCompress(paths, format);
+  return c.json({
+    job: startJob('compress', `Packing ${what} into a .${format}`, dir, async (ctx) => {
+      const r = await compressPaths(paths, format, { signal: ctx.signal, progress: ctx.progress });
+      return { message: `Made ${path.posix.basename(r.file)}.`, result: r.file };
+    }),
+  });
+});
+
+app.get('/api/files/jobs', (c) => c.json(listJobs()));
+app.post('/api/files/jobs/:id/cancel', (c) => c.json(cancelJob(c.req.param('id'))));
+app.post('/api/files/jobs/:id/dismiss', (c) => c.json(dismissJob(c.req.param('id'))));
+
+/** A link to fetch a zip of these with; see zipTicket. */
+app.post('/api/files/zip', async (c) => c.json(await zipTicket((await c.req.json())?.paths)));
+
+app.get('/api/files/zip/:ticket', async (c) => {
+  const t = takeTicket(c.req.param('ticket'));
+  if (!t) return c.json({ error: 'That download link has expired. Try again.' }, 404);
+  const { sftp } = await sftpSession();
+  const stream = zipPaths(sftp, t.paths);
+  return c.body(Readable.toWeb(stream) as ReadableStream, 200, {
+    'Content-Type': 'application/zip',
+    'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(t.name)}`,
+    'X-Content-Type-Options': 'nosniff',
+    'Cache-Control': 'no-store',
+  });
+});
+
+/** Names or contents under a folder, as lines of JSON: each hit as it's found, then how it ended. */
+app.post('/api/files/search', async (c) => {
+  const body = await c.req.json();
+  const dir = cleanPath(body?.dir);
+  const query = cleanQuery(body?.query);
+  const mode = body?.mode === 'content' ? 'content' : 'name';
+  const id = typeof body?.id === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(body.id) ? body.id : undefined;
+  const signal = c.req.raw.signal;
+  const enc = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(ctl) {
+      const send = (v: unknown) => {
+        try {
+          ctl.enqueue(enc.encode(JSON.stringify(v) + '\n'));
+        } catch {
+          // The page went away.
+        }
+      };
+      searchFiles(dir, query, mode, send, { id, signal })
+        .then(send, (e: Error) => send({ done: true, count: 0, more: false, timedOut: false, tool: 'find', error: e.message }))
+        .finally(() => {
+          try {
+            ctl.close();
+          } catch {
+            // Already closed.
+          }
+        });
+    },
+    cancel() {
+      if (id) cancelSearch(id);
+    },
+  });
+  return c.body(stream, 200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+});
+
+app.post('/api/files/search/cancel', async (c) => {
+  const id = (await c.req.json())?.id;
+  if (typeof id === 'string') cancelSearch(id);
   return c.json({ ok: true });
 });
 
@@ -779,20 +991,68 @@ app.post('/api/minecraft/:id/start', async (c) => {
   return c.json({ ok: true });
 });
 
+/** Who's online (?fresh=1 asks the console's list again), with ops and the whitelist. */
+app.get('/api/minecraft/:id/players', async (c) => c.json(await players(c.req.param('id'), c.req.query('fresh') === '1')));
+
+/** Kick, op, de-op, whitelist or teleport: one console command, built here from a checked name. */
+app.post('/api/minecraft/:id/players', async (c) => {
+  await playerAction(c.req.param('id'), (await c.req.json()) ?? {});
+  return c.json({ ok: true });
+});
+
+/** Memory and CPU, the ping's player count, and TPS where the server says (?tps=1 lets it be asked). */
+app.get('/api/minecraft/:id/meters', async (c) => c.json(await meters(c.req.param('id'), c.req.query('tps') === '1')));
+
+/** World backups: the list, and any backup or restore under way. */
+app.get('/api/minecraft/:id/backups', async (c) => c.json(await backups(c.req.param('id'))));
+app.post('/api/minecraft/:id/backups', async (c) => c.json(await startBackup(c.req.param('id'))));
+app.post('/api/minecraft/:id/backups/dismiss', async (c) => {
+  dismissMcJob(c.req.param('id'));
+  return c.json(await backups(c.req.param('id')));
+});
+app.post('/api/minecraft/:id/backups/:name/restore', async (c) => c.json(await startRestore(c.req.param('id'), c.req.param('name'))));
+app.delete('/api/minecraft/:id/backups/:name', async (c) => c.json(await deleteBackup(c.req.param('id'), c.req.param('name'))));
+
+/** Crash reports, newest first, and what Restart if it crashes has done. */
+app.get('/api/minecraft/:id/crashes', async (c) => c.json(await listCrashes(c.req.param('id'))));
+app.get('/api/minecraft/:id/crashes/:name', async (c) => c.json(await readCrash(c.req.param('id'), c.req.param('name'))));
+
+/** Whether Explain this log can run, and why not. */
+app.get('/api/explain', (c) => c.json(explainStatus()));
+
+/** Explain the end of the server's log, or one crash report ({ crash: name }). */
+app.post('/api/minecraft/:id/explain', async (c) => {
+  const body = ((await c.req.json().catch(() => ({}))) ?? {}) as { crash?: unknown };
+  const id = c.req.param('id');
+  const s = await findMc(id);
+  const kind = await serverFacts(s).then((f) => (f.spark ? 'with Spark' : f.paper ? 'Paper' : f.bukkit ? 'Spigot or Bukkit' : 'vanilla or modded'), () => 'unknown kind');
+  if (typeof body.crash === 'string') {
+    const r = await readCrash(id, body.crash);
+    return c.json(await explainLog(`the crash report ${r.name} of the Minecraft server "${s.name}" (${kind})`, r.text, { crashReport: true }));
+  }
+  const log = await readLog(id, undefined);
+  if (log.missing) throw new FileError(`There’s no logs/latest.log in ${s.dir || 'its folder'} to explain.`, 409);
+  return c.json(await explainLog(`logs/latest.log of the Minecraft server "${s.name}" (${kind}, ${s.running ? 'running' : 'stopped'})`, log.text));
+});
+
 // ---------- downloads and torrents ----------
 
 app.get('/api/downloads', async (c) => {
-  const [list, instagram] = await Promise.all([listDownloads(), instagramInfo()]);
-  return c.json({ ...list, instagram } satisfies DownloadsInfo);
+  const [list, instagram, video] = await Promise.all([listDownloads(), instagramInfo(), videoInfo()]);
+  return c.json({ ...list, instagram, video, unpacks: unpackRecords() } satisfies DownloadsInfo);
 });
 
-/** Fetch a link into a folder on the server, or an Instagram post's or profile's photos and videos; the page polls the list for progress. */
+/** Fetch a link into a folder on the server, an Instagram post's or profile's photos and videos, or (via: 'video') a video with yt-dlp; the page polls the list for progress. */
 app.post('/api/downloads', async (c) => {
   const body = await c.req.json();
+  if (wantsVideo(body)) return c.json(await startVideo(body));
   const ig = typeof body?.url === 'string' ? parseInstagram(body.url) : null;
   if (ig && 'error' in ig) throw new FileError(ig.error);
   return c.json(ig ? startInstagram(body, ig) : startDownload(body));
 });
+
+/** Whether yt-dlp knows the site a link is on (worked out without fetching it). */
+app.get('/api/downloads/video', async (c) => c.json(await videoSite(c.req.query('url'))));
 
 /** Sign Instagram downloads in with a browser's session cookie, checked with Instagram first. */
 app.post('/api/downloads/instagram', async (c) => c.json(await signInInstagram((await c.req.json())?.cookie)));
@@ -808,19 +1068,48 @@ app.get('/api/torrents', async (c) => c.json(await torrents()));
 /** Magnet links (or links to .torrent files), one a line. */
 app.post('/api/torrents', async (c) => {
   const body = await c.req.json();
-  await addTorrentLinks(body?.urls, body?.paused === true);
+  await addTorrentLinks(body?.urls, { paused: body?.paused === true, category: body?.category, tags: body?.tags, ratio: body?.ratio });
   return c.json(await torrents());
 });
 
-/** A .torrent file, its bytes as the body. */
+/** A .torrent file, its bytes as the body; its category, tags (comma-separated) and ratio in the query. */
 app.post(
   '/api/torrents/file',
   bodyLimit({ maxSize: MAX_TORRENT_FILE, onError: (c) => c.json({ error: 'That .torrent file is over 10 MB.' }, 413) }),
   async (c) => {
-    await addTorrentFile(await c.req.arrayBuffer(), c.req.query('name') ?? 'file.torrent');
+    await addTorrentFile(await c.req.arrayBuffer(), c.req.query('name') ?? 'file.torrent', { category: c.req.query('category'), tags: c.req.query('tags'), ratio: c.req.query('ratio') });
     return c.json(await torrents());
   },
 );
+
+/** qBittorrent's categories and tags, to add a torrent with. */
+app.get('/api/torrents/options', async (c) => c.json(await torrentOptions()));
+
+/** Turtle mode (qBittorrent's alternative speed limits) on or off. */
+app.post('/api/torrents/turtle', async (c) => {
+  await setTurtle((await c.req.json())?.on);
+  return c.json(await torrents());
+});
+
+/** Speed caps in bytes a second, 0 for none: dl, up, turtleDl, turtleUp (only the ones given change). */
+app.post('/api/torrents/caps', async (c) => {
+  await setSpeedCaps(await c.req.json());
+  return c.json(await torrents());
+});
+
+app.get('/api/torrents/:hash/files', async (c) => c.json(await torrentFiles(c.req.param('hash'))));
+
+/** Skip a torrent's files, or download them at normal or high priority. */
+app.post('/api/torrents/:hash/files', async (c) => {
+  const body = await c.req.json();
+  return c.json(await setFilePriority(c.req.param('hash'), body?.ids, body?.priority));
+});
+
+/** The ratio a torrent seeds to before Launchpad takes it out of qBittorrent (its files kept), or null to seed on. */
+app.post('/api/torrents/:hash/ratio', async (c) => {
+  await setRatio(c.req.param('hash'), (await c.req.json())?.ratio);
+  return c.json(await torrents());
+});
 
 app.post('/api/torrents/action', async (c) => {
   const body = await c.req.json();
@@ -977,8 +1266,8 @@ app.delete('/api/photos/:id', (c) => {
 
 app.post('/api/sync/:source', async (c) => {
   const key = c.req.param('source') as SourceKey;
-  if (!['calendar', 'tasks', 'gmail', 'carriers', 'news', 'inbox', 'weather', 'speedtest'].includes(key)) return c.json({ error: 'Unknown source' }, 400);
-  if (key === 'news' || key === 'inbox') {
+  if (!['calendar', 'tasks', 'gmail', 'carriers', 'digest', 'inbox', 'weather', 'speedtest'].includes(key)) return c.json({ error: 'Unknown source' }, 400);
+  if (key === 'digest' || key === 'inbox') {
     await refreshSummaries(key);
     return c.json(state());
   }
@@ -1078,8 +1367,13 @@ server.on('upgrade', async (req, socket, head) => {
 });
 
 startScheduler();
+startMcWatch();
 startReviewNotes();
 startSampler();
 startCleanup();
+startTorrentWatch();
 startSnapshots(copyDailyToDrive);
 startLinkChecks();
+startAlerts();
+startMcAlerts();
+startUnpacking();

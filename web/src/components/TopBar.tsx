@@ -319,7 +319,7 @@ export function TopBar({ data, now, title, subline, search, onSearch, searchRef,
     { key: 'tasks', name: 'Tasks', ok: 'Synced' },
     { key: 'gmail', name: 'Gmail packages', ok: 'Checked' },
     { key: 'carriers', name: 'Carriers', ok: 'Updated' },
-    { key: 'news', name: 'News', ok: 'Updated' },
+    { key: 'digest', name: 'Daily digest', ok: 'Checked' },
     { key: 'inbox', name: 'Inbox', ok: 'Updated' },
     { key: 'weather', name: 'Weather', ok: 'Updated' },
     { key: 'speedtest', name: 'Speed test', ok: 'Ran' },
@@ -333,8 +333,8 @@ export function TopBar({ data, now, title, subline, search, onSearch, searchRef,
       const h = health.find((w) => w.key === s.key);
       const st = data.sync[s.key];
       const off =
-        s.key === 'news'
-          ? !data.prefs.newsTopics.length
+        s.key === 'digest'
+          ? !data.newsSummaries || !data.prefs.digestSubjects.length || hidden.includes('view:digest')
           : s.key === 'inbox'
             ? !data.prefs.sources.gmail || hidden.includes('view:inbox')
             : s.key === 'weather'

@@ -1,6 +1,6 @@
 // Backup and restore of everything you've typed into Launchpad, as one JSON file,
 // plus a snapshot of the SQLite database itself. Caches that sync fills again
-// (calendar, tasks, mail, news, weather) and the Google sign-in stay out of the JSON.
+// (calendar, tasks, mail, weather) and the Google sign-in stay out of the JSON.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -14,6 +14,7 @@ import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
 import { cleanCravings } from '../../shared/trackers';
 import { cleanNewsLists } from '../../shared/news';
+import { cleanDigest } from '../../shared/digest';
 import { cleanOpens } from '../../shared/bookmarks';
 import { cleanHistory } from '../../shared/notes';
 import { historyRestored, noteImageExists, readNoteImage, restoreNoteImage, usedImages } from './notes';
@@ -39,6 +40,7 @@ export function exportBackup(): Backup {
     packages: store.packages(),
     photos: store.photos(),
     newsLists: store.newsLists(),
+    digest: store.digest(),
     bookmarkOpens: store.bookmarkOpens(),
     noteHistory: store.noteHistory(),
     snippets: store.snippets(),
@@ -63,6 +65,7 @@ export const PART_NAMES: Record<BackupPart, string> = {
   packages: 'packages',
   photos: 'photos',
   newsLists: 'reading list',
+  digest: 'daily digest',
   bookmarkOpens: 'bookmark ranking',
   noteHistory: 'notepad history',
   snippets: 'terminal snippets',
@@ -151,6 +154,11 @@ export function restoreBackup(body: unknown): BackupPart[] {
   if (has('newsLists') && typeof b.newsLists === 'object') {
     const v = cleanNewsLists(b.newsLists);
     writes.push(['newsLists', () => store.setNewsLists(v)]);
+  }
+
+  if (has('digest') && typeof b.digest === 'object') {
+    const v = cleanDigest(b.digest);
+    writes.push(['digest', () => store.setDigest(v)]);
   }
 
   if (has('bookmarkOpens') && typeof b.bookmarkOpens === 'object') {
@@ -263,6 +271,7 @@ export function describeRestored(parts: BackupPart[]): string[] {
       case 'packages': return plural(store.packages().length, 'package');
       case 'photos': return plural(store.photos().length, 'photo');
       case 'newsLists': return `reading list (${plural(store.newsLists().saved.length, 'story', 'stories')})`;
+      case 'digest': return `daily digest (${plural(store.digest().days.reduce((n, d) => n + d.cards.length, 0), 'lesson')})`;
       case 'snippets': return plural(store.snippets().length, 'terminal snippet');
       case 'minecraft': return plural(store.minecraft().length, 'Minecraft server');
       default: return PART_NAMES[p];

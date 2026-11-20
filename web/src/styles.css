@@ -431,7 +431,11 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .menu button:hover:not(:disabled) { background: var(--hv); }
 .menu button:disabled { opacity: 0.4; cursor: default; }
 
-.tabs { display: flex; gap: 2px; }
+/* A row of tabs that doesn't fit (a view's tabs on a phone) scrolls sideways rather than
+   running off the edge. As a scroll container it may shrink below its content in a flex row. */
+.tabs { display: flex; gap: 2px; min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; }
+/* The scroll box would clip a focus ring drawn outside the tab, so draw it inside. */
+.tabs .tab:focus-visible { outline-offset: -2px; }
 .tab {
   flex: none;
   border: none;
@@ -780,8 +784,167 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .reading-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .reading-body a.story-headline:hover { text-decoration: underline; text-underline-offset: 2px; }
 
+/* ---------- daily digest ---------- */
+
+/* The whole view scrolls: lessons are read top to bottom, not squeezed into the screen. */
+.lp-root:not([data-layout='narrow']) .digest { overflow-y: auto; margin: -1px; padding: 1px; }
+.dg-status { display: flex; align-items: center; gap: 10px; }
+.digest > .news-head { position: relative; }
+/* On a phone the refresh button sits at the end of the tabs' row rather than on a row of its own; errors show in the view. */
+[data-layout='narrow'] .digest .dg-status { position: absolute; top: 0; right: 0; }
+[data-layout='narrow'] .digest .dg-status > span { display: none; }
+[data-layout='narrow'] .digest .news-tabs { max-width: calc(100% - 40px); }
+.dg-add { width: 230px; max-width: 100%; }
+[data-layout='narrow'] .dg-add { width: 100%; }
+.dg-ideas { display: flex; flex-wrap: wrap; gap: 8px; }
+.dg-note { display: flex; align-items: flex-start; gap: 8px; flex: none; padding: 0 10px; font-size: 13px; color: var(--t2); text-wrap: pretty; }
+.dg-note i { flex: none; margin-top: 2px; font-size: 16px; }
+.dg-day-head { flex: none; margin: 10px 0 -5px; padding: 0 10px; font-family: var(--f-display); font-size: 15px; font-weight: 600; color: var(--t2); }
+
+.dg-grid { flex: none; display: grid; gap: 20px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); align-items: start; }
+[data-layout='wide'] .dg-grid { gap: 30px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); }
+[data-layout='narrow'] .dg-grid { grid-template-columns: minmax(0, 1fr); gap: 15px; }
+
+.dg-card { position: relative; }
+.dg-head-end { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.dg-card .panel-head { align-items: center; }
+.dg-card .icon-btn.on { background: transparent; color: var(--ac); }
+.dg-body { display: flex; flex-direction: column; gap: 10px; padding: 0 10px; }
+.dg-body p { margin: 0; line-height: 1.55; text-wrap: pretty; color: var(--t2); }
+.dg-lead { display: flex; flex-direction: column; gap: 3px; }
+.dg-title { margin: 0; font-family: var(--f-display); font-size: 24px; font-weight: 600; line-height: 1.2; letter-spacing: -0.01em; color: var(--tx); text-wrap: balance; }
+.dg-body p.dg-hook { font-size: 14px; color: var(--t3); }
+.dg-body p.dg-gist { font-size: 15px; line-height: 1.5; color: var(--tx); }
+/* A formula on its own line; a long one scrolls sideways rather than pushing the card wider. */
+.dg-formula { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; padding: 4px 12px 8px; border-radius: var(--r-m); background: var(--hv); color: var(--tx); }
+.dg-formula > .tex-display { align-self: stretch; }
+.dg-body p.dg-where { font-size: 12px; line-height: 1.45; color: var(--t3); text-align: center; }
+.dg-example { min-width: 0; padding: 10px 12px; border-radius: var(--r-m); background: var(--hv); }
+.dg-body .dg-example p { white-space: pre-wrap; color: var(--tx); }
+.dg-example pre.dg-code { margin: 0; font-family: var(--f-mono); font-size: 12px; line-height: 1.6; color: var(--tx); overflow-x: auto; overflow-wrap: normal; white-space: pre; }
+/* On a phone a long line wraps rather than hiding off the edge. */
+[data-layout='narrow'] .dg-example pre.dg-code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.dg-body p.dg-takeaway { display: flex; gap: 8px; font-weight: 500; color: var(--tx); }
+.dg-takeaway i { flex: none; margin-top: 3px; font-size: 16px; color: var(--ac); }
+
+/* The quick check under the gist: three short answers, one tap. */
+.dg-check { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; border: 1px solid var(--ln); border-radius: var(--r-m); }
+.dg-body p.dg-check-q { font-size: 14px; line-height: 1.45; color: var(--tx); }
+.dg-check-label { display: block; margin-bottom: 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--t3); }
+/* Short answers share a line; a long one takes the row. */
+.dg-check-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.dg-option.sm { flex: 1 1 auto; align-items: center; gap: 7px; max-width: 100%; padding: 5px 10px 5px 6px; border-radius: 999px; font-size: 13px; line-height: 1.35; }
+.dg-option.sm .dg-letter { width: 18px; height: 18px; font-size: 10px; }
+.dg-option.sm > i { margin-top: 0; font-size: 16px; }
+.dg-body p.dg-check-why { font-size: 13px; line-height: 1.5; }
+.dg-check.right .dg-check-why b { color: var(--acd); }
+.dg-check.wrong .dg-check-why b { color: var(--wn); }
+
+/* More on a lesson, one part at a time: how it works, an example, follow-up questions. */
+.dg-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.dg-pill { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 3px 11px; border: 1px solid var(--ln); border-radius: 999px; background: transparent; color: var(--t2); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; transition: background 0.12s, border-color 0.12s, color 0.12s; }
+.dg-pill:hover { background: var(--hv); color: var(--tx); }
+.dg-pill.on { border-color: transparent; background: var(--act); color: var(--acd); }
+.dg-pill i { font-size: 14px; }
+.dg-pill .tab-count { margin-left: 1px; }
+.dg-pill.on .tab-count { background: var(--bg); }
+.dg-section { display: flex; flex-direction: column; gap: 8px; min-width: 0; animation: dgOpen 0.16s var(--ease); }
+@keyframes dgOpen { from { opacity: 0; transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .dg-section { animation: none; } }
+.dg-points { margin: 0; padding: 0 0 0 18px; gap: 6px; }
+.dg-points li { padding-left: 2px; line-height: 1.5; color: var(--t2); text-wrap: pretty; }
+.dg-points li::marker { color: var(--ac); }
+.dg-ask { gap: 10px; }
+.dg-qa { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding-left: 10px; border-left: 2px solid var(--ac); }
+.dg-body p.dg-qa-q { font-size: 13px; font-weight: 600; color: var(--tx); }
+.dg-body p.dg-qa-a { font-size: 13px; line-height: 1.5; white-space: pre-line; }
+.dg-body p.dg-thinking { display: flex; align-items: center; gap: 6px; color: var(--t3); }
+.dg-ask-ideas { display: flex; flex-wrap: wrap; gap: 6px; }
+.dg-ask-form { display: flex; gap: 6px; }
+.dg-ask-form .input { flex: 1; min-width: 0; }
+.dg-ask-form .btn { flex: none; }
+.dg-body p.dg-ask-error { display: flex; gap: 6px; font-size: 12px; color: var(--wn); }
+.dg-ask-error i { flex: none; margin-top: 2px; }
+
+/* Maths (KaTeX). Its own fonts, at the size of the text around it, in the text's colour. */
+.digest .katex { font-size: 1.1em; }
+.digest .tex-display { display: block; max-width: 100%; overflow-x: auto; overflow-y: hidden; }
+.digest .tex-display .katex-display { margin: 0.35em 0; }
+.digest .dg-formula .katex { font-size: 1.3em; }
+.tex-raw { font-family: var(--f-mono); font-size: 0.9em; overflow-wrap: anywhere; }
+.dg-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; margin-top: 14px; padding: 10px 6px 0; border-top: 1px solid var(--ln); }
+.dg-rate { display: inline-flex; flex-wrap: wrap; gap: 2px; }
+.dg-foot .btn.on { background: var(--act); color: var(--acd); }
+.dg-foot .btn:disabled { opacity: 0.6; cursor: default; }
+.dg-swapping .dg-body { opacity: 0.45; transition: opacity 0.2s; }
+
+.dg-pending .dg-body { gap: 12px; padding-bottom: 10px; }
+.dg-missing .dg-body { padding-bottom: 6px; }
+.dg-bar { display: block; height: 12px; border-radius: 6px; background: var(--hv); animation: dgPulse 1.4s ease-in-out infinite; }
+.dg-bar.short { width: 60%; }
+@keyframes dgPulse { 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .dg-bar { animation: none; } }
+
+.dg-recall { flex: none; }
+.dg-recall .panel-head { flex-wrap: wrap; }
+.dg-recall-body { display: flex; flex-direction: column; gap: 12px; padding: 0 10px; }
+.dg-q { margin: 0; font-family: var(--f-display); font-size: 18px; line-height: 1.4; text-wrap: pretty; max-width: 75ch; }
+.dg-options { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+[data-layout='narrow'] .dg-options { grid-template-columns: minmax(0, 1fr); }
+.dg-option { display: flex; align-items: flex-start; gap: 10px; min-width: 0; padding: 9px 12px; border: 1px solid var(--ln); border-radius: var(--r-m); background: transparent; color: var(--tx); font: inherit; font-size: 13px; line-height: 1.45; text-align: left; cursor: pointer; transition: background 0.12s, border-color 0.12s; }
+.dg-option > span:nth-child(2) { flex: 1; min-width: 0; }
+.dg-option:hover:not(:disabled) { background: var(--hv); border-color: var(--ac); }
+.dg-option:disabled { cursor: default; }
+.dg-letter { flex: none; width: 20px; height: 20px; border-radius: 50%; background: var(--hv); display: grid; place-items: center; font-size: 11px; font-weight: 600; color: var(--t2); }
+.dg-option > i { flex: none; margin-top: 1px; font-size: 18px; color: var(--ac); }
+.dg-option.picked { border-color: var(--ac); background: var(--hv); }
+.dg-option.right { border-color: var(--ac); background: var(--act); }
+.dg-option.right .dg-letter { background: var(--ac); color: var(--on); }
+.dg-option.wrong { border-color: var(--wn); background: var(--wnt); }
+.dg-option.wrong .dg-letter { background: var(--wn); color: var(--on); }
+.dg-option.wrong > i { color: var(--wn); }
+.dg-option.faded { opacity: 0.55; }
+.dg-result { display: flex; flex-direction: column; gap: 4px; }
+.dg-result p { margin: 0; line-height: 1.5; text-wrap: pretty; max-width: 80ch; }
+.dg-result.right b { color: var(--acd); }
+.dg-result.wrong b { color: var(--wn); }
+
+.dg-archive { flex: 1; min-height: 320px; }
+[data-layout='narrow'] .dg-archive { min-height: 0; }
+.dg-archive-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; flex: none; padding: 0 10px 12px; }
+.dg-search { position: relative; flex: 1 1 240px; max-width: 420px; min-width: 0; }
+.dg-search i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--t3); pointer-events: none; }
+.dg-search .input { width: 100%; padding-left: 32px; }
+.dg-subject { width: auto; max-width: 100%; min-width: 0; }
+.dg-archive-bar .btn.on { background: var(--act); color: var(--acd); border-color: transparent; }
+/* Only the duotone icons are loaded: a star is filled by making its fill layer solid. */
+.dg-starred { color: var(--ac); }
+.dg-starred::before { opacity: 1 !important; }
+.dg-archive-list { display: flex; flex-direction: column; }
+.dg-row { display: flex; align-items: baseline; gap: 14px; width: 100%; padding: 9px 10px; border: none; border-radius: var(--r); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.dg-row + .dg-row { border-top: 1px solid var(--ln); border-radius: 0; }
+.dg-row:hover { background: var(--hv); }
+.dg-row-when { flex: none; width: 92px; }
+.dg-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.dg-row-title { font-size: 14px; font-weight: 600; line-height: 1.3; text-wrap: pretty; }
+.dg-row-title i { margin-left: 6px; font-size: 12px; color: var(--ac); }
+.dg-row-sub { font-size: 12px; line-height: 1.45; color: var(--t3); text-wrap: pretty; }
+.dg-row-sub .chip { margin-right: 4px; vertical-align: 1px; }
+[data-layout='narrow'] .dg-row { flex-direction: column; gap: 2px; }
+[data-layout='narrow'] .dg-row-when { width: auto; }
+.dg-archive-open { display: flex; flex-direction: column; gap: 6px; padding: 8px 0 14px; }
+.dg-archive-open .dg-card { box-shadow: 0 0 0 1px var(--ln); }
+/* The archive is as wide as the view: an open lesson keeps to a readable line length. */
+.dg-archive-open .dg-body > * { max-width: 80ch; }
+.dg-close { align-self: flex-start; }
+.dg-more { align-self: center; margin: 12px 0 4px; }
+
 /* ---------- inbox ---------- */
 
+/* Bills and the summary sit above the columns and keep their full height. When they leave too little room,
+   the columns keep a usable height and the whole view scrolls down to them, rather than squashing them to nothing. */
+.lp-root:not([data-layout='narrow']) .inbox { overflow-y: auto; margin: -1px; padding: 1px; } /* room for the panels' 1px outline */
+.lp-root:not([data-layout='narrow']) .inbox-grid { min-height: 420px; }
 .inbox-brief { flex: none; }
 .inbox-overview { margin: 0; padding: 0 10px; max-width: 78ch; font-family: var(--f-display); font-size: 17px; line-height: 1.5; text-wrap: pretty; }
 .inbox-skimmed { margin: 8px 0 0; padding: 0 10px; font-size: 12px; color: var(--t3); text-wrap: pretty; }
@@ -802,6 +965,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .inbox-reconnect { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; flex: none; font-size: 13px; color: var(--t3); }
 /* Bills and receipts found in Gmail, waiting for Keep or Dismiss. */
 .inbox-bills { flex: none; }
+.inbox-bills .scroll { max-height: 220px; }
+/* Phones scroll the page, not the panel, so every bill shows rather than being cut off at the first few. */
+[data-layout='narrow'] .inbox-bills .scroll { max-height: none; }
 .bill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 7px 10px; border-radius: var(--r); font-size: 13px; }
 .bill-row + .bill-row { border-top: 1px solid var(--ln); border-radius: 0; }
 .bill-row .bill-what { flex: 1 1 260px; min-width: 0; }
@@ -1110,7 +1276,8 @@ button.pix-cell:hover { box-shadow: inset 0 0 0 1px var(--t3); }
 .term-wrap { position: relative; flex: 1; min-height: 0; min-width: 0; border-radius: var(--r); background: var(--rz); }
 .term-shell { position: absolute; inset: 0; }
 .term-box { position: absolute; inset: 8px 4px 8px 10px; }
-.snippets { flex: 0 0 280px; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+/* min-width: 0 keeps it 280px wide when a long snippet name won't fit (it ends in … instead). */
+.snippets { flex: 0 0 280px; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
 [data-layout='narrow'] .snippets { flex: none; max-height: 40vh; }
 .snippets-head { display: flex; align-items: center; justify-content: space-between; }
 .snippets-list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
@@ -1121,6 +1288,25 @@ button.pix-cell:hover { box-shadow: inset 0 0 0 1px var(--t3); }
 .snippet-form { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--ac); border-radius: var(--r); }
 .snippet-form .input { width: 100%; box-sizing: border-box; }
 .snippet-form textarea.input { height: auto; padding: 6px 8px; font-size: 12px; resize: vertical; }
+/* Ask for a command, at the top of the snippets bar, and Claude's answer above the snippets. */
+.cmd-ask { display: flex; flex-direction: column; gap: 6px; }
+.cmd-ask-row { position: relative; display: flex; align-items: center; margin: 0; }
+.cmd-ask-row > i { position: absolute; left: 9px; color: var(--ac); font-size: 15px; pointer-events: none; }
+.cmd-ask-row .input { flex: 1; min-width: 0; padding: 0 34px 0 30px; }
+.cmd-ask-row .icon-btn { position: absolute; right: 3px; }
+[data-layout='narrow'] .cmd-ask-row .input { font-size: 16px; }
+.cmd-ask-note, .cmd-ask-off { margin: 0; font-size: 12px; line-height: 1.4; text-wrap: pretty; }
+.cmd-ask-note { color: var(--wn); }
+.cmd-answer { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--ac); border-radius: var(--r); }
+.cmd-answer.risky { border-color: var(--wn); }
+.cmd-answer.failed { border-color: var(--ln); }
+.cmd-answer-top { display: flex; align-items: flex-start; gap: 4px; }
+.cmd-answer-top .icon-btn { flex: none; margin: -3px -6px 0 0; }
+.cmd-answer-cmd { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.45; color: var(--tx); }
+.cmd-answer-what, .cmd-answer-error { margin: 0; font-size: 12px; line-height: 1.4; color: var(--t2); text-wrap: pretty; }
+.cmd-answer-error { flex: 1; min-width: 0; }
+.cmd-answer-warn { display: flex; gap: 6px; margin: 0; padding: 6px 8px; border-radius: var(--r-s); background: var(--wnt); color: var(--wn); font-size: 12px; line-height: 1.4; }
+.cmd-answer-warn i { flex: none; font-size: 14px; margin-top: 1px; }
 .term-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 20px; border-radius: var(--r); background: color-mix(in srgb, var(--rz) 90%, transparent); text-align: center; }
 .term-overlay p { margin: 0; max-width: 520px; color: var(--t2); text-wrap: pretty; }
 .term-overlay .copy-block { width: min(640px, 100%); text-align: left; }
@@ -1142,9 +1328,9 @@ button.pix-cell:hover { box-shadow: inset 0 0 0 1px var(--t3); }
 .files-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
 .files-path { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .files-list { display: flex; flex-direction: column; margin: 0 -8px; }
-.file-row { display: grid; grid-template-columns: 20px minmax(0, 1fr) 72px 124px 88px 116px; align-items: center; gap: 10px; min-height: 34px; padding: 2px 8px; border-radius: var(--r); }
+.file-row { display: grid; grid-template-columns: 18px 20px minmax(0, 1fr) 72px 124px 88px 116px; align-items: center; gap: 10px; min-height: 34px; padding: 2px 8px; border-radius: var(--r); }
 .file-row:hover { background: var(--hv); }
-.file-row.editing { grid-template-columns: 20px minmax(0, 1fr); }
+.file-row.editing { grid-template-columns: 18px 20px minmax(0, 1fr); }
 .file-row > i { font-size: 17px; color: var(--t3); }
 .file-row > i.is-dir { color: var(--ac); }
 .file-name { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 0; border: none; background: none; color: var(--tx); font-size: 13px; text-align: left; cursor: pointer; }
@@ -1157,34 +1343,127 @@ button.pix-cell:hover { box-shadow: inset 0 0 0 1px var(--t3); }
 .file-actions { display: flex; justify-content: flex-end; gap: 2px; opacity: 0; }
 .file-row:hover .file-actions, .file-row:focus-within .file-actions { opacity: 1; }
 @media (hover: none) { .file-actions { opacity: 1; } }
-@media (max-width: 1100px) { .file-mode { display: none; } .file-row { grid-template-columns: 20px minmax(0, 1fr) 72px 124px 116px; } }
+@media (max-width: 1100px) { .file-mode { display: none; } .file-row { grid-template-columns: 18px 20px minmax(0, 1fr) 72px 124px 116px; } }
 /* Sized by the panel, not the window: Files can share the screen with the terminal. When it's
    narrow, the permissions go, the row buttons float over the row on hover instead of keeping a
    column, and on very narrow panels the date goes too, so the name keeps the room. */
 .files-panel { container-type: inline-size; }
 @container (max-width: 820px) {
   .file-mode { display: none; }
-  .file-row { grid-template-columns: 20px minmax(0, 1fr) auto 108px auto; }
+  .file-row { grid-template-columns: 18px 20px minmax(0, 1fr) auto 108px auto; }
 }
 @container (max-width: 820px) {
 @media (hover: hover) {
-  .lp-root:not([data-layout='narrow']) .file-row { position: relative; grid-template-columns: 20px minmax(0, 1fr) auto 108px; }
+  .lp-root:not([data-layout='narrow']) .file-row { position: relative; grid-template-columns: 18px 20px minmax(0, 1fr) auto 108px; }
   .lp-root:not([data-layout='narrow']) .file-actions { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); padding-left: 8px; background: var(--sf); box-shadow: -10px 0 10px var(--sf); border-radius: var(--r); pointer-events: none; }
   .lp-root:not([data-layout='narrow']) .file-row:hover .file-actions, .lp-root:not([data-layout='narrow']) .file-row:focus-within .file-actions { pointer-events: auto; }
 }
 }
 @container (max-width: 460px) {
   .file-when { display: none; }
-  .file-row { grid-template-columns: 20px minmax(0, 1fr) auto auto; }
+  .file-row { grid-template-columns: 18px 20px minmax(0, 1fr) auto auto; }
 }
-[data-layout='narrow'] .file-row { grid-template-columns: 20px minmax(0, 1fr) auto auto; gap: 8px; }
+[data-layout='narrow'] .file-row { grid-template-columns: 18px 20px minmax(0, 1fr) auto auto; gap: 8px; }
 [data-layout='narrow'] .file-when, [data-layout='narrow'] .file-mode { display: none; }
 .files-upload { display: flex; align-items: center; gap: 10px; }
 .files-upload .mono { max-width: 40%; }
 .files-foot { padding-top: 10px; border-top: 1px solid var(--ln); }
+/* Nothing is dragged onto a phone. */
+[data-layout='narrow'] .files-foot-hint { display: none; }
 .files-panel.dragging { outline: 2px dashed var(--ac); outline-offset: -6px; }
 .files-editor { flex: 1; min-height: 300px; padding: 12px; border: 1px solid var(--ln); border-radius: var(--r); background: var(--rz); color: var(--tx); font-size: 13px; line-height: 1.5; tab-size: 4; white-space: pre; overflow: auto; resize: none; outline: none; }
 .files-editor:focus { border-color: var(--ac); }
+/* Choosing rows: a checkbox column, faint until a row is hovered or something is chosen. */
+input.file-check { width: 15px; height: 15px; margin: 0; accent-color: var(--ac); cursor: pointer; }
+@media (hover: hover) { .files-list:not(:has(.chosen)) .file-row:not(:hover):not(:focus-within) > .file-check { opacity: 0.3; } }
+.file-row.file-head { min-height: 26px; position: sticky; top: 0; z-index: 2; background: var(--sf); font-size: 11px; }
+.file-row.file-head:hover { background: var(--sf); }
+.file-row.chosen, .file-row.chosen:hover { background: color-mix(in srgb, var(--ac) 12%, transparent); }
+.file-row.highlight { box-shadow: inset 0 0 0 2px var(--ac); }
+.file-row.clipped { opacity: 0.55; }
+i.file-pinned { color: var(--ac); }
+.file-name > i.file-pinned { font-size: 11px; }
+.file-measure { border: none; background: none; padding: 0; font: inherit; color: var(--t3); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; opacity: 0; }
+.file-row:hover .file-measure, .file-measure:focus-visible { opacity: 1; }
+@media (hover: none) { .file-measure { opacity: 0.8; } }
+/* On a phone, and in a very narrow panel, a row keeps only its ⋯, which has everything. */
+[data-layout='narrow'] .file-row:not(.trash-row):not(.search-row) > .file-actions > :not(:last-child) { display: none; }
+@container (max-width: 460px) { .file-row:not(.trash-row):not(.search-row) > .file-actions > :not(:last-child) { display: none; } }
+/* Bars above the list: what's chosen, what's being copied or moved, and how things went. */
+.files-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 6px 8px 6px 10px; border-radius: var(--r); background: var(--rz); font-size: 13px; }
+.files-bar > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.files-bar-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+@container (max-width: 560px) { .files-bar .files-label { display: none; } }
+@container (max-width: 400px) { .files-tools .files-label { display: none; } }
+.files-notice { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--t2); }
+.files-notice-body { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.files-notice-body > span { min-width: 0; overflow-wrap: anywhere; }
+.files-notice .btn-link, .files-job .btn-link { color: var(--ac); font-size: 12px; }
+.files-dismiss { margin-left: auto; }
+.status-line .files-dismiss { color: inherit; }
+.files-job { display: flex; align-items: center; gap: 10px; min-height: 28px; }
+.files-job > i { flex: none; }
+.files-job > i.ph-check-circle { color: var(--ac); }
+.files-job-text { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 0 8px; }
+.files-job-label { color: var(--tx); overflow-wrap: anywhere; }
+.files-job-msg { min-width: 0; overflow-wrap: anywhere; }
+.files-job.failed .files-job-msg, .files-job.failed > i { color: var(--wn); }
+/* The ⋯ and star menus, fixed where their button is so the list's scrolling can't clip them. */
+.files-menu { z-index: 60; min-width: 190px; max-width: min(320px, calc(100vw - 16px)); max-height: min(440px, calc(100vh - 16px)); overflow: auto; }
+.files-menu-sep { height: 1px; margin: 4px 6px; background: var(--ln); flex: none; }
+.menu .files-menu-link { display: flex; gap: 8px; align-items: center; padding: 6px 10px; border-radius: var(--r-s); font-size: 13px; color: inherit; text-decoration: none; }
+.menu .files-menu-link:hover { background: var(--hv); }
+.files-pin { display: flex; align-items: center; gap: 2px; }
+.files-pin > button:first-child { flex: 1; min-width: 0; }
+.menu .files-pin .icon-btn { padding: 0; display: grid; gap: 0; }
+.files-pin-name { display: flex; flex-direction: column; min-width: 0; }
+.files-pin-name > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.files-menu-note { margin: 4px 10px 6px; max-width: 250px; text-wrap: pretty; }
+/* Search: a bar under the head, then results in the list's place. */
+.files-search { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.files-search > .input { flex: 1 1 200px; min-width: 0; }
+.files-search-mode { flex: none; }
+.files-search-mode .tab { font-size: 12px; padding: 3px 10px; }
+/* Search and trash rows have columns of their own, and their buttons always show: the list's
+   narrower-panel rules (floating buttons, fewer columns) are for folder rows. */
+.lp-root .files-list > .file-row.search-row { position: static; grid-template-columns: 20px minmax(0, 1fr) 72px 30px; }
+.lp-root[data-layout='narrow'] .files-list > .file-row.search-row { grid-template-columns: 20px minmax(0, 1fr) auto 30px; }
+.lp-root .file-row.search-row > .file-actions, .lp-root .file-row.trash-row > .file-actions { position: static; transform: none; padding: 0; background: none; box-shadow: none; pointer-events: auto; opacity: 1; }
+.search-hit { flex-direction: column; align-items: flex-start; gap: 0; padding: 3px 0; }
+.search-hit > span { max-width: 100%; }
+.search-hit .search-where { font-size: 11px; }
+.search-hit .search-text { font-size: 11px; color: var(--t2); }
+.search-row .file-actions { opacity: 1; }
+/* The trash. */
+.lp-root .files-list > .file-row.trash-row { position: static; grid-template-columns: 20px minmax(0, 1fr) 72px 150px auto; }
+.trash-what { display: flex; flex-direction: column; min-width: 0; padding: 3px 0; }
+.trash-what > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trash-name { font-size: 13px; }
+.trash-from { font-size: 11px; }
+.trash-left { color: var(--t3); }
+.trash-row .file-actions { opacity: 1; gap: 4px; align-items: center; }
+.trash-when-inline { display: none; }
+.lp-root[data-layout='narrow'] .files-list > .file-row.trash-row { grid-template-columns: 20px minmax(0, 1fr) auto; }
+.lp-root[data-layout='narrow'] .trash-row .file-size, .lp-root[data-layout='narrow'] .trash-row .file-when, .lp-root[data-layout='narrow'] .trash-row .files-label { display: none; }
+.lp-root[data-layout='narrow'] .trash-when-inline { display: inline; }
+@container (max-width: 560px) {
+  .lp-root .files-list > .file-row.trash-row { grid-template-columns: 20px minmax(0, 1fr) auto; }
+  .trash-row .file-size, .trash-row .file-when { display: none; }
+  .trash-row .files-label { display: none; }
+  .trash-when-inline { display: inline; }
+}
+/* The viewer: an image or video fits the panel; click an image for its actual size. */
+.files-viewer { position: relative; flex: 1; min-height: 360px; border-radius: var(--r); background: var(--rz); overflow: hidden; }
+[data-layout='narrow'] .files-viewer { flex: none; height: 65vh; min-height: 300px; }
+.files-viewer > img, .files-viewer > video, .files-viewer > iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.files-viewer > img { object-fit: contain; cursor: zoom-in; }
+.files-viewer.zoomed { overflow: auto; }
+.files-viewer.zoomed > img { position: static; width: auto; height: auto; max-width: none; cursor: zoom-out; }
+.files-viewer > video { background: #000; }
+.files-viewer.audio { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 20px; }
+.files-viewer.audio > audio { width: min(480px, 100%); }
+.files-viewer-icon { font-size: 64px; color: var(--t3); }
+.files-viewer > .empty { position: absolute; inset: 0; align-items: center; justify-content: center; text-align: center; }
 
 /* ---------- training ---------- */
 
@@ -1678,7 +1957,8 @@ button.m-stat { cursor: default; }
 
 /* ---------- settings tabs ---------- */
 
-.settings-tabs { flex-wrap: wrap; margin-top: -6px; }
+/* flex: none: as a scroll box (.tabs) it would otherwise be squashed to nothing in the drawer's column when the tab's content is long. */
+.settings-tabs { flex: none; flex-wrap: wrap; margin-top: -6px; }
 .settings-tabs .tab { font-size: 13px; padding: 3px 9px; }
 .setting-row { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 0; border-top: 1px solid var(--ln); }
 .engines { display: flex; flex-direction: column; gap: 6px; }
@@ -1868,8 +2148,7 @@ button.m-stat { cursor: default; }
 .mc-console.empty { align-items: center; justify-content: center; }
 .mc-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
 .mc-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mc-tools { display: flex; gap: 6px; }
-.mc-where { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-tools { display: flex; flex-wrap: wrap; gap: 6px; }
 .mc-log { flex: 1 1 auto; min-height: 260px; margin: 0; }
 [data-layout='narrow'] .mc-log { flex: none; height: 55vh; }
 .mc-line { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -1922,6 +2201,83 @@ button.m-stat { cursor: default; }
 .mc-field-row { display: flex; gap: 12px; }
 .mc-field-row select.input { width: auto; padding: 0 6px; }
 
+/* ---------- Server › Minecraft: meters, players, backups, crashes ---------- */
+.mc-where { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 12px; min-width: 0; }
+.mc-where-dir { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-meters { display: flex; flex-wrap: wrap; gap: 2px 10px; }
+.mc-meter { font-size: 12px; color: var(--t2); white-space: nowrap; }
+.mc-meter.warn { color: var(--wn); }
+.mc-views { flex: none; }
+.mc-log[hidden] { display: none; }
+.mc-line.quiet { color: var(--t3); }
+.mc-view { flex: 1 1 auto; min-height: 260px; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
+[data-layout='narrow'] .mc-view { flex: none; min-height: 0; overflow: visible; }
+.mc-view-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.mc-view-where { flex: 1 1 200px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* No hover on a phone to read the rest, so it wraps. */
+[data-layout='narrow'] .mc-view-where { white-space: normal; overflow-wrap: anywhere; }
+.mc-note { margin: 0; text-wrap: pretty; }
+.mc-note.warn { color: var(--wn); }
+.mc-section { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 1px solid var(--ln); }
+.mc-players, .mc-wl, .mc-backups, .mc-restarts, .mc-crashes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.mc-player { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 6px 8px; border-radius: var(--r); }
+.mc-player:hover { background: var(--hv); }
+.mc-player-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.mc-player-name { min-width: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-player-tools { display: flex; flex-wrap: wrap; gap: 4px; }
+.mc-face { flex: none; width: 28px; height: 28px; border-radius: 4px; image-rendering: pixelated; background: var(--hv); }
+.mc-face-none { display: grid; place-items: center; font-size: 12px; font-weight: 600; color: var(--t3); }
+.mc-tp { flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 2px 0 2px 38px; }
+.mc-tp select.input { width: auto; max-width: 100%; padding: 0 6px; }
+[data-layout='narrow'] .mc-tp { padding-left: 0; }
+.mc-wl-row { display: flex; align-items: center; gap: 10px; padding: 3px 8px; }
+.mc-wl-row .mc-player-name { flex: 1; font-weight: 500; }
+.mc-wl-add { display: flex; align-items: center; gap: 8px; max-width: 420px; }
+.mc-wl-add .input { flex: 1; min-width: 0; }
+.mc-job { flex: none; display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--ln); border-radius: 6px; font-size: 13px; }
+.mc-job > i { flex: none; margin-top: 1px; font-size: 18px; color: var(--acd); }
+.mc-job.failed > i { color: var(--wn); }
+.mc-job-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; text-wrap: pretty; overflow-wrap: anywhere; }
+.mc-backup { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: var(--r); }
+.mc-backup:hover { background: var(--hv); }
+.mc-backup > i { flex: none; font-size: 18px; color: var(--t3); }
+.mc-backup-text { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 13px; }
+.mc-backup-text .meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-backup-when { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; }
+.mc-backup-when > span:first-child { white-space: nowrap; }
+.mc-backup-tools { flex: none; display: flex; align-items: center; gap: 4px; }
+.mc-auto { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mc-auto-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; text-wrap: pretty; }
+.mc-restart { display: grid; grid-template-columns: 16px auto minmax(0, 1fr); align-items: baseline; gap: 8px; padding: 2px 8px; font-size: 13px; text-wrap: pretty; }
+.mc-restart > i { color: var(--t3); }
+.mc-restart.crash > i, .mc-restart.gave-up > i { color: var(--wn); }
+[data-layout='narrow'] .mc-restart { grid-template-columns: 16px minmax(0, 1fr); }
+[data-layout='narrow'] .mc-restart > span { grid-column: 2; }
+.mc-crash-row { width: 100%; display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: none; border-radius: var(--r); background: none; color: var(--tx); font: inherit; text-align: left; cursor: pointer; }
+.mc-crash-row:hover { background: var(--hv); }
+.mc-crash-row > i { flex: none; font-size: 18px; color: var(--t3); }
+.mc-crash-text { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 13px; }
+.mc-crash-text .meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-report { flex: 1 1 auto; min-height: 200px; margin: 0; padding: 10px; overflow: auto; font-size: 11px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border-radius: var(--r); }
+[data-layout='narrow'] .mc-report { flex: none; max-height: 70vh; }
+.mc-diag-crash { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--ln); font-size: 13px; text-wrap: pretty; }
+
+/* ---------- Explain this log (Minecraft and the containers' logs) ---------- */
+.explain { flex: 0 0 auto; max-height: 360px; overflow: auto; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--ln); border-radius: 6px; font-size: 13px; }
+[data-layout='narrow'] .explain { max-height: none; }
+.explain-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.explain-head .drawer-label { display: inline-flex; align-items: center; gap: 5px; }
+.explain-summary { margin: 0; font-weight: 600; text-wrap: pretty; }
+.explain-text { margin: 2px 0 0; text-wrap: pretty; }
+.explain-fix { margin: 2px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 3px; overflow-wrap: anywhere; }
+.explain summary { cursor: pointer; }
+.explain-pre { margin: 6px 0 0; padding: 8px; max-height: 200px; overflow: auto; font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--hv); border-radius: var(--r); }
+.logs-explain { flex: none; padding: 0 30px 10px; }
+/* In the console, Diagnosis and the explanation give way (each scrolls) so the log and the command line stay inside the panel. */
+.mc-console > .mc-diag, .mc-console > .explain { flex: 0 1 auto; min-height: 96px; }
+[data-layout='narrow'] .mc-console > .mc-diag, [data-layout='narrow'] .mc-console > .explain { flex: none; min-height: 0; }
+.logs-explain .explain { max-height: 40vh; }
+
 /* ---------- Server › Downloads ---------- */
 .server > .dl-view { flex: 1 0 auto; display: flex; flex-direction: column; gap: 20px; }
 [data-layout='wide'] .server > .dl-view { gap: 30px; }
@@ -1935,6 +2291,17 @@ button.m-stat { cursor: default; }
 .dl-row { align-items: stretch; }
 .dl-row > .srv-panel { flex: 1 1 380px; min-width: 0; min-height: 260px; }
 .dl-row > .torrents { flex-grow: 1.5; }
+.dl-unpack { display: flex; flex-direction: column; gap: 10px; }
+.dl-unpacks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.dl-unpack-row { display: grid; grid-template-columns: 16px minmax(0, 0.8fr) minmax(0, 1.2fr) auto; align-items: center; gap: 8px; min-height: 32px; padding: 2px 8px; font-size: 13px; }
+.dl-unpack-row > i { color: var(--t3); }
+.dl-unpack-row.done > i { color: var(--ac); }
+.dl-unpack-row.failed > i, .dl-unpack-row.failed .dl-unpack-what { color: var(--wn); }
+.dl-unpack-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl-unpack-what { min-width: 0; text-wrap: pretty; }
+[data-layout='narrow'] .dl-unpack-row { grid-template-columns: 16px minmax(0, 1fr) auto; }
+[data-layout='narrow'] .dl-unpack-what { grid-column: 2; grid-row: 2; }
+[data-layout='narrow'] .dl-unpack-row > .icon-btn { grid-column: 3; grid-row: 1 / span 2; }
 .dl-items { display: flex; flex-direction: column; margin: 0 -8px; }
 .dl-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px; border-radius: var(--r); }
 .dl-item:hover { background: var(--hv); }
@@ -1964,3 +2331,69 @@ button.m-stat { cursor: default; }
 .dl-ig-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 640px; }
 .dl-ig-form .input { flex: 1 1 260px; min-width: 0; box-sizing: border-box; }
 .dl-ig-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+/* Server › Downloads: a picked .torrent file, a video's format, a torrent's category, tags and
+   ratio, turtle mode and the speed caps, and an open torrent's files. */
+.dl-picked { display: flex; align-items: center; gap: 8px; height: 40px; }
+.dl-picked > i { flex: none; color: var(--t3); }
+.dl-picked .mono { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl-picked .meta { flex: none; }
+.dl-picked .icon-btn { margin-left: auto; }
+.dl-video-opts .segmented { flex-wrap: wrap; }
+.dl-video-opts .segmented button { white-space: nowrap; padding-inline: 12px; }
+.dl-tor-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; font-size: 13px; color: var(--t2); }
+.dl-tor-opts > .meta { flex-basis: 100%; }
+.dl-opt { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; max-width: 100%; }
+.dl-opt select.input { width: auto; max-width: 220px; padding: 0 6px; }
+.dl-opt > .input:not(select) { width: 190px; max-width: 100%; box-sizing: border-box; }
+.dl-tags .chip { display: inline-flex; align-items: center; gap: 3px; padding: 3px 9px; border: none; font-family: inherit; font-size: 12px; cursor: pointer; }
+.dl-tags .chip i { font-size: 10px; }
+.dl-opt > .input.dl-tag-new { width: 110px; }
+.dl-opt > .input.dl-ratio, .tor-ratio .dl-ratio { width: calc(13ch + 24px); box-sizing: border-box; text-align: right; }
+.torrents > .panel-head { flex-wrap: wrap; row-gap: 6px; }
+.tor-head-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px 10px; }
+.tor-speeds { display: inline-flex; gap: 10px; }
+.tor-turtle.on { border-color: transparent; background: var(--act); color: var(--acd); }
+.tor-limits { margin-top: -4px; }
+.tor-caps { display: flex; flex-direction: column; gap: 10px; padding: 12px 0; border-top: 1px solid var(--ln); border-bottom: 1px solid var(--ln); font-size: 13px; color: var(--t2); }
+.tor-caps-grid { display: grid; grid-template-columns: auto minmax(0, 150px) minmax(0, 150px); align-items: center; gap: 6px 10px; }
+.tor-caps-grid .input { width: 100%; min-width: 0; box-sizing: border-box; text-align: right; }
+.tor-name { display: block; padding: 0; border: none; background: none; color: var(--tx); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.tor-name:hover { text-decoration: underline; text-underline-offset: 2px; }
+.tor-labels { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
+.tor-labels .meta { display: inline-flex; align-items: center; gap: 3px; min-width: 0; }
+.dl-item.torrent.open, .dl-item.torrent.open:hover { background: var(--hv); }
+.tor-detail { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 4px 0 2px; container-type: inline-size; }
+.tor-ratio { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 13px; color: var(--t2); }
+.tor-ratio label { display: inline-flex; align-items: center; gap: 8px; }
+.tor-files-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tor-files-head label { display: inline-flex; align-items: center; gap: 6px; }
+.tor-files-head select.input, .tor-file select.input { width: auto; height: 28px; padding: 0 6px; font-size: 12px; }
+.tor-files { display: flex; flex-direction: column; max-height: 420px; overflow: auto; overscroll-behavior: contain; border-top: 1px solid var(--ln); }
+.tor-file { display: grid; grid-template-columns: minmax(0, 1fr) 70px 58px auto 26px; grid-template-areas: 'name size pct prio dir'; align-items: center; gap: 4px 8px; padding: 5px 0; border-bottom: 1px solid var(--ln); font-size: 13px; }
+.tor-file-name { grid-area: name; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tor-file-dir { color: var(--t3); }
+.tor-file-size { grid-area: size; text-align: right; }
+.tor-file-pct { grid-area: pct; text-align: right; }
+.tor-file select { grid-area: prio; }
+.tor-file > .icon-btn, .tor-file-nofolder { grid-area: dir; }
+.tor-file.skipped .tor-file-name { color: var(--t3); }
+@container (max-width: 440px) {
+  .tor-file { grid-template-columns: minmax(0, 1fr) auto auto 26px; grid-template-areas: 'name name name name' 'size pct prio dir'; }
+  .tor-file-size { text-align: left; }
+}
+.tor-retired i { vertical-align: -2px; }
+/* A narrow Torrents panel (a phone, or a split view): a torrent's name and progress get the
+   whole width, with its status and buttons on the line below. */
+.torrents { container-type: inline-size; }
+@container (max-width: 540px) {
+  .dl-item.torrent { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'main main' 'chip tools'; row-gap: 6px; }
+  .dl-item.torrent > .chip { grid-area: chip; }
+  .dl-item.torrent > .dl-item-main { grid-area: main; }
+  .dl-item.torrent > .dl-tools { grid-area: tools; }
+  .dl-item.torrent > .dl-confirm, .dl-item.torrent > .tor-detail { grid-column: 1 / -1; }
+}
+.tor-files-count { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Console's capitals are wider: its status chips need more room than 96px. */
+@container (min-width: 541px) {
+  [data-design='console'] .dl-item.torrent { grid-template-columns: 128px minmax(0, 1fr) auto; }
+}

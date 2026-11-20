@@ -2,7 +2,7 @@ import type { ViewKey } from '../../../shared/types';
 
 export const VIEWS: { key: ViewKey; name: string; icon: string; letter: string }[] = [
   { key: 'home', name: 'Home', icon: 'ph-house', letter: 'H' },
-  { key: 'news', name: 'News', icon: 'ph-newspaper', letter: 'N' },
+  { key: 'digest', name: 'Digest', icon: 'ph-lightbulb', letter: 'D' },
   { key: 'inbox', name: 'Inbox', icon: 'ph-envelope-simple', letter: 'I' },
   { key: 'you', name: 'You', icon: 'ph-heart', letter: 'Y' },
   { key: 'training', name: 'Training', icon: 'ph-barbell', letter: 'T' },

@@ -67,8 +67,8 @@ export type DesignKey = 'broadsheet' | 'console' | 'bento' | 'horizon' | 'vista'
 /** Every design, for checking a saved or sent one is still known. */
 export const DESIGN_KEYS: DesignKey[] = ['broadsheet', 'console', 'bento', 'horizon', 'vista', 'focus', 'poster'];
 export type GoogleSource = 'calendar' | 'tasks' | 'gmail';
-export type SourceKey = GoogleSource | 'carriers' | 'news' | 'inbox' | 'weather' | 'speedtest';
-export type ViewKey = 'home' | 'news' | 'inbox' | 'you' | 'training' | 'learn' | 'money' | 'server' | 'review';
+export type SourceKey = GoogleSource | 'carriers' | 'digest' | 'inbox' | 'weather' | 'speedtest';
+export type ViewKey = 'home' | 'digest' | 'inbox' | 'you' | 'training' | 'learn' | 'money' | 'server' | 'review';
 
 /** One place to search: "yt lofi" opens url with %s replaced by "lofi". The first engine is the default. */
 export interface SearchEngine {
@@ -88,7 +88,9 @@ export interface Prefs {
   hiddenCalendars: string[];
   /** Per-source on/off switches from Settings. */
   sources: Record<GoogleSource, boolean>;
-  /** Search terms for the News tab, in display order. */
+  /** What the daily digest teaches, one lesson a day each (shared/digest.ts). */
+  digestSubjects: string[];
+  /** What the old News view followed. Nothing reads it any more; kept so nothing typed in is lost. */
   newsTopics: string[];
   /** 2-hour forecast area for the weather beside the clock (e.g. "Bishan"); empty hides it. */
   weatherArea: string;
@@ -108,6 +110,8 @@ export interface Prefs {
   setsPerWeek: number;
   /** Exercise names always shown first in Training › Your lifts. */
   pinnedLifts: string[];
+  /** Folders on the server starred in Server › Files, in the order they were pinned. */
+  pinnedFolders: string[];
   /** What the gym costs a month, in dollars, for the cost of each session; 0 hides it. */
   gymMonthly: number;
   /** What a pack of cigarettes costs, in dollars, for what they cost; 0 hides it. */
@@ -118,6 +122,35 @@ export interface Prefs {
   claudeBudget?: number;
   /** Copy the daily database copies to Google Drive, once the Google sign-in allows it. */
   driveBackup: boolean;
+  /** Which kinds of phone alert are on (Settings › Alerts). Where they go is kept apart from prefs (server/src/notify.ts). */
+  alerts: Record<AlertKind, boolean>;
+  /** Unpack archives (a link, or what's in a torrent) next to them when they finish downloading. Missing in older saved prefs. */
+  autoUnpack?: boolean;
+}
+
+/** What a phone alert is about; each has its own switch in Settings › Alerts. */
+export type AlertKind = 'health' | 'containers' | 'disks' | 'minecraft';
+export const ALERT_KINDS: AlertKind[] = ['health', 'containers', 'disks', 'minecraft'];
+
+/** One alert sent to the phone, for Settings › Alerts. */
+export interface AlertRecord {
+  at: string;
+  kind: AlertKind | 'test';
+  /** problem: something started going wrong. fixed: it cleared. paused: too many about one thing, so it's held back. event: a one-off (a crash). */
+  type: 'problem' | 'fixed' | 'paused' | 'event' | 'test';
+  title: string;
+}
+
+/** GET /api/alerts: where alerts go and how sending is going. */
+export interface AlertsInfo {
+  /** The ntfy topic's address, or '' when alerts aren't set up. */
+  topicUrl: string;
+  /** Problems the phone has been told about that haven't cleared yet. */
+  open: { kind: AlertKind; title: string; at: string }[];
+  /** Newest first, the last 20. */
+  recent: AlertRecord[];
+  /** The last send that failed, until one works again. */
+  lastError: { at: string; message: string } | null;
 }
 
 export interface CalendarInfo {
@@ -191,32 +224,115 @@ export interface Package {
   trackingError: string | null;
 }
 
-export interface NewsArticle {
+/** A multiple-choice question on a lesson, for Quick recall. `answer` is the index of the right option. */
+export interface DigestQuiz {
+  question: string;
+  options: string[];
+  answer: number;
+  /** Why the right answer is right. */
+  why: string;
+}
+
+/** One time a lesson came up in Quick recall. `choice` is -1 when it isn't known. */
+export interface DigestRecall {
+  at: string;
+  choice: number;
+  right: boolean;
+}
+
+/** "Too basic" or "Too deep" on a lesson; Claude pitches the subject's next ones from it. */
+export type DigestFeedback = '' | 'basic' | 'deep';
+
+/** A follow-up question asked on a lesson, with Claude's short answer. */
+export interface DigestAsk {
+  q: string;
+  /** Plain text, maths in LaTeX between $…$ (shared/math.ts). */
+  a: string;
+  at: string;
+}
+
+/**
+ * One lesson in the daily digest (shared/digest.ts). Lessons written before the digest went
+ * short have `body` paragraphs and a `takeaway` but no `gist`, `points` or `check`; newer ones
+ * the other way round. Text may have maths in LaTeX between $…$ (shared/math.ts).
+ */
+export interface DigestCard {
+  id: string;
+  /** What it was written for, as in prefs.digestSubjects. */
+  subject: string;
+  /** The concept's usual name. */
   title: string;
-  url: string;
-  source: string;
-  /** ISO date-time. */
-  publishedAt: string;
+  /** A one-line teaser: why it's worth a look. */
+  hook: string;
+  /** The idea in a sentence or two ('' on lessons from before). */
+  gist: string;
+  /** Its key formula in LaTeX, without dollar signs, or ''. */
+  formula: string;
+  /** What the formula's symbols stand for, one line. */
+  where: string;
+  /** Two or three short lines on how it works ([] on lessons from before). */
+  points: string[];
+  /** Lessons from before: short paragraphs explaining it. */
+  body: string[];
+  /** A small worked example, as plain text (it may be a few lines of code or a sum). */
+  example: string;
+  /** The example is code: shown in the mono font, with no maths read from it. */
+  exampleCode: boolean;
+  /** Lessons from before: one line to remember. */
+  takeaway: string;
+  /** Words to look it up by, for "Go deeper". */
+  search: string;
+  /** The quick question on the card itself, answered there and then. */
+  check: DigestQuiz | null;
+  /** The option picked in `check`, or -1 before it's answered. */
+  checked: number;
+  /** The question Quick recall asks a few days later. */
+  quiz: DigestQuiz | null;
+  starred: boolean;
+  feedback: DigestFeedback;
+  /** Oldest first. */
+  recalls: DigestRecall[];
+  /** Follow-up questions, oldest first. */
+  asks: DigestAsk[];
 }
 
-export interface NewsStory {
-  headline: string;
-  summary: string;
-  /** The headlines this story was written from. */
-  links: { source: string; url: string }[];
+export interface DigestDay {
+  /** YYYY-MM-DD, the server's day (Asia/Singapore). */
+  date: string;
+  cards: DigestCard[];
 }
 
-export interface NewsTopic {
-  /** What's followed, as in prefs.newsTopics (see shared/news.ts). */
-  topic: string;
-  /** A feed's own title, once it's been fetched. */
-  title?: string;
+/** Every day's lessons, as the store keeps them. */
+export interface DigestStore {
   /** Newest first. */
-  articles: NewsArticle[];
-  /** Claude's digest of the headlines, or null before the first one (or without an API key). */
-  stories: NewsStory[] | null;
-  summarisedAt: string | null;
-  fetchedAt: string | null;
+  days: DigestDay[];
+  /** "subject: title" of lessons swapped out with "Another one", so they aren't written again. */
+  skipped: string[];
+  /** Why the last try at writing lessons failed, until one works. */
+  error: string | null;
+}
+
+/** Today's question in Quick recall. The answer comes once it's been given. */
+export interface RecallQuestion {
+  cardId: string;
+  /** The day the lesson was written. */
+  date: string;
+  subject: string;
+  title: string;
+  question: string;
+  options: string[];
+  answered: { choice: number; right: boolean; answer: number; why: string; takeaway: string } | null;
+}
+
+/** The digest as the page gets it: the last two weeks, with the rest in the archive's search. */
+export interface DigestState {
+  /** Newest first. */
+  days: DigestDay[];
+  /** Lessons in the whole archive. */
+  total: number;
+  /** Subjects in the archive with how many lessons each, most first. */
+  subjects: { subject: string; count: number }[];
+  recall: RecallQuestion | null;
   error: string | null;
 }
 
@@ -795,6 +911,12 @@ export interface McServer {
   session: string;
   /** What to type in the session to start it, e.g. ./start.sh. Empty: no Start button. */
   start: string;
+  /** Start it again when it stops on its own (a crash). Needs a start command. Missing: off. */
+  autoRestart?: boolean;
+  /** How many of Launchpad's world backups to keep; older ones are removed after a new one. Missing: MC_KEEP_BACKUPS. */
+  keepBackups?: number;
+  /** Where world backups go. Missing: a backups folder inside `dir`. */
+  backupDir?: string;
 }
 
 export interface McStatus extends McServer {
@@ -804,7 +926,14 @@ export interface McStatus extends McServer {
   pid: number | null;
   /** It runs inside tmux or screen, so commands can be typed into it. */
   attached: boolean;
+  /** A backup or restore is under way. */
+  job?: 'backup' | 'restore';
+  /** Restart if it crashes gave up after too many crashes in a row. */
+  gaveUp?: boolean;
 }
+
+/** World backups kept per server unless the server says otherwise. */
+export const MC_KEEP_BACKUPS = 7;
 
 /** One thing the check found out about a server that won't start (or is misbehaving). */
 export interface McFinding {
@@ -824,6 +953,8 @@ export interface McDiagnosis {
   running: boolean;
   /** When the check ran (ms since epoch). */
   at: number;
+  /** The newest report in crash-reports/, however old. */
+  crash?: McCrashSummary | null;
 }
 
 /** New lines of a server's logs/latest.log since `offset`. */
@@ -835,6 +966,145 @@ export interface McLog {
   reset: boolean;
   /** There's no logs/latest.log in the folder. */
   missing: boolean;
+}
+
+// ---------- Minecraft: players, meters, backups, crashes ----------
+
+export interface McPlayer {
+  name: string;
+  /** With dashes; null when nothing Launchpad read says. */
+  uuid: string | null;
+  op: boolean;
+  whitelisted: boolean;
+}
+
+/** Who's on, from a Server List Ping and, when that doesn't name everyone, the console's `list`. */
+export interface McPlayers {
+  running: boolean;
+  /** null when the server didn't answer the ping. */
+  online: number | null;
+  max: number | null;
+  players: McPlayer[];
+  /** whitelist.json. */
+  whitelist: { name: string; uuid: string | null }[];
+  /** white-list=true in server.properties. */
+  whitelistOn: boolean;
+  /** As the server reports it, e.g. "Paper 1.21.1". */
+  version: string | null;
+  /** Why some or all names are missing, when they are. */
+  note: string | null;
+  at: number;
+}
+
+export type McPlayerAction = 'kick' | 'op' | 'deop' | 'whitelist-add' | 'whitelist-remove' | 'tp';
+
+/** The Java process's memory and CPU, and TPS/MSPT where the server reports them. */
+export interface McMeters {
+  running: boolean;
+  /** Resident memory, bytes. */
+  rss: number | null;
+  /** Share of the whole machine, 0–100. */
+  cpu: number | null;
+  cores: number | null;
+  /** Seconds the process has been up. */
+  uptime: number | null;
+  online: number | null;
+  max: number | null;
+  /** Ticks per second and milliseconds per tick: null when the server can't say (vanilla before 1.20.3 without Spark). */
+  tps: number | null;
+  mspt: number | null;
+  tpsFrom: 'spark' | 'paper' | 'vanilla' | null;
+  /** When TPS was read (ms since epoch). */
+  tpsAt: number | null;
+  at: number;
+}
+
+export interface McBackup {
+  name: string;
+  size: number;
+  /** When it was taken (ISO). */
+  at: string;
+  /** Taken just before a restore, to undo it. */
+  beforeRestore: boolean;
+}
+
+/** A backup or restore under way, or the last one to finish. */
+export interface McJob {
+  kind: 'backup' | 'restore';
+  /** What it's doing now, as a short sentence. */
+  step: string;
+  startedAt: string;
+  endedAt: string | null;
+  ok: boolean | null;
+  /** How it went, once it's over. */
+  message: string | null;
+  file: string | null;
+  /** How big the backup is so far, while it's being packed. */
+  bytes: number | null;
+}
+
+export interface McBackups {
+  dir: string;
+  keep: number;
+  list: McBackup[];
+  job: McJob | null;
+  /** Free space where backups go, bytes; null when it can't be read. */
+  free: number | null;
+  /** Folders a restore left behind when it was cut off, in the server's folder. */
+  leftovers: string[];
+}
+
+export interface McCrashReport {
+  name: string;
+  at: string;
+  size: number;
+}
+
+export interface McCrashSummary extends McCrashReport {
+  description: string | null;
+  /** The exception and its first lines. */
+  lines: string[];
+}
+
+/** One thing Restart if it crashes noticed or did. */
+export interface McRestart {
+  at: string;
+  kind: 'crash' | 'restart' | 'gave-up';
+  reason: string;
+}
+
+/** What's kept per server for Restart if it crashes. */
+export interface McWatchRecord {
+  gaveUp: boolean;
+  /** Newest last. */
+  log: McRestart[];
+}
+
+export interface McCrashes {
+  reports: McCrashReport[];
+  /** Restart if it crashes, for saved servers. */
+  autoRestart: boolean;
+  gaveUp: boolean;
+  restarts: McRestart[];
+}
+
+/** What Claude made of the end of a log. */
+export interface ExplainResult {
+  summary: string;
+  cause: string;
+  fix: string[];
+  /** Exactly what was sent, secrets taken out. */
+  excerpt: string;
+  /** The log had a clear error in it, rather than only its last lines. */
+  foundError: boolean;
+}
+
+export interface ExplainStatus {
+  /** There's an API key; without one the button isn't shown at all. */
+  configured: boolean;
+  ready: boolean;
+  /** Why not, in a sentence, when it isn't. */
+  reason: string | null;
 }
 
 // ---------- downloads and torrents ----------
@@ -855,6 +1125,34 @@ export interface DownloadJob {
   endedAt: string | null;
   /** Instagram posts or a profile, rather than one file: `url` is what was pasted, `received` counts every file. */
   ig?: IgProgress;
+  /** A video (or its sound) saved with yt-dlp: `received` and `total` are the download's, then the copy's into `dir`. */
+  video?: VideoProgress;
+}
+
+/** Server › Downloads' choices for a video: yt-dlp's best, up to 1080p as an .mp4, or the sound as an .mp3. */
+export type VideoFormat = 'best' | '1080p' | 'mp3';
+
+export interface VideoProgress {
+  format: VideoFormat;
+  /** The site as yt-dlp names it (Youtube, TikTok, Vimeo…), once it has looked. */
+  site: string | null;
+  title: string | null;
+  /** Finding the video; downloading it (`part` of `parts`: the video, then its sound); ffmpeg at work on it (`step`); copying it into the folder. */
+  phase: 'finding' | 'downloading' | 'processing' | 'saving';
+  part: number;
+  parts: number;
+  /** What ffmpeg is doing: joining the video and sound, making an MP3 or an MP4, tidying the file, or adding its title. */
+  step: 'join' | 'mp3' | 'mp4' | 'fix' | 'tags' | null;
+  /** The link was a playlist's (or a channel's), so only its first video was taken. */
+  playlist: boolean;
+}
+
+export interface VideoInfo {
+  /** yt-dlp and ffmpeg are installed where Launchpad can run them (they come with the Docker image). */
+  available: boolean;
+  version: string | null;
+  /** Why it isn't available. */
+  error: string | null;
 }
 
 export interface IgProgress {
@@ -899,6 +1197,23 @@ export interface DownloadsInfo {
   /** Where a download goes unless another folder is picked: ~/Downloads, or home. Null without SSH. */
   defaultDir: string | null;
   instagram: InstagramInfo;
+  video: VideoInfo;
+  /** Archives unpacked after they finished downloading, newest first, since Launchpad started. */
+  unpacks: UnpackRecord[];
+}
+
+/** One archive unpacked (or being unpacked) because it finished downloading. */
+export interface UnpackRecord {
+  id: string;
+  /** When it was queued, then when it finished. */
+  at: string;
+  /** The archive on the server. */
+  file: string;
+  from: 'link' | 'torrent';
+  state: 'waiting' | 'unpacking' | 'done' | 'failed';
+  /** The folder it went into, also when it failed partway. */
+  folder?: string;
+  message?: string;
 }
 
 export type TorrentStatus = 'downloading' | 'seeding' | 'done' | 'paused' | 'queued' | 'checking' | 'stalled' | 'metadata' | 'moving' | 'error';
@@ -926,6 +1241,47 @@ export interface Torrent {
   savePath: string;
   /** The same folder on the server itself, for Files; null when QBIT_HOST_DIR isn't set or it's elsewhere. */
   hostDir: string | null;
+  /** qBittorrent's category ('' for none) and tags. */
+  category: string;
+  tags: string[];
+  /** Launchpad takes it out of qBittorrent, keeping its files, once it has seeded to this ratio; null to seed on. */
+  ratioLimit: number | null;
+}
+
+/** qBittorrent's speed caps in bytes a second (0 for none): the usual ones, and turtle mode's (its alternative limits). */
+export interface TorrentSpeed {
+  turtle: boolean;
+  dl: number;
+  up: number;
+  turtleDl: number;
+  turtleUp: number;
+}
+
+/** A torrent that reached its ratio and was taken out of qBittorrent, its files left where they are. */
+export interface RetiredTorrent {
+  name: string;
+  ratio: number;
+  at: string;
+  hostDir: string | null;
+}
+
+export interface TorrentFile {
+  /** qBittorrent's number for the file. */
+  index: number;
+  /** Its path inside the torrent. */
+  name: string;
+  size: number;
+  /** 0 to 1. */
+  progress: number;
+  priority: 'skip' | 'normal' | 'high';
+  /** The folder it's in on the server, for Files; null when that can't be known. */
+  hostDir: string | null;
+}
+
+/** What a torrent can be added with: qBittorrent's categories (each a save folder) and tags. */
+export interface TorrentOptions {
+  categories: { name: string; savePath: string; hostDir: string | null }[];
+  tags: string[];
 }
 
 export interface TorrentsInfo {
@@ -938,6 +1294,9 @@ export interface TorrentsInfo {
   version: string | null;
   /** Where finished torrents land on the server (QBIT_HOST_DIR), if known. */
   hostDir: string | null;
+  speed: TorrentSpeed | null;
+  /** Taken out of qBittorrent at their ratio since Launchpad started, newest first. */
+  retired: RetiredTorrent[];
 }
 
 export interface ServerStats {
@@ -1032,9 +1391,9 @@ export interface AppState {
   sync: Record<SourceKey, SyncStatus>;
   /** Carriers that get live status (SingPost always; others with a 17TRACK key). */
   tracking: { allCarriers: boolean };
-  news: NewsTopic[];
+  digest: DigestState;
   newsLists: NewsLists;
-  /** ANTHROPIC_API_KEY is set, so news topics and the inbox get summaries and not just lists. */
+  /** ANTHROPIC_API_KEY is set, so there's a daily digest and the inbox gets summaries and not just lists. */
   newsSummaries: boolean;
   inbox: InboxState;
   /** Latest reading for prefs.weatherArea, and the areas Settings can offer. */
@@ -1103,6 +1462,8 @@ export interface Backup {
   photos?: Photo[];
   /** The reading list, hidden headlines and muted sources. */
   newsLists?: NewsLists;
+  /** Every day's lessons in the daily digest, with stars, ratings and recall answers. */
+  digest?: DigestStore;
   /** How often each bookmark's been opened, for ranking. */
   bookmarkOpens?: BookmarkOpens;
   /** Earlier versions of each notepad, by its id. The images notes show come in a .zip backup. */

@@ -1,8 +1,20 @@
 import type { DownloadJob, DownloadsInfo, InstagramInfo, McDiagnosis, McLog, McServer, McStatus, TorrentsInfo } from '../../shared/types';
-import type { AppState, Backup, BackupSnapshot, CalEvent, Countdown, Craving, DirListing, DisksReport, LinkCheck, LogLine, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
+import type { ExplainResult, ExplainStatus, McBackups, McCrashes, McMeters, McPlayerAction, McPlayers } from '../../shared/types';
+import type { TorrentFile, TorrentOptions, TorrentSpeed, VideoFormat } from '../../shared/types';
+import type { ArchiveCard } from '../../shared/digest';
+import type { AppState, Backup, BackupSnapshot, CalEvent, Countdown, Craving, DigestCard, DigestFeedback, DirListing, DisksReport, LinkCheck, LogLine, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
+import type { AlertsInfo } from '../../shared/types';
 import type { AskResult } from '../../shared/ask';
+import type { ShellAskResult, ShellAskStatus } from '../../shared/shellAsk';
 import type { UsageReport } from '../../shared/claudeUsage';
 import { kvGet, kvSet } from './idb';
+
+/** What a torrent is added with: a category (made if it's new), tags, and a ratio to seed to. */
+export interface TorrentAdd {
+  category?: string;
+  tags?: string[];
+  ratio?: number | null;
+}
 
 /** Where the state was kept before it moved to IndexedDB; still used where IndexedDB isn't available. */
 const STATE_KEY = 'launchpad:state';
@@ -144,7 +156,7 @@ export class ConflictError extends Error {
   }
 }
 
-async function req<T>(method: string, url: string, body?: unknown, keepalive = false, extra?: Record<string, string>, timeoutMs?: number): Promise<T> {
+export async function req<T>(method: string, url: string, body?: unknown, keepalive = false, extra?: Record<string, string>, timeoutMs?: number): Promise<T> {
   const raw = body instanceof Blob;
   let res: Response;
   try {
@@ -209,13 +221,23 @@ export const api = {
   keepNoteVersion: (id: string) => req<NoteVersion[]>('POST', `/api/notes/${encodeURIComponent(id)}/history`, {}),
   /** Start checking every bookmark for ones that no longer open; the result comes through the change stream. */
   checkLinks: () => req<LinkCheck>('POST', '/api/bookmarks/check', {}),
-  /** Try a feed before following it; refused with the reason when it doesn't work. */
-  checkNewsSource: (source: string) => req<{ source: string; title: string; count: number }>('POST', '/api/news/check', { source }),
+  /** Star a lesson in the daily digest, say it was too basic or too deep ('' clears that), or answer its quick check. */
+  markLesson: (id: string, patch: { starred?: boolean; feedback?: DigestFeedback; checked?: number }) => req<Partial<AppState>>('PATCH', `/api/digest/cards/${encodeURIComponent(id)}`, patch),
+  /** A follow-up question on a lesson; Claude answers in a few seconds. The lesson comes back with it. */
+  askLesson: (id: string, question: string) =>
+    req<Partial<AppState> & { lesson: DigestCard }>('POST', `/api/digest/cards/${encodeURIComponent(id)}/ask`, { question }, false, undefined, 90_000),
+  /** Today's lesson on that subject, written again on another concept. Claude takes a little while. */
+  swapLesson: (id: string) => req<Partial<AppState>>('POST', `/api/digest/cards/${encodeURIComponent(id)}/swap`, {}, false, undefined, 120_000),
+  answerRecall: (cardId: string, choice: number) => req<Partial<AppState>>('POST', '/api/digest/recall', { cardId, choice }),
+  /** Past lessons matching a search, newest first. */
+  lessonArchive: (q: { q?: string; subject?: string; starred?: boolean; offset?: number; limit?: number }) =>
+    req<{ cards: ArchiveCard[]; total: number }>(
+      'GET',
+      `/api/digest/archive?${new URLSearchParams({ q: q.q ?? '', subject: q.subject ?? '', starred: q.starred ? '1' : '', offset: String(q.offset ?? 0), limit: String(q.limit ?? 40) })}`,
+    ),
   saveStory: (s: Pick<SavedStory, 'title' | 'url' | 'source' | 'topic' | 'summary'>) => req<NewsLists>('POST', '/api/news/saved', s),
   markStoryRead: (id: string, read: boolean) => req<NewsLists>('PATCH', `/api/news/saved/${encodeURIComponent(id)}`, { read }),
   removeStory: (id: string) => req<NewsLists>('DELETE', `/api/news/saved/${encodeURIComponent(id)}`),
-  hideNews: (topic: string, urls: string[], hide: boolean) => req<NewsLists>('POST', '/api/news/hidden', { topic, urls, hide }),
-  muteSource: (source: string, muted: boolean) => req<NewsLists>('POST', '/api/news/muted', { source, muted }),
   addPhoto: (image: Blob) => req<Photo>('POST', '/api/photos', image),
   putPhotos: (v: Photo[]) => req('PUT', '/api/photos', v),
   deletePhoto: (id: string) => req('DELETE', `/api/photos/${encodeURIComponent(id)}`),
@@ -259,6 +281,9 @@ export const api = {
   addSnippet: (s: Omit<Snippet, 'id'>) => req<Snippet[]>('POST', '/api/shell/snippets', s),
   editSnippet: (s: Snippet) => req<Snippet[]>('PUT', `/api/shell/snippets/${encodeURIComponent(s.id)}`, { name: s.name, command: s.command }),
   deleteSnippet: (id: string) => req<Snippet[]>('DELETE', `/api/shell/snippets/${encodeURIComponent(id)}`),
+  shellAskStatus: () => req<ShellAskStatus>('GET', '/api/shell/ask'),
+  /** A plain-English request → one command to put at the prompt; `cwd` is the shell's folder when it's known. */
+  shellAsk: (text: string, cwd: string | null) => req<ShellAskResult>('POST', '/api/shell/ask', { text, cwd }, false, undefined, 60_000),
   /** Saved Minecraft servers and any others running; `fresh` looks again rather than using the last few seconds' look. */
   minecraft: (fresh = false) => req<McStatus[]>('GET', `/api/minecraft${fresh ? '?fresh=1' : ''}`, undefined, false, undefined, 30_000),
   addMcServer: (s: Omit<McServer, 'id'>) => req<McStatus[]>('POST', '/api/minecraft/servers', s),
@@ -269,19 +294,51 @@ export const api = {
   mcCommand: (id: string, command: string) => req('POST', `/api/minecraft/${encodeURIComponent(id)}/command`, { command }, false, undefined, 30_000),
   mcStart: (id: string) => req('POST', `/api/minecraft/${encodeURIComponent(id)}/start`, {}, false, undefined, 30_000),
   mcDiagnose: (id: string) => req<McDiagnosis>('GET', `/api/minecraft/${encodeURIComponent(id)}/diagnose`, undefined, false, undefined, 40_000),
+  /** Who's online; `fresh` asks the console's list again even when the ping's count hasn't changed. */
+  mcPlayers: (id: string, fresh = false) => req<McPlayers>('GET', `/api/minecraft/${encodeURIComponent(id)}/players${fresh ? '?fresh=1' : ''}`, undefined, false, undefined, 40_000),
+  mcPlayerAction: (id: string, action: McPlayerAction, name: string, to?: string) => req('POST', `/api/minecraft/${encodeURIComponent(id)}/players`, { action, name, to }, false, undefined, 30_000),
+  /** `tps`: the server may be asked for its TPS (typed into its console, at most every couple of minutes). */
+  mcMeters: (id: string, tps: boolean) => req<McMeters>('GET', `/api/minecraft/${encodeURIComponent(id)}/meters${tps ? '?tps=1' : ''}`, undefined, false, undefined, 30_000),
+  mcBackups: (id: string) => req<McBackups>('GET', `/api/minecraft/${encodeURIComponent(id)}/backups`, undefined, false, undefined, 40_000),
+  // Measuring a big world (du) can take a while before the backup starts.
+  mcBackup: (id: string) => req<McBackups>('POST', `/api/minecraft/${encodeURIComponent(id)}/backups`, {}, false, undefined, 150_000),
+  mcRestore: (id: string, name: string) => req<McBackups>('POST', `/api/minecraft/${encodeURIComponent(id)}/backups/${encodeURIComponent(name)}/restore`, {}, false, undefined, 60_000),
+  mcDeleteBackup: (id: string, name: string) => req<McBackups>('DELETE', `/api/minecraft/${encodeURIComponent(id)}/backups/${encodeURIComponent(name)}`, undefined, false, undefined, 40_000),
+  mcDismissJob: (id: string) => req<McBackups>('POST', `/api/minecraft/${encodeURIComponent(id)}/backups/dismiss`, {}, false, undefined, 40_000),
+  mcCrashes: (id: string) => req<McCrashes>('GET', `/api/minecraft/${encodeURIComponent(id)}/crashes`, undefined, false, undefined, 30_000),
+  mcCrash: (id: string, name: string) => req<{ name: string; text: string; truncated: boolean }>('GET', `/api/minecraft/${encodeURIComponent(id)}/crashes/${encodeURIComponent(name)}`, undefined, false, undefined, 30_000),
+  explainStatus: () => req<ExplainStatus>('GET', '/api/explain'),
+  /** Explain the end of the server's log, or one crash report. */
+  mcExplain: (id: string, crash?: string) => req<ExplainResult>('POST', `/api/minecraft/${encodeURIComponent(id)}/explain`, crash ? { crash } : {}, false, undefined, 120_000),
+  explainContainer: (id: string, name: string) => req<ExplainResult>('POST', `/api/server/containers/${encodeURIComponent(id)}/explain`, { name }, false, undefined, 120_000),
   downloads: () => req<DownloadsInfo>('GET', '/api/downloads'),
-  /** `ig` only matters for Instagram links: a profile's newest how many, and whether to save captions and details too. */
-  startDownload: (url: string, dir: string, ig?: { limit?: number; metadata: boolean }) => req<DownloadJob>('POST', '/api/downloads', { url, dir, ...ig }),
+  /** `opts`: for Instagram links, a profile's newest how many and whether to save captions and details too; for videos, yt-dlp and the format. */
+  startDownload: (url: string, dir: string, opts?: { limit?: number; metadata: boolean } | { via: 'video'; format: VideoFormat }) => req<DownloadJob>('POST', '/api/downloads', { url, dir, ...opts }),
+  /** The site yt-dlp knows a link as, or null when it would only fetch the link itself. */
+  videoSite: (url: string) => req<{ site: string | null }>('GET', `/api/downloads/video?url=${encodeURIComponent(url)}`, undefined, false, undefined, 40_000),
   instagramSignIn: (cookie: string) => req<InstagramInfo>('POST', '/api/downloads/instagram', { cookie }),
   instagramSignOut: () => req<InstagramInfo>('DELETE', '/api/downloads/instagram'),
   cancelDownload: (id: string) => req<DownloadJob>('POST', `/api/downloads/${encodeURIComponent(id)}/cancel`, {}),
   clearDownloads: () => req<DownloadJob[]>('POST', '/api/downloads/clear', {}),
   torrents: () => req<TorrentsInfo>('GET', '/api/torrents'),
-  addTorrents: (urls: string) => req<TorrentsInfo>('POST', '/api/torrents', { urls }),
-  addTorrentFile: (f: File) => req<TorrentsInfo>('POST', `/api/torrents/file?name=${encodeURIComponent(f.name)}`, f),
+  addTorrents: (urls: string, o: TorrentAdd = {}) => req<TorrentsInfo>('POST', '/api/torrents', { urls, ...o }),
+  addTorrentFile: (f: File, o: TorrentAdd = {}) =>
+    req<TorrentsInfo>('POST', `/api/torrents/file?${new URLSearchParams({ name: f.name, category: o.category ?? '', tags: (o.tags ?? []).join(','), ratio: o.ratio == null ? '' : String(o.ratio) })}`, f),
+  torrentOptions: () => req<TorrentOptions>('GET', '/api/torrents/options'),
+  torrentFiles: (hash: string) => req<TorrentFile[]>('GET', `/api/torrents/${encodeURIComponent(hash)}/files`),
+  setFilePriority: (hash: string, ids: number[], priority: TorrentFile['priority']) => req<TorrentFile[]>('POST', `/api/torrents/${encodeURIComponent(hash)}/files`, { ids, priority }),
+  setTorrentRatio: (hash: string, ratio: number | null) => req<TorrentsInfo>('POST', `/api/torrents/${encodeURIComponent(hash)}/ratio`, { ratio }),
+  setTurtle: (on: boolean) => req<TorrentsInfo>('POST', '/api/torrents/turtle', { on }),
+  setSpeedCaps: (caps: Partial<Omit<TorrentSpeed, 'turtle'>>) => req<TorrentsInfo>('POST', '/api/torrents/caps', caps),
   torrentAction: (hashes: string[], action: 'stop' | 'start' | 'delete' | 'deleteFiles') => req<TorrentsInfo>('POST', '/api/torrents/action', { hashes, action }),
   /** Take a copy now and upload it to Google Drive; resolves once it's there (or failed, in `drive.lastError`). */
   copyToDrive: () => req<AppState>('POST', '/api/backup/drive', {}),
+  /** Settings › Alerts: where alerts go, what's going on and what was sent lately. */
+  alerts: () => req<AlertsInfo>('GET', '/api/alerts'),
+  /** Save the ntfy topic's address; '' turns alerts off. Refused with what's wrong with it. */
+  setAlertTopic: (topicUrl: string) => req<AlertsInfo>('PUT', '/api/alerts', { topicUrl }),
+  /** Send a test alert now; refused with why it didn't go. */
+  testAlert: () => req<AlertsInfo>('POST', '/api/alerts/test', {}),
 };
 
 /** Count an open of a bookmark (a tile, a search result, ⌘K, 1–9), for ranking results. Nothing waits on it. */

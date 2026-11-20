@@ -107,18 +107,18 @@ SingPost status works out of the box. For Ninja Van, J&T, DHL, UPS, FedEx and Qx
 
 Without a key, those packages still appear (manually or from Gmail) with a "Track on …" link to the carrier's site.
 
-## 7. Optional: news, inbox and training summaries (Anthropic API)
+## 7. Optional: the daily digest, inbox and training summaries (Anthropic API)
 
-The News view (in the rail on the left, or press `N`) works without this and lists headlines for each topic, and the Inbox view (`G` then `I`) lists your last week of email. To get a short digest instead:
+The Digest view (in the rail on the left, or press `D`) needs this: Claude writes its lessons. The Inbox view (`G` then `I`) works without it and lists your last week of email; with it you get a short digest instead. To set it up:
 
 1. Create an API key at <https://platform.claude.com/> (Settings → API keys) and add some credit.
 2. Add it to `.env` and `docker compose up -d`:
    ```
    ANTHROPIC_API_KEY=sk-ant-...
    ```
-3. Optional: `NEWS_MODEL`, `INBOX_MODEL`, `TRAINING_MODEL`, `LEARN_MODEL`, `ASK_MODEL` (⌘K’s Ask Launchpad) and `REVIEW_MODEL` (the weekly recap in Review) pick the models. The default for all of them, `claude-haiku-5-5`, costs a few cents a month for news, training, and ⌘K and at most a dollar or two for the inbox (Server › Claude usage shows the real numbers); `claude-opus-5-5` writes richer summaries at about 40 times the price.
+3. Optional: `DIGEST_MODEL`, `DIGEST_ASK_MODEL` (answers follow-up questions on a lesson; `claude-sonnet-5-5` by default), `INBOX_MODEL`, `TRAINING_MODEL`, `LEARN_MODEL`, `ASK_MODEL` (⌘K’s Ask Launchpad), `REVIEW_MODEL` (the weekly recap in Review) and `EXPLAIN_MODEL` (Explain this log, in the Minecraft tab and the containers’ logs) pick the models. The digest's default is `claude-opus-5-5`, about $2–3 a month for four subjects, since the lessons teach and have to be right; the others default to `claude-haiku-5-5`, which costs a few cents a month for training and ⌘K and at most a dollar or two for the inbox (Server › Claude usage shows the real numbers); `claude-opus-5-5` writes richer summaries at about 40 times the price.
 
-News summaries are written from headlines only, at most every 3 hours per topic and only when new headlines have appeared.
+The digest is written once a day, on the first hourly check after midnight (or when you open the view first), with one lesson per subject; adding a subject or pressing Another one writes one more. Claude is sent the date, Settings › About me, the titles each subject has covered and your Too basic / Too deep ratings. A follow-up question under a lesson's Ask is one more small call, made only when you ask, with the lesson, the questions already asked on it and yours. Hide the Digest view in Settings › Panels to stop it.
 
 The same key turns on two things in the Training view (`G` then `T`). Claude reads what each exercise in your Hevy export trains, once per new exercise name, and writes a short note on your training after each import that brings in a newer workout, or when you press refresh.
 
@@ -206,6 +206,10 @@ Server › **Downloads** has one box for links. An `https://` link is fetched by
 
 Public posts and profiles download without signing in, though Instagram limits how much a server can fetch that way. For private posts you follow, or when it's limiting the server, press **Instagram** at the top of the box and paste the `sessionid` cookie of a browser signed in to Instagram (developer tools › Application › Cookies › instagram.com; the whole Cookie header works too). Launchpad checks it with Instagram, keeps it in `/data/instagram-session.json` (readable only by Launchpad, never sent to the page, and not in backups) and uses it for nothing else. Sign in from a private window and close it without signing out: signing out ends the session. If Instagram later turns it away, the button turns orange; paste a fresh one, or **Sign out**. The instaloader version is pinned in `server/requirements-instagram.txt`; when Instagram changes something and downloads start failing, raising it there (and pushing) builds an image with the fix. Outside Docker, `pip install instaloader` and set `INSTALOADER_PYTHON` to that Python.
 
+**Videos**: YouTube, X (Twitter), TikTok, Reddit and SoundCloud links are saved with [yt-dlp](https://github.com/yt-dlp/yt-dlp), which comes with Launchpad's Docker image along with ffmpeg. For a link to another site, Launchpad asks yt-dlp whether it knows the site, and if it does offers to save the video on the page rather than the page itself. Pick **Best** (the best picture and sound yt-dlp finds, in whatever file suits them), **1080p MP4** (1080p at most, H.264 where there is one, as an `.mp4`) or **MP3 audio**. A link gets one video: a video in a playlist is just that video, and a playlist's or channel's own link its first. The video is downloaded into `/data/video-downloads` first, where ffmpeg joins its picture and sound or makes the MP3, then copied into the folder like any other download, and Launchpad's copy is deleted (as is what a restart left there). It won't start with less than 512 MB free in `/data`, nor once yt-dlp says how big the video is when there isn't room for about twice that. Live streams aren't saved. YouTube now and then turns a download away (HTTP 403); Launchpad tries once more by itself, and **Try again** usually works after that.
+
+Sites change and break yt-dlp now and then ("Unable to extract…", "Sign in to confirm…"). A newer yt-dlp usually fixes it: it's pinned in `server/requirements-ytdlp.txt`, which says how to raise it (with the matching `yt-dlp-ejs`, the JavaScript it runs with Node.js for YouTube), and pushing the change builds an image with it. Outside Docker, `pip install yt-dlp yt-dlp-ejs`, set `YTDLP_PYTHON` to that Python, and put ffmpeg on the PATH or set `YTDLP_FFMPEG` to it.
+
 Magnet links (one a line) and `.torrent` files go to **qBittorrent**, which `docker-compose.yml` runs beside Launchpad. Launchpad lists its torrents with progress, speed and time left, and can pause, resume and delete them (keeping or deleting the files). Set it up once:
 
 1. Get the new `docker-compose.yml` and make the folder torrents download into, as your user:
@@ -225,6 +229,12 @@ Magnet links (one a line) and `.torrent` files go to **qBittorrent**, which `doc
 
 Port 8091 is only for your LAN, like 8090. For better speeds, forward port 6881 (TCP and UDP) on your router to the server. Finished torrents have a button that opens their folder in Files. To leave torrents out, delete the `qbittorrent` service and `QBIT_URL` from `docker-compose.yml`.
 
+In the Torrents panel:
+
+- **Turtle** switches qBittorrent to its alternative (slower) speed limits and back, and the line under it says what's capped. The sliders button sets the caps, the usual ones and turtle mode's, in MB/s (blank for none). They're qBittorrent's own settings, the same as in its options.
+- **A torrent's files**: the arrow on a torrent (or its name) opens its files, with their size and progress. Set each to **Skip**, **Normal** or **High**, or all at once, and open a file's folder in Files.
+- **Category, tags and ratio**: a magnet link or `.torrent` file (which now waits for **Download**) can go in a category, which is a folder of its own inside qBittorrent's save folder (pick **New category…** to make one), and have tags, new ones included. **Seed to ratio** (also in a torrent's files, for one already added) is how far it seeds: once it's there, Launchpad takes it out of qBittorrent and leaves its files where they are, and the panel says so. Launchpad keeps these ratios itself, in `/data/torrent-watch.json`, and checks them every half a minute; it never deletes a torrent's files, and doesn't touch qBittorrent's own share limits.
+
 ## 12. Optional: Minecraft consoles
 
 Server › **Minecraft** lists the Minecraft servers on the machine and gives each a console. It needs step 9: everything goes over the same SSH login.
@@ -239,7 +249,7 @@ A server started some other way (systemd, `nohup`) shows up with its log, but La
 
 Everything is in one SQLite file inside the `launchpad-data` volume, with photos in a `photos` folder beside it, images pasted into notes in `note-images` and bookmark icons in `favicons` (a cache, fetched again when missing). Settings → General → **Backup** has:
 
-- **Download backup**: one JSON file with everything you've entered (bookmarks, notes, settings, countdowns, the cigarette, mood and weight logs, the money tracker, courses and study time, workouts, exercise muscles, packages, the photo list, notepads' earlier versions, the news reading list with hidden headlines and muted sources, how often each bookmark's been opened, the terminal's snippets and the saved Minecraft servers). It leaves out what sync fetches again (calendar, tasks, mail, news, weather) and the Google sign-in.
+- **Download backup**: one JSON file with everything you've entered (bookmarks, notes, settings, countdowns, the cigarette, mood and weight logs, the money tracker, courses and study time, workouts, exercise muscles, packages, the photo list, notepads' earlier versions, the daily digest's lessons with their stars, ratings and recall answers, the reading list kept from the old News view, how often each bookmark's been opened, the terminal's snippets and the saved Minecraft servers). It leaves out what sync fetches again (calendar, tasks, mail, weather) and the Google sign-in.
 - **With photos (.zip)**: the same backup plus every photo file and every image the notes show, in one .zip.
 - **Restore…** takes either file (and the older bookmarks-and-notes files from **Export JSON**). Each part it holds replaces what's there; parts it doesn't hold are kept. From a .zip, photos and note images missing here are put back. Cloudflare refuses uploads over 100 MB, so a bigger .zip has to be restored over the LAN address.
 - **Database (.db)**: a consistent copy of the whole SQLite database, safe to take while Launchpad runs. It includes the Google sign-in, so keep it private. To put it back by hand, stop the container, replace `launchpad.db` in the volume (and delete any `launchpad.db-wal` and `launchpad.db-shm` beside it), then start it.

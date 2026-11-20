@@ -3,6 +3,7 @@ import { DOW, MON } from '../../../shared/dates';
 import { fmtDuration } from '../../../shared/trackers';
 import type { AppState, ServerStats, ShellInfo, SourceKey, SpeedTest } from '../../../shared/types';
 import { api, cachedServer, cacheServer, localGet, localSet } from '../api';
+import { useActiveTabInView } from '../hooks/useActiveTabInView';
 import { ago, fmtBytes, hm, niceMax } from '../util';
 import { ClaudeUsagePanel } from './ClaudeUsage';
 import { ContainerRow, LogsDrawer } from './Containers';
@@ -32,8 +33,12 @@ const TABS: { key: Tab; name: string; icon: string }[] = [
 const pair = (t: Tab) => t === 'terminal' || t === 'files';
 
 /** The Server view: the machine's health at a glance, a shell on it, its files, its Minecraft servers and its downloads. */
-export function Server({ data, now, openTab, onOpenSettings, split }: {
+export function Server({ data, now, openTab, onOpenSettings, onPinFolders, onAutoUnpack, split }: {
   data: AppState;
+  /** Save Files' pinned folders, in prefs. */
+  onPinFolders: (pins: string[]) => void;
+  /** Save Downloads' "Unpack archives when they finish", in prefs. */
+  onAutoUnpack: (on: boolean) => void;
   /** Terminal and Files open side by side (Console, Bento and Horizon on a wide enough screen). */
   split?: boolean;
   now: Date;
@@ -44,6 +49,7 @@ export function Server({ data, now, openTab, onOpenSettings, split }: {
   const [tab, setTabState] = useState<Tab>(() => TABS.find((t) => t.key === localGet('serverTab'))?.key ?? 'overview');
   // The terminal and files stay mounted once opened, so the screen and unsaved edits survive a switch of tab.
   const [opened, setOpened] = useState<Set<Tab>>(() => new Set([tab]));
+  const tabsRef = useActiveTabInView(tab);
   const [cd, setCd] = useState<{ path: string; n: number } | null>(null);
   const [filesAt, setFilesAt] = useState<{ path: string; n: number } | null>(null);
   const [info, setInfo] = useState<ShellInfo | null>(null);
@@ -94,7 +100,7 @@ export function Server({ data, now, openTab, onOpenSettings, split }: {
   return (
     <main className={'server' + (both && ready ? ' split-shell' : '')}>
       <div className="server-head">
-        <div className="tabs server-tabs" role="tablist" aria-label="Server">
+        <div ref={tabsRef} className="tabs server-tabs" role="tablist" aria-label="Server">
           {TABS.map((t) => (
             <button key={t.key} role="tab" aria-selected={tab === t.key || (both && pair(t.key))} className={'tab' + (tab === t.key || (both && pair(t.key)) ? ' active' : '')} onClick={() => setTab(t.key)}>
               <i className={'ph-duotone ' + t.icon} />
@@ -137,6 +143,8 @@ export function Server({ data, now, openTab, onOpenSettings, split }: {
         <ErrorBoundary label="Downloads">
           <DownloadsPanel
             shellReady={info ? ready : null}
+            autoUnpack={!!data.prefs.autoUnpack}
+            onAutoUnpack={onAutoUnpack}
             onOpenFolder={(path) => {
               setFilesAt((f) => ({ path, n: (f?.n ?? 0) + 1 }));
               setTab('files');
@@ -150,6 +158,8 @@ export function Server({ data, now, openTab, onOpenSettings, split }: {
           hidden={!both && tab !== 'files'}
           now={now}
           open={filesAt}
+          pins={data.prefs.pinnedFolders ?? []}
+          onPins={onPinFolders}
           onFailed={loadInfo}
           onOpenTerminal={(path) => {
             setCd((c) => ({ path, n: (c?.n ?? 0) + 1 }));
@@ -659,7 +669,7 @@ const SYNCS: { key: SourceKey; name: string }[] = [
   { key: 'tasks', name: 'Tasks' },
   { key: 'gmail', name: 'Gmail packages' },
   { key: 'carriers', name: 'Carriers' },
-  { key: 'news', name: 'News' },
+  { key: 'digest', name: 'Daily digest' },
   { key: 'inbox', name: 'Inbox' },
   { key: 'weather', name: 'Weather and air' },
   { key: 'speedtest', name: 'Speed test' },

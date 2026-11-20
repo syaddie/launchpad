@@ -141,17 +141,22 @@ function busiest(names: string[]): string {
 
 // ---------- stats ----------
 
-export async function serverStats(iface: string | undefined, speed: ServerStats['speed']): Promise<ServerStats> {
-  startSampler();
-  const last = samples[samples.length - 1];
-  let disk: ServerStats['disk'] = null;
+/** How full the disk Launchpad's data is on is; null where statfs isn't supported. */
+export function dataDisk(): ServerStats['disk'] {
   try {
     const s = fs.statfsSync(config.dataDir);
     const total = s.blocks * s.bsize;
-    disk = { totalBytes: total, usedBytes: total - s.bavail * s.bsize };
+    return { totalBytes: total, usedBytes: total - s.bavail * s.bsize };
   } catch {
-    // statfs unsupported: leave the storage panel without totals.
+    return null;
   }
+}
+
+export async function serverStats(iface: string | undefined, speed: ServerStats['speed']): Promise<ServerStats> {
+  startSampler();
+  const last = samples[samples.length - 1];
+  // Null leaves the storage panel without totals.
+  const disk = dataDisk();
 
   const names = [...new Set(samples.flatMap((s) => [...s.net.keys()]))];
   const shown = names.filter(isPhysical);

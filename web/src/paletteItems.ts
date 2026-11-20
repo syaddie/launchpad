@@ -44,10 +44,9 @@ export interface PaletteContext {
   addEvent: (calendarId: string, d: EventDraft) => Promise<boolean>;
   /** Put the cursor in Today's add-an-event field; missing when that panel isn't on screen. */
   openAddEvent?: () => void;
-  refreshNews: () => void;
   refreshInbox: () => void;
-  /** News › Reading list. */
-  openReading: () => void;
+  /** Digest › Archive, or the reading list kept from the old News view. */
+  openDigestTab: (tab: 'archive' | 'reading') => void;
   /** Show a notepad on home. */
   openNote: (id: string) => void;
   showShortcuts: () => void;
@@ -114,7 +113,7 @@ export function paletteItems(c: PaletteContext): PaletteItem[] {
     ...(c.openAddEvent && eventsOn(data)
       ? [{ id: 'a:event', group: 'Actions', label: 'Add a calendar event', icon: 'ph-calendar-plus', words: 'google calendar meeting appointment schedule', sub: 'Or type “event”, then what and when', run: c.openAddEvent }]
       : []),
-    { id: 'a:news', group: 'Actions', label: 'Refresh the news', icon: 'ph-arrows-clockwise', run: () => (setView('news'), c.refreshNews()) },
+    { id: 'a:lessons', group: 'Actions', label: 'Search past lessons', icon: 'ph-lightbulb', words: 'digest learn archive concepts starred', run: () => c.openDigestTab('archive') },
     ...readingItems(c),
     // Notepads by name, tag or anything in them, once something's typed.
     ...data.notes.map((n) => ({
@@ -172,11 +171,13 @@ export function paletteItems(c: PaletteContext): PaletteItem[] {
 /** The reading list, and each story on it (those once something's typed). */
 function readingItems(c: PaletteContext): PaletteItem[] {
   const toRead = (c.data.newsLists?.saved ?? []).filter((s) => !s.readAt);
+  // Nothing new can be saved since News became the digest, so it's only offered while it holds something.
+  if (!c.data.newsLists?.saved.length) return [];
   return [
     {
       id: 'a:reading', group: 'Actions', label: 'Open the reading list', icon: 'ph-bookmark-simple', words: 'news saved later read stories',
-      sub: toRead.length ? `${toRead.length} to read` : 'Nothing saved yet',
-      run: c.openReading,
+      sub: toRead.length ? `${toRead.length} to read` : 'All read',
+      run: () => c.openDigestTab('reading'),
     },
     ...toRead.map((s) => ({
       id: 'r:' + s.id, group: 'Reading list', label: s.title, icon: 'ph-bookmark-simple', sub: s.source || host(s.url), words: `${s.url} saved read later`,

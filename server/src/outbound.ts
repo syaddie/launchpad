@@ -1,5 +1,4 @@
-// Fetching addresses the owner typed in (news feeds) or saved (bookmarks, for the link
-// check and their icons). Only http(s), never the server itself, with every redirect
+// Fetching addresses the owner saved (bookmarks, for the link check and their icons). Only http(s), never the server itself, with every redirect
 // checked the same way, a time limit and a size cap.
 import dns from 'node:dns/promises';
 import net from 'node:net';
@@ -61,7 +60,8 @@ export async function checkUrl(raw: string): Promise<URL> {
   return url;
 }
 
-function fetchFailure(e: unknown): FetchError {
+/** What went wrong reaching an address, as a FetchError the page can show. */
+export function fetchFailure(e: unknown): FetchError {
   if (e instanceof FetchError) return e;
   const err = e as Error & { cause?: { code?: string } };
   if (err.name === 'TimeoutError' || err.name === 'AbortError') return new FetchError('timeout', 'Didn’t answer in time.');

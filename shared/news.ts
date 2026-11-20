@@ -1,7 +1,7 @@
-// What the News view follows, and the reading list. A followed item is one string in
-// prefs.newsTopics: plain words search Google News; "rss:<address>", "hn:front",
-// "hn:best" and "r/<subreddit>" are feeds that work the same way.
-import type { NewsArticle, NewsLists, NewsStory, SavedStory } from './types';
+// The reading list kept from the old News view (now the daily digest), and how that view's
+// followed items were written in prefs.newsTopics, which is still cleaned and kept: plain
+// words searched Google News; "rss:<address>", "hn:front", "hn:best" and "r/<subreddit>" were feeds.
+import type { NewsLists, SavedStory } from './types';
 
 export type NewsSourceKind = 'topic' | 'rss' | 'hn' | 'reddit';
 
@@ -32,24 +32,6 @@ export function parseNewsSource(s: string): NewsSourceRef {
   return { kind: 'topic', value: s, label: s };
 }
 
-/**
- * What someone typed in "Add" as a followed item: a web address is a feed, "r/name" or a
- * Reddit address a subreddit, "hn" or "hn best" Hacker News, and anything else a topic.
- */
-export function newsSourceFromInput(input: string): string {
-  const t = input.trim().replace(/\s+/g, ' ');
-  if (/^(hn|hacker ?news)( front( ?page)?)?$/i.test(t) || /^https?:\/\/news\.ycombinator\.com\/?(news)?$/i.test(t)) return 'hn:front';
-  if (/^(hn|hacker ?news) best$/i.test(t) || /^https?:\/\/news\.ycombinator\.com\/best\/?$/i.test(t)) return 'hn:best';
-  const sub = t.match(/^\/?r\/([A-Za-z0-9_]+)\/?$/i) ?? t.match(/^(?:https?:\/\/)?(?:www\.|old\.)?reddit\.com\/r\/([A-Za-z0-9_]+)\/?(?:\.rss)?$/i);
-  if (sub && SUBREDDIT.test(sub[1])) return `r/${sub[1]}`;
-  if (/^https?:\/\/\S+$/i.test(t)) return `rss:${t}`;
-  if (/^[\w-]+(\.[\w-]+)+\/\S*(rss|atom|feed|xml)\S*$/i.test(t)) return `rss:https://${t}`;
-  return t;
-}
-
-/** Key for a followed item in the news cache and the hidden lists. */
-export const sourceKey = (s: string) => s.toLowerCase();
-
 /** Same address, give or take the trailing slash, the fragment and tracking tags. */
 export function sameUrl(a: string, b: string): boolean {
   return normUrl(a) === normUrl(b);
@@ -65,22 +47,6 @@ export function normUrl(u: string): string {
   } catch {
     return u.trim();
   }
-}
-
-const mutedSet = (l: NewsLists) => new Set(l.muted.map((m) => m.toLowerCase()));
-
-/** Headlines without the ones hidden in this topic or from a muted source. */
-export function visibleArticles(topic: string, articles: NewsArticle[], lists: NewsLists): NewsArticle[] {
-  const hidden = new Set((lists.hidden[sourceKey(topic)] ?? []).map((h) => normUrl(h.url)));
-  const muted = mutedSet(lists);
-  return articles.filter((a) => !hidden.has(normUrl(a.url)) && !muted.has(a.source.toLowerCase()));
-}
-
-/** A story is hidden once every headline it came from is hidden or muted. */
-export function visibleStories(topic: string, stories: NewsStory[], lists: NewsLists): NewsStory[] {
-  const hidden = new Set((lists.hidden[sourceKey(topic)] ?? []).map((h) => normUrl(h.url)));
-  const muted = mutedSet(lists);
-  return stories.filter((s) => !s.links.length || s.links.some((l) => !hidden.has(normUrl(l.url)) && !muted.has(l.source.toLowerCase())));
 }
 
 export const EMPTY_NEWS_LISTS: NewsLists = { saved: [], hidden: {}, muted: [] };

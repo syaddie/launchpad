@@ -89,8 +89,8 @@ export function useShortcuts(state: ShortcutState) {
         return;
       }
       if (drawer || focus) return;
-      if (key === 'n') {
-        setView((v) => (v === 'news' ? 'home' : 'news'));
+      if (key === 'd') {
+        setView((v) => (v === 'digest' ? 'home' : 'digest'));
         return;
       }
       if (key === 'c') {

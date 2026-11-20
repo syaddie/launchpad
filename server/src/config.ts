@@ -14,10 +14,12 @@ export const config = {
   },
   /** Optional: 17TRACK API key for carriers other than SingPost. */
   seventeenTrackKey: env.SEVENTEEN_TRACK_API_KEY || '',
-  /** Optional: Anthropic API key for the News and Inbox summaries, the Training and Learn notes, and ⌘K's Ask Launchpad. Without it they show plain lists or nothing. */
+  /** Optional: Anthropic API key for the daily digest, the Inbox summaries, the Training and Learn notes, and ⌘K's Ask Launchpad. Without it they show plain lists or nothing. */
   anthropicKey: env.ANTHROPIC_API_KEY || '',
-  /** Claude model that writes the news summaries. */
-  newsModel: env.NEWS_MODEL || 'claude-haiku-5-5',
+  /** Claude model that writes the daily digest's lessons. Opus by default: they teach, so they have to be right, and it's one call a day. */
+  digestModel: env.DIGEST_MODEL || 'claude-opus-5-5',
+  /** Claude model that answers follow-up questions on a lesson. Sonnet: quick, and each question is a call of its own. */
+  digestAskModel: env.DIGEST_ASK_MODEL || 'claude-sonnet-5-5',
   /** Claude model that writes the inbox digests. */
   inboxModel: env.INBOX_MODEL || 'claude-haiku-5-5',
   /** Claude model that labels exercises and writes the training note. */
@@ -28,6 +30,8 @@ export const config = {
   askModel: env.ASK_MODEL || 'claude-haiku-5-5',
   /** Claude model that writes the weekly recap in Review. */
   reviewModel: env.REVIEW_MODEL || 'claude-haiku-5-5',
+  /** Claude model that explains a Minecraft server's or a container's log (Explain this log). */
+  explainModel: env.EXPLAIN_MODEL || 'claude-haiku-5-5',
   /** Optional: data.gov.sg API key for the weather. It works without one, at a lower rate limit. */
   dataGovKey: env.DATA_GOV_SG_API_KEY || '',
   /** Optional: where the host's /proc is mounted (e.g. /host/proc), so the Server view sees the host's network traffic. */
@@ -53,6 +57,9 @@ export const config = {
   },
   /** Instagram downloads: a Python with instaloader installed. The Docker image sets this to its own; outside it, `python3`. */
   instaloaderPython: env.INSTALOADER_PYTHON || 'python3',
+  /** Video downloads: a Python with yt-dlp and yt-dlp-ejs installed, and ffmpeg's path if it isn't on the PATH. The Docker image sets the Python to its own. */
+  ytdlpPython: env.YTDLP_PYTHON || 'python3',
+  ytdlpFfmpeg: env.YTDLP_FFMPEG || '',
   /** Optional: verify Cloudflare Access JWTs so only your Access login can reach the app. */
   access: {
     teamDomain: (env.CF_ACCESS_TEAM_DOMAIN || '').replace(/^https?:\/\//, '').replace(/\/+$/, ''),

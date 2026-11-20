@@ -1,3 +1,4 @@
+import { DEFAULT_SUBJECTS } from './digest';
 import type { BookmarkGroup, Note, Prefs, SearchEngine } from './types';
 
 export const STARTER_BOOKMARKS: BookmarkGroup[] = [
@@ -28,7 +29,8 @@ export const DEFAULT_PREFS: Prefs = {
   design: 'broadsheet',
   hiddenCalendars: [],
   sources: { calendar: true, tasks: true, gmail: true },
-  newsTopics: ['K-pop', 'Video games'],
+  digestSubjects: DEFAULT_SUBJECTS,
+  newsTopics: [],
   weatherArea: 'City',
   aboutMe:
     'I busk. Small incoming PayNow transfers from friends or strangers are usually tips from my busking sessions, especially when several arrive close together or during/just after a busking event in my calendar.',
@@ -39,9 +41,13 @@ export const DEFAULT_PREFS: Prefs = {
   speedPlanMbps: 0,
   setsPerWeek: 10,
   pinnedLifts: [],
+  pinnedFolders: [],
   gymMonthly: 0,
   claudeBudget: 0,
   driveBackup: true,
+  // On, but nothing is sent until a topic is set in Settings › Alerts.
+  alerts: { health: true, containers: true, disks: true, minecraft: true },
+  autoUnpack: false,
   packPrice: 0,
   packSize: 20,
 };
@@ -50,7 +56,7 @@ export const DEFAULT_PREFS: Prefs = {
 export const HIDEABLE = {
   panel: ['today', 'briefing', 'tasks', 'notes', 'packages', 'photos', 'bookmarks'],
   top: ['weather', 'air', 'cig', 'training', 'countdown'],
-  view: ['news', 'inbox', 'you', 'training', 'learn', 'money', 'server', 'review'],
+  view: ['digest', 'inbox', 'you', 'training', 'learn', 'money', 'server', 'review'],
 } as const;
 
 export const HIDEABLE_KEYS: string[] = Object.entries(HIDEABLE).flatMap(([k, v]) => v.map((x) => `${k}:${x}`));
