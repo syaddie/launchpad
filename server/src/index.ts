@@ -17,7 +17,7 @@ import { health } from './health';
 import { dbSnapshot, describeRestored, exportBackup, readBackupUpload, restoreBackup, RestoreError, zipBackup } from './backup';
 import { listSnapshots, removeSnapshot, snapshotBackup, snapshotFile, startSnapshots, takeSnapshot } from './snapshots';
 import { cleanCountdowns, cleanMood, cleanPrefs, cleanSnippet, isStr, isYmd, MAX_SNIPPETS, validBookmarks, validNotes } from './clean';
-import { answerRecall, DigestError, markCard, swapCard } from './digest';
+import { answerRecall, askCard, DigestError, markCard, swapCard } from './digest';
 import { checkLinks, favicon, startLinkChecks } from './bookmarks';
 import { keepVersion, MAX_NOTE_IMAGE, readNoteImage, recordVersions, writeNoteImage } from './notes';
 import { bumpOpen, cleanOpens } from '../../shared/bookmarks';
@@ -262,7 +262,7 @@ async function digestReply(c: Context, run: () => void | Promise<void>): Promise
   }
 }
 
-/** Star a lesson, or say it was too basic or too deep. */
+/** Star a lesson, say it was too basic or too deep, or answer its quick check. */
 app.patch('/api/digest/cards/:id', async (c) => {
   const b = await c.req.json().catch(() => ({}));
   return digestReply(c, () => markCard(c.req.param('id'), b));
@@ -272,6 +272,18 @@ app.patch('/api/digest/cards/:id', async (c) => {
 app.post('/api/digest/cards/:id/swap', async (c) => {
   if (!claudeEnabled()) return c.json({ error: 'The digest needs ANTHROPIC_API_KEY on the server.' }, 400);
   return digestReply(c, () => swapCard(c.req.param('id')));
+});
+
+/** A follow-up question on a lesson. The lesson comes back too: older ones aren't in the page's state. */
+app.post('/api/digest/cards/:id/ask', async (c) => {
+  if (!claudeEnabled()) return c.json({ error: 'Follow-up questions need ANTHROPIC_API_KEY on the server.' }, 400);
+  const b = await c.req.json().catch(() => ({}));
+  try {
+    const lesson = await askCard(c.req.param('id'), b.question);
+    return c.json({ ...stateFor(['digest']), lesson });
+  } catch (e) {
+    return e instanceof DigestError ? c.json({ error: e.message }, e.status) : c.json({ error: (e as Error).message }, 422);
+  }
 });
 
 /** An answer to today's Quick recall question. */

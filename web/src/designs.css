@@ -903,3 +903,5 @@ a.hz-row:hover .hz-grow { text-decoration: underline; }
 .lp-root[data-design='poster']:not([data-layout='narrow']) .lp-shell > .lp-inner { padding-left: 30px; }
 [data-layout='wide'][data-design='poster'] .lp-shell > .lp-inner { padding-left: 64px; }
 .lp-root[data-layout='narrow'][data-design='poster'] .rail { background: var(--tx); backdrop-filter: none; box-shadow: none; }
+/* The quick check on a lesson: a right answer in ink too. */
+[data-design='poster'] .dg-check.right .dg-check-why b { color: var(--tx); }

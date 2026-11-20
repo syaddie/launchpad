@@ -28,6 +28,7 @@ import {
   cleanCard, cleanDigest, cleanSubjects, coveredTitles, deeperUrl, EMPTY_DIGEST, feedbackFor, isLearnt, recallDue, recallFor, recallQuestion, searchArchive, subjectsMissing,
 } from '../shared/digest';
 import { ymd } from '../shared/dates';
+import { repairTex, splitMath } from '../shared/math';
 import type { DigestCard, DigestStore } from '../shared/types';
 
 let digest: typeof import('../server/src/digest');
@@ -45,21 +46,34 @@ beforeAll(async () => {
 }, 30_000);
 
 const quiz = { question: 'Which is idempotent?', options: ['POST', 'PUT', 'PATCH', 'CONNECT'], answer: 1, why: 'PUT sets the same state however often it runs.' };
+const check = { question: 'Retrying a PUT twice…', options: ['Sets it twice over', 'Leaves it the same', 'Fails'], answer: 1, why: 'Same request, same state.' };
+/** A lesson from before the digest went short: paragraphs and a takeaway. */
 const card = (id: string, over: Partial<DigestCard> = {}): DigestCard => ({
   id,
   subject: 'Software engineering',
   title: `Concept ${id}`,
   hook: 'Why it matters.',
+  gist: '',
+  formula: '',
+  where: '',
+  points: [],
   body: ['What it is.'],
   example: 'An example.',
+  exampleCode: false,
   takeaway: 'Remember this.',
   search: `Concept ${id}`,
+  check: null,
+  checked: -1,
   quiz,
   starred: false,
   feedback: '',
   recalls: [],
+  asks: [],
   ...over,
 });
+/** A lesson as they're written now: a gist, points and a quick check. */
+const short = (id: string, over: Partial<DigestCard> = {}): DigestCard =>
+  card(id, { gist: 'Doing it twice is the same as once.', body: [], takeaway: '', points: ['Retries are safe.'], check, ...over });
 const at = (date: string, h = 9) => new Date(`${date}T${String(h).padStart(2, '0')}:00:00+08:00`);
 const withDays = (...days: [string, DigestCard[]][]): DigestStore => cleanDigest({ days: days.map(([date, cards]) => ({ date, cards })), skipped: [], error: null });
 
@@ -94,6 +108,30 @@ describe('cleaning what the store keeps', () => {
     const c = cleanCard({ ...card('a'), feedback: 'meh', starred: 'yes', search: '', recalls: [{ at: 'never', right: true }, { at: '2026-11-01T01:00:00Z', right: false, choice: 9 }] })!;
     expect(c).toMatchObject({ feedback: '', starred: false, search: 'Concept a' });
     expect(c.recalls).toEqual([{ at: '2026-11-01T01:00:00Z', right: false, choice: -1 }]);
+  });
+
+  it('keeps lessons from before the digest went short as they were, and short ones without paragraphs', () => {
+    const old = cleanCard({ id: 'o', subject: 'S', title: 'T', hook: 'h', body: ['p'], example: 'e', takeaway: 't', search: 's', quiz, starred: true, feedback: '', recalls: [] })!;
+    expect(old).toMatchObject({ gist: '', points: [], formula: '', check: null, checked: -1, asks: [], body: ['p'], takeaway: 't', starred: true });
+    const now = cleanCard(short('n', { formula: 'E = mc^2', where: '$E$ energy', checked: 1 }))!;
+    expect(now).toMatchObject({ gist: 'Doing it twice is the same as once.', body: [], formula: 'E = mc^2', where: '$E$ energy', check, checked: 1 });
+    // A check answer that isn't one of its options, or a `where` without a formula, isn't kept.
+    expect(cleanCard(short('n', { checked: 3 }))!.checked).toBe(-1);
+    expect(cleanCard(short('n', { check: null, checked: 0 }))!.checked).toBe(-1);
+    expect(cleanCard(short('n', { where: '$x$ stuff' }))!.where).toBe('');
+    expect(cleanCard(short('n', { gist: '' }))).toBeNull();
+  });
+
+  it('says which examples are code, guessing for lessons that didn’t say', () => {
+    expect(cleanCard({ ...card('a'), exampleCode: undefined, example: 'def f(x):\n    return x * 2\nf(3)' })!.exampleCode).toBe(true);
+    expect(cleanCard({ ...card('a'), exampleCode: undefined, example: 'A 2 m pipe at 1 m/s.' })!.exampleCode).toBe(false);
+    expect(cleanCard({ ...card('a'), exampleCode: true, example: 'x' })!.exampleCode).toBe(true);
+  });
+
+  it('keeps the last dozen follow-up questions that have an answer', () => {
+    const asks = Array.from({ length: 15 }, (_, i) => ({ q: `Q${i}`, a: `A${i}`, at: new Date(Date.UTC(2026, 10, 1, i)).toISOString() }));
+    const c = cleanCard(short('a', { asks: [...asks, { q: 'no answer', a: '', at: asks[0].at }, { q: 'when?', a: 'x', at: 'never' }] }))!;
+    expect(c.asks.map((a) => a.q)).toEqual(asks.slice(3).map((a) => a.q));
   });
 
   it('keeps days newest first, one per date, with each lesson once', () => {
@@ -148,13 +186,28 @@ describe('what to write next', () => {
 });
 
 describe('reading Claude’s lessons', () => {
-  const w = (subject: string, title = 'Idempotency') => ({ subject, title, hook: 'h', body: ['b'], example: 'e', takeaway: 't', search: title, quiz });
+  const w = (subject: string, title = 'Idempotency') => ({ subject, title, hook: 'h', gist: 'g', formula: '', where: '', points: ['p'], example: 'e', exampleCode: false, search: title, check, quiz });
 
   it('matches each lesson to the subject it was written for, and drops ones it can’t use', () => {
-    const cards = digest.readCards([w('finance', 'Compounding'), w('Software engineering'), w('Software engineering', 'Twice'), { ...w('Poetry'), body: [] }], ['Software engineering', 'Finance', 'Poetry']);
+    const cards = digest.readCards([w('finance', 'Compounding'), w('Software engineering'), w('Software engineering', 'Twice'), { ...w('Poetry'), gist: '' }], ['Software engineering', 'Finance', 'Poetry']);
     expect(cards.map((c) => [c.subject, c.title])).toEqual([['Finance', 'Compounding'], ['Software engineering', 'Idempotency']]);
     expect(new Set(cards.map((c) => c.id)).size).toBe(2);
-    expect(cards[0]).toMatchObject({ starred: false, feedback: '', recalls: [] });
+    expect(cards[0]).toMatchObject({ starred: false, feedback: '', recalls: [], checked: -1, asks: [], gist: 'g', points: ['p'], check, quiz });
+  });
+
+  it('puts back LaTeX backslashes that JSON turned into escapes, but leaves code alone', () => {
+    const [c] = digest.readCards(
+      // As JSON.parse reads Claude's answer when a backslash wasn't doubled: \f a form feed, \r a carriage return…
+      [{ ...w('Finance'), formula: 'Re = \frac{\rho v L}{\\mu}', gist: 'It is $a \times b$.', example: 'x\ty', check: { ...check, why: 'Since $\beta$.' } }],
+      ['Finance'],
+    );
+    expect(c.formula).toBe('Re = \\frac{\\rho v L}{\\mu}');
+    expect(c.gist).toBe('It is $a \\times b$.');
+    expect(c.check!.why).toBe('Since $\\beta$.');
+    // No maths in it: a tab stays a tab.
+    expect(c.example).toBe('x\ty');
+    const [code] = digest.readCards([{ ...w('Finance'), exampleCode: true, example: 'if x:\n\tnext()' }], ['Finance']);
+    expect(code.example).toBe('if x:\n\tnext()');
   });
 
   it('goes by order when the names come back changed but the count is right', () => {
@@ -196,6 +249,9 @@ describe('Quick recall', () => {
     expect(JSON.stringify(q)).not.toContain(quiz.why);
     const done = withDays(['2026-11-16', [card('a', { recalls: [{ at: at('2026-11-20', 8).toISOString(), choice: 2, right: false }] })]]);
     expect(recallQuestion(done, at('2026-11-20', 22))!.answered).toEqual({ choice: 2, right: false, answer: 1, why: quiz.why, takeaway: 'Remember this.' });
+    // A short lesson has no takeaway: its gist is shown with the answer instead.
+    const s = withDays(['2026-11-16', [short('b', { quiz, recalls: [{ at: at('2026-11-20', 8).toISOString(), choice: 1, right: true }] })]]);
+    expect(recallQuestion(s, at('2026-11-20', 9))!.answered!.takeaway).toBe('Doing it twice is the same as once.');
     // The next day it's gone: due again two days after the wrong answer.
     expect(recallQuestion(done, at('2026-11-21'))).toBeNull();
     expect(recallQuestion(done, at('2026-11-22'))!.answered).toBeNull();
@@ -221,6 +277,11 @@ describe('the archive', () => {
     expect(searchArchive(d, { offset: 1, limit: 1 })).toMatchObject({ total: 3, cards: [{ id: 'b' }] });
   });
 
+  it('finds words in a short lesson’s gist, points and follow-ups too', () => {
+    const s = withDays(['2026-11-20', [short('x', { gist: 'Laminar flow', points: ['Turbulence above 4000'], asks: [{ q: 'Pipes?', a: 'Viscosity wins.', at: '2026-11-20T01:00:00Z' }] })]]);
+    for (const q of ['laminar', 'turbulence', 'viscosity']) expect(searchArchive(s, { q }).total).toBe(1);
+  });
+
   it('links Go deeper to Wikipedia', () => {
     expect(deeperUrl({ search: 'Bias–variance tradeoff', title: 'x' })).toBe('https://en.wikipedia.org/wiki/Special:Search?search=Bias%E2%80%93variance%20tradeoff&go=Go');
   });
@@ -228,7 +289,7 @@ describe('the archive', () => {
 
 describe('on the server', () => {
   const today = ymd(new Date());
-  const lesson = (subject: string, title: string) => ({ subject, title, hook: 'h', body: ['b'], example: 'e', takeaway: 't', search: title, quiz });
+  const lesson = (subject: string, title: string) => ({ subject, title, hook: 'h', gist: 'g', formula: '', where: '', points: ['p'], example: 'e', exampleCode: false, search: title, check, quiz });
 
   beforeEach(() => {
     claude.calls = [];
@@ -287,6 +348,47 @@ describe('on the server', () => {
     expect(coveredTitles(store.digest(), 'Software engineering')).toEqual(['Backpressure', 'Idempotency']);
   });
 
+  it('keeps the first answer to a lesson’s quick check, and only one of its options', () => {
+    store.setDigest(withDays(['2026-11-16', [short('s'), card('old')]]));
+    expect(() => digest.markCard('s', { checked: 3 })).toThrow(/Pick one/);
+    expect(() => digest.markCard('old', { checked: 0 })).toThrow(/Pick one/);
+    digest.markCard('s', { checked: 0 });
+    digest.markCard('s', { checked: 1 });
+    expect(store.digest().days[0].cards[0].checked).toBe(0);
+    // Starring it doesn't touch the answer.
+    digest.markCard('s', { starred: true });
+    expect(store.digest().days[0].cards[0]).toMatchObject({ checked: 0, starred: true });
+  });
+
+  it('answers a follow-up question with the cheaper model, from the lesson and what’s been asked on it', async () => {
+    store.setDigest(withDays(['2026-11-16', [short('s', { formula: 'E = mc^2', where: '$E$ energy', asks: [{ q: 'Earlier?', a: 'Yes.', at: '2026-11-16T02:00:00Z' }] })]]));
+    claude.answer = { answer: '  Because $E \times 2$ doubles.  ' };
+    const lesson = await digest.askCard('s', '  Why   though? ');
+    expect(claude.calls).toHaveLength(1);
+    expect(claude.calls[0]).toMatchObject({ model: 'claude-sonnet-5-5', feature: 'digest' });
+    expect(claude.calls[0].user).toContain('The lesson (Software engineering, from Mon 16 Nov 2026): Concept s');
+    expect(claude.calls[0].user).toContain('The idea: Doing it twice is the same as once.');
+    expect(claude.calls[0].user).toContain('Formula: $E = mc^2$ ($E$ energy)');
+    expect(claude.calls[0].user).toContain('Q: Earlier?\nA: Yes.');
+    expect(claude.calls[0].user).toMatch(/Their question: Why though\?$/);
+    expect(lesson.asks.map((a) => [a.q, a.a])).toEqual([['Earlier?', 'Yes.'], ['Why though?', 'Because $E \\times 2$ doubles.']]);
+    expect(store.digest().days[0].cards[0].asks).toHaveLength(2);
+  });
+
+  it('asks nothing for an empty or overlong question, or a lesson that’s gone', async () => {
+    store.setDigest(withDays(['2026-11-16', [short('s')]]));
+    await expect(digest.askCard('s', '   ')).rejects.toThrow(/Type a question/);
+    await expect(digest.askCard('s', 'x'.repeat(301))).rejects.toThrow(/under 300/);
+    await expect(digest.askCard('nope', 'Why?')).rejects.toThrow(/isn’t in the digest/);
+    expect(claude.calls).toHaveLength(0);
+    // Claude's errors speak of the next sync; a question is just asked again.
+    claude.fail = 'Hit the Claude API rate limit. It tries again on the next sync; if it keeps happening, check your limits.';
+    await expect(digest.askCard('s', 'Why?')).rejects.toThrow('Hit the Claude API rate limit. Try asking again in a minute; if it keeps happening, check your limits.');
+    claude.fail = 'Claude took too long to answer. It tries again on the next sync, or press refresh.';
+    await expect(digest.askCard('s', 'Why?')).rejects.toThrow('Claude took too long to answer. Try asking again in a minute.');
+    expect(store.digest().days[0].cards[0].asks).toEqual([]);
+  });
+
   it('only swaps today’s lessons', async () => {
     store.setDigest(withDays(['2026-01-02', [card('old')]]));
     await expect(digest.swapCard('old')).rejects.toThrow(/Only today’s/);
@@ -322,5 +424,39 @@ describe('on the server', () => {
     store.setDigest(EMPTY_DIGEST);
     expect(backup.restoreBackup({ version: 2, exported: new Date().toISOString(), bookmarks: [], notes: [], digest: file.digest })).toContain('digest');
     expect(store.digest().days[0].cards[0].id).toBe('kept');
+  });
+});
+
+describe('maths in the text', () => {
+  const kinds = (t: string) => splitMath(t).map((p) => [p.kind, p.value]);
+
+  it('finds $…$ in a sentence and $$…$$ on its own', () => {
+    expect(kinds('So $Re = \\frac{\\rho v L}{\\mu}$, and')).toEqual([['text', 'So '], ['inline', 'Re = \\frac{\\rho v L}{\\mu}'], ['text', ', and']]);
+    expect(kinds('$$E = mc^2$$')).toEqual([['display', 'E = mc^2']]);
+    expect(kinds('\\(x\\) and \\[y\\]')).toEqual([['inline', 'x'], ['text', ' and '], ['display', 'y']]);
+    expect(kinds('$x$')).toEqual([['inline', 'x']]);
+  });
+
+  it('leaves prices and stray dollar signs as text', () => {
+    for (const t of ['It costs $5 and $10.', 'From $5-$10 a month', 'Pay $ 5 now', 'A lone $', 'Empty $$ here', '\\$5 each, \\$6 more']) {
+      expect(splitMath(t).every((p) => p.kind === 'text')).toBe(true);
+    }
+    expect(splitMath('\\$5 each').map((p) => p.value).join('')).toBe('$5 each');
+    // A price before real maths doesn't swallow it.
+    expect(kinds('Between $5 and $10, or $x$.')).toEqual([['text', 'Between $5 and $10, or '], ['inline', 'x'], ['text', '.']]);
+    // Inline maths stays on one line, and may hold an escaped dollar.
+    expect(kinds('$a\nb$')).toEqual([['text', '$a\nb$']]);
+    expect(kinds('$\\$1$')).toEqual([['inline', '\\$1']]);
+  });
+
+  it('puts back backslashes lost to JSON escapes, only before LaTeX in maths', () => {
+    expect(repairTex('\frac{a}{b}', true)).toBe('\\frac{a}{b}');
+    expect(repairTex('\theta + \nabla', true)).toBe('\\theta + \\nabla');
+    expect(repairTex('$a \times b \neq \rho$')).toBe('$a \\times b \\neq \\rho$');
+    expect(repairTex('$\beta$')).toBe('$\\beta$');
+    // A real new line or tab in text with maths, before words that aren't LaTeX, stays.
+    expect(repairTex('$x$ first\nthen\tafter')).toBe('$x$ first\nthen\tafter');
+    // Without maths nothing changes but stray form feeds, backspaces and carriage returns.
+    expect(repairTex('one\ntwo\r\nthree')).toBe('one\ntwo\nthree');
   });
 });
