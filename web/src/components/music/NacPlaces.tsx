@@ -56,8 +56,10 @@ export function NacPlaces({ s, codes, now, onSaved, onClose }: { s: NacStatus; c
   const rename = (e: FormEvent) => {
     e.preventDefault();
     if (!draft.name.trim()) return setError('Give it a name.');
+    // A blank short name is what its placeholder shows: the name, cut to fit.
+    const short = draft.short.trim() || draft.name.trim().slice(0, NAC_SHORT_MAX);
     save(
-      places.map((p) => (p.key === editing ? { ...p, name: draft.name, short: draft.short } : p)),
+      places.map((p) => (p.key === editing ? { ...p, name: draft.name, short } : p)),
       () => setEditing(null),
     );
   };
