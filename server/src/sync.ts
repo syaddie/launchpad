@@ -6,9 +6,8 @@ import { claudeEnabled } from './claude';
 import { addFinds, CLAUDE_BATCH, readBill, readBillsWithClaude, withoutDueDate, type BillMail, type FoundBill } from './bills';
 import { fetchBillMail, fetchCalendar, fetchInbox, fetchTasks, GoogleError, scanGmail } from './google';
 import { inRange, summariseInbox } from './inbox';
-import { fetchSource, summariseHeadlines } from './news';
-import { sourceKey, visibleArticles } from '../../shared/news';
-import { asServer, store, updatePackages, type NewsCache } from './store';
+import { runDigest } from './digest';
+import { asServer, store, updatePackages } from './store';
 import { runSpeedTest } from './speedtest';
 import { canTrack, track, TrackingUnavailable } from './tracking';
 import { fetchWeather } from './weather';
@@ -20,7 +19,8 @@ const EVERY: Record<SourceKey, number> = {
   tasks: 2 * MIN,
   gmail: 10 * MIN,
   carriers: 20 * MIN,
-  news: 60 * MIN,
+  // Writes today's lessons once a day, on the first run after midnight that finds them missing.
+  digest: 60 * MIN,
   inbox: 15 * MIN,
   // Forecasts are issued every 30 min; temperatures every minute.
   weather: 10 * MIN,
@@ -28,9 +28,6 @@ const EVERY: Record<SourceKey, number> = {
   speedtest: 10 * MIN,
 };
 const ARCHIVE_AFTER = 3 * 24 * 60 * MIN;
-// Summaries cost an API call, so a topic is re-summarised at most this often
-// on the schedule. Pressing refresh in the News tab skips the wait.
-const RESUMMARISE_AFTER = 3 * 60 * MIN;
 // The same for the inbox: the two-day digest keeps up through the day, the week's
 // a few times a day. Each is only rewritten when new mail has arrived in its range.
 const REDIGEST_AFTER: Record<InboxRange, number> = { '2d': 90 * MIN, '7d': 6 * 60 * MIN };
@@ -59,7 +56,8 @@ function enabled(key: SourceKey, force: boolean): boolean {
     // Leave a few minutes of slack so a 3-hour test doesn't slip a whole tick each time.
     return force || (hours > 0 && (!last || Date.now() - Date.parse(last) >= hours * 60 * MIN - 5 * MIN));
   }
-  if (key === 'news') return store.prefs().newsTopics.length > 0;
+  // Lessons cost an API call each day, so switching the view off stops them.
+  if (key === 'digest') return claudeEnabled() && store.prefs().digestSubjects.length > 0 && !store.prefs().hidden.includes('view:digest');
   // The inbox reads Gmail too, so the Gmail switch covers it; hiding the view stops it.
   if (key === 'inbox') return googleConfigured() && !!store.google() && store.prefs().sources.gmail && !store.prefs().hidden.includes('view:inbox');
   if (key === 'weather') return !!store.prefs().weatherArea;
@@ -153,52 +151,6 @@ async function runCarriers() {
   if (active.length && errors.length === active.length) throw new Error(errors[0]);
 }
 
-async function runNews(force: boolean) {
-  const prev = store.news();
-  const lists = store.newsLists();
-  const results = await Promise.all(
-    store.prefs().newsTopics.map(async (topic) => {
-      const old = prev[sourceKey(topic)];
-      const entry = {
-        topic,
-        title: old?.title,
-        articles: old?.articles ?? [],
-        stories: claudeEnabled() ? old?.stories ?? null : null,
-        summarisedAt: old?.summarisedAt ?? null,
-        summarisedUrls: old?.summarisedUrls ?? [],
-        fetchedAt: old?.fetchedAt ?? null,
-        error: null as string | null,
-      };
-      try {
-        // Each followed item fails on its own: a broken feed shows its error and keeps its last headlines.
-        const got = await fetchSource(topic);
-        entry.articles = got.articles;
-        if (got.title) entry.title = got.title;
-        entry.fetchedAt = new Date().toISOString();
-        // Headlines hidden from the topic, or from a muted source, aren't summarised.
-        const shown = visibleArticles(topic, entry.articles, lists);
-        const known = new Set(entry.summarisedUrls);
-        const fresh = shown.some((a) => !known.has(a.url));
-        const due = force || !entry.summarisedAt || Date.now() - Date.parse(entry.summarisedAt) > RESUMMARISE_AFTER;
-        if (claudeEnabled() && shown.length && (!entry.stories || (fresh && due))) {
-          entry.stories = await summariseHeadlines(topic, shown, entry.title);
-          entry.summarisedUrls = shown.map((a) => a.url);
-          entry.summarisedAt = new Date().toISOString();
-        }
-      } catch (e) {
-        entry.error = (e as Error).message;
-      }
-      return entry;
-    }),
-  );
-  // A topic removed meanwhile is hidden by state(); one added meanwhile is fetched by refreshNews().
-  const next: NewsCache = {};
-  for (const r of results) next[sourceKey(r.topic)] = r;
-  store.setNews(next);
-  const failed = results.filter((r) => r.error);
-  if (failed.length && failed.length === results.length) throw new Error(`${failed[0].topic}: ${failed[0].error}`);
-}
-
 async function runInbox(force: boolean) {
   const startedAt = new Date().toISOString();
   const prev = store.inbox();
@@ -248,13 +200,13 @@ const JOBS: Record<SourceKey, (force: boolean) => Promise<void>> = {
   tasks: runTasks,
   gmail: runGmail,
   carriers: runCarriers,
-  news: runNews,
+  digest: () => runDigest(),
   inbox: runInbox,
   weather: runWeather,
   speedtest: runSpeed,
 };
 
-/** `force` summarises new news headlines and mail now instead of waiting, and runs a speed test even when one isn't due. */
+/** `force` summarises new mail now instead of waiting, and runs a speed test even when one isn't due. */
 export function runSource(key: SourceKey, force = false): Promise<void> {
   const existing = running.get(key);
   if (existing) return existing;
@@ -286,8 +238,8 @@ export function runIfStale(key: SourceKey, minAgeMs: number): Promise<void> {
   return runSource(key);
 }
 
-/** Refresh news or the inbox on request: waits out a scheduled run first, so topics added during it are included. */
-export async function refreshSummaries(key: 'news' | 'inbox'): Promise<void> {
+/** Refresh the digest or the inbox on request: waits out a scheduled run first, so subjects added during it are included. */
+export async function refreshSummaries(key: 'digest' | 'inbox'): Promise<void> {
   await running.get(key);
   return runSource(key, true);
 }

@@ -3,6 +3,7 @@
 import path from 'node:path';
 import { DEFAULT_ENGINES, DEFAULT_PREFS, HIDEABLE_KEYS } from '../../shared/defaults';
 import { MAX_JOURNAL } from '../../shared/trackers';
+import { cleanSubjects } from '../../shared/digest';
 import { parseNewsSource } from '../../shared/news';
 import { cleanKg } from '../../shared/training';
 import { ALERT_KINDS, DESIGN_KEYS } from '../../shared/types';
@@ -25,7 +26,7 @@ export function validNotes(v: unknown): v is Note[] {
     && (n.pinned === undefined || typeof n.pinned === 'boolean'));
 }
 
-/** Most topics and feeds the News view follows. */
+/** Most topics and feeds the old News view followed (prefs.newsTopics, kept as it was). */
 export const MAX_TOPICS = 12;
 
 /**
@@ -71,10 +72,12 @@ export function cleanPrefs(body: Partial<Prefs>, prev: Prefs): Prefs {
     design: DESIGN_KEYS.includes(body.design as DesignKey) ? body.design! : prev.design ?? 'broadsheet',
     hiddenCalendars: Array.isArray(body.hiddenCalendars) ? body.hiddenCalendars.filter(isStr) : prev.hiddenCalendars,
     sources: { ...prev.sources, ...pickBools(body.sources, Object.keys(prev.sources)) },
+    digestSubjects: Array.isArray(body.digestSubjects) ? cleanSubjects(body.digestSubjects) : prev.digestSubjects,
     newsTopics: Array.isArray(body.newsTopics) ? cleanTopics(body.newsTopics) : prev.newsTopics,
     weatherArea: isStr(body.weatherArea) ? body.weatherArea.trim().slice(0, 60) : prev.weatherArea,
     aboutMe: isStr(body.aboutMe) ? body.aboutMe.trim().slice(0, 1000) : prev.aboutMe,
-    hidden: Array.isArray(body.hidden) ? [...new Set(body.hidden.filter((h) => isStr(h) && HIDEABLE_KEYS.includes(h)))] : prev.hidden,
+    // A backup from before the digest says view:news for the view it replaced.
+    hidden: Array.isArray(body.hidden) ? [...new Set(body.hidden.map((h) => (h === 'view:news' ? 'view:digest' : h)).filter((h) => isStr(h) && HIDEABLE_KEYS.includes(h)))] : prev.hidden,
     searchEngines: Array.isArray(body.searchEngines) ? cleanEngines(body.searchEngines) : prev.searchEngines,
     cigaretteLimit: num(body.cigaretteLimit, 0, 99, prev.cigaretteLimit),
     speedTestHours: num(body.speedTestHours, 0, 24, prev.speedTestHours),

@@ -174,7 +174,7 @@ describe('Drive pruning', () => {
 const NOW = Date.parse('2026-11-12T12:00:00Z');
 const H = 3_600_000;
 const iso = (msAgo: number) => new Date(NOW - msAgo).toISOString();
-const KEYS: SourceKey[] = ['calendar', 'tasks', 'gmail', 'carriers', 'news', 'inbox', 'weather', 'speedtest'];
+const KEYS: SourceKey[] = ['calendar', 'tasks', 'gmail', 'carriers', 'digest', 'inbox', 'weather', 'speedtest'];
 const fine: SyncStatus = { lastSuccess: iso(60_000), lastAttempt: iso(60_000), lastError: null, failures: 0 };
 const DRIVE_OK: DriveStatus = { on: true, allowed: true, lastSuccess: iso(H), lastAttempt: iso(H), lastError: null, running: false };
 
@@ -239,8 +239,8 @@ describe('health', () => {
   });
 
   it('skips syncs that are off, and gives a restarted server time to catch up', () => {
-    const old = withSync('news', { lastSuccess: iso(30 * H), lastError: 'x', failures: 5 });
-    expect(keys({ ...old, on: { ...old.on, news: false } })).toEqual([]);
+    const old = withSync('digest', { lastSuccess: iso(30 * H), lastError: 'x', failures: 5 });
+    expect(keys({ ...old, on: { ...old.on, digest: false } })).toEqual([]);
     const restarted = withSync('weather', { lastSuccess: iso(30 * H) });
     expect(keys({ ...restarted, startedAt: NOW - 5 * 60_000 })).toEqual([]);
     expect(keys(restarted)).toEqual(['weather']);

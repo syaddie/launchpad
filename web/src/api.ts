@@ -1,7 +1,8 @@
 import type { DownloadJob, DownloadsInfo, InstagramInfo, McDiagnosis, McLog, McServer, McStatus, TorrentsInfo } from '../../shared/types';
 import type { ExplainResult, ExplainStatus, McBackups, McCrashes, McMeters, McPlayerAction, McPlayers } from '../../shared/types';
 import type { TorrentFile, TorrentOptions, TorrentSpeed, VideoFormat } from '../../shared/types';
-import type { AppState, Backup, BackupSnapshot, CalEvent, Countdown, Craving, DirListing, DisksReport, LinkCheck, LogLine, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
+import type { ArchiveCard } from '../../shared/digest';
+import type { AppState, Backup, BackupSnapshot, CalEvent, Countdown, Craving, DigestFeedback, DirListing, DisksReport, LinkCheck, LogLine, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
 import type { AlertsInfo } from '../../shared/types';
 import type { AskResult } from '../../shared/ask';
 import type { ShellAskResult, ShellAskStatus } from '../../shared/shellAsk';
@@ -220,13 +221,20 @@ export const api = {
   keepNoteVersion: (id: string) => req<NoteVersion[]>('POST', `/api/notes/${encodeURIComponent(id)}/history`, {}),
   /** Start checking every bookmark for ones that no longer open; the result comes through the change stream. */
   checkLinks: () => req<LinkCheck>('POST', '/api/bookmarks/check', {}),
-  /** Try a feed before following it; refused with the reason when it doesn't work. */
-  checkNewsSource: (source: string) => req<{ source: string; title: string; count: number }>('POST', '/api/news/check', { source }),
+  /** Star a lesson in the daily digest, or say it was too basic or too deep ('' clears that). */
+  markLesson: (id: string, patch: { starred?: boolean; feedback?: DigestFeedback }) => req<Partial<AppState>>('PATCH', `/api/digest/cards/${encodeURIComponent(id)}`, patch),
+  /** Today's lesson on that subject, written again on another concept. Claude takes a little while. */
+  swapLesson: (id: string) => req<Partial<AppState>>('POST', `/api/digest/cards/${encodeURIComponent(id)}/swap`, {}, false, undefined, 120_000),
+  answerRecall: (cardId: string, choice: number) => req<Partial<AppState>>('POST', '/api/digest/recall', { cardId, choice }),
+  /** Past lessons matching a search, newest first. */
+  lessonArchive: (q: { q?: string; subject?: string; starred?: boolean; offset?: number; limit?: number }) =>
+    req<{ cards: ArchiveCard[]; total: number }>(
+      'GET',
+      `/api/digest/archive?${new URLSearchParams({ q: q.q ?? '', subject: q.subject ?? '', starred: q.starred ? '1' : '', offset: String(q.offset ?? 0), limit: String(q.limit ?? 40) })}`,
+    ),
   saveStory: (s: Pick<SavedStory, 'title' | 'url' | 'source' | 'topic' | 'summary'>) => req<NewsLists>('POST', '/api/news/saved', s),
   markStoryRead: (id: string, read: boolean) => req<NewsLists>('PATCH', `/api/news/saved/${encodeURIComponent(id)}`, { read }),
   removeStory: (id: string) => req<NewsLists>('DELETE', `/api/news/saved/${encodeURIComponent(id)}`),
-  hideNews: (topic: string, urls: string[], hide: boolean) => req<NewsLists>('POST', '/api/news/hidden', { topic, urls, hide }),
-  muteSource: (source: string, muted: boolean) => req<NewsLists>('POST', '/api/news/muted', { source, muted }),
   addPhoto: (image: Blob) => req<Photo>('POST', '/api/photos', image),
   putPhotos: (v: Photo[]) => req('PUT', '/api/photos', v),
   deletePhoto: (id: string) => req('DELETE', `/api/photos/${encodeURIComponent(id)}`),

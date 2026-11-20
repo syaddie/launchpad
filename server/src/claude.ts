@@ -1,6 +1,6 @@
 // The Claude calls Launchpad makes, all through here so each one's tokens are counted
 // (the usage meter in the Server view). askJson: a system prompt, a user message and a
-// JSON schema in, the parsed JSON out; used by the News and Inbox summaries, Training,
+// JSON schema in, the parsed JSON out; used by the daily digest, the Inbox summaries, Training,
 // Learn and the weekly recap. askTool: the same, but Claude picks one of a few tools
 // (⌘K's "Ask Launchpad"). Pass `feature` so the meter can say what the tokens were for.
 import Anthropic from '@anthropic-ai/sdk';
@@ -17,7 +17,7 @@ let client: Anthropic | null = null;
 // Models that accept server-side refusal fallbacks.
 const FALLBACK_MODELS = ['claude-opus-5-5', 'claude-opus-5', 'claude-fable-5-1', 'claude-sonnet-5-5'];
 
-/** An API failure → what went wrong and what to do about it, for the News and Inbox views. */
+/** An API failure → what went wrong and what to do about it, for the Digest and Inbox views. */
 export function claudeErrorMessage(e: unknown, model: string): string {
   if (e instanceof Anthropic.APIConnectionTimeoutError) return 'Claude took too long to answer. It tries again on the next sync, or press refresh.';
   if (e instanceof Anthropic.APIConnectionError) {
@@ -34,7 +34,7 @@ export function claudeErrorMessage(e: unknown, model: string): string {
   }
   if (e.status === 403) return `This API key isn’t allowed to use Claude (${detail}). Check the key’s workspace at platform.claude.com.`;
   if (e.status === 404) {
-    return `The model “${model}” isn’t available. Check NEWS_MODEL, INBOX_MODEL and TRAINING_MODEL in .env, and LEARN_MODEL and ASK_MODEL too (or remove them to use the default), then restart Launchpad.`;
+    return `The model “${model}” isn’t available. Check DIGEST_MODEL, INBOX_MODEL and TRAINING_MODEL in .env, and LEARN_MODEL and ASK_MODEL too (or remove them to use the default), then restart Launchpad.`;
   }
   if (e.status === 429) return 'Hit the Claude API rate limit. It tries again on the next sync; if it keeps happening, check your limits at platform.claude.com.';
   if (e.status && e.status >= 500) return `The Claude API is having trouble (${e.status} ${detail}). It tries again on the next sync.`;
@@ -90,7 +90,7 @@ export async function askJson<T>(opts: {
   effort: 'low' | 'medium' | 'high';
   /** Finishes the error messages, e.g. "summarise these headlines". */
   task: string;
-  /** What the tokens are for in the usage meter: news, inbox, training, learn, briefing, review… */
+  /** What the tokens are for in the usage meter: digest, inbox, training, learn, briefing, review… */
   feature?: string;
 }): Promise<T> {
   const res = await create(opts.feature ?? 'other', {

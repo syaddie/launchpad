@@ -784,6 +784,108 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .reading-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .reading-body a.story-headline:hover { text-decoration: underline; text-underline-offset: 2px; }
 
+/* ---------- daily digest ---------- */
+
+/* The whole view scrolls: lessons are read top to bottom, not squeezed into the screen. */
+.lp-root:not([data-layout='narrow']) .digest { overflow-y: auto; margin: -1px; padding: 1px; }
+.dg-status { display: flex; align-items: center; gap: 10px; }
+.digest > .news-head { position: relative; }
+/* On a phone the refresh button sits at the end of the tabs' row rather than on a row of its own; errors show in the view. */
+[data-layout='narrow'] .digest .dg-status { position: absolute; top: 0; right: 0; }
+[data-layout='narrow'] .digest .dg-status > span { display: none; }
+[data-layout='narrow'] .digest .news-tabs { max-width: calc(100% - 40px); }
+.dg-add { width: 230px; max-width: 100%; }
+[data-layout='narrow'] .dg-add { width: 100%; }
+.dg-ideas { display: flex; flex-wrap: wrap; gap: 8px; }
+.dg-note { display: flex; align-items: flex-start; gap: 8px; flex: none; padding: 0 10px; font-size: 13px; color: var(--t2); text-wrap: pretty; }
+.dg-note i { flex: none; margin-top: 2px; font-size: 16px; }
+.dg-day-head { flex: none; margin: 10px 0 -5px; padding: 0 10px; font-family: var(--f-display); font-size: 15px; font-weight: 600; color: var(--t2); }
+
+.dg-grid { flex: none; display: grid; gap: 20px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); align-items: start; }
+[data-layout='wide'] .dg-grid { gap: 30px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); }
+[data-layout='narrow'] .dg-grid { grid-template-columns: minmax(0, 1fr); gap: 15px; }
+
+.dg-card { position: relative; }
+.dg-head-end { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.dg-card .panel-head { align-items: center; }
+.dg-card .icon-btn.on { background: transparent; color: var(--ac); }
+.dg-body { display: flex; flex-direction: column; gap: 10px; padding: 0 10px; }
+.dg-body p { margin: 0; line-height: 1.55; text-wrap: pretty; color: var(--t2); }
+.dg-title { margin: 0; font-family: var(--f-display); font-size: 24px; font-weight: 600; line-height: 1.2; letter-spacing: -0.01em; color: var(--tx); text-wrap: balance; }
+.dg-body p.dg-hook { font-size: 15px; color: var(--tx); }
+.dg-example { padding: 10px 12px; border-radius: var(--r-m); background: var(--hv); }
+.dg-example .label { margin-bottom: 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--t3); }
+.dg-body .dg-example p { white-space: pre-wrap; color: var(--tx); }
+.dg-body .dg-example p.dg-code { font-family: var(--f-mono); font-size: 12px; line-height: 1.6; overflow-x: auto; overflow-wrap: normal; white-space: pre; }
+.dg-body p.dg-takeaway { display: flex; gap: 8px; font-weight: 500; color: var(--tx); }
+.dg-takeaway i { flex: none; margin-top: 3px; font-size: 16px; color: var(--ac); }
+.dg-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; margin-top: 14px; padding: 10px 6px 0; border-top: 1px solid var(--ln); }
+.dg-rate { display: inline-flex; flex-wrap: wrap; gap: 2px; }
+.dg-foot .btn.on { background: var(--act); color: var(--acd); }
+.dg-foot .btn:disabled { opacity: 0.6; cursor: default; }
+.dg-swapping .dg-body { opacity: 0.45; transition: opacity 0.2s; }
+
+.dg-pending .dg-body { gap: 12px; padding-bottom: 10px; }
+.dg-missing .dg-body { padding-bottom: 6px; }
+.dg-bar { display: block; height: 12px; border-radius: 6px; background: var(--hv); animation: dgPulse 1.4s ease-in-out infinite; }
+.dg-bar.short { width: 60%; }
+@keyframes dgPulse { 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .dg-bar { animation: none; } }
+
+.dg-recall { flex: none; }
+.dg-recall .panel-head { flex-wrap: wrap; }
+.dg-recall-body { display: flex; flex-direction: column; gap: 12px; padding: 0 10px; }
+.dg-q { margin: 0; font-family: var(--f-display); font-size: 18px; line-height: 1.4; text-wrap: pretty; max-width: 75ch; }
+.dg-options { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+[data-layout='narrow'] .dg-options { grid-template-columns: minmax(0, 1fr); }
+.dg-option { display: flex; align-items: flex-start; gap: 10px; min-width: 0; padding: 9px 12px; border: 1px solid var(--ln); border-radius: var(--r-m); background: transparent; color: var(--tx); font: inherit; font-size: 13px; line-height: 1.45; text-align: left; cursor: pointer; transition: background 0.12s, border-color 0.12s; }
+.dg-option > span:nth-child(2) { flex: 1; min-width: 0; }
+.dg-option:hover:not(:disabled) { background: var(--hv); border-color: var(--ac); }
+.dg-option:disabled { cursor: default; }
+.dg-letter { flex: none; width: 20px; height: 20px; border-radius: 50%; background: var(--hv); display: grid; place-items: center; font-size: 11px; font-weight: 600; color: var(--t2); }
+.dg-option > i { flex: none; margin-top: 1px; font-size: 18px; color: var(--ac); }
+.dg-option.picked { border-color: var(--ac); background: var(--hv); }
+.dg-option.right { border-color: var(--ac); background: var(--act); }
+.dg-option.right .dg-letter { background: var(--ac); color: var(--on); }
+.dg-option.wrong { border-color: var(--wn); background: var(--wnt); }
+.dg-option.wrong .dg-letter { background: var(--wn); color: var(--on); }
+.dg-option.wrong > i { color: var(--wn); }
+.dg-option.faded { opacity: 0.55; }
+.dg-result { display: flex; flex-direction: column; gap: 4px; }
+.dg-result p { margin: 0; line-height: 1.5; text-wrap: pretty; max-width: 80ch; }
+.dg-result.right b { color: var(--acd); }
+.dg-result.wrong b { color: var(--wn); }
+
+.dg-archive { flex: 1; min-height: 320px; }
+[data-layout='narrow'] .dg-archive { min-height: 0; }
+.dg-archive-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; flex: none; padding: 0 10px 12px; }
+.dg-search { position: relative; flex: 1 1 240px; max-width: 420px; min-width: 0; }
+.dg-search i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--t3); pointer-events: none; }
+.dg-search .input { width: 100%; padding-left: 32px; }
+.dg-subject { width: auto; max-width: 100%; min-width: 0; }
+.dg-archive-bar .btn.on { background: var(--act); color: var(--acd); border-color: transparent; }
+/* Only the duotone icons are loaded: a star is filled by making its fill layer solid. */
+.dg-starred { color: var(--ac); }
+.dg-starred::before { opacity: 1 !important; }
+.dg-archive-list { display: flex; flex-direction: column; }
+.dg-row { display: flex; align-items: baseline; gap: 14px; width: 100%; padding: 9px 10px; border: none; border-radius: var(--r); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.dg-row + .dg-row { border-top: 1px solid var(--ln); border-radius: 0; }
+.dg-row:hover { background: var(--hv); }
+.dg-row-when { flex: none; width: 92px; }
+.dg-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.dg-row-title { font-size: 14px; font-weight: 600; line-height: 1.3; text-wrap: pretty; }
+.dg-row-title i { margin-left: 6px; font-size: 12px; color: var(--ac); }
+.dg-row-sub { font-size: 12px; line-height: 1.45; color: var(--t3); text-wrap: pretty; }
+.dg-row-sub .chip { margin-right: 4px; vertical-align: 1px; }
+[data-layout='narrow'] .dg-row { flex-direction: column; gap: 2px; }
+[data-layout='narrow'] .dg-row-when { width: auto; }
+.dg-archive-open { display: flex; flex-direction: column; gap: 6px; padding: 8px 0 14px; }
+.dg-archive-open .dg-card { box-shadow: 0 0 0 1px var(--ln); }
+/* The archive is as wide as the view: an open lesson keeps to a readable line length. */
+.dg-archive-open .dg-body > * { max-width: 80ch; }
+.dg-close { align-self: flex-start; }
+.dg-more { align-self: center; margin: 12px 0 4px; }
+
 /* ---------- inbox ---------- */
 
 /* Bills and the summary sit above the columns and keep their full height. When they leave too little room,

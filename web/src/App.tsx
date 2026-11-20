@@ -44,7 +44,7 @@ import { dayDiff, hm, inboxBadge, inMinutes, newId, parseYmd } from './util';
 const loadInbox = () => import('./components/Inbox');
 const loadLearn = () => import('./components/Learn');
 const loadMoney = () => import('./components/money/MoneyView');
-const loadNews = () => import('./components/News');
+const loadDigest = () => import('./components/Digest');
 const loadReview = () => import('./components/Review');
 const loadServer = () => import('./components/Server');
 // The terminal is the one file the Server view fetches on its own, so it's kept up to date with the rest.
@@ -55,7 +55,7 @@ const Inbox = lazy(() => loadInbox().then((m) => ({ default: m.Inbox })));
 const LearnView = lazy(() => loadLearn().then((m) => ({ default: m.LearnView })));
 const CourseDrawer = lazy(() => loadLearn().then((m) => ({ default: m.CourseDrawer })));
 const MoneyView = lazy(() => loadMoney().then((m) => ({ default: m.MoneyView })));
-const News = lazy(() => loadNews().then((m) => ({ default: m.News })));
+const Digest = lazy(() => loadDigest().then((m) => ({ default: m.Digest })));
 const ReviewView = lazy(() => loadReview().then((m) => ({ default: m.ReviewView })));
 const Server = lazy(() => loadServer().then((m) => ({ default: m.Server })));
 const TrainingView = lazy(() => loadTraining().then((m) => ({ default: m.TrainingView })));
@@ -63,7 +63,7 @@ const ExerciseDrawer = lazy(() => loadTraining().then((m) => ({ default: m.Exerc
 const You = lazy(() => loadYou().then((m) => ({ default: m.You })));
 
 function preloadViews() {
-  for (const load of [loadInbox, loadLearn, loadMoney, loadNews, loadReview, loadServer, loadTerminal, loadTraining, loadYou]) load().catch(() => {});
+  for (const load of [loadDigest, loadInbox, loadLearn, loadMoney, loadReview, loadServer, loadTerminal, loadTraining, loadYou]) load().catch(() => {});
 }
 
 type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings' } | { type: 'exercise'; title: string } | { type: 'course'; id: string; item?: string } | null;
@@ -76,10 +76,10 @@ export function App({ cached }: { cached: AppState | null }) {
   const [weightSignal, setWeightSignal] = useState(0);
   const [addWorkSignal, setAddWorkSignal] = useState(0);
   const [addEventSignal, setAddEventSignal] = useState(0);
-  const [readingSignal, setReadingSignal] = useState(0);
+  const [digestTab, setDigestTab] = useState<{ tab: 'archive' | 'reading'; n: number } | null>(null);
   const [serverTab, setServerTab] = useState<{ tab: ServerTab; n: number } | null>(null);
   const [learnNoteBusy, setLearnNoteBusy] = useState(false);
-  const [newsBusy, setNewsBusy] = useState(false);
+  const [digestBusy, setDigestBusy] = useState(false);
   const [noteBusy, setNoteBusy] = useState(false);
   const [reviewBusy, setReviewBusy] = useState(false);
   const [inboxBusy, setInboxBusy] = useState(false);
@@ -137,9 +137,9 @@ export function App({ cached }: { cached: AppState | null }) {
     document.documentElement.dataset.design = design;
   }, [dark, data.prefs.accent, design]);
 
-  // Pick up anything the hourly news run (or the inbox's) fetched since the last poll.
+  // Pick up anything the hourly digest run (or the inbox's) wrote since the last poll.
   useEffect(() => {
-    if (view === 'news' || view === 'inbox') refresh();
+    if (view === 'digest' || view === 'inbox') refresh();
   }, [view, refresh]);
 
   // ---------- actions ----------
@@ -174,14 +174,15 @@ export function App({ cached }: { cached: AppState | null }) {
     send({ kind: 'prefs', value: prefs }).then((saved) => saved && refresh()).catch(onSaveError);
   };
 
-  const refreshNews = () => {
-    setNewsBusy(true);
+  /** Write any of today's lessons that are missing (a new subject's, or all of them on a new day). */
+  const refreshDigest = useCallback(() => {
+    setDigestBusy(true);
     api
-      .sync('news')
+      .sync('digest')
       .then(merge)
-      .catch((e) => showToast(`Couldn’t refresh news: ${e.message}`))
-      .finally(() => setNewsBusy(false));
-  };
+      .catch((e) => showToast(`Couldn’t write today’s lessons: ${e.message}`))
+      .finally(() => setDigestBusy(false));
+  }, [merge, showToast]);
 
   const refreshInbox = () => {
     setInboxBusy(true);
@@ -192,18 +193,24 @@ export function App({ cached }: { cached: AppState | null }) {
       .finally(() => setInboxBusy(false));
   };
 
-  const setNewsTopics = (newsTopics: string[]) => {
-    const prefs = { ...data.prefs, newsTopics };
-    const added = newsTopics.some((t) => !data.news.some((n) => n.topic.toLowerCase() === t.toLowerCase()));
-    update((d) => ({
-      ...d,
-      prefs,
-      news: newsTopics.map((t) => d.news.find((n) => n.topic.toLowerCase() === t.toLowerCase()) ?? { topic: t, articles: [], stories: null, summarisedAt: null, fetchedAt: null, error: null }),
-    }));
+  /** A subject added writes its lesson for today straight away. */
+  const setDigestSubjects = (digestSubjects: string[]) => {
+    const prefs = { ...data.prefs, digestSubjects };
+    const added = digestSubjects.some((t) => !data.prefs.digestSubjects.some((s) => s.toLowerCase() === t.toLowerCase()));
+    update((d) => ({ ...d, prefs }));
     send({ kind: 'prefs', value: prefs })
-      .then((saved) => saved && (added ? refreshNews() : refresh()))
+      .then((saved) => saved && (added && data.newsSummaries ? refreshDigest() : refresh()))
       .catch(onSaveError);
   };
+
+  // Opening the digest on a day whose lessons haven't been written yet (the hourly run hasn't got
+  // to them since midnight) writes them now; the server does nothing when they're all there.
+  const digestToday = data.digest.days[0]?.date === ymd(now);
+  useEffect(() => {
+    if (view === 'digest' && data.newsSummaries && data.prefs.digestSubjects.length && !digestToday && !digestBusy) refreshDigest();
+    // Once per visit to the view, and again when the day turns over while it's open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, data.newsSummaries, digestToday]);
 
   const addTask = (listId: string, title: string, due: string | null, opts: { parent?: string } = {}) => {
     const tmp: Task = { id: 'tmp-' + Date.now(), listId, title, due, ...(opts.parent ? { parent: opts.parent, position: '~' } : {}) };
@@ -671,8 +678,8 @@ export function App({ cached }: { cached: AppState | null }) {
     addEvent: google.addEvent,
     // The field is in the Today panel, which Horizon's home doesn't have.
     openAddEvent: shown.has('today') && design !== 'horizon' ? () => (setView('home'), setHomeTab('today'), setAddEventSignal((n) => n + 1)) : undefined,
-    refreshNews, refreshInbox,
-    openReading: () => (setView('news'), setReadingSignal((n) => n + 1)),
+    refreshInbox,
+    openDigestTab: (tab) => (setView('digest'), setDigestTab((t) => ({ tab, n: (t?.n ?? 0) + 1 }))),
     openNote: (id: string) => (pickNote(id), setHomeTab('notes'), setView('home')),
     showShortcuts: () => setShortcuts(true),
     openSettings: () => setDrawer({ type: 'settings' }),
@@ -693,8 +700,8 @@ export function App({ cached }: { cached: AppState | null }) {
         {serverIssue && <ServerBanner issue={serverIssue} waiting={waiting} onRetry={() => refresh()} />}
         <ErrorBoundary resetKey={view}>
         <Suspense fallback={<main className="view-loading" aria-busy="true" />}>
-        {view === 'news' ? (
-          <News data={data} now={now} busy={newsBusy} onRefresh={refreshNews} onTopics={setNewsTopics} onLists={(newsLists) => update((d) => ({ ...d, newsLists }))} notify={showToast} readingSignal={readingSignal} />
+        {view === 'digest' ? (
+          <Digest data={data} now={now} busy={digestBusy} onRefresh={refreshDigest} onSubjects={setDigestSubjects} onMerge={merge} onLists={(newsLists) => update((d) => ({ ...d, newsLists }))} notify={showToast} tabSignal={digestTab} />
         ) : view === 'inbox' ? (
           <Inbox
             data={data}

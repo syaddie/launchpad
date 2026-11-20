@@ -785,7 +785,7 @@ export const PANEL_ROWS: { section: string; hint?: string; rows: { key: string; 
     section: 'Views',
     hint: 'In the rail on the left',
     rows: [
-      { key: 'view:news', name: 'News' },
+      { key: 'view:digest', name: 'Digest', meta: 'A short lesson a day on each subject you pick, by Claude' },
       { key: 'view:inbox', name: 'Inbox', meta: 'Claude’s digest of your Gmail' },
       { key: 'view:you', name: 'You', meta: 'Countdowns, cigarettes and cravings, mood and journal' },
       { key: 'view:training', name: 'Training', meta: 'Workouts from your Hevy export' },

@@ -15,7 +15,7 @@ export const SHORTCUT_GROUPS: { title: string; rows: Row[] }[] = [
       { keys: [['C']], what: 'Log a cigarette (with undo)' },
       { keys: [['Shift', 'C']], what: 'Log a craving you didn’t act on (with undo)' },
       { keys: [['M']], what: 'You: today’s mood' },
-      { keys: [['N']], what: 'News, and back' },
+      { keys: [['D']], what: 'Today’s digest, and back' },
     ],
   },
   {

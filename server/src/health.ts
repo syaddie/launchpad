@@ -16,7 +16,7 @@ const NAMES: Record<SourceKey, string> = {
   tasks: 'Tasks',
   gmail: 'Gmail packages',
   carriers: 'Carriers',
-  news: 'News',
+  digest: 'Daily digest',
   inbox: 'Inbox',
   weather: 'Weather',
   speedtest: 'Speed test',

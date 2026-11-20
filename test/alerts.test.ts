@@ -328,8 +328,9 @@ describe('health warnings', () => {
   });
 
   it('go quietly when the sync was switched off rather than fixed', () => {
-    const c = alerts.healthCheck([], (k) => k === 'news' || k === 'drive');
-    expect(c.cleared).toEqual({ 'health:news': null, 'health:drive': null });
+    const c = alerts.healthCheck([], (k) => k === 'digest' || k === 'drive');
+    // The old news sync's warning goes too: it became the digest's.
+    expect(c.cleared).toEqual({ 'health:digest': null, 'health:drive': null, 'health:news': null });
   });
 });
 

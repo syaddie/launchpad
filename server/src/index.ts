@@ -16,12 +16,13 @@ import { copyDailyToDrive, copyToDriveNow, driveOn } from './drive';
 import { health } from './health';
 import { dbSnapshot, describeRestored, exportBackup, readBackupUpload, restoreBackup, RestoreError, zipBackup } from './backup';
 import { listSnapshots, removeSnapshot, snapshotBackup, snapshotFile, startSnapshots, takeSnapshot } from './snapshots';
-import { cleanCountdowns, cleanMood, cleanPrefs, cleanSnippet, cleanTopics, isStr, isYmd, MAX_SNIPPETS, validBookmarks, validNotes } from './clean';
-import { checkSource } from './news';
+import { cleanCountdowns, cleanMood, cleanPrefs, cleanSnippet, isStr, isYmd, MAX_SNIPPETS, validBookmarks, validNotes } from './clean';
+import { answerRecall, DigestError, markCard, swapCard } from './digest';
 import { checkLinks, favicon, startLinkChecks } from './bookmarks';
 import { keepVersion, MAX_NOTE_IMAGE, readNoteImage, recordVersions, writeNoteImage } from './notes';
 import { bumpOpen, cleanOpens } from '../../shared/bookmarks';
-import { sameUrl, sourceKey } from '../../shared/news';
+import { sameUrl } from '../../shared/news';
+import { searchArchive } from '../../shared/digest';
 import { eventStream, tabOf } from './events';
 import { recentSmokes, state, stateFor } from './state';
 import { MAX_PHOTOS, MAX_PHOTO_BYTES, readPhoto, removePhotoFile, sniffImage, writePhoto } from './photos';
@@ -250,19 +251,51 @@ app.post('/api/alerts/test', async (c) => {
   return c.json(alertsInfo());
 });
 
-// ---------- news: feeds, the reading list, hidden headlines, muted sources ----------
+// ---------- the daily digest ----------
 
-/** Try a feed before following it; says what's wrong with one that doesn't work. */
-app.post('/api/news/check', async (c) => {
-  const body = await c.req.json().catch(() => ({}));
-  const [source] = isStr(body.source) ? cleanTopics([body.source]) : [];
-  if (!source) return c.json({ error: 'That isn’t a feed address, a subreddit or Hacker News.' }, 400);
+async function digestReply(c: Context, run: () => void | Promise<void>): Promise<Response> {
   try {
-    return c.json({ source, ...(await checkSource(source)) });
+    await run();
+    return c.json(stateFor(['digest']));
   } catch (e) {
-    return c.json({ error: (e as Error).message }, 400);
+    return e instanceof DigestError ? c.json({ error: e.message }, e.status) : c.json({ error: (e as Error).message }, 422);
   }
+}
+
+/** Star a lesson, or say it was too basic or too deep. */
+app.patch('/api/digest/cards/:id', async (c) => {
+  const b = await c.req.json().catch(() => ({}));
+  return digestReply(c, () => markCard(c.req.param('id'), b));
 });
+
+/** Today's lesson on that subject, on a different concept. Not 502 when Claude fails: the page reads that as Launchpad being down. */
+app.post('/api/digest/cards/:id/swap', async (c) => {
+  if (!claudeEnabled()) return c.json({ error: 'The digest needs ANTHROPIC_API_KEY on the server.' }, 400);
+  return digestReply(c, () => swapCard(c.req.param('id')));
+});
+
+/** An answer to today's Quick recall question. */
+app.post('/api/digest/recall', async (c) => {
+  const b = await c.req.json().catch(() => ({}));
+  if (!isStr(b.cardId)) return c.json({ error: 'Which question?' }, 400);
+  return digestReply(c, () => answerRecall(b.cardId, b.choice));
+});
+
+/** Past lessons: words to find, a subject, starred only, and where to carry on from. */
+app.get('/api/digest/archive', (c) => {
+  const q = c.req.query();
+  return c.json(
+    searchArchive(store.digest(), {
+      q: (q.q ?? '').slice(0, 200),
+      subject: q.subject ? q.subject.slice(0, 100) : undefined,
+      starred: q.starred === '1',
+      offset: Number(q.offset) || 0,
+      limit: Number(q.limit) || 40,
+    }),
+  );
+});
+
+// ---------- the reading list kept from the old News view ----------
 
 const updateLists = (fn: (l: NewsLists) => NewsLists) => {
   store.setNewsLists(fn(store.newsLists()));
@@ -297,29 +330,6 @@ app.patch('/api/news/saved/:id', async (c) => {
 app.delete('/api/news/saved/:id', (c) => {
   const id = c.req.param('id');
   return c.json(updateLists((l) => ({ ...l, saved: l.saved.filter((s) => s.id !== id) })));
-});
-
-/** Hide headlines (a story's, or one) from a topic; `hide: false` puts them back. */
-app.post('/api/news/hidden', async (c) => {
-  const b = await c.req.json().catch(() => ({}));
-  if (!isStr(b.topic) || !Array.isArray(b.urls)) return c.json({ error: 'A topic and the headlines to hide are needed.' }, 400);
-  const urls: string[] = b.urls.filter((u: unknown) => isStr(u) && /^https?:\/\//i.test(u)).slice(0, 50);
-  const key = sourceKey(b.topic);
-  const at = new Date().toISOString();
-  return c.json(
-    updateLists((l) => {
-      const rest = (l.hidden[key] ?? []).filter((h) => !urls.some((u) => sameUrl(u, h.url)));
-      return { ...l, hidden: { ...l.hidden, [key]: b.hide === false ? rest : [...rest, ...urls.map((url) => ({ url, at }))] } };
-    }),
-  );
-});
-
-/** Mute a source everywhere, or unmute it. */
-app.post('/api/news/muted', async (c) => {
-  const b = await c.req.json().catch(() => ({}));
-  if (!isStr(b.source) || !b.source.trim()) return c.json({ error: 'Which source?' }, 400);
-  const name = b.source.trim();
-  return c.json(updateLists((l) => ({ ...l, muted: [...l.muted.filter((m) => m.toLowerCase() !== name.toLowerCase()), ...(b.muted === false ? [] : [name])] })));
 });
 
 // ---------- tasks ----------
@@ -1244,8 +1254,8 @@ app.delete('/api/photos/:id', (c) => {
 
 app.post('/api/sync/:source', async (c) => {
   const key = c.req.param('source') as SourceKey;
-  if (!['calendar', 'tasks', 'gmail', 'carriers', 'news', 'inbox', 'weather', 'speedtest'].includes(key)) return c.json({ error: 'Unknown source' }, 400);
-  if (key === 'news' || key === 'inbox') {
+  if (!['calendar', 'tasks', 'gmail', 'carriers', 'digest', 'inbox', 'weather', 'speedtest'].includes(key)) return c.json({ error: 'Unknown source' }, 400);
+  if (key === 'digest' || key === 'inbox') {
     await refreshSummaries(key);
     return c.json(state());
   }
