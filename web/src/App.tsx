@@ -758,7 +758,7 @@ export function App({ cached }: { cached: AppState | null }) {
         ) : view === 'money' ? (
           <MoneyView money={data.money} now={now} saved={moneySaved} onChange={setMoney} onImport={importMoney} notify={showToast} together={design !== 'broadsheet' && layout !== 'narrow'} />
         ) : view === 'music' ? (
-          <MusicView now={now} />
+          <MusicView now={now} notify={showToast} />
         ) : view === 'server' ? (
           <Server data={data} now={now} openTab={serverTab} onOpenSettings={() => setDrawer({ type: 'settings' })} onPinFolders={(pinnedFolders) => setPrefs({ ...data.prefs, pinnedFolders })} onAutoUnpack={(autoUnpack) => setPrefs({ ...data.prefs, autoUnpack })} split={design !== 'broadsheet' && layout !== 'narrow'} />
         ) : (

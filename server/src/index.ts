@@ -53,7 +53,7 @@ import { alertsInfo, sendTest, setTopicUrl } from './notify';
 import { startAlerts } from './alerts';
 import { startMcAlerts } from './mc-alerts';
 import { startUnpacking, unpackRecords } from './unpack';
-import { nacStatus, startNac } from './nac';
+import { nacStatus, requestNacCheck, startNac } from './nac';
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
 import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
@@ -1322,8 +1322,17 @@ app.get('/api/carriers', (c) => c.json(CARRIERS));
 
 // ---------- Music › Busking slots (NAC Slot Finder) ----------
 
-/** The last check's free slots, or why it failed. Checks only run on their schedule (nac.ts), never from here, so nothing here can make Launchpad ask NAC more often. */
+/** The last check's free slots, or why it failed, and whether Check now can be used. */
 app.get('/api/nac', (c) => c.json(nacStatus()));
+
+// A page on another site can't make the server ask NAC.
+app.use('/api/nac/check', async (c, next) => (foreignOrigin(c.req.header('origin'), c.req.header('host')) ? c.json({ error: 'Cross-site request refused' }, 403) : next()));
+
+/** Check now: one check soon, unless one ran in the last 10 minutes or it's backing off after a failure (nac.ts refusal). */
+app.post('/api/nac/check', (c) => {
+  const r = requestNacCheck();
+  return r.ok ? c.json({ at: r.at }) : c.json({ error: r.error }, 409);
+});
 
 // ---------- errors ----------
 

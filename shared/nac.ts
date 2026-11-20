@@ -70,12 +70,22 @@ export function fmtNacDay(ymd: string): string {
   return `${DOW3[weekdayOf(ymd)]} ${Number(ymd.slice(8, 10))} ${MONTH_NAMES[Number(ymd.slice(5, 7)) - 1].slice(0, 3)}`;
 }
 
-/** "14:30" from an ISO time, in Singapore; with the day in front when it isn't `today`'s ("Sat 00:15"). */
-export function fmtClock(iso: string, today?: string): string {
+/**
+ * "14:30" from an ISO time, in Singapore. Seen from `now`, a time on another day says which
+ * ("yesterday 23:50", "tomorrow 09:15", "Sat 21 Nov 10:00"), except one in the next 12 hours:
+ * at 23:50, "00:15" can only be the one coming.
+ */
+export function fmtClock(iso: string, now?: Date): string {
   const d = new Date(iso);
-  const day = sgtYmd(d);
   const t = hhmm(sgtMinutes(d));
-  return today && day !== today ? `${day === addDaysYmd(today, 1) ? 'tomorrow' : fmtNacDay(day)} ${t}` : t;
+  if (!now) return t;
+  const day = sgtYmd(d);
+  const today = sgtYmd(now);
+  const ahead = d.getTime() - now.getTime();
+  if (day === today || (ahead > 0 && ahead < 12 * 3_600_000)) return t;
+  if (day === addDaysYmd(today, 1)) return `tomorrow ${t}`;
+  if (day === addDaysYmd(today, -1)) return `yesterday ${t}`;
+  return `${fmtNacDay(day)} ${t}`;
 }
 
 // ---------- what the Music view shows ----------
