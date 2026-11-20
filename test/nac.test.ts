@@ -78,7 +78,7 @@ function card(o: { status?: string; date?: string | null; time?: string | null; 
   if (o.date === null) c = c.replace(/<li><img[^>]*red-date\.png[^>]*>[^<]*<\/li>/, '');
   else if (o.date) c = c.replace(/(red-date\.png[^>]*>)[^<]*/, `$1${o.date}`);
   if (o.time === null) c = c.replace(/<li>\s*<img[^>]*red-clock\.png[^>]*>[^<]*<\/li>/, '');
-  else if (o.time) c = c.replace(/(red-clock\.png[^>]*>)[^<]*/, `$1${o.time}\r\n                `);
+  else if (o.time) c = c.replace(/(red-clock\.png[^>]*>)[^<]*/, `$1${o.time}\n                `);
   if (o.profile) c = c.replace(/(\/busker\/profile\/)[0-9a-f-]{36}/, `$1${o.profile}`);
   c = c.replace(/data-bookingid="[^"]*"/, `data-bookingid="${o.booking ?? `b-${Math.random().toString(36).slice(2)}`}"`);
   return c;
@@ -86,8 +86,10 @@ function card(o: { status?: string; date?: string | null; time?: string | null; 
 /** Pasir Ris' page with these cards in place of its own. */
 function pageWith(cards: string[]): string {
   const html = read('pasir-ris.html');
+  // Whatever the line endings: a checkout can change them.
   const start = html.indexOf('<div class="col-md-6');
-  const end = html.indexOf('</div>\r\n                            <div class="text-center');
+  const end = html.search(/<\/div>\s*<div class="text-center/);
+  if (start < 0 || end < start) throw new Error('pasir-ris.html isn’t laid out as pageWith expects');
   return html.slice(0, start) + cards.join('') + html.slice(end);
 }
 const onePlace = (html: string): Fetcher => async (_url, kind) => {
@@ -159,6 +161,15 @@ describe('reading NAC’s pages', () => {
     expect(p.cards[0]).toEqual({ status: 'Passed', mine: false, date: '2026-11-20', start: 600, end: 660, id: '' });
     expect(p.cards[1]).toMatchObject({ status: 'Published', date: '2026-11-20', start: 660, end: 720 });
     expect(p.cards[1].id).toMatch(/^b0000000-/);
+  });
+
+  it('reads pages the same whatever their line endings', () => {
+    const crlf = read('tampines.html');
+    const lf = crlf.replace(/\r\n/g, '\n');
+    expect(lf).not.toContain('\r');
+    expect(parsePage(lf, META.today, MINE)).toEqual(parsePage(crlf, META.today, MINE));
+    const more = fetchFragment(read('tampines-more.json'));
+    expect(parseCards(more.replace(/\r\n/g, '\n'), META.today, MINE)).toEqual(parseCards(more, META.today, MINE));
   });
 
   it('unescapes the location’s name (BLK 2 &amp; 3)', () => {
