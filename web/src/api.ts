@@ -3,7 +3,7 @@ import type { ExplainResult, ExplainStatus, McBackups, McCrashes, McMeters, McPl
 import type { TorrentFile, TorrentOptions, TorrentSpeed, VideoFormat } from '../../shared/types';
 import type { ArchiveCard } from '../../shared/digest';
 import type { AppState, Backup, BackupSnapshot, CalEvent, Countdown, Craving, DigestCard, DigestFeedback, DirListing, DisksReport, LinkCheck, LogLine, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
-import type { AlertsInfo } from '../../shared/types';
+import type { AlertsInfo, NacStatus } from '../../shared/types';
 import type { AskResult } from '../../shared/ask';
 import type { ShellAskResult, ShellAskStatus } from '../../shared/shellAsk';
 import type { UsageReport } from '../../shared/claudeUsage';
@@ -115,6 +115,27 @@ export function cachedServer(): ServerStats | null {
 export function cacheServer(s: ServerStats): void {
   try {
     localStorage.setItem(SERVER_KEY, JSON.stringify(s));
+  } catch {
+    // ignore
+  }
+}
+
+const NAC_KEY = 'launchpad:nac';
+
+/** Music › Busking slots' last reading, so the view opens on it, offline too. */
+export function cachedNac(): NacStatus | null {
+  try {
+    const raw = localStorage.getItem(NAC_KEY);
+    const s = raw ? (JSON.parse(raw) as NacStatus) : null;
+    return s && Array.isArray(s.locations) && Array.isArray(s.watching) ? s : null;
+  } catch {
+    return null;
+  }
+}
+
+export function cacheNac(s: NacStatus): void {
+  try {
+    localStorage.setItem(NAC_KEY, JSON.stringify(s));
   } catch {
     // ignore
   }
@@ -259,6 +280,8 @@ export const api = {
   reviewTasks: (week: string) => req<{ done: number | null }>('GET', `/api/review/tasks?week=${week}`),
   refreshReview: (week: string) => req<AppState>('POST', `/api/review/refresh?week=${week}`, {}),
   server: (iface?: string) => req<ServerStats>('GET', `/api/server${iface ? `?iface=${encodeURIComponent(iface)}` : ''}`),
+  /** Music › Busking slots: the last check of NAC's free slots (the server checks on its own schedule). */
+  nacSlots: () => req<NacStatus>('GET', '/api/nac'),
   speedTest: () => req<ServerStats['speed']>('POST', '/api/speedtest', {}),
   shell: () => req<ShellInfo>('GET', '/api/shell'),
   trustHostKey: () => req<ShellInfo>('POST', '/api/shell/trust', {}),

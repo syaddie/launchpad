@@ -245,6 +245,15 @@ Server › **Minecraft** lists the Minecraft servers on the machine and gives ea
 
 A server started some other way (systemd, `nohup`) shows up with its log, but Launchpad can't type into it.
 
+## 13. Music: busking slots (NAC)
+
+**Music** shows which busking slots are still free at the NAC locations listed in `server/src/config.ts` (`nac.locations`, one line each). It works with nothing set: the server reads NAC's public location pages on :15 and :45 every hour (streamlit-portfolio's schedule-sync takes :00 and :30), one request at a time about 2 s apart, and keeps the result in `nac/snapshot.json` in the `launchpad-data` volume. The first check is at the next :15 or :45 after the container starts.
+
+- **Your own bookings.** Set `NAC_BUSKER_ID` in `.env` to your busker profile ID, the id at the end of your public NAC profile's address (the same value schedule-sync uses), then `docker compose up -d launchpad`. Without it your bookings count as taken, never as free. Only bookings with that profile ID are marked yours; no other busker's name or ID is stored or shown.
+- **When NAC fails or blocks it** (anything but a plain 200, or a page that isn't the usual one), the check stops there, the last good data stays with a warning saying when it's from, and the next tries wait longer: 1 h, 1.5 h, 2.5 h, then every 4.5 h until one works. It never tries to get around NAC's bot protection.
+- **What a check costs NAC.** About 8 requests, but NAC's load-more answers carry every busker's photo inline, so a check downloads tens of MB (about 77 MB across the four locations on 20 Nov 2026).
+- **Running it without NAC** (development): `NAC_FIXTURES=test/fixtures/nac` reads saved pages instead; see test/fixtures/nac/README.md.
+
 ## Backups
 
 Everything is in one SQLite file inside the `launchpad-data` volume, with photos in a `photos` folder beside it, images pasted into notes in `note-images` and bookmark icons in `favicons` (a cache, fetched again when missing). Settings → General → **Backup** has:

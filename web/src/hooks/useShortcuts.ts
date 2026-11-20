@@ -25,7 +25,7 @@ export interface ShortcutState {
   logCraving: () => void;
 }
 
-/** Every key on the `?` page: ⌘K, Esc, G then a letter, /, ?, N, C, Shift C, M, 1–9 and Console's F1–F10. */
+/** Every key on the `?` page: ⌘K, Esc, G then a letter, /, ?, N, C, Shift C, M, 1–9 and Console's F-keys (one per view, then Settings). */
 export function useShortcuts(state: ShortcutState) {
   const s = useRef(state);
   s.current = state;
@@ -49,10 +49,12 @@ export function useShortcuts(state: ShortcutState) {
         else if (view !== 'home') setView('home');
         return;
       }
-      // Console: F1–F9 open the views in rail order, F10 Settings.
-      if (s.current.design === 'console' && /^F([1-9]|10)$/.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+      // Console: F1 onwards open the views in rail order, and the key after the last view Settings
+      // (F11 with ten). Only those: F12 and the rest stay the browser's.
+      const fkey = /^F(\d{1,2})$/.exec(e.key);
+      const n = fkey ? Number(fkey[1]) : 0;
+      if (s.current.design === 'console' && n >= 1 && n <= VIEWS.length + 1 && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
         e.preventDefault();
-        const n = Number(e.key.slice(1));
         if (n === VIEWS.length + 1) s.current.openSettings();
         else if (VIEWS[n - 1]) {
           setPalette(false);

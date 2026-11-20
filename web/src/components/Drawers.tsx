@@ -793,6 +793,7 @@ export const PANEL_ROWS: { section: string; hint?: string; rows: { key: string; 
       { key: 'view:money', name: 'Money', meta: 'Money in and out, month by month, a wishlist and what you’re owed' },
       { key: 'view:server', name: 'Server', meta: 'Health, internet speed, services' },
       { key: 'view:review', name: 'Review', meta: 'Your week across everything, with Claude’s recap' },
+      { key: 'view:music', name: 'Music', meta: 'Free busking slots at your NAC locations' },
     ],
   },
 ];
