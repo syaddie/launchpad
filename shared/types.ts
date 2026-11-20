@@ -1472,6 +1472,8 @@ export interface Backup {
   snippets?: Snippet[];
   /** The Minecraft servers saved in the Server view. */
   minecraft?: McServer[];
+  /** The busking locations Music › Busking slots checks, in order. */
+  nacPlaces?: NacPlace[];
 }
 
 export type BackupPart = Exclude<keyof Backup, 'version' | 'exported'>;
@@ -1545,7 +1547,7 @@ export interface NacSlots {
   error: string | null;
   /** When `locations` was read; null until a check has worked. */
   last_good_at: string | null;
-  /** When the next check is due: :15 or :45, later after failures. */
+  /** When the next check is due: :05, :15 … :55, later after failures. */
   next_check: string | null;
   /** Checks that failed in a row; each one waits longer before the next. */
   failures: number;
@@ -1556,16 +1558,48 @@ export interface NacSlots {
   locations: NacLocation[];
 }
 
+/**
+ * A busking location the Slot Finder checks. The four in server/src/config.ts are where it
+ * starts; Music › Busking slots › Locations adds, renames, orders and removes them (store key
+ * `nacPlaces`). `nac` is NAC's name for it; `name` and `short` are yours.
+ */
+export interface NacPlace {
+  /** Stays the same through renames; the snapshot matches locations by it. */
+  key: string;
+  /** The id in the location page's address. */
+  id: string;
+  nac: string;
+  name: string;
+  short: string;
+}
+
+/** POST /api/nac/lookup: what a location's NAC page says, before it's added. */
+export interface NacLookup {
+  id: string;
+  /** NAC's own name for it. */
+  nac: string;
+  url: string;
+  open: string;
+  close: string;
+  /** Names to start from, tidied from NAC's. */
+  name: string;
+  short: string;
+  /** Already on the list, under this name. */
+  watched: string | null;
+}
+
 /** GET /api/nac: the result, plus what the page needs before there is one. */
 export interface NacStatus extends NacSlots {
-  /** The locations in config, in order. */
-  watching: { key: string; name: string; short: string; url: string }[];
+  /** The locations it checks, in order. `locations` only holds these, named as they are now. */
+  watching: { key: string; name: string; short: string; nac: string; url: string }[];
+  /** At most this many locations: each one adds two requests and tens of MB to every check. */
+  max_places: number;
   /** Read from saved test pages (NAC_FIXTURES), not from NAC. */
   fixtures: boolean;
   /** A check is running now. */
   running: boolean;
   /** When a check asked for (or the first one) will start, waiting for schedule-sync's :00 or :30 to pass; null when none is waiting. */
   queued_at: string | null;
-  /** Why Check now can't be used at the moment (one's running, the last was under 10 minutes ago, or it's backing off), or null when it can. */
+  /** Why Check now can't be used at the moment (one's running, the last was under 5 minutes ago, or it's backing off, or there are no locations), or null when it can. */
   can_check: string | null;
 }

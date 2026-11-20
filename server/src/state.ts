@@ -151,6 +151,8 @@ export const KEY_FIELDS: Record<string, Field[]> = {
   // Settings › Alerts fetches these itself; the topic stays out of the page's state.
   alertTopic: [],
   alertMemory: [],
+  // Music › Busking slots fetches its locations with the slots (GET /api/nac), every minute.
+  nacPlaces: [],
 };
 
 /** The fields changed store keys feed, or null when one isn't known (then send everything). */

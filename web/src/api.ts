@@ -3,7 +3,7 @@ import type { ExplainResult, ExplainStatus, McBackups, McCrashes, McMeters, McPl
 import type { TorrentFile, TorrentOptions, TorrentSpeed, VideoFormat } from '../../shared/types';
 import type { ArchiveCard } from '../../shared/digest';
 import type { AppState, Backup, BackupSnapshot, CalEvent, Countdown, Craving, DigestCard, DigestFeedback, DirListing, DisksReport, LinkCheck, LogLine, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
-import type { AlertsInfo, NacStatus } from '../../shared/types';
+import type { AlertsInfo, NacLookup, NacStatus } from '../../shared/types';
 import type { AskResult } from '../../shared/ask';
 import type { ShellAskResult, ShellAskStatus } from '../../shared/shellAsk';
 import type { UsageReport } from '../../shared/claudeUsage';
@@ -282,8 +282,13 @@ export const api = {
   server: (iface?: string) => req<ServerStats>('GET', `/api/server${iface ? `?iface=${encodeURIComponent(iface)}` : ''}`),
   /** Music › Busking slots: the last check of NAC's free slots (the server checks on its own schedule). */
   nacSlots: () => req<NacStatus>('GET', '/api/nac'),
-  /** Check now: when the check will start. Refused (with why) within 10 minutes of the last, or while it's backing off. */
+  /** Check now: when the check will start. Refused (with why) within 5 minutes of the last, or while it's backing off. */
   checkNac: () => req<{ at: string }>('POST', '/api/nac/check', {}),
+  /** Reads one location's NAC page (one request), so it can be added. */
+  nacLookup: (link: string) => req<NacLookup>('POST', '/api/nac/lookup', { link }),
+  nacAddPlace: (p: { id: string; name: string; short: string }) => req<NacStatus>('POST', '/api/nac/places', p),
+  /** The list's order and names; locations left out are removed. */
+  nacEditPlaces: (places: { key: string; name: string; short: string }[]) => req<NacStatus>('PUT', '/api/nac/places', { places }),
   speedTest: () => req<ServerStats['speed']>('POST', '/api/speedtest', {}),
   shell: () => req<ShellInfo>('GET', '/api/shell'),
   trustHostKey: () => req<ShellInfo>('POST', '/api/shell/trust', {}),

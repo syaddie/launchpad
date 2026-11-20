@@ -252,7 +252,7 @@ describe('a check', () => {
   it('works out free, taken and yours, from now to each location’s last booking', async () => {
     const { result } = await check('.');
     expect(result).toMatchObject({ checked_at: '2026-11-20T12:20:00+08:00', last_good_at: '2026-11-20T12:20:00+08:00', ok: true, error: null, failures: 0, mine_on: true, unknown_statuses: [] });
-    expect(result.next_check).toBe('2026-11-20T12:45:00+08:00');
+    expect(result.next_check).toBe('2026-11-20T12:25:00+08:00');
     expect(result.locations.map((l) => [l.key, l.open, l.close, l.horizon_end, l.days[0].date, l.days[l.days.length - 1].date])).toEqual([
       ['tampines', '10:00', '14:00', '2026-12-14', '2026-11-20', '2026-12-14'],
       ['pasir-ris', '10:00', '14:00', '2026-12-11', '2026-11-20', '2026-12-11'],
@@ -327,14 +327,14 @@ describe('a check', () => {
     expect(result).toMatchObject({ ok: false, failures: 1, checked_at: '2026-11-20T12:45:00+08:00', last_good_at: '2026-11-20T12:20:00+08:00' });
     expect(result.error).toBe('Tampines: NAC didn’t return JSON, so it may be blocking Launchpad');
     expect(result.locations).toEqual(good.locations);
-    // Skips the 13:15 slot.
+    // Waits an hour, not 10 minutes.
     expect(result.next_check).toBe('2026-11-20T13:45:00+08:00');
     const twice = (await check('blocked', { file, now: new Date('2026-11-20T13:45:00+08:00') })).result;
     expect(twice).toMatchObject({ failures: 2, next_check: '2026-11-20T15:15:00+08:00', last_good_at: '2026-11-20T12:20:00+08:00' });
     expect(twice.locations).toEqual(good.locations);
-    // Working again: back to every slot, compared with the last good data.
+    // Working again: back to every 10 minutes, compared with the last good data.
     const back = (await check('.', { file, now: new Date('2026-11-20T15:15:00+08:00') })).result;
-    expect(back).toMatchObject({ ok: true, failures: 0, error: null, next_check: '2026-11-20T15:45:00+08:00' });
+    expect(back).toMatchObject({ ok: true, failures: 0, error: null, next_check: '2026-11-20T15:25:00+08:00' });
   });
 
   it('fails the first check without inventing any data', async () => {
@@ -454,18 +454,22 @@ describe('asking NAC', () => {
 // ---------- schedule and snapshot ----------
 
 describe('when it checks', () => {
-  it('checks on :15 and :45, out of schedule-sync’s :00 and :30', () => {
+  it('checks every 10 minutes on :05, :15 … :55, out of schedule-sync’s :00 and :30', () => {
     const at = (s: string) => nextSlot(new Date(s)).toISOString();
-    expect(at('2026-11-20T12:20:00+08:00')).toBe(new Date('2026-11-20T12:45:00+08:00').toISOString());
-    expect(at('2026-11-20T12:44:59+08:00')).toBe(new Date('2026-11-20T12:45:00+08:00').toISOString());
-    expect(at('2026-11-20T12:45:00+08:00')).toBe(new Date('2026-11-20T13:15:00+08:00').toISOString());
-    expect(at('2026-11-20T23:50:00+08:00')).toBe(new Date('2026-11-21T00:15:00+08:00').toISOString());
+    expect(at('2026-11-20T12:20:00+08:00')).toBe(new Date('2026-11-20T12:25:00+08:00').toISOString());
+    expect(at('2026-11-20T12:24:59+08:00')).toBe(new Date('2026-11-20T12:25:00+08:00').toISOString());
+    expect(at('2026-11-20T12:25:00+08:00')).toBe(new Date('2026-11-20T12:35:00+08:00').toISOString());
+    expect(at('2026-11-20T12:55:00+08:00')).toBe(new Date('2026-11-20T13:05:00+08:00').toISOString());
+    expect(at('2026-11-20T23:58:00+08:00')).toBe(new Date('2026-11-21T00:05:00+08:00').toISOString());
+    // Never on the hour or half past.
+    for (let m = 0; m < 60; m++) expect([0, 30]).not.toContain(new Date(at(`2026-11-20T12:${String(m).padStart(2, '0')}:00+08:00`)).getUTCMinutes());
   });
 
   it('waits longer after each failure in a row', () => {
     const after = (f: number) => nextCheck(new Date('2026-11-20T12:20:00+08:00'), f).toISOString();
     const t = (s: string) => new Date(`2026-11-20T${s}:00+08:00`).toISOString();
-    expect([0, 1, 2, 3, 4, 9].map(after)).toEqual([t('12:45'), t('13:15'), t('13:45'), t('14:45'), t('16:45'), t('16:45')]);
+    // The next slot, then about 1 h, 1.5 h, 2.5 h and 4.5 h on, as when it checked every 30 minutes.
+    expect([0, 1, 2, 3, 4, 9].map(after)).toEqual([t('12:25'), t('13:15'), t('13:45'), t('14:45'), t('16:45'), t('16:45')]);
   });
 
   it('stays clear of schedule-sync’s :00 and :30 when checking out of turn', () => {
@@ -478,20 +482,30 @@ describe('when it checks', () => {
     expect(at('2026-11-21T00:02:00+08:00')).toBe(t('2026-11-21T00:02:00+08:00'));
     expect(at('2026-11-20T12:29:00+08:00')).toBe(t('2026-11-20T12:32:00+08:00'));
     expect(at('2026-11-20T12:31:59+08:00')).toBe(t('2026-11-20T12:32:00+08:00'));
+    // Only schedule-sync's :00 and :30, not every tenth of the hour this checks on.
+    expect(at('2026-11-20T12:09:00+08:00')).toBe(t('2026-11-20T12:09:00+08:00'));
+    expect(at('2026-11-20T12:19:00+08:00')).toBe(t('2026-11-20T12:19:00+08:00'));
   });
 
-  it('skips a slot within 10 minutes of the check before it', () => {
-    expect(nextCheck(new Date('2026-11-20T23:40:00+08:00'), 0).toISOString()).toBe(new Date('2026-11-21T00:15:00+08:00').toISOString());
-    expect(nextCheck(new Date('2026-11-20T23:34:00+08:00'), 0).toISOString()).toBe(new Date('2026-11-20T23:45:00+08:00').toISOString());
+  it('skips a slot within 5 minutes of the check before it, never the next of every 10', () => {
+    const after = (s: string) => nextCheck(new Date(`2026-11-20T${s}:00+08:00`), 0).toISOString();
+    const t = (s: string) => new Date(`2026-11-20T${s}:00+08:00`).toISOString();
+    // Asked for by hand at 23:42: 23:45 is too close.
+    expect(after('23:42')).toBe(t('23:55'));
+    expect(after('23:36')).toBe(t('23:45'));
+    expect(after('23:40')).toBe(t('23:45'));
+    // The 23:45 check took a minute or two: the next is still 23:55.
+    expect(after('23:46')).toBe(t('23:55'));
+    expect(after('23:49')).toBe(t('23:55'));
   });
 
   it('says why Check now can’t be used', () => {
     const at = (s: string) => new Date(`2026-11-20T${s}:00+08:00`);
-    const good: NacSlots = { checked_at: '2026-11-20T23:45:00+08:00', ok: true, error: null, last_good_at: '2026-11-20T23:45:00+08:00', next_check: '2026-11-21T00:15:00+08:00', failures: 0, unknown_statuses: [], mine_on: true, locations: [] };
+    const good: NacSlots = { checked_at: '2026-11-20T23:45:00+08:00', ok: true, error: null, last_good_at: '2026-11-20T23:45:00+08:00', next_check: '2026-11-20T23:55:00+08:00', failures: 0, unknown_statuses: [], mine_on: true, locations: [] };
     expect(refusal(null, at('23:50'), false)).toBeNull();
     expect(refusal(null, at('23:50'), true)).toBe('A check is running now.');
-    expect(refusal(good, at('23:50'), false)).toBe('The last check was at 23:45. You can ask for another from 23:55.');
-    expect(refusal(good, at('23:55'), false)).toBeNull();
+    expect(refusal(good, at('23:48'), false)).toBe('The last check was at 23:45. You can ask for another from 23:50.');
+    expect(refusal(good, at('23:50'), false)).toBeNull();
     const failed = { ...good, ok: false, error: 'Tampines: NAC answered 403', failures: 1, next_check: '2026-11-21T00:45:00+08:00' };
     expect(refusal(failed, at('23:58'), false)).toBe('The last check failed, so Launchpad leaves NAC alone until 00:45.');
     // Once the back-off's over, it can be asked for again.
@@ -545,15 +559,18 @@ describe('the scheduler', () => {
   const untilIso = (iso: string) => vi.advanceTimersByTimeAsync(new Date(iso).getTime() - Date.now());
   const checked = (s: string): NacSlots => ({ checked_at: `2026-11-20T${s}+08:00`, ok: true, error: null, last_good_at: `2026-11-20T${s}+08:00`, next_check: sgtIso(nextCheck(sgt(s), 0)), failures: 0, unknown_statuses: [], mine_on: true, locations: [] });
 
-  it('checks straight away when there’s no data yet, then on :15 and :45', async () => {
+  it('checks straight away when there’s no data yet, then every 10 minutes', async () => {
     const h = harness('23:33:00', null);
     h.s.start();
     await until('23:33:01');
     expect(h.calls).toEqual(['23:33:00']);
+    // 23:35 is too close to it.
     await until('23:44:59');
     expect(h.calls).toEqual(['23:33:00']);
     await until('23:45:01');
     expect(h.calls).toEqual(['23:33:00', '23:45:00']);
+    await until('23:55:01');
+    expect(h.calls).toEqual(['23:33:00', '23:45:00', '23:55:00']);
     h.s.stop();
   });
 
@@ -571,28 +588,28 @@ describe('the scheduler', () => {
   it('doesn’t check at startup when there’s data already', async () => {
     const h = harness('23:20:00', checked('23:15:00'));
     h.s.start();
-    await until('23:44:59');
+    await until('23:24:59');
     expect(h.calls).toEqual([]);
-    await until('23:45:01');
-    expect(h.calls).toEqual(['23:45:00']);
+    await until('23:25:01');
+    expect(h.calls).toEqual(['23:25:00']);
     h.s.stop();
   });
 
-  it('runs a check asked for at once, then refuses for 10 minutes, and skips a slot too close to it', async () => {
-    const h = harness('23:35:00', checked('23:15:00'));
+  it('runs a check asked for at once, then refuses for 5 minutes, and skips a slot too close to it', async () => {
+    const h = harness('23:41:00', checked('23:25:00'));
     h.s.start();
-    expect(h.s.request()).toEqual({ ok: true, at: '2026-11-20T23:35:00+08:00' });
+    expect(h.s.request()).toEqual({ ok: true, at: '2026-11-20T23:41:00+08:00' });
     await vi.advanceTimersByTimeAsync(1);
     expect(h.s.state().running).toBe(true);
     expect(h.s.request()).toEqual({ ok: false, error: 'A check is running now.' });
-    await until('23:40:00');
-    expect(h.s.request()).toEqual({ ok: false, error: 'The last check was at 23:35. You can ask for another from 23:45.' });
-    // The 23:45 slot is within 10 minutes of it, so the next one's at 00:15.
-    expect(h.snap()!.next_check).toBe('2026-11-21T00:15:00+08:00');
+    await until('23:44:00');
+    expect(h.s.request()).toEqual({ ok: false, error: 'The last check was at 23:41. You can ask for another from 23:46.' });
+    // The 23:45 slot is within 5 minutes of it, so the next one's at 23:55.
+    expect(h.snap()!.next_check).toBe('2026-11-20T23:55:00+08:00');
     await until('23:50:00');
-    expect(h.calls).toEqual(['23:35:00']);
-    await untilIso('2026-11-21T00:15:01+08:00');
-    expect(h.calls).toEqual(['23:35:00', '00:15:00']);
+    expect(h.calls).toEqual(['23:41:00']);
+    await until('23:55:01');
+    expect(h.calls).toEqual(['23:41:00', '23:55:00']);
     h.s.stop();
   });
 
@@ -602,7 +619,7 @@ describe('the scheduler', () => {
     expect(h.s.request().ok).toBe(true);
     await until('23:46:00');
     expect(h.calls).toEqual(['23:44:30']);
-    expect(h.snap()!.next_check).toBe('2026-11-21T00:15:00+08:00');
+    expect(h.snap()!.next_check).toBe('2026-11-20T23:55:00+08:00');
     h.s.stop();
   });
 
@@ -622,11 +639,11 @@ describe('the scheduler', () => {
   it('won’t check by hand while it’s backing off after a failure', async () => {
     const h = harness('23:20:00', checked('23:15:00'), 'fail');
     h.s.start();
-    // The 23:45 check takes its minute, then fails.
-    await until('23:46:01');
-    expect(h.snap()).toMatchObject({ ok: false, failures: 1, next_check: '2026-11-21T00:45:00+08:00' });
+    // The 23:25 check takes its minute, then fails: about an hour until the next.
+    await until('23:26:01');
+    expect(h.snap()).toMatchObject({ ok: false, failures: 1, next_check: '2026-11-21T00:25:00+08:00' });
     await until('23:58:00');
-    expect(h.s.request()).toEqual({ ok: false, error: 'The last check failed, so Launchpad leaves NAC alone until 00:45.' });
+    expect(h.s.request()).toEqual({ ok: false, error: 'The last check failed, so Launchpad leaves NAC alone until 00:25.' });
     h.s.stop();
   });
 
@@ -634,7 +651,8 @@ describe('the scheduler', () => {
     const idle = { running: false, queued: null, planned: sgt('23:45:00').getTime() };
     expect(statusOf(null, { ...idle, queued: sgt('23:32:00').getTime() }, sgt('23:29:00'), true)).toMatchObject({ checked_at: null, next_check: '2026-11-20T23:32:00+08:00', queued_at: '2026-11-20T23:32:00+08:00', can_check: null, running: false });
     expect(statusOf(checked('23:15:00'), idle, sgt('23:30:00'), true)).toMatchObject({ next_check: '2026-11-20T23:45:00+08:00', queued_at: null, can_check: null });
-    expect(statusOf(checked('23:15:00'), idle, sgt('23:20:00'), true).can_check).toBe('The last check was at 23:15. You can ask for another from 23:25.');
+    expect(statusOf(checked('23:15:00'), idle, sgt('23:18:00'), true).can_check).toBe('The last check was at 23:15. You can ask for another from 23:20.');
+    expect(statusOf(checked('23:15:00'), idle, sgt('23:20:00'), true).can_check).toBeNull();
     // A next check missed while the server was down: the planned one instead.
     expect(statusOf(checked('20:15:00'), { ...idle, planned: sgt('23:45:00').getTime() }, sgt('23:40:00'), true).next_check).toBe('2026-11-20T23:45:00+08:00');
     expect(statusOf(checked('23:15:00'), { ...idle, running: true }, sgt('23:20:00'), true)).toMatchObject({ running: true, can_check: 'A check is running now.' });

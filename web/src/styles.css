@@ -2415,10 +2415,7 @@ button.m-stat { cursor: default; }
 .nac-empty { margin: 0; display: flex; flex-direction: column; gap: 6px; }
 .nac-empty p { margin: 0; color: var(--t2); }
 .nac-note-line, .nac-foot { margin: 0; }
-/* Days as cards: as many across as fit, one under another on a phone. */
-.nac-days { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
-[data-layout='wide'] .nac-days { grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 16px; }
-[data-layout='narrow'] .nac-days { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+/* The day picked in the calendar, its times by location. */
 .nac-day { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 12px 14px; border-radius: var(--r-m); box-shadow: inset 0 0 0 1px var(--ln); }
 .nac-date { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; margin: 0; font-size: 14px; font-weight: 600; }
 .nac-day.none .nac-date { color: var(--t3); }
@@ -2443,3 +2440,122 @@ button.m-stat { cursor: default; }
 .nac-check { flex: none; }
 .nac-check.off { opacity: 0.55; }
 .nac-check:disabled { cursor: default; }
+.nac.stale .nac-chip { opacity: 0.72; }
+
+/* The calendar (SlotCalendar.tsx): weeks from Monday, each day's locations with free time as
+   code-and-hours chips. Sized by its own width: hours drop out of the chips when the cells get
+   too narrow for them, and the picked day sits beside the calendar when there's room. */
+.nac-cal-wrap { container-type: inline-size; min-width: 0; }
+.nac-cal-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
+.nac-cal-main { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.nac-cal-title { margin: 0; font-size: 14px; font-weight: 600; }
+.nac-cal { display: flex; flex-direction: column; gap: 4px; }
+.nac-cal-row { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.nac-cal-dow { padding: 0 0 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; text-align: center; color: var(--t3); }
+.nac-cal-dow.wkend { color: var(--t2); }
+.nac-cal-dow .one { display: none; }
+.nac-cell-at { display: flex; min-width: 0; }
+.nac-cell { flex: 1; display: flex; flex-direction: column; align-items: stretch; gap: 4px; min-width: 0; min-height: 74px; padding: 6px; border: none; border-radius: var(--r); background: none; box-shadow: inset 0 0 0 1px var(--ln); color: var(--tx); font: inherit; text-align: left; cursor: pointer; transition: background-color 0.12s, box-shadow 0.12s; }
+button.nac-cell:hover { background: var(--hv); }
+.nac-cell:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+.nac-cell.on { background: color-mix(in srgb, var(--act) 60%, transparent); box-shadow: inset 0 0 0 2px var(--ac); }
+/* Before today, or past the last day known: there, but nothing to pick. */
+.nac-cell.out { cursor: default; box-shadow: none; background: color-mix(in srgb, var(--hv) 70%, transparent); }
+.nac-cell.out .nac-cell-num { color: var(--t3); opacity: 0.7; }
+.nac-cell-top { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.nac-cell-star { display: none; flex: none; font-size: 10px; line-height: 1; color: var(--acd); }
+.nac-cell-num { align-self: flex-start; max-width: 100%; font-size: 12px; font-weight: 600; line-height: 18px; color: var(--t2); white-space: nowrap; overflow: hidden; }
+.nac-cell-mon { font-weight: 500; color: var(--t3); }
+.nac-cell.today .nac-cell-num { padding: 0 6px; border-radius: 999px; background: var(--ac); color: var(--on); }
+.nac-cell.today .nac-cell-mon { color: inherit; }
+.nac-cell.none .nac-cell-num { color: var(--t3); }
+.nac-chips { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.nac-chip { position: relative; display: flex; align-items: baseline; gap: 4px; min-width: 0; padding: 1px 5px; border-radius: var(--r-s); background: var(--act); color: var(--acd); font-size: 11px; line-height: 16px; white-space: nowrap; overflow: hidden; }
+.nac-chip b { font-weight: 700; letter-spacing: 0.02em; }
+.nac-chip-h { margin-left: auto; font-weight: 500; }
+.nac-chip-star { flex: none; }
+/* Booked by you, and nothing else free there that day. */
+.nac-chip.mine-only { background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ac) 60%, transparent); }
+.nac-chip.new { padding-right: 12px; }
+.nac-chip.new::after, .nac-new-dot { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ac); }
+.nac-chip.new::after { position: absolute; top: 50%; right: 4px; margin-top: -3px; }
+.nac-new-dot { display: inline-block; flex: none; }
+.nac-cell-note { font-size: 11px; line-height: 16px; color: var(--t3); }
+.nac-cal-detail { min-width: 0; scroll-margin: 12px; }
+.nac-legend { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 18px; margin: 2px 0 0; font-size: 12px; }
+.nac-legend-places, .nac-legend-marks { display: flex; flex-wrap: wrap; gap: 4px 12px; min-width: 0; }
+.nac-legend-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.nac-code { font-size: 11px; font-weight: 700; letter-spacing: 0.03em; color: var(--acd); }
+.nac-chip.sample { display: inline-flex; padding: 0 5px; }
+.nac-chip.sample .nac-chip-h { margin: 0; }
+@container (min-width: 880px) {
+  .nac-cal-split { grid-template-columns: minmax(0, 1fr) minmax(280px, 340px); gap: 20px; }
+  .nac-cal-detail { position: sticky; top: 12px; padding-top: 27px; }
+  .nac-cell { min-height: 84px; }
+}
+/* A wide screen: cells are wide enough for a location's code and hours side by side, a few to a line. */
+@container (min-width: 1500px) {
+  .nac-cal-split { grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); }
+  .nac-chips { flex-direction: row; flex-wrap: wrap; gap: 4px; }
+  .nac-chip-h { margin-left: 0; }
+  .nac-cell { min-height: 76px; gap: 6px; padding: 8px; }
+}
+/* A phone: one-letter day names, codes without hours (the picked day below has the times). */
+@container (max-width: 560px) {
+  .nac-cal, .nac-cal-row { gap: 3px; }
+  .nac-cell { min-height: 60px; gap: 3px; padding: 4px 3px; border-radius: var(--r-s); }
+  .nac-cell-top { justify-content: center; }
+  .nac-cell-num { font-size: 11px; line-height: 16px; }
+  .nac-cell.today .nac-cell-num { padding: 0 5px; }
+  .nac-chip { justify-content: center; gap: 1px; padding: 0 2px; font-size: 10px; line-height: 14px; }
+  .nac-chip-h { display: none; }
+  .nac-chip.new { padding-right: 2px; box-shadow: inset 0 -2px 0 var(--ac); }
+  .nac-chip.new::after { display: none; }
+  .nac-chip.mine-only.new { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ac) 60%, transparent), inset 0 -2px 0 var(--ac); }
+  .nac-cell-note { font-size: 10px; text-align: center; }
+  .nac-legend-marks .nac-legend-item:first-child { display: none; }
+}
+@container (max-width: 420px) {
+  .nac-cal-dow .full { display: none; }
+  .nac-cal-dow .one { display: inline; }
+  .nac-cell-mon { display: none; }
+  .nac-cell { padding: 4px 2px; }
+  .nac-chip-star { display: none; }
+  .nac-cell-star { display: inline; }
+}
+
+/* Locations (NacPlaces.tsx): the places it checks, and adding one from its NAC link. */
+.nac-places-btn.on { background: var(--act); color: var(--acd); }
+.nac-places { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 14px 16px; border-radius: var(--r-m); background: color-mix(in srgb, var(--hv) 60%, transparent); box-shadow: inset 0 0 0 1px var(--ln); }
+.nac-places-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; }
+.nac-places-title { margin: 0; font-size: 14px; font-weight: 600; }
+.nac-places-head .meta { flex: 1 1 240px; min-width: 0; }
+.nac-places-none { margin: 0; }
+.nac-place-list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.nac-place { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 4px 10px; padding: 5px 4px; border-radius: var(--r); }
+.nac-place:hover { background: var(--hv); }
+.nac-place > .nac-code { padding: 2px 0; border-radius: var(--r-s); background: var(--act); text-align: center; }
+.nac-place-names { display: flex; flex-direction: column; min-width: 0; }
+.nac-place-name { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.nac-place-names .meta { font-size: 12px; overflow-wrap: anywhere; }
+.nac-place-acts { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px; }
+.nac-place.editing { display: block; padding: 8px 4px; background: var(--hv); }
+.nac-place-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 10px; }
+.nac-place-form .field { flex: 1 1 220px; min-width: 0; }
+.nac-place-btns { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; }
+.nac-add { gap: 6px; margin: 0; font-size: 13px; color: var(--t2); }
+.nac-add-row { display: flex; gap: 8px; }
+.nac-add-row .input { flex: 1; min-width: 0; }
+.nac-found { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: var(--r); background: var(--sf); box-shadow: inset 0 0 0 1px var(--ln); }
+.nac-found-what { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.nac-found-what i { flex: none; margin-top: 2px; font-size: 16px; color: var(--acd); }
+.nac-found > .meta { margin: 0; }
+.nac-places-error { display: flex; align-items: flex-start; gap: 6px; margin: 0; font-size: 13px; color: var(--wn); overflow-wrap: anywhere; }
+.nac-places-error i { flex: none; margin-top: 2px; }
+[data-layout='narrow'] .nac-places { padding: 12px; }
+[data-layout='narrow'] .nac-places-head .btn { margin-left: auto; }
+[data-layout='narrow'] .nac-places-head .meta { order: 1; flex-basis: 100%; }
+[data-layout='narrow'] .nac-place { grid-template-columns: 34px minmax(0, 1fr); }
+[data-layout='narrow'] .nac-place-acts { grid-column: 2; justify-content: flex-start; margin-left: -6px; }
+[data-layout='narrow'] .nac-add-row { flex-wrap: wrap; }
+[data-layout='narrow'] .nac-add-row .input { flex-basis: 100%; }

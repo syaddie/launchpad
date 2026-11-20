@@ -1,7 +1,7 @@
 // The NAC Slot Finder's time maths and what the Music view shows, shared by the server
 // (server/src/nac.ts) and the page. Everything is Singapore time, worked out from the
 // moment itself rather than the runtime's time zone: SGT is UTC+8 all year.
-import type { NacBooked, NacFree, NacSlots } from './types';
+import type { NacBooked, NacFree, NacPlace, NacSlots } from './types';
 
 const SGT_MS = 8 * 3_600_000;
 const DAY_MS = 86_400_000;
@@ -172,3 +172,120 @@ export function slotView(s: Pick<NacSlots, 'locations'>, now: Date): SlotView {
   }
   return { days, lastDate, freeWindows, newWindows, noBookings: s.locations.filter((l) => !l.horizon_end).map((l) => l.short) };
 }
+
+// ---------- the locations it checks ----------
+
+/** Each location adds two requests and tens of MB (its busker photos) to every check, so not too many. */
+export const NAC_MAX_PLACES = 8;
+export const NAC_NAME_MAX = 50;
+export const NAC_SHORT_MAX = 20;
+
+const GUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+/** The location id in a NAC link (…/Busking/locations/<id>/events), or a bare id; '' when there's none. */
+export function nacPlaceId(link: string): string {
+  const s = String(link ?? '').trim();
+  const inPath = /\/locations\/([0-9a-f-]{36})(?=[/?#]|$)/i.exec(s)?.[1];
+  const id = inPath ?? (/^[0-9a-f-]{36}$/i.test(s) ? s : '');
+  return GUID_RE.test(id) ? id.toLowerCase() : '';
+}
+
+/** Words kept in capitals when NAC's all-caps names are tidied: MRT lines and the like. */
+const CAPS = new Set(['MRT', 'LRT', 'DTL', 'EWL', 'NSL', 'NEL', 'CCL', 'TEL', 'BPL', 'SKL', 'PGL', 'HDB', 'NAC', 'CBD', 'ITE', 'NUS', 'NTU', 'SMU', 'SUTD', 'SIT', 'SUSS', 'ION']);
+const SMALL = new Set(['and', 'of', 'the', 'at', 'in', 'on', 'by']);
+/** The bit before or after " - " that says nothing about where: "MRT STATION". */
+const GENERIC = /^(?:(?:mrt|lrt)(?: station)?|station|bus interchange|interchange)$/i;
+/** A line's code in front of a station: "DTL TAMPINES". */
+const LINE = /^(?:dtl|ewl|nsl|nel|ccl|tel|bpl|skl|pgl)\s+/i;
+
+const tidyWord = (w: string, i: number) => {
+  const up = w.toUpperCase();
+  if (CAPS.has(up) || /\d/.test(w) || !/[a-z]/i.test(w)) return CAPS.has(up) ? up : w;
+  const low = w.toLowerCase();
+  if (i > 0 && SMALL.has(low)) return low;
+  return low.replace(/(^|[-'’(/])([a-z])/g, (_, a: string, b: string) => a + b.toUpperCase());
+};
+const tidy = (s: string) => s.trim().split(/\s+/).map(tidyWord).join(' ');
+
+/**
+ * Names to start from for a location NAC calls "MRT STATION - DTL TAMPINES": "MRT Station - DTL
+ * Tampines" and "Tampines"; "CHANGI VILLAGE - SPACE BETWEEN BLK 2 & 3" gives "Changi Village".
+ */
+export function guessNacNames(nac: string): { name: string; short: string } {
+  const name = tidy(nac.replace(/\s+/g, ' ')).slice(0, NAC_NAME_MAX).trim() || 'NAC location';
+  const parts = nac.split(/\s+-\s+/).map((p) => p.trim()).filter(Boolean);
+  const where = parts.find((p) => !GENERIC.test(p)) ?? parts[0] ?? nac;
+  const short = tidy(where.replace(LINE, '')).slice(0, NAC_SHORT_MAX).trim();
+  return { name, short: short || name.slice(0, NAC_SHORT_MAX).trim() };
+}
+
+/** A key for a new location from its short name: "Paya Lebar" → "paya-lebar", "paya-lebar-2" if that's taken. */
+export function nacPlaceKey(short: string, taken: Iterable<string>): string {
+  const used = new Set(taken);
+  const base = short.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'place';
+  let key = base;
+  for (let n = 2; used.has(key); n++) key = `${base}-${n}`;
+  return key;
+}
+
+/** A name from the page or a backup, trimmed and cut to fit; '' when there's nothing left. */
+const cleanName = (v: unknown, max: number) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max).trim() : '');
+
+/**
+ * A saved list of locations, checked: entries without a real id or a name are dropped, as are
+ * repeats of an id or key; at most NAC_MAX_PLACES. Null when it isn't a list at all.
+ */
+export function cleanNacPlaces(v: unknown): NacPlace[] | null {
+  if (!Array.isArray(v)) return null;
+  const out: NacPlace[] = [];
+  for (const p of v as Partial<NacPlace>[]) {
+    if (!p || typeof p !== 'object' || out.length >= NAC_MAX_PLACES) continue;
+    const id = nacPlaceId(String(p.id ?? ''));
+    const name = cleanName(p.name, NAC_NAME_MAX);
+    const short = cleanName(p.short, NAC_SHORT_MAX) || name.slice(0, NAC_SHORT_MAX).trim();
+    const key = typeof p.key === 'string' && /^[a-z0-9-]{1,40}$/.test(p.key) ? p.key : nacPlaceKey(short, out.map((x) => x.key));
+    if (!id || !name || out.some((x) => x.id === id || x.key === key)) continue;
+    out.push({ key, id, nac: cleanName(p.nac, 120), name, short });
+  }
+  return out;
+}
+
+/**
+ * Codes for the calendar's tight cells, unique among the locations: initials for a name of two
+ * or more words ("Paya Lebar" → "PL"), the first three letters otherwise ("Tampines" → "TAM").
+ */
+export function nacCodes(places: { key: string; short: string }[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  const used = new Set<string>();
+  for (const p of places) {
+    const words = p.short.toUpperCase().replace(/[^A-Z0-9 ]+/g, ' ').trim().split(/\s+/).filter(Boolean);
+    const letters = words.join('');
+    const tries = [words.length > 1 ? words.map((w) => w[0]).join('').slice(0, 3) : letters.slice(0, 3), letters.slice(0, 3), letters.slice(0, 2) + (letters[letters.length - 1] ?? '')].filter(Boolean);
+    let code = tries.find((t) => !used.has(t)) ?? '';
+    for (let n = 2; !code || used.has(code); n++) code = (tries[0] || 'L').slice(0, 2) + n;
+    used.add(code);
+    out[p.key] = code;
+  }
+  return out;
+}
+
+// ---------- the calendar ----------
+
+/** Weeks of seven days, Monday first, from the week `from` is in to the week `to` is in. */
+export function calendarWeeks(from: string, to: string): string[][] {
+  const start = addDaysYmd(from, -((weekdayOf(from) + 6) % 7));
+  const weeks: string[][] = [];
+  for (let d = start; d <= to; d = addDaysYmd(d, 7)) weeks.push(Array.from({ length: 7 }, (_, i) => addDaysYmd(d, i)));
+  return weeks;
+}
+
+/** "November 2026", or "November – December 2026" across two, for the calendar's heading. */
+export function monthsLabel(from: string, to: string): string {
+  const name = (ymd: string) => MONTH_NAMES[Number(ymd.slice(5, 7)) - 1];
+  const [y1, y2] = [from.slice(0, 4), to.slice(0, 4)];
+  if (from.slice(0, 7) === to.slice(0, 7)) return `${name(from)} ${y1}`;
+  return y1 === y2 ? `${name(from)} – ${name(to)} ${y2}` : `${name(from)} ${y1} – ${name(to)} ${y2}`;
+}
+
+/** Free hours in a row, for a calendar cell: 5, 1.5. */
+export const freeHours = (free: { start: string; end: string }[]) => Math.round(free.reduce((n, w) => n + hoursOf(w), 0) * 10) / 10;

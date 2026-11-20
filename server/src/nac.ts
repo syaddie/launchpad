@@ -1,15 +1,17 @@
 // NAC Slot Finder (docs/nac-slot-finder-spec.md): which busking slots are still free at the
-// NAC locations in config, for Music › Busking slots. Booking itself stays on the NAC portal.
+// NAC locations on the list (config's four to start with, then Music › Busking slots ›
+// Locations), for Music › Busking slots. Booking itself stays on the NAC portal.
 //
-// Every 30 minutes, on :15 and :45 (streamlit-portfolio's schedule-sync takes :00 and :30),
+// Every 10 minutes, on :05, :15, :25, :35, :45 and :55 (streamlit-portfolio's schedule-sync takes :00 and :30),
 // it reads each location's public page and then its "load more" list, one request at a time
 // about 2 s apart; works out which 1-hour blocks are yours, taken or free; joins free blocks
 // into windows; flags the windows that weren't free at the check before; and keeps the result
 // in DATA_DIR/nac/snapshot.json, the only thing it stores. A check that fails, or that NAC
 // blocks, stops there, keeps the last good data with the reason, and waits longer before the
 // next. It never tries to get around NAC's bot protection. The very first check runs as soon as
-// it starts, and Music's Check now runs one at any time, but never within 10 minutes of the last,
-// while backing off, or on schedule-sync's :00 or :30.
+// it starts, and Music's Check now runs one at any time, but never within 5 minutes of the last,
+// while backing off, or on schedule-sync's :00 or :30. Adding a location reads its page once to
+// check it's a real one, in turn with the checks' requests, never alongside them.
 //
 // Kept apart from the other scrapers. fetchFragment, parseNacDate, parseNacTime, writeSnapshot
 // and the keep-last-good run are TypeScript copies of schedule-sync's sync.py (fetch,
@@ -21,8 +23,9 @@ import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config, type NacPlace } from './config';
-import { addDaysYmd, daysBetween, DOW3, fmtClock, hhmm, MONTH_NAMES, sgtIso, sgtMinutes, sgtYmd, toMin, weekdayOf } from '../../shared/nac';
-import type { NacBooked, NacDay, NacFree, NacLocation, NacSlots, NacStatus } from '../../shared/types';
+import { store } from './store';
+import { addDaysYmd, daysBetween, DOW3, fmtClock, guessNacNames, hhmm, MONTH_NAMES, NAC_MAX_PLACES, NAC_NAME_MAX, NAC_SHORT_MAX, nacPlaceId, nacPlaceKey, sgtIso, sgtMinutes, sgtYmd, toMin, weekdayOf } from '../../shared/nac';
+import type { NacBooked, NacDay, NacFree, NacLocation, NacLookup, NacSlots, NacStatus } from '../../shared/types';
 
 const BASE_URL = 'https://eservices.nac.gov.sg/Busking';
 /** schedule-sync's style: generic, nothing personal in it. */
@@ -39,13 +42,16 @@ export const OVERLAP = 2;
 const MAX_PAGES = 10;
 /** Between one request and the next. */
 const GAP_MS = 2000;
-/** Minutes past the hour it checks on. */
-const SLOT_MINUTES = 15;
-const SLOT_MS = 30 * 60_000;
+/** It checks every 10 minutes, this many minutes past each tenth: :05, :15 … :55, clear of schedule-sync's :00 and :30. */
+const SLOT_MINUTES = 5;
+const SLOT_MS = 10 * 60_000;
 /** Slots skipped after 1, 2, 3, and 4 or more failed checks in a row: tries again after 1 h, 1.5 h, 2.5 h, then every 4.5 h. */
-const BACKOFF = [1, 2, 4, 8];
-/** The least time between two checks, however they're asked for: one asked for by hand, and the slot after it. */
-export const MIN_GAP = 10 * 60_000;
+const BACKOFF = [5, 8, 14, 26];
+/**
+ * The least time between two checks, however they're asked for: one asked for by hand, and the
+ * slot after it. Half the 10 minutes between slots, so the slots themselves are never skipped.
+ */
+export const MIN_GAP = 5 * 60_000;
 /** The longest a planned check can be off (the last back-off step); a next_check further away isn't one this set. */
 const MAX_WAIT = (BACKOFF[BACKOFF.length - 1] + 1) * SLOT_MS;
 /** The load-more answers carry every busker's photo inline (about 0.3 MB a card), so a big list is tens of MB. Past this, something's wrong. */
@@ -428,7 +434,7 @@ export function writeSnapshot(s: NacSlots, file = snapshotFile()): void {
 
 // ---------- when to check ----------
 
-/** The next :15 or :45 after `now`. Singapore is a whole number of hours off UTC, so its minutes are UTC's. */
+/** The next :05, :15 … :55 after `now`. Singapore is a whole number of hours off UTC, so its minutes are UTC's. */
 export function nextSlot(now: Date): Date {
   const t = now.getTime();
   let at = t - (t % SLOT_MS) + SLOT_MINUTES * 60_000;
@@ -438,20 +444,23 @@ export function nextSlot(now: Date): Date {
 
 /**
  * The next check after one that ended at `now` with `failures` failed ones in a row: the next
- * slot at least `MIN_GAP` away (one asked for by hand at :40 skips :45), or a few slots later.
+ * slot at least `MIN_GAP` away (one asked for by hand at :12 skips :15), or a few slots later.
  */
 export function nextCheck(now: Date, failures: number): Date {
   const skip = failures > 0 ? BACKOFF[Math.min(failures, BACKOFF.length) - 1] : 0;
-  return new Date(nextSlot(new Date(now.getTime() + MIN_GAP)).getTime() + skip * SLOT_MS);
+  // At least MIN_GAP: a check that ended at 12:20 can be followed at 12:25.
+  return new Date(nextSlot(new Date(now.getTime() + MIN_GAP - 1)).getTime() + skip * SLOT_MS);
 }
 
 /** schedule-sync asks NAC on :00 and :30; a check made out of turn stays this far from those. */
 const SYNC_MARGIN = 2 * 60_000;
+/** schedule-sync's own interval, whatever this one checks on. */
+const SYNC_EVERY = 30 * 60_000;
 
 /** `now`, or the moment schedule-sync's :00 or :30 check is clear, when `now` is within two minutes of one. */
 export function clearOfScheduleSync(now: Date): Date {
   const t = now.getTime();
-  const into = (t + SYNC_MARGIN) % SLOT_MS;
+  const into = (t + SYNC_MARGIN) % SYNC_EVERY;
   return into < 2 * SYNC_MARGIN ? new Date(t - into + 2 * SYNC_MARGIN) : now;
 }
 
@@ -485,12 +494,12 @@ export interface CheckOptions {
  * A failure keeps the last good locations, records why, and pushes the next check back.
  */
 export async function runCheck(opts: CheckOptions = {}): Promise<NacSlots> {
-  const places = opts.places ?? config.nac.locations;
+  const places = opts.places ?? nacPlaces();
   const mineId = opts.mineId ?? config.nac.buskerId;
   const file = opts.file ?? snapshotFile();
   const clock = opts.now ?? (() => new Date());
   const log = opts.log ?? ((m: string) => console.warn(`[nac] ${m}`));
-  const fetcher = opts.fetcher ?? (config.nac.fixtures ? fixtureFetcher(config.nac.fixtures, places, clock()) : liveFetch);
+  const fetcher = opts.fetcher ?? (config.nac.fixtures ? fixtureFetcher(config.nac.fixtures, [...places, ...config.nac.locations], clock()) : liveFetch);
   // Saved pages need no pause between them.
   const wait = opts.wait ?? (() => sleep(config.nac.fixtures ? 0 : GAP_MS));
   const prev = readSnapshot(file);
@@ -510,8 +519,8 @@ export async function runCheck(opts: CheckOptions = {}): Promise<NacSlots> {
       failures: 0,
       unknown_statuses: unknown,
       mine_on: !!mineId,
-      // The first check, or a location new to config, has nothing to compare with, so nothing is new.
-      locations: reads.map((r) => buildLocation(r, prev?.last_good_at ? prev.locations.find((l) => l.key === r.place.key) : undefined, started, log)),
+      // The first check, or a location new to the list, has nothing to compare with, so nothing is new.
+      locations: reads.map((r) => buildLocation(r, prev?.last_good_at ? prev.locations.find((l) => l.key === r.place.key && l.url === pageUrl(r.place)) : undefined, started, log)),
     };
   } catch (e) {
     const failures = (prev?.failures ?? 0) + 1;
@@ -525,6 +534,17 @@ export async function runCheck(opts: CheckOptions = {}): Promise<NacSlots> {
 
 // ---------- schedule ----------
 
+/** Checks and lookups take turns, so NAC is only ever asked one thing at a time. */
+let turn: Promise<unknown> = Promise.resolve();
+/** When NAC was last asked something, for the gap before a lookup. */
+let lastAsked = 0;
+
+function inTurn<T>(fn: () => Promise<T>): Promise<T> {
+  const mine = turn.then(fn, fn);
+  turn = mine.catch(() => {}).finally(() => (lastAsked = Date.now()));
+  return mine;
+}
+
 export interface NacScheduler {
   /** Plan the checks: the next slot (or the back-off's), and one straight away when there's no data yet. */
   start(): void;
@@ -535,7 +555,7 @@ export interface NacScheduler {
 }
 
 /**
- * When checks run: on :15 and :45 (or later while backing off), one at a time. A check asked
+ * When checks run: every 10 minutes on :05 … :55 (or later while backing off), one at a time. A check asked
  * for by hand, or the first one when there's no data yet, waits only for schedule-sync's :00 or
  * :30 to be clear. After any check the next is planned again from what it wrote, so a slot within
  * `MIN_GAP` of one asked for by hand is skipped. `check` is runCheck; `read`, readSnapshot.
@@ -598,20 +618,23 @@ export function makeScheduler(deps: { check: () => Promise<unknown>; read: () =>
 let scheduler: NacScheduler | null = null;
 
 export function startNac(): void {
-  if (!config.nac.locations.length) return;
   if (config.nac.buskerIdInvalid) console.warn('[nac] NAC_BUSKER_ID has no profile ID in it, so your own bookings will show as taken');
   if (config.nac.fixtures) console.log(`[nac] reading saved pages from ${config.nac.fixtures}, not NAC`);
-  scheduler = makeScheduler({ check: () => runCheck(), read: () => readSnapshot(), fixtures: !!config.nac.fixtures });
+  // With no locations on the list there's nothing to ask, but the clock keeps going for when one's added.
+  scheduler = makeScheduler({ check: () => (nacPlaces().length ? inTurn(() => runCheck()) : Promise.resolve()), read: () => readSnapshot(), fixtures: !!config.nac.fixtures });
   scheduler.start();
 }
 
+const NOTHING_TO_CHECK = 'There are no locations on the list to check.';
+
 /** POST /api/nac/check. */
 export function requestNacCheck(): { ok: true; at: string } | { ok: false; error: string } {
+  if (!nacPlaces().length) return { ok: false, error: NOTHING_TO_CHECK };
   return scheduler ? scheduler.request() : { ok: false, error: 'The Slot Finder isn’t running.' };
 }
 
 /** The saved result with what the scheduler is doing: the next check is whichever comes first, one waiting to run or the planned one. */
-export function statusOf(saved: NacSlots | null, st: ReturnType<NacScheduler['state']>, now: Date, mineOn: boolean): Omit<NacStatus, 'watching' | 'fixtures'> {
+export function statusOf(saved: NacSlots | null, st: ReturnType<NacScheduler['state']>, now: Date, mineOn: boolean): Omit<NacStatus, 'watching' | 'fixtures' | 'max_places'> {
   const s = saved ?? emptySlots(mineOn);
   const t = now.getTime();
   const due = Date.parse(s.next_check ?? '');
@@ -619,13 +642,95 @@ export function statusOf(saved: NacSlots | null, st: ReturnType<NacScheduler['st
   return { ...s, next_check: sgtIso(new Date(next)), running: st.running, queued_at: st.queued === null ? null : sgtIso(new Date(st.queued)), can_check: refusal(saved, now, st.running) };
 }
 
-/** GET /api/nac. */
+/**
+ * GET /api/nac. Only the locations on the list now, in its order and under their names now, so
+ * a change to the list shows straight away; one added since the last check isn't in it yet.
+ */
 export function nacStatus(now = new Date()): NacStatus {
+  const places = nacPlaces();
+  const s = statusOf(readSnapshot(), scheduler?.state() ?? { running: false, queued: null, planned: null }, now, !!config.nac.buskerId);
+  const locations = places.flatMap((p) => {
+    const l = s.locations.find((x) => x.key === p.key && x.url === pageUrl(p));
+    return l ? [{ ...l, name: p.name, short: p.short }] : [];
+  });
   return {
-    ...statusOf(readSnapshot(), scheduler?.state() ?? { running: false, queued: null, planned: null }, now, !!config.nac.buskerId),
-    watching: config.nac.locations.map((p) => ({ key: p.key, name: p.name, short: p.short, url: pageUrl(p) })),
+    ...s,
+    locations,
+    next_check: places.length ? s.next_check : null,
+    can_check: places.length ? s.can_check : NOTHING_TO_CHECK,
+    watching: places.map((p) => ({ key: p.key, name: p.name, short: p.short, nac: p.nac, url: pageUrl(p) })),
+    max_places: NAC_MAX_PLACES,
     fixtures: !!config.nac.fixtures,
   };
+}
+
+// ---------- the list of locations ----------
+
+/** The locations it checks, in order: the list as last changed in the app, or config's to start with. */
+export function nacPlaces(): NacPlace[] {
+  return store.nacPlaces() ?? config.nac.locations;
+}
+
+/** Ids whose page was read lately, with NAC's name for them; only these can be added. */
+const looked = new Map<string, { nac: string; at: number }>();
+const LOOKED_FOR = 30 * 60_000;
+
+/**
+ * POST /api/nac/lookup: reads a location's page once, so it's only added when it's a real one
+ * (a wrong id would fail every check after it), and says what NAC calls it and its hours.
+ */
+export async function lookupPlace(link: string, opts: { fetcher?: Fetcher; now?: Date } = {}): Promise<NacLookup> {
+  const id = nacPlaceId(link);
+  if (!id) throw new NacError('That isn’t a NAC location link. Open the location on the NAC portal and copy the address: it has /locations/ and a long id in it.');
+  const places = nacPlaces();
+  const now = opts.now ?? new Date();
+  const fetcher = opts.fetcher ?? (config.nac.fixtures ? fixtureFetcher(config.nac.fixtures, [...places, ...config.nac.locations], now) : liveFetch);
+  const place = { key: '', id, nac: '', name: '', short: '' };
+  const page = await inTurn(async () => {
+    if (!opts.fetcher && !config.nac.fixtures) await sleep(Math.max(0, lastAsked + GAP_MS - Date.now()));
+    return parsePage(await fetcher(pageUrl(place), 'page'), sgtYmd(now), '');
+  }).catch((e) => {
+    throw new NacError(`Couldn’t read that location: ${e instanceof NacError ? e.message : reason(e)}`);
+  });
+  for (const [k, v] of looked) if (now.getTime() - v.at > LOOKED_FOR) looked.delete(k);
+  looked.set(id, { nac: page.name, at: now.getTime() });
+  return { id, nac: page.name, url: pageUrl(place), open: hhmm(page.open), close: hhmm(page.close), ...guessNacNames(page.name), watched: places.find((p) => p.id === id)?.name ?? null };
+}
+
+const nameOf = (v: unknown, max: number) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max).trim() : '');
+
+/** POST /api/nac/places: adds a location that was just looked up, at the end of the list. */
+export function addPlace(body: { id?: unknown; name?: unknown; short?: unknown }, now = new Date()): NacPlace {
+  const places = nacPlaces();
+  const id = nacPlaceId(String(body?.id ?? ''));
+  const seen = looked.get(id);
+  if (places.length >= NAC_MAX_PLACES) throw new NacError(`That’s ${NAC_MAX_PLACES} locations already, the most it checks. Remove one first.`);
+  const dup = places.find((p) => p.id === id);
+  if (dup) throw new NacError(`That’s already on the list as ${dup.name}.`);
+  if (!id || !seen || now.getTime() - seen.at > LOOKED_FOR) throw new NacError('Look the location up again first, so it’s known to be a real one.');
+  const name = nameOf(body?.name, NAC_NAME_MAX);
+  const short = nameOf(body?.short, NAC_SHORT_MAX) || name.slice(0, NAC_SHORT_MAX).trim();
+  if (!name) throw new NacError('Give it a name.');
+  const place = { key: nacPlaceKey(short, places.map((p) => p.key)), id, nac: seen.nac, name, short };
+  store.setNacPlaces([...places, place]);
+  return place;
+}
+
+/**
+ * PUT /api/nac/places: the list's new order and names. Locations left out are removed; ones
+ * not on the list are ignored (adding goes through a lookup). A blank name or short name keeps the old one.
+ */
+export function editPlaces(list: unknown): NacPlace[] {
+  if (!Array.isArray(list)) throw new NacError('That isn’t a list of locations.');
+  const places = nacPlaces();
+  const out: NacPlace[] = [];
+  for (const e of list as { key?: unknown; name?: unknown; short?: unknown }[]) {
+    const p = places.find((x) => x.key === e?.key);
+    if (!p || out.some((x) => x.key === p.key)) continue;
+    out.push({ ...p, name: nameOf(e.name, NAC_NAME_MAX) || p.name, short: nameOf(e.short, NAC_SHORT_MAX) || p.short });
+  }
+  store.setNacPlaces(out);
+  return out;
 }
 
 // ---------- saved pages instead of NAC (development) ----------
@@ -634,7 +739,8 @@ const DATE_TEXT = new RegExp(`\\b(${DOW3.join('|')}), (\\d{1,2}) (${MONTH_NAMES.
 
 /**
  * NAC_FIXTURES: pages saved in a folder stand in for NAC, so the app runs without asking it
- * anything. <key>.html is a location's page and <key>-more.json its load-more answer; a file
+ * anything. <key>.html is a location's page and <key>-more.json its load-more answer (or <id>.html
+ * and <id>-more.json, for one that isn't in `places`); a file
  * a folder doesn't have is read from the folder above (a later round only holds what changed),
  * and one neither has answers 404. Dates move so the folder's day (meta.json "today") is today.
  */
@@ -651,8 +757,10 @@ export function fixtureFetcher(dir: string, places: NacPlace[], now: Date): Fetc
           return `${DOW3[weekdayOf(d)]}, ${Number(d.slice(8, 10))} ${MONTH_NAMES[Number(d.slice(5, 7)) - 1]}`;
         });
   return async (url, kind) => {
-    const place = places.find((p) => url.includes(`/locations/${p.id}/`));
-    const file = place && find(`${place.key}${kind === 'page' ? '.html' : '-more.json'}`);
+    // By any key that location has on the list or in config, or by its id.
+    const id = /\/locations\/([0-9a-f-]{36})\//i.exec(url)?.[1].toLowerCase() ?? '';
+    const names = [...places.filter((p) => p.id === id).map((p) => p.key), id].filter(Boolean);
+    const file = names.map((n) => find(`${n}${kind === 'page' ? '.html' : '-more.json'}`)).find(Boolean);
     if (!file) throw new NacError('NAC answered 404, so it may be blocking Launchpad, or it’s down');
     return move(fs.readFileSync(file, 'utf8'));
   };

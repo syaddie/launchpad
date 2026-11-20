@@ -2,14 +2,10 @@ import path from 'node:path';
 
 const env = process.env;
 
-/** A busking location the Slot Finder checks. `nac` is NAC's name for it; `name` matches streamlit-portfolio's data/nac_locations.csv. */
-export interface NacPlace {
-  key: string;
-  id: string;
-  nac: string;
-  name: string;
-  short: string;
-}
+import type { NacPlace } from '../../shared/types';
+
+/** A busking location the Slot Finder checks (shared/types.ts). */
+export type { NacPlace };
 
 export const config = {
   port: Number(env.PORT || 8787),
@@ -77,7 +73,11 @@ export const config = {
     buskerIdInvalid: !!(env.NAC_BUSKER_ID || '').trim() && !/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(env.NAC_BUSKER_ID || ''),
     /** Development only: read saved pages from this folder (e.g. test/fixtures/nac) instead of asking NAC. See test/fixtures/nac/README.md. */
     fixtures: env.NAC_FIXTURES ? path.resolve(env.NAC_FIXTURES) : '',
-    /** The locations it checks, one line each. The id is the one in the location page's address; open hours are read from the page. */
+    /**
+     * The locations it starts with, one line each. The id is the one in the location page's address;
+     * open hours are read from the page. Once the list is changed in Music › Busking slots › Locations,
+     * that list (store key `nacPlaces`) is the one it checks, and this one only matters for a fresh install.
+     */
     locations: [
       { key: 'tampines', id: '9c962e64-ae46-40d2-9506-eb71639b274d', nac: 'MRT STATION - DTL TAMPINES', name: 'Tampines Interchange', short: 'Tampines' },
       { key: 'pasir-ris', id: '2df197be-cf61-4981-8aef-ebda3f353ec2', nac: 'MRT STATION - EWL PASIR RIS', name: 'Pasir Ris MRT', short: 'Pasir Ris' },

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { addDaysYmd, fmtClock, fmtNacDay, fmtRange, hoursOf, sgtYmd, slotView, type SlotDay, type SlotRow } from '../../../../shared/nac';
+import { addDaysYmd, fmtClock, fmtNacDay, fmtRange, hoursOf, nacCodes, sgtYmd, slotView, type SlotDay, type SlotRow } from '../../../../shared/nac';
 import type { NacBooked, NacFree, NacStatus } from '../../../../shared/types';
 import { api, cachedNac, cacheNac } from '../../api';
+import { NacPlaces } from './NacPlaces';
+import { SlotCalendar } from './SlotCalendar';
 
-/** The server checks NAC on :15 and :45; this only reads what it found, so asking often costs nothing. */
+/** The server checks NAC every 10 minutes; this only reads what it found, so asking often costs nothing. */
 const POLL = 60_000;
 /** While a check is running or about to, so its result shows as soon as it's in. */
 const POLL_BUSY = 3_000;
@@ -24,12 +26,14 @@ const sentence = (t: string | null) => (!t ? 'no reason given.' : /[.?!]$/.test(
 
 /**
  * Music › Busking slots: which slots are still free at the NAC locations, from the server's last
- * check (server/src/nac.ts), grouped by date and then location. Booking stays on the NAC portal.
+ * check (server/src/nac.ts), as a calendar; a day's times by location beside or below it.
+ * Locations opens the list of places it checks. Booking stays on the NAC portal.
  */
 export function SlotFinder({ now, notify }: { now: Date; notify: (msg: string) => void }) {
   // Open on the last reading while a fresh one loads.
   const [s, setS] = useState<NacStatus | null>(cachedNac);
   const [loadError, setLoadError] = useState('');
+  const [editing, setEditing] = useState(false);
   const [asking, setAsking] = useState(false);
   /** The check asked for here, by when the one before it was made, so its result can be told when it's in. */
   const askedAfter = useRef<string | null | undefined>(undefined);
@@ -86,6 +90,11 @@ export function SlotFinder({ now, notify }: { now: Date; notify: (msg: string) =
   const today = sgtYmd(now);
   const view = useMemo(() => (s ? slotView(s, now) : null), [s, now]);
   const watching = list((s?.watching ?? []).map((w) => w.short));
+  const codes = useMemo(() => nacCodes(s?.watching ?? []), [s?.watching]);
+  const saved = (r: NacStatus) => {
+    setS(r);
+    cacheNac(r);
+  };
   const waiting = s?.queued_at && !s.running && Date.parse(s.queued_at) > now.getTime() + 30_000 ? fmtClock(s.queued_at, now) : '';
 
   return (
@@ -115,8 +124,15 @@ export function SlotFinder({ now, notify }: { now: Date; notify: (msg: string) =
               {busy ? 'Checking…' : 'Check now'}
             </button>
           )}
+          {s && (
+            <button type="button" className={'btn btn-ghost btn-small nac-places-btn' + (editing ? ' on' : '')} aria-expanded={editing} onClick={() => setEditing(!editing)}>
+              <i className="ph-duotone ph-map-pin" aria-hidden="true" />
+              Locations
+            </button>
+          )}
         </span>
       </div>
+      {s && editing && <NacPlaces s={s} codes={codes} now={now} onSaved={saved} onClose={() => setEditing(false)} />}
 
       {!s ? (
         <p className="meta nac-empty">{loadError ? `Couldn’t load the slots: ${loadError}` : 'Loading…'}</p>
@@ -140,9 +156,21 @@ export function SlotFinder({ now, notify }: { now: Date; notify: (msg: string) =
           )}
           {loadError && <p className="meta nac-note-line">Couldn’t refresh: {loadError}</p>}
 
-          {!s.locations.length ? (
+          {!s.watching.length ? (
+            !editing && (
+              <div className="nac-empty">
+                <p>No locations on the list, so nothing is checked.</p>
+                <p>
+                  <button type="button" className="btn btn-secondary btn-small" onClick={() => setEditing(true)}>
+                    <i className="ph-duotone ph-plus" aria-hidden="true" />
+                    Add a location
+                  </button>
+                </p>
+              </div>
+            )
+          ) : !s.locations.length ? (
             <div className="nac-empty">
-              <p>{s.ok ? `No slot data yet. The first check is ${s.next_check ? atClock(s.next_check, now) : 'at the next quarter past or quarter to'}, then every 30 minutes.` : 'Nothing to show until a check works.'}</p>
+              <p>{s.ok ? `No slot data yet. The ${s.checked_at ? 'next' : 'first'} check is ${s.next_check ? atClock(s.next_check, now) : 'within 10 minutes'}, then every 10 minutes.` : 'Nothing to show until a check works.'}</p>
               {watching && <p className="meta">Watching {watching}.</p>}
             </div>
           ) : (
@@ -162,11 +190,7 @@ export function SlotFinder({ now, notify }: { now: Date; notify: (msg: string) =
                 </p>
               )}
               {view!.days.length ? (
-                <div className="nac-days">
-                  {view!.days.map((d) => (
-                    <Day key={d.date} day={d} today={today} />
-                  ))}
-                </div>
+                <SlotCalendar view={view!} today={today} codes={codes} places={s.locations} detail={(d) => <Day day={d} today={today} />} />
               ) : (
                 <p className="nac-empty">The last good data doesn’t reach today, so there’s nothing to show until a check works.</p>
               )}
@@ -185,9 +209,11 @@ export function SlotFinder({ now, notify }: { now: Date; notify: (msg: string) =
   );
 }
 
-/** What to know about the data itself: your bookings, statuses NAC hasn't used before, locations with no bookings. */
+/** What to know about the data itself: your bookings, statuses NAC hasn't used before, locations with no bookings or not checked yet. */
 function Notes({ s, noBookings }: { s: NacStatus; noBookings: string[] }) {
   const notes: string[] = [];
+  const unchecked = s.watching.filter((w) => !s.locations.some((l) => l.key === w.key)).map((w) => w.short);
+  if (unchecked.length) notes.push(`${list(unchecked)} ${unchecked.length === 1 ? 'isn’t' : 'aren’t'} checked yet: ${unchecked.length === 1 ? 'its' : 'their'} slots come with the next check${s.next_check ? `, at ${fmtClock(s.next_check, new Date())}` : ''}.`);
   if (!s.mine_on) notes.push('Your own bookings show as taken: set NAC_BUSKER_ID on the server to see them as yours.');
   if (s.unknown_statuses.length) notes.push(`NAC marked some bookings ${list(s.unknown_statuses.map((x) => `“${x}”`))}, which isn’t a status known yet. They count as taken.`);
   if (noBookings.length) notes.push(`No bookings seen at ${list(noBookings)}, so which of ${noBookings.length === 1 ? 'its' : 'their'} days are open for booking isn’t known.`);

@@ -12,6 +12,8 @@ import { snapshotDb, store } from './store';
 import { isZip, unzip, zipStream, type ZipEntry } from './zip';
 import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
+import { cleanNacPlaces } from '../../shared/nac';
+import { nacPlaces } from './nac';
 import { cleanCravings } from '../../shared/trackers';
 import { cleanNewsLists } from '../../shared/news';
 import { cleanDigest } from '../../shared/digest';
@@ -45,6 +47,7 @@ export function exportBackup(): Backup {
     noteHistory: store.noteHistory(),
     snippets: store.snippets(),
     minecraft: store.minecraft(),
+    nacPlaces: nacPlaces(),
   };
 }
 
@@ -70,6 +73,7 @@ export const PART_NAMES: Record<BackupPart, string> = {
   noteHistory: 'notepad history',
   snippets: 'terminal snippets',
   minecraft: 'Minecraft servers',
+  nacPlaces: 'busking locations',
 };
 
 function cleanMuscles(v: unknown): Record<string, ExerciseMuscles> | null {
@@ -176,6 +180,11 @@ export function restoreBackup(body: unknown): BackupPart[] {
     writes.push(['minecraft', () => store.setMinecraft(v)]);
   }
 
+  if (has('nacPlaces') && Array.isArray(b.nacPlaces)) {
+    const v = cleanNacPlaces(b.nacPlaces) ?? [];
+    writes.push(['nacPlaces', () => store.setNacPlaces(v)]);
+  }
+
   if (!writes.length) throw new RestoreError('That file isn’t a Launchpad backup.');
   for (const [, write] of writes) write();
   historyRestored();
@@ -274,6 +283,7 @@ export function describeRestored(parts: BackupPart[]): string[] {
       case 'digest': return `daily digest (${plural(store.digest().days.reduce((n, d) => n + d.cards.length, 0), 'lesson')})`;
       case 'snippets': return plural(store.snippets().length, 'terminal snippet');
       case 'minecraft': return plural(store.minecraft().length, 'Minecraft server');
+      case 'nacPlaces': return plural(nacPlaces().length, 'busking location');
       default: return PART_NAMES[p];
     }
   });
