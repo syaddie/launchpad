@@ -38,6 +38,40 @@ Don't guess these; ask before building:
 - Keep anything that's the main action of a thing (e.g. checking off a task), and keep at least one visible way into each feature, since long press isn't discoverable on a phone. Moving a cluster of icons into a single "⋯" button that opens the same menu is a good middle ground.
 - Keyboard users must still reach every action (Shift+F10 on the item, or the ⋯ button).
 
+### The list (agreed with the owner, 2026-11-22)
+
+Check it again once batch 2 is merged, in case its menus changed.
+
+**Remove or merge:**
+
+| Where | Button now | Replaced by |
+|---|---|---|
+| Notepad header | Focus view icon | "Focus view" in the tab's menu (already there) and in ⋯ |
+| Notepad header | Search every notepad icon | "Search every notepad" in ⋯ (**new item**). ⌘K already searches notepad text. |
+| Notepad header | "+" New notepad (at the end of the tabs, scrolls out of view) | "New notepad" in ⋯ and in the tab menu (**new item**) |
+| Notepad header | ⋯ opens its own custom dropdown | ⋯ opens the shared menu (`openMenu` with an anchor, like Files): New notepad, Search every notepad, Show a tag… (**new**), sep, Rename, Pin to the front / Unpin, Tags…, History…, Focus view, sep, Delete (`danger` + `confirm`) |
+| Terminal › Snippets rows | Edit and Delete icons | One ⋯ opening the snippet's menu (already has Edit and Delete). Keep Insert and Run. |
+| Server › Containers rows *(owner's call)* | Restart icon | "Restart" in the row menu (already there, with a confirm). Keep Logs. |
+
+The Notepad header goes from 4 icons to 1, which also gives the tab row more room.
+
+**Keep:**
+
+- Main actions: task checkboxes, Join on a meeting that's on now, Insert/Run on snippets, Cancel/Try again on downloads.
+- Packages' Keep / Dismiss bar on new Gmail finds: it's the decision to make, and nobody thinks to long-press for it on a phone.
+- "Add package", Bookmarks' "Edit", the rail's ⌘K and Settings: each is the only visible way in on a phone.
+- Photo arrows: hover-only overlays, they take no space.
+- Top-bar chips (cigarette, studying, trained): no menu has them, and they're one-tap.
+- Today's Tomorrow / This week toggles and the Tasks list tabs: navigation, not actions.
+- Files rows: already decluttered (hover-only on desktop, just ⋯ on a phone).
+
+**Gaps to fill in the same change:**
+
+- Add "New notepad", "Search every notepad" and "Show a tag…" to the Notepad menus before their buttons go.
+- Photos has no context menu at all: add one (Previous, Next, Manage photos).
+
+Expect a modest space saving from this; P5 is where most of the room comes from.
+
 ## P5: empty space
 
 - For each design the owner uses, at desktop, wide and phone sizes: screenshot it with typical data *and* with little data (empty panels), and mark where space is wasted.
