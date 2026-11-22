@@ -282,7 +282,8 @@
 }
 
 /* Rows of tabs and segmented controls (Glide, or useGlide). Each design's active look, on the highlight. */
-:has(> .glide) { position: relative; }
+/* A default (no weight), so a row that places itself (the sticky Settings tabs, the fixed rails) keeps its own. */
+:where(:has(> .glide)) { position: relative; }
 :is(.tabs, .note-tabs) > .glide { border-radius: var(--r-s); background: var(--hv); }
 :is(.tabs, .note-tabs)[data-glide] > .tab.active { background: transparent; }
 /* A view's own row of tabs sits on the page, so its active tab is a panel's colour. */

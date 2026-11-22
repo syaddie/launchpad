@@ -244,8 +244,8 @@ a.hz-row:hover .hz-grow { text-decoration: underline; }
    behind it; a taller header (a toolbar, wrapped tabs) just grows down into the pane. */
 [data-design='console'] .panel > .panel-head,
 [data-design='console'] .panel > .note-head { position: relative; z-index: 1; min-height: 17px; margin: 0 4px 6px; padding: 0; gap: 8px; align-items: center; }
-[data-design='console'] .panel > .panel-head > *,
-[data-design='console'] .panel > .note-head > * { background: var(--bg); padding: 0 6px; }
+[data-design='console'] .panel > .panel-head > :not(.popover),
+[data-design='console'] .panel > .note-head > :not(.popover) { background: var(--bg); padding: 0 6px; }
 [data-design='console'] .panel > .panel-head > :empty { display: none; }
 /* A pane with no header still clears its top edge. */
 [data-design='console'] .panel > :first-child:not(.panel-head):not(.note-head) { margin-top: 18px; }
@@ -392,7 +392,7 @@ a.hz-row:hover .hz-grow { text-decoration: underline; }
 [data-design='bento'] .lp-grid > [aria-label='Tasks'] { background: var(--t-lemon); color: var(--i-lemon); --tx: var(--i-lemon); --t2: var(--i-lemon); --t3: color-mix(in srgb, var(--i-lemon) 80%, transparent); --hv: rgba(0, 0, 0, 0.05); }
 [data-design='bento'] .lp-grid > [aria-label='Packages'] { background: var(--t-lilac); color: var(--i-lilac); --t2: var(--i-lilac); --t3: color-mix(in srgb, var(--i-lilac) 80%, transparent); --hv: rgba(255, 255, 255, 0.45); }
 [data-design='bento'] .lp-grid > .wx-panel { background: var(--t-sky); color: var(--i-sky); --tx: var(--i-sky); --t2: var(--i-sky); --t3: color-mix(in srgb, var(--i-sky) 80%, transparent); --ln: rgba(11, 74, 117, 0.15); }
-[data-design='bento'] .lp-grid > [aria-label='Packages'] .pkg { background: var(--sf); color: var(--tx); margin-bottom: 6px; }
+[data-design='bento'] .lp-grid > [aria-label='Packages'] .pkg { background: var(--sf); color: var(--tx); margin-bottom: 6px; --hv: color-mix(in srgb, var(--tx) 7%, transparent); }
 [data-design='bento'] .lp-grid > [aria-label='Packages'] .pkg:hover { background: var(--sf); box-shadow: 0 0 0 2px var(--i-lilac); }
 [data-design='bento'] .lp-grid > [aria-label='Tasks'] .task-add { background: rgba(255, 255, 255, 0.6); border-radius: 12px; margin: 0 10px 8px; }
 [data-mode='dark'][data-design='bento'] .lp-grid > [aria-label='Tasks'] .task-add { background: rgba(0, 0, 0, 0.2); }
@@ -939,6 +939,25 @@ a.hz-row:hover .hz-grow { text-decoration: underline; }
 .lp-root[data-layout='narrow'][data-design='poster'] .rail-btn { width: auto; min-width: 46px; padding: 0 6px; }
 /* The quick check on a lesson: a right answer in ink too. */
 [data-design='poster'] .dg-check.right .dg-check-why b { color: var(--tx); }
+
+/* ---------- Small things in each design ---------- */
+
+/* The square designs keep chips, pills and badges square too. */
+[data-design='poster'] :is(.dg-option.sm, .dg-pill, .topic-chip, .topic-chip button, .acct-chip, .days-left, .ent-acct, .ent-inv, .note-filter, .crv-chip, .mc-sheet, .mc-diag, .mc-job, .explain, .design-pick),
+[data-design='console'] :is(.dg-option.sm, .dg-pill, .topic-chip, .topic-chip button, .acct-chip, .days-left, .ent-acct, .ent-inv, .note-filter, .crv-chip, .mc-sheet, .mc-diag, .mc-job, .explain, .design-pick) { border-radius: 0; }
+/* Poster's accent is its red: money coming in, a lift going up and a friend's chat line are good news, so they're ink. */
+[data-design='poster'] :is(.m-in, .ent-amt.in, .cal-in, .tr-ld.up, .acct-up, .mc-line.chat, .sheet.owed-sheet td.amt .cell, .ent-lock.in) { color: var(--tx) !important; }
+/* The course filter takes each design's active tab look, as other tab rows do. */
+[data-design='console'] .ln-tab.on { background: var(--ac); color: var(--on); }
+:is([data-design='bento'], [data-design='horizon'], [data-design='focus'], [data-design='poster']) .ln-tab.on { background: var(--tx); color: var(--bg); }
+/* Console's row tiles leave room for the remove button in edit mode, so names aren't covered. */
+[data-design='console'] .edit-mode .tile { padding-right: 20px; }
+/* Horizon on a phone: column headings stick below the rail, not under it. */
+[data-layout='narrow'][data-design='horizon'] .hz-head { top: 50px; }
+/* Bento's lead panel is the view's tint, so what's picked inside it is a step darker, not the same colour. */
+.lp-root[data-design='bento']:not([data-view='home']) :is(.lp-inner > main > :nth-child(1 of .panel, :has(.panel)).panel, .lp-inner > main > :nth-child(1 of .panel, :has(.panel)):not(.panel) > :nth-child(1 of .panel)):not(.bm-panel) { --act: color-mix(in srgb, var(--ink) 12%, var(--tint)); }
+/* Vista: headers that stay put over a scrolling list are frosted, so rows don't show through them. */
+[data-design='vista'] :is(.file-row.file-head, .mc-sheet-label) { backdrop-filter: blur(18px) saturate(1.4); }
 
 /* ---------- Learn's rows in each design: they reach to the panel's edge, as far as its sides go ---------- */
 

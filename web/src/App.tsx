@@ -173,6 +173,9 @@ export function App({ cached }: { cached: AppState | null }) {
     document.documentElement.dataset.mode = dark ? 'dark' : 'light';
     document.documentElement.dataset.accent = data.prefs.accent;
     document.documentElement.dataset.design = design;
+    // A phone's status bar and an installed app's title bar take the design's own page colour.
+    const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+    if (bg) for (const m of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) m.content = bg;
   }, [dark, data.prefs.accent, design]);
 
   // Pick up anything the hourly digest run (or the inbox's) wrote since the last poll.

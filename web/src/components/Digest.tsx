@@ -81,7 +81,7 @@ export function Digest({ data, now, busy, onRefresh, onSubjects, onMerge, onList
         {tab === 'today' && data.newsSummaries && (
           <div className="meta dg-status">
             {busy ? <span>Writing…</span> : writeError ? <span style={{ color: 'var(--wn)' }} title={writeError}>Couldn’t write today’s lessons</span> : null}
-            <button className="icon-btn md" title="Write any of today’s lessons that are missing" aria-label="Write any missing lessons" disabled={busy || !data.prefs.digestSubjects.length} onClick={onRefresh}>
+            <button className="icon-btn md" title="Write any of today’s lessons that are missing" aria-label="Write any missing lessons" aria-busy={busy} disabled={busy || !data.prefs.digestSubjects.length} onClick={onRefresh}>
               <i className={'ph-duotone ph-arrow-clockwise' + (busy ? ' spin' : '')} />
             </button>
           </div>
