@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { allTags, backlinks, findNote, imageMarkdown, linksIn, parseTags, pinnedFirst, renameLinks, searchNotes } from '../../../shared/notes';
 import type { Note, NoteVersion } from '../../../shared/types';
@@ -207,6 +207,23 @@ export function NoteTabs({
   );
 }
 
+/** Below this the title and buttons leave the tabs too little room (a sliver, in most designs), so they get a row of their own. */
+const STACK_BELOW = 440;
+
+/** Whether the notepad's header is too narrow for the tabs to share a row with the title and buttons. */
+function useStackedHead() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [on, setOn] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setOn(e.contentRect.width < STACK_BELOW));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return { ref, on };
+}
+
 /** Highlight the words searched for. */
 function Marked({ text, words }: { text: string; words: string[] }) {
   if (!words.length) return <>{text}</>;
@@ -224,6 +241,7 @@ export function Notes({ notes, activeId, onActive, onChange, saved, onOpenFocus,
   const [tagMenu, setTagMenu] = useState(false);
   const [tagsDraft, setTagsDraft] = useState<string | null>(null);
   const [history, setHistory] = useState(false);
+  const stacked = useStackedHead();
   const menuRef = useRef<HTMLDivElement>(null);
   const tagMenuRef = useRef<HTMLDivElement>(null);
   const renameFrom = useRef<{ id: string; name: string } | null>(null);
@@ -348,9 +366,9 @@ export function Notes({ notes, activeId, onActive, onChange, saved, onOpenFocus,
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
 
   return (
-    <section className="panel" style={{ gridArea: 'notes', overflow: 'visible', position: 'relative' }} aria-label="Notes">
-      <div className="note-head">
-        <h2 className="panel-title">Notes</h2>
+    <section className="panel" style={{ gridArea: 'notes', overflow: 'visible', position: 'relative' }} aria-label="Notepad">
+      <div ref={stacked.ref} className={'note-head' + (stacked.on ? ' stacked' : '')}>
+        <h2 className="panel-title">Notepad</h2>
         <div className="note-tabs">
           <Glide on={note.id} />
           {filter && (
@@ -678,7 +696,7 @@ export function FocusView({ notes, activeId, onActive, onChange, saved, onClose,
   }, notify);
   const count = words(note.text);
   return (
-    <div className="focus-view" role="dialog" aria-label="Notes focus view">
+    <div className="focus-view" role="dialog" aria-label="Notepad focus view">
       <div className="focus-col">
         <div style={{ display: 'flex', alignItems: 'center', gap: 15 }}>
           <div className="tabs" style={{ flex: 1, minWidth: 0, overflowX: 'auto' }}>

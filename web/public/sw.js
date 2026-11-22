@@ -2,9 +2,12 @@
 // bundles, icons) so Launchpad still opens when the server or the tunnel is down:
 // the page paints from its own copy of the state (IndexedDB) and says the server can't be reached.
 // Nothing under /api/ is touched, so data always comes from the server, except bookmark
-// icons and the images in notes, kept so they show offline too.
+// icons, the images in notes and the photos, kept so they show offline too.
 const CACHE = 'launchpad-v1';
 const FILES = 'launchpad-files-v1';
+const PHOTOS = 'launchpad-photos-v1';
+/** As many as the server keeps (MAX_PHOTOS in server/src/photos.ts). */
+const MAX_PHOTOS = 60;
 /** Icons and note images kept; the oldest go first. */
 const MAX_FILES = 400;
 const SHELL = '/';
@@ -26,7 +29,7 @@ self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== FILES).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => ![CACHE, FILES, PHOTOS].includes(k)).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
@@ -97,12 +100,45 @@ async function file(req) {
   return hit || fresh;
 }
 
+/**
+ * Photos: an id is never reused, so a kept copy is always right and is never fetched again.
+ * One that's gone (404) is dropped, and the page says which still exist (see 'photos' below).
+ */
+async function photo(req) {
+  const c = await caches.open(PHOTOS);
+  const hit = await c.match(req);
+  if (hit) return hit;
+  const res = await fetch(req);
+  if (keepable(res)) {
+    try {
+      await c.put(req, res.clone());
+      const keys = await c.keys();
+      for (const old of keys.slice(0, Math.max(0, keys.length - MAX_PHOTOS))) await c.delete(old);
+    } catch {
+      // Out of room on this device: it still shows now, just not offline.
+    }
+  } else if (res.status === 404) await c.delete(req);
+  return res;
+}
+
+/** The page sends the ids of the photos that still exist, after the server answers; the rest are dropped. */
+self.addEventListener('message', (e) => {
+  if (e.data?.type !== 'photos' || !Array.isArray(e.data.ids)) return;
+  const keep = new Set(e.data.ids.map((id) => '/api/photos/' + encodeURIComponent(id)));
+  e.waitUntil(
+    caches.open(PHOTOS).then(async (c) => {
+      for (const r of await c.keys()) if (!keep.has(new URL(r.url).pathname)) await c.delete(r);
+    }),
+  );
+});
+
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin || url.pathname === '/sw.js') return;
   if (url.pathname === '/api/favicon' || url.pathname.startsWith('/api/note-images/')) return e.respondWith(file(req));
+  if (url.pathname.startsWith('/api/photos/')) return e.respondWith(photo(req));
   if (url.pathname.startsWith('/api/')) return;
   if (req.mode === 'navigate') e.respondWith(page(req));
   else if (url.pathname.startsWith('/assets/')) e.respondWith(asset(req));

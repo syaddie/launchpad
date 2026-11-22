@@ -30,6 +30,7 @@ import { useAppData } from './hooks/useAppData';
 import { useGoogleActions } from './hooks/useGoogleActions';
 import { useHashView, useLayout, useMinuteNow, useSystemDark } from './hooks/useDevice';
 import { useShortcuts } from './hooks/useShortcuts';
+import { useSidewaysWheel } from './hooks/useSidewaysWheel';
 import { useFlash, useToast } from './hooks/useToast';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Presence } from './components/Motion';
@@ -572,6 +573,7 @@ export function App({ cached }: { cached: AppState | null }) {
 
   // ---------- keyboard ----------
 
+  useSidewaysWheel();
   useShortcuts({
     view, setView, design, palette, setPalette, shortcuts, setShortcuts,
     drawer: !!drawer, closeDrawer: () => setDrawer(null), openSettings: () => setDrawer({ type: 'settings' }),
@@ -642,7 +644,7 @@ export function App({ cached }: { cached: AppState | null }) {
     const onTheWay = data.packages.filter((p) => p.stage < 3);
     if (shown.has('today')) focusTabs.push({ key: 'today', name: 'Today', icon: 'ph-calendar-blank', count: left });
     if (shown.has('tasks')) focusTabs.push({ key: 'tasks', name: 'Tasks', icon: 'ph-check-square', count: overdue + dueToday, warn: overdue > 0 });
-    if (shown.has('notes')) focusTabs.push({ key: 'notes', name: 'Notes', icon: 'ph-notebook' });
+    if (shown.has('notes')) focusTabs.push({ key: 'notes', name: 'Notepad', icon: 'ph-notebook' });
     if (shown.has('pkgs')) focusTabs.push({ key: 'pkgs', name: 'Packages', icon: 'ph-package', count: onTheWay.length, warn: onTheWay.some((p) => p.exception) });
   }
 
