@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { ampm, fmtClock, fmtNacDay, fmtRange, fmtWatch, hhmm, toMin, type SlotRow } from '../../../../shared/nac';
 import type { NacStatus, NacWatch } from '../../../../shared/types';
+import { menuProps, type MenuItem } from '../ContextMenu';
 
 /** What a row in the day's times needs to watch its slots (SlotFinder.tsx). */
 export interface WatchProps {
@@ -11,8 +12,9 @@ export interface WatchProps {
   alerts: NacStatus['watch_alerts'];
   busy: boolean;
   now: Date;
-  onAdd: (w: { place: string; date: string; start: string; end: string }) => Promise<boolean>;
-  onRemove: (id: string) => void;
+  onAdd: (w: Slot) => Promise<boolean>;
+  /** Resolves once the server has answered, so several can go one after another. */
+  onRemove: (id: string) => Promise<void>;
 }
 
 /** Whether a watch reaches the phone, in words, or '' when it does. */
@@ -20,12 +22,50 @@ export const alertsNote = (a: NacStatus['watch_alerts']) =>
   a === 'no-topic' ? 'Phone alerts aren’t set up yet, so a watch can’t reach you: set them up in Settings › Alerts.' : a === 'off' ? 'Busking slot alerts are off in Settings › Alerts, so a watch won’t reach your phone.' : '';
 
 /** The 1-hour blocks a slot can start and end on, from the location's hours. */
-function blocks(row: SlotRow, fromMin: number | null) {
+export function blocks(row: SlotRow, fromMin: number | null) {
   const open = toMin(row.open);
   const close = toMin(row.close);
   const out: { start: string; end: string }[] = [];
   for (let m = open; m < close; m += 60) if (fromMin === null || Math.min(m + 60, close) > fromMin) out.push({ start: hhmm(m), end: hhmm(Math.min(m + 60, close)) });
   return out;
+}
+
+type Slot = { place: string; date: string; start: string; end: string };
+
+/**
+ * A watched slot's right-click (and long-press) menu: its day, booking it, watching it again once
+ * it's freed up (the freed one is cleared), and stopping. `onPick` is there in the list above the calendar.
+ */
+export function watchMenu(x: NacWatch, o: { url?: string; onAdd: (w: Slot) => Promise<boolean>; onRemove: (id: string) => Promise<void>; onPick?: (date: string) => void }): MenuItem[] {
+  return [
+    o.onPick && { label: 'Show the day', icon: 'ph-calendar-dots', onSelect: () => o.onPick!(x.date) },
+    o.url && { label: x.freed ? 'Book it on NAC' : 'Open on NAC', icon: 'ph-arrow-square-out', href: o.url, newTab: true },
+    x.freed && { label: 'Watch it again', icon: 'ph-bell-ringing', onSelect: () => void o.onAdd({ place: x.place, date: x.date, start: x.start, end: x.end }).then((ok) => (ok ? o.onRemove(x.id) : undefined)) },
+    'sep',
+    { label: x.freed ? 'Clear' : 'Stop watching', icon: x.freed ? 'ph-x' : 'ph-bell-slash', danger: true, onSelect: () => o.onRemove(x.id) },
+  ];
+}
+
+/**
+ * A location's row on a day: open it on NAC, and (when it can still free up) watch a slot there:
+ * the form, the whole day, or one of the times others have booked, as the form's quick picks.
+ */
+export function rowMenu(row: SlotRow, w: WatchProps | null, o: { canWatch: boolean; openForm: () => void }): MenuItem[] {
+  const all = w && o.canWatch ? blocks(row, w.fromMin) : [];
+  const live = w?.watches.filter((x) => !x.freed) ?? [];
+  // Already covered by a watch here (4 PM – 7 PM inside a 4 PM – 10 PM one, everything inside "any time").
+  const has = (a: { start: string; end: string }) => live.some((x) => toMin(x.start) <= toMin(a.start) && toMin(x.end) >= toMin(a.end));
+  const add = (a: { start: string; end: string }) => void w!.onAdd({ place: row.key, date: w!.date, start: a.start, end: a.end });
+  const whole = all.length ? { start: all[0].start, end: all[all.length - 1].end } : null;
+  return [
+    { label: 'Open on NAC', icon: 'ph-arrow-square-out', href: row.url, newTab: true },
+    'sep',
+    all.length > 0 && { label: 'Watch a slot here…', icon: 'ph-bell', onSelect: o.openForm },
+    whole && !has(whole) && { label: 'Watch any time this day', icon: 'ph-bell-ringing', disabled: w!.busy, onSelect: () => add(whole) },
+    ...(all.length ? row.taken.filter((t) => !has(t)).slice(0, 4) : []).map((t): MenuItem => ({ label: `Watch ${fmtRange(t)}`, icon: 'ph-bell-ringing', disabled: w!.busy, onSelect: () => add(t) })),
+    'sep',
+    live.length > 0 && { label: live.length === 1 ? 'Stop watching' : `Stop watching all ${live.length}`, icon: 'ph-bell-slash', danger: true, onSelect: () => void live.reduce((p, x) => p.then(() => w!.onRemove(x.id)), Promise.resolve()) },
+  ];
 }
 
 /**
@@ -113,7 +153,7 @@ export function WatchLines({ row, w }: { row: SlotRow; w: WatchProps }) {
   return (
     <span className="nac-watch-lines">
       {w.watches.map((x) => (
-        <span key={x.id} className={'nac-watch' + (x.freed ? ' freed' : '')}>
+        <span key={x.id} className={'nac-watch' + (x.freed ? ' freed' : '')} {...menuProps(() => watchMenu(x, { url: row.url, onAdd: w.onAdd, onRemove: w.onRemove }), `Watched slot at ${row.short}`)}>
           <i className={'ph-duotone ' + (x.freed ? 'ph-check-circle' : 'ph-bell-ringing')} aria-hidden="true" />
           {x.freed ? (
             <span>
@@ -138,7 +178,7 @@ export function WatchLines({ row, w }: { row: SlotRow; w: WatchProps }) {
  * Every slot watched, soonest first, above the calendar: what's watched where, and any that
  * have freed up. Picking one shows its day.
  */
-export function WatchList({ s, now, onPick, onRemove }: { s: NacStatus; now: Date; onPick: (date: string) => void; onRemove: (id: string) => void }) {
+export function WatchList({ s, now, onPick, onAdd, onRemove }: { s: NacStatus; now: Date; onPick: (date: string) => void; onAdd: (w: Slot) => Promise<boolean>; onRemove: (id: string) => Promise<void> }) {
   const byKey = new Map(s.watching.map((p) => [p.key, p]));
   const loc = new Map(s.locations.map((l) => [l.key, l]));
   const list = [...s.watches].sort((a, b) => (a.freed ? 0 : 1) - (b.freed ? 0 : 1) || a.date.localeCompare(b.date) || a.start.localeCompare(b.start));
@@ -156,7 +196,7 @@ export function WatchList({ s, now, onPick, onRemove }: { s: NacStatus; now: Dat
           const p = byKey.get(x.place);
           const l = loc.get(x.place);
           return (
-            <li key={x.id} className={'nac-watch' + (x.freed ? ' freed' : '')}>
+            <li key={x.id} className={'nac-watch' + (x.freed ? ' freed' : '')} {...menuProps(() => watchMenu(x, { url: p?.url, onAdd, onRemove, onPick }), `Watched slot at ${p?.short ?? x.place}`)}>
               {x.freed && <i className="ph-duotone ph-check-circle" aria-hidden="true" />}
               <button type="button" className="btn-link nac-watch-go" onClick={() => onPick(x.date)}>
                 {p?.short ?? x.place} · {fmtNacDay(x.date)} · {x.freed ? x.found.map(fmtRange).join(', ') : fmtWatch(x, l?.open, l?.close)}

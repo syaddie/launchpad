@@ -4,7 +4,8 @@ import type { NacBooked, NacFree, NacStatus } from '../../../../shared/types';
 import { api, cachedNac, cacheNac } from '../../api';
 import { NacPlaces } from './NacPlaces';
 import { SlotCalendar } from './SlotCalendar';
-import { WatchForm, WatchLines, WatchList, type WatchProps } from './SlotWatch';
+import { menuProps } from '../ContextMenu';
+import { rowMenu, WatchForm, WatchLines, WatchList, type WatchProps } from './SlotWatch';
 
 /** The server checks NAC every 10 minutes; this only reads what it found, so asking often costs nothing. */
 const POLL = 60_000;
@@ -109,12 +110,11 @@ export function SlotFinder({ now, notify }: { now: Date; notify: (msg: string) =
       .catch((e) => (notify((e as Error).message), false))
       .finally(() => setWatchBusy(false));
   };
-  const removeWatch = (id: string) => {
+  const removeWatch = (id: string) =>
     api
       .nacUnwatch(id)
       .then(saved)
       .catch((e) => notify((e as Error).message));
-  };
   /** What a day's rows need to watch their slots. */
   const watchOf = (date: string): WatchProps | null =>
     s ? { date, fromMin: date === today ? sgtMinutes(now) : null, watches: (s.watches ?? []).filter((x) => x.date === date), alerts: s.watch_alerts ?? 'ok', busy: watchBusy, now, onAdd: addWatch, onRemove: removeWatch } : null;
@@ -199,7 +199,7 @@ export function SlotFinder({ now, notify }: { now: Date; notify: (msg: string) =
           ) : (
             <>
               <Notes s={s} noBookings={view!.noBookings} />
-              <WatchList s={{ ...s, watches: s.watches ?? [] }} now={now} onPick={(date) => setJump((j) => ({ date, n: (j?.n ?? 0) + 1 }))} onRemove={removeWatch} />
+              <WatchList s={{ ...s, watches: s.watches ?? [] }} now={now} onPick={(date) => setJump((j) => ({ date, n: (j?.n ?? 0) + 1 }))} onAdd={addWatch} onRemove={removeWatch} />
               {view!.days.length > 0 && (
                 <p className="nac-sum">
                   {view!.freeWindows ? (
@@ -282,7 +282,7 @@ function Row({ row, w }: { row: SlotRow; w: WatchProps | null }) {
   // A day that's over has nothing left to free up.
   const canWatch = !!w && row.kind !== 'done';
   return (
-    <li className={'nac-row ' + row.kind + (canWatch ? ' watchable' : '')}>
+    <li className={'nac-row ' + row.kind + (canWatch ? ' watchable' : '')} {...menuProps(() => rowMenu(row, w, { canWatch, openForm: () => setWatching(true) }), w ? `${row.short}, ${fmtNacDay(w.date)}` : row.short)}>
       <a className="nac-loc" href={row.url} target="_blank" rel="noopener noreferrer" title={`${row.name} on the NAC portal`}>
         {row.short}
       </a>
