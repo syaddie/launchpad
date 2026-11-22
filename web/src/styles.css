@@ -2693,6 +2693,20 @@ button.nac-cell:hover { background: var(--hv); }
 .nac-code { font-size: 11px; font-weight: 700; letter-spacing: 0.03em; color: var(--acd); }
 .nac-chip.sample { display: inline-flex; padding: 0 5px; }
 .nac-chip.sample .nac-chip-h { margin: 0; }
+
+/* The Music-only page's guide (GuestGuide.tsx): each mark from the page beside what it means; stacked on a phone. */
+.guide-panel { width: 100%; max-width: 780px; font-size: 14px; line-height: 1.5; }
+.guide-panel :is(p, dl, ul) { margin: 0; }
+.guide-places { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; }
+.guide-h { margin: 10px 0 0; font-family: var(--f-display); font-size: 16px; font-weight: 600; line-height: 1.25; }
+.guide-list { display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr); gap: 10px 18px; align-items: baseline; }
+.guide-mark, .guide-means { margin: 0; min-width: 0; }
+.guide-mark { justify-self: start; }
+[data-layout='narrow'] .guide-list { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+[data-layout='narrow'] .guide-means { margin-bottom: 10px; }
+.guide-ul { padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+/* A picture of the button, not the button. */
+.guide-btn { pointer-events: none; }
 @container (min-width: 880px) {
   .nac-cal-split { grid-template-columns: minmax(0, 1fr) minmax(280px, 340px); gap: 20px; }
   .nac-cal-detail { position: sticky; top: 12px; padding-top: 27px; }

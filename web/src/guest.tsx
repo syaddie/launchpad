@@ -1,7 +1,7 @@
 // The Music-only page (web/guest.html): Music's busking slots for a music-only sign-in
 // (server/src/access.ts), or for you at /guest to see what they see. Only the slots and Check now:
 // none of Launchpad's other views are in its bundle, and the server answers nothing else to them.
-import { StrictMode, useLayoutEffect, useRef, useSyncExternalStore, type CSSProperties } from 'react';
+import { StrictMode, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@phosphor-icons/web/duotone/style.css';
 import './styles.css';
@@ -12,6 +12,7 @@ import { api, cachedGuest, cacheGuest } from './api';
 import { ContextMenuHost, copyText, menuProps, placeOf } from './components/ContextMenu';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Presence } from './components/Motion';
+import { GuestGuide } from './components/music/GuestGuide';
 import { MusicView } from './components/music/MusicView';
 import type { SlotSource } from './components/music/SlotFinder';
 import { useLayout, useMinuteNow, useSystemDark } from './hooks/useDevice';
@@ -45,6 +46,18 @@ const GUEST: SlotSource = {
   check: () => api.guestCheckNac(),
 };
 
+/** The one-page guide is at #help; any other address is the slots. A hash, so it works at /guest and on the Music-only address alike. */
+const onGuide = () => location.hash === '#help';
+function useGuide(): boolean {
+  const [guide, setGuide] = useState(onGuide);
+  useEffect(() => {
+    const f = () => setGuide(onGuide());
+    window.addEventListener('hashchange', f);
+    return () => window.removeEventListener('hashchange', f);
+  }, []);
+  return guide;
+}
+
 function GuestApp() {
   const rootRef = useRef<HTMLDivElement>(null);
   const layout = useLayout(rootRef);
@@ -52,6 +65,12 @@ function GuestApp() {
   const systemDark = useSystemDark();
   const l = useSyncExternalStore(lookStore.subscribe, lookStore.get);
   const { toast, showToast, holdToast } = useToast();
+  const guide = useGuide();
+  // The guide names the locations by their codes; opened first (a link straight to #help), it asks for them, and for the look, itself.
+  const [places, setPlaces] = useState(() => cachedGuest()?.nac.watching ?? []);
+  useEffect(() => {
+    if (guide) GUEST.load().then((n) => setPlaces(n.watching), () => {});
+  }, [guide]);
 
   const design = l?.design ?? 'broadsheet';
   const theme = l?.theme ?? 'system';
@@ -71,13 +90,15 @@ function GuestApp() {
     (t) => {
       const place = placeOf(t);
       const link = t.closest('a[href]');
-      const url = link instanceof HTMLAnchorElement ? link.href : '';
+      // Links to other sites only: the guide's own links (#help, #slots) are this page.
+      const url = link instanceof HTMLAnchorElement && !link.getAttribute('href')?.startsWith('#') ? link.href : '';
       return [
         url && { label: 'Open link', icon: 'ph-arrow-square-out', href: url, newTab: true },
         url && { label: 'Copy link', icon: 'ph-link', onSelect: () => copyText(url, showToast, 'Link copied') },
         'sep',
         ...(place?.items ?? []),
         'sep',
+        (guide ? { label: 'Back to the slots', icon: 'ph-arrow-left', onSelect: () => (location.hash = 'slots') } : { label: 'How to read this', icon: 'ph-question', onSelect: () => (location.hash = 'help') }),
         url !== PORTAL && { label: 'Open the NAC portal', icon: 'ph-arrow-square-out', href: PORTAL, newTab: true },
         { label: 'Reload', icon: 'ph-arrow-clockwise', onSelect: () => location.reload() },
       ];
@@ -95,9 +116,22 @@ function GuestApp() {
             <h1 className="serif greeting">Music</h1>
             <div className="subline">Free NAC busking slots, checked every 10 minutes.</div>
           </div>
+          <div className="top-right">
+            {guide ? (
+              <a className="btn btn-ghost btn-small" href="#slots">
+                <i className="ph-duotone ph-arrow-left" aria-hidden="true" />
+                Back to the slots
+              </a>
+            ) : (
+              <a className="btn btn-ghost btn-small" href="#help">
+                <i className="ph-duotone ph-question" aria-hidden="true" />
+                How to read this
+              </a>
+            )}
+          </div>
         </header>
-        <ErrorBoundary resetKey="music">
-          <MusicView now={now} notify={showToast} guest={GUEST} />
+        <ErrorBoundary resetKey={guide ? 'guide' : 'music'}>
+          {guide ? <GuestGuide places={places} /> : <MusicView now={now} notify={showToast} guest={GUEST} />}
         </ErrorBoundary>
       </div>
 
