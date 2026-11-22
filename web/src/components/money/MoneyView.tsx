@@ -85,7 +85,7 @@ export function MoneyView({ money: given, now, saved, onChange: save, onImport, 
       if (!read.entries.length && !read.wishlist.length) throw new Error('no Tracker or Wishlist sheet found');
       const planned = read.entries.filter((e) => e.planned).length;
       // The workbook has no invoices or goals: keep the ones here, with the invoices' money.
-      const m = { ...read, invoices: money.invoices, goals: money.goals, entries: sortEntries([...read.entries, ...money.entries.filter((e) => e.invoice)]) };
+      const m = { ...read, invoices: money.invoices, goals: money.goals, ...(money.invoiceSetup ? { invoiceSetup: money.invoiceSetup } : {}), entries: sortEntries([...read.entries, ...money.entries.filter((e) => e.invoice)]) };
       onImport(m, `Imported ${read.entries.length} entries from ${monthName(importMonth)} on (${planned} still planned) and ${m.wishlist.length} wishlist item${m.wishlist.length === 1 ? '' : 's'}`);
       setImporting(false);
       setMonth(importMonth);

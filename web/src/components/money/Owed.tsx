@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { addDays, ymd } from '../../../../shared/dates';
-import { fmtMoney, invoiceEntry, type InvoiceRow, invoiceRows, mainAccount, MAX_ENTRIES, MAX_INVOICES, monthName, nextInvoiceNum, sortEntries } from '../../../../shared/money';
+import { fmtMoney, invoiceEntry, type InvoiceRow, invoiceRows, mainAccount, MAX_ENTRIES, MAX_INVOICES, monthName, sortEntries, suggestInvoiceNum } from '../../../../shared/money';
 import type { Invoice, Money, MoneyEntry } from '../../../../shared/types';
 import { localGet, localSet } from '../../api';
 import { dayDiff, newId, parseYmd } from '../../util';
 import { AccountSelect, DateCell, namesOf, type Notify, NumCell, shortDate, TextCell } from './shared';
 import { Readout } from '../Motion';
+import { menuProps, type MenuItem } from '../ContextMenu';
+import { InvoiceDrawer } from './InvoiceDrawer';
+import { printInvoice } from './InvoicePage';
 
 /** `num` null means the suggested next number. */
 type InvoiceDraft = { num: string | null; event: string; amount: number | null; due: string; account: string };
@@ -36,6 +39,8 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
     setShowPaidState(v);
     localSet('owedPaid', v ? 'show' : 'hide');
   };
+  /** The invoice form: a new invoice, or one in Owed to change. */
+  const [editor, setEditor] = useState<{ inv?: Invoice } | null>(null);
   const names = namesOf(money);
   const rows = invoiceRows(money, today);
   const open = rows.filter((r) => !r.paidOn).sort(byDue);
@@ -44,7 +49,7 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
   const week = open.filter((r) => r.daysLeft >= 0 && r.daysLeft <= 7);
   const recent = paid.filter((r) => dayDiff(parseYmd(r.paidOn), parseYmd(today)) <= 30);
 
-  const num = (draft.num ?? nextInvoiceNum(money.invoices)).trim();
+  const num = (draft.num ?? suggestInvoiceNum(money)).trim();
   const canAdd = !!num && !!draft.due && !!draft.amount && money.invoices.length < MAX_INVOICES && money.entries.length < MAX_ENTRIES;
   const add = () => {
     if (!canAdd) return;
@@ -65,6 +70,29 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
     notify(on ? `${r.inv.num || 'Invoice'} paid: its ${fmtMoney(r.inv.amount)} in Month is now done, dated today.` : `${r.inv.num || 'Invoice'} is owed again: back to planned money in on ${shortDate(r.inv.due)}.`);
   };
   const remove = (r: InvoiceRow) => onChange({ ...money, invoices: money.invoices.filter((i) => i.id !== r.inv.id), entries: money.entries.filter((e) => e.id !== r.entry.id) });
+  const pdf = (inv: Invoice) => inv.doc && printInvoice({ num: inv.num, event: inv.event, due: inv.due, doc: inv.doc });
+  const label = (r: InvoiceRow) => r.inv.num || 'invoice';
+  /** A row's right-click menu: what its buttons do, plus its invoice. */
+  const rowMenu = (r: InvoiceRow): MenuItem[] => [
+    { label: r.inv.doc ? 'Open its invoice' : 'Make its invoice', icon: r.inv.doc ? 'ph-file-text' : 'ph-file-plus', onSelect: () => setEditor({ inv: r.inv }) },
+    r.inv.doc && { label: 'Download PDF', icon: 'ph-file-arrow-down', onSelect: () => pdf(r.inv) },
+    'sep',
+    r.paidOn ? { label: 'Mark as not paid', icon: 'ph-arrow-counter-clockwise', onSelect: () => setPaid(r, false) } : { label: 'Mark as paid', icon: 'ph-check', onSelect: () => setPaid(r, true) },
+    !r.paidOn && { label: `Open ${monthName(r.inv.due.slice(0, 7))}`, icon: 'ph-calendar-blank', onSelect: () => onOpenMonth(r.inv.due.slice(0, 7)) },
+    'sep',
+    { label: 'Delete', icon: 'ph-trash', danger: true, confirm: `Delete ${label(r)}${r.inv.doc ? ', its invoice' : ''} and its money in Month? This can’t be undone.`, onSelect: () => remove(r) },
+  ];
+  /** The file button: the PDF of one made in the form, or the form for one added before it. */
+  const fileBtn = (r: InvoiceRow) =>
+    r.inv.doc ? (
+      <button className="icon-btn row-x" title="Download its PDF" aria-label={`Download ${label(r)} as a PDF`} onClick={() => pdf(r.inv)}>
+        <i className="ph-duotone ph-file-arrow-down" />
+      </button>
+    ) : (
+      <button className="icon-btn row-x" title="Make its invoice: rows, who it’s for, a PDF" aria-label={`Make an invoice for ${label(r)}`} onClick={() => setEditor({ inv: r.inv })}>
+        <i className="ph-duotone ph-file-plus" />
+      </button>
+    );
 
   const due = draft.due ? dayDiff(parseYmd(today), parseYmd(draft.due)) : null;
 
@@ -113,7 +141,7 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
             title="Invoice number"
             autoComplete="off"
             maxLength={24}
-            value={draft.num ?? nextInvoiceNum(money.invoices)}
+            value={draft.num ?? suggestInvoiceNum(money)}
             onChange={(e) => setDraft({ ...draft, num: e.target.value })}
           />
           <input className="composer-note" aria-label="Event" placeholder="What’s it for? The gig, like a wedding or a jazz night" maxLength={120} value={draft.event} onChange={(e) => setDraft({ ...draft, event: e.target.value })} />
@@ -154,7 +182,11 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
       <section className="panel you-panel" aria-label="Owed to you" data-grid>
         <div className="panel-head">
           <h2 className="panel-title">Owed to you</h2>
-          <span className="meta">Each one is also planned money in on its due date, in Month · tick it once you’re paid</span>
+          <span className="meta owed-head-meta">Each one is also planned money in on its due date, in Month · tick it once you’re paid</span>
+          <button className="btn btn-secondary btn-small owed-new" onClick={() => setEditor({})}>
+            <i className="ph-duotone ph-file-plus" aria-hidden="true" />
+            New invoice
+          </button>
         </div>
         <div className="sum-scroll">
           <table className="sheet owed-sheet">
@@ -166,7 +198,7 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
               <col style={{ width: 136 }} />
               <col style={{ width: 140 }} />
               <col style={{ width: 128 }} />
-              <col style={{ width: 70 }} />
+              <col style={{ width: 104 }} />
             </colgroup>
             <thead>
               <tr>
@@ -182,7 +214,7 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
             </thead>
             <tbody>
               {open.map((row, r) => (
-                <tr key={row.inv.id} className={row.daysLeft < 0 ? 'late' : undefined}>
+                <tr key={row.inv.id} className={row.daysLeft < 0 ? 'late' : undefined} {...menuProps(() => rowMenu(row), `Actions for ${label(row)}`)}>
                   <td className="c">
                     <button className="ent-check" title="Tick once you’re paid: its money in Month turns to done" aria-label={`Mark ${row.inv.num || 'invoice'} as paid`} aria-pressed={false} onClick={() => setPaid(row, true)}>
                       <span className={'ent-tick' + (row.daysLeft < 0 ? ' late' : '')} />
@@ -195,7 +227,13 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
                     <TextCell value={row.inv.event} label="Event" r={r} c={1} max={120} placeholder="What’s it for?" onChange={(v) => patchInv(row.inv.id, { event: v })} />
                   </td>
                   <td className="amt">
-                    <NumCell value={row.inv.amount} label="Amount owed" r={r} c={2} onChange={(v) => patchInv(row.inv.id, { amount: Math.abs(v ?? 0) })} />
+                    {row.inv.doc ? (
+                      <button className="cell num tnum owed-doc-amt" title="Its rows add up to this: open the invoice to change them" aria-label={`${fmtMoney(row.inv.amount)}: open ${label(row)}’s invoice`} onClick={() => setEditor({ inv: row.inv })}>
+                        {fmtMoney(row.inv.amount)}
+                      </button>
+                    ) : (
+                      <NumCell value={row.inv.amount} label="Amount owed" r={r} c={2} onChange={(v) => patchInv(row.inv.id, { amount: Math.abs(v ?? 0) })} />
+                    )}
                   </td>
                   <td>
                     <DateCell value={row.inv.due} label="Payment due" r={r} c={3} onChange={(v) => patchInv(row.inv.id, { due: v })} />
@@ -208,6 +246,7 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
                   </td>
                   <td>
                     <span className="owed-acts">
+                      {fileBtn(row)}
                       <button className="icon-btn row-x" title={`Open ${monthName(row.inv.due.slice(0, 7))}, where it’s planned money in`} aria-label={`Open ${row.inv.num || 'invoice'} in Month`} onClick={() => onOpenMonth(row.inv.due.slice(0, 7))}>
                         <i className="ph-duotone ph-calendar-blank" />
                       </button>
@@ -233,7 +272,7 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
                   paid.map((row) => {
                     const lateBy = dayDiff(parseYmd(row.inv.due), parseYmd(row.paidOn));
                     return (
-                      <tr key={row.inv.id}>
+                      <tr key={row.inv.id} {...menuProps(() => rowMenu(row), `Actions for ${label(row)}`)}>
                         <td className="c">
                           <button className="ent-check" title="Untick if it hasn’t come in after all" aria-label={`Mark ${row.inv.num || 'invoice'} as not paid`} aria-pressed onClick={() => setPaid(row, false)}>
                             <span className="ent-tick on">
@@ -252,6 +291,7 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
                         <td className="txt">{names.get(row.entry.account)}</td>
                         <td>
                           <span className="owed-acts">
+                            {fileBtn(row)}
                             <button className="icon-btn row-x" title="Delete, along with its money in Month" aria-label={`Delete ${row.inv.num || 'invoice'}`} onClick={() => remove(row)}>
                               <i className="ph-duotone ph-x" />
                             </button>
@@ -263,10 +303,11 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
               </tbody>
             )}
           </table>
-          {!rows.length && <p className="month-empty">Nobody owes you anything yet. Add an invoice above when you send one: it goes into Month as planned money in on its due date.</p>}
+          {!rows.length && <p className="month-empty">Nobody owes you anything yet. Add an invoice above when you send one, or make one with New invoice: it goes into Month as planned money in on its due date.</p>}
           {rows.length > 0 && !open.length && <p className="month-empty">All paid up.</p>}
         </div>
       </section>
+      {editor && <InvoiceDrawer money={money} today={today} editing={editor.inv} onChange={onChange} onClose={() => setEditor(null)} onOpenMonth={onOpenMonth} notify={notify} />}
     </div>
   );
 }
