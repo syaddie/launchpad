@@ -6,8 +6,8 @@ import { MAX_JOURNAL } from '../../shared/trackers';
 import { cleanSubjects } from '../../shared/digest';
 import { parseNewsSource } from '../../shared/news';
 import { cleanKg } from '../../shared/training';
-import { ALERT_KINDS, DESIGN_KEYS } from '../../shared/types';
-import type { BookmarkGroup, Countdown, DesignKey, Mood, Note, Package, Prefs, SearchEngine, Snippet } from '../../shared/types';
+import { ALERT_KINDS, DESIGN_KEYS, HOME_AREAS } from '../../shared/types';
+import type { BookmarkGroup, Countdown, DesignKey, HomeArea, HomeLayouts, Mood, Note, Package, Prefs, SearchEngine, Snippet } from '../../shared/types';
 
 export const isStr = (v: unknown): v is string => typeof v === 'string';
 
@@ -92,9 +92,29 @@ export function cleanPrefs(body: Partial<Prefs>, prev: Prefs): Prefs {
     alerts: { ...DEFAULT_PREFS.alerts, ...prev.alerts, ...pickBools(body.alerts, ALERT_KINDS) },
     pinnedFolders: Array.isArray(body.pinnedFolders) ? cleanFolders(body.pinnedFolders) : prev.pinnedFolders ?? [],
     autoUnpack: typeof body.autoUnpack === 'boolean' ? body.autoUnpack : prev.autoUnpack ?? false,
+    homeLayouts: body.homeLayouts && typeof body.homeLayouts === 'object' && !Array.isArray(body.homeLayouts) ? cleanHomeLayouts(body.homeLayouts) : prev.homeLayouts ?? {},
   };
   if (!next.searchEngines.length) next.searchEngines = DEFAULT_ENGINES;
   return next;
+}
+
+/**
+ * Known designs only; each a list of at most 8 columns of known panel names, a panel once per design,
+ * empty columns and designs dropped. What each design allows is the page's job (web/src/layout.ts).
+ */
+export function cleanHomeLayouts(v: object): HomeLayouts {
+  const out: HomeLayouts = {};
+  for (const key of [...DESIGN_KEYS, 'narrow'] as const) {
+    const cols = (v as Record<string, unknown>)[key];
+    if (!Array.isArray(cols)) continue;
+    const seen = new Set<HomeArea>();
+    const clean = cols
+      .slice(0, 8)
+      .map((c) => (Array.isArray(c) ? c.filter((a): a is HomeArea => HOME_AREAS.includes(a) && !seen.has(a) && !!seen.add(a)) : []))
+      .filter((c) => c.length);
+    if (clean.length) out[key] = clean;
+  }
+  return out;
 }
 
 /** Most folders Server › Files keeps pinned. */

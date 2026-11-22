@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import type { Photo } from '../../../shared/types';
 import { localGet, localSet, photoUrl } from '../api';
+import { menuProps } from './ContextMenu';
 
 /** Long edge of an uploaded photo. Panels are at most ~900px wide on a 4K screen. */
 const MAX_EDGE = 2400;
@@ -55,14 +56,27 @@ interface PanelProps {
   area: 'photo' | 'photo2';
   index: number;
   onStep: (dir: 1 | -1) => void;
+  /** Settings › Photos, to add, remove and frame them. */
+  onManage?: () => void;
+  onHide?: () => void;
 }
 
-export function PhotoPanel({ photos, area, index: i, onStep }: PanelProps) {
+export function PhotoPanel({ photos, area, index: i, onStep, onManage, onHide }: PanelProps) {
   const n = photos.length;
   const p = photos[i];
+  const menu = menuProps(
+    () => [
+      n > 1 && { label: 'Previous photo', icon: 'ph-caret-left', onSelect: () => onStep(-1) },
+      n > 1 && { label: 'Next photo', icon: 'ph-caret-right', onSelect: () => onStep(1) },
+      'sep',
+      onManage && { label: 'Manage photos…', icon: 'ph-images', onSelect: onManage },
+      onHide && { label: 'Hide photos', icon: 'ph-eye-slash', onSelect: onHide },
+    ],
+    'Photos',
+  );
 
   return (
-    <section className="photo-panel" style={{ gridArea: area }} aria-label={area === 'photo' ? 'Photos' : 'More photos'} data-hide="panel:photos">
+    <section className="photo-panel" style={{ gridArea: area }} aria-label={area === 'photo' ? 'Photos' : 'More photos'} data-hide="panel:photos" {...menu}>
       <img key={p.id} src={photoUrl(p.id)} alt={`Photo ${i + 1} of ${n}`} style={{ objectPosition: focusPos(p) }} />
       {n > 1 && (
         <div className="photo-bar">

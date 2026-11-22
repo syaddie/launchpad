@@ -7,6 +7,7 @@ import type { AccentKey, AppState, Backup, BackupSnapshot, DesignKey, DriveStatu
 import { api, BACKUP_URL, DB_BACKUP_URL, snapshotUrl, ZIP_BACKUP_URL } from '../api';
 import { PhotoSettings } from './Photos';
 import { AlertSettings } from './AlertSettings';
+import { HomeArrangement } from './HomeArrangement';
 import { STEP_LABELS, ago, chipOf, fmtStamp, hm, segColor, statusText } from '../util';
 import { Glide } from './Motion';
 
@@ -212,8 +213,10 @@ const ACCENTS: { key: AccentKey; name: string; light: string; dark: string }[] =
   { key: 'terracotta', name: 'Terracotta', light: '#ad603f', dark: '#dd9b7b' },
 ];
 
-export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconnect, onRestore, onRestoreSnapshot, onAddPhotos, onRemovePhoto, onPhotoFocus, localDesign, onLocalDesign }: {
+export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconnect, onRestore, onRestoreSnapshot, onAddPhotos, onRemovePhoto, onPhotoFocus, localDesign, onLocalDesign, startTab }: {
   data: AppState;
+  /** The tab it opens on (a photo's "Manage photos…" opens Photos); General when not given. */
+  startTab?: SettingsTab;
   /** This browser's own layout, or '' to use the one saved for every device. */
   localDesign: DesignKey | '';
   onLocalDesign: (d: DesignKey | '') => void;
@@ -238,7 +241,7 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
   const [name, setName] = useState(p.name);
   // A name changed on another device, or put back by a restore, shows here too.
   useEffect(() => setName(p.name), [p.name]);
-  const [tab, setTab] = useState<SettingsTab>('general');
+  const [tab, setTab] = useState<SettingsTab>(startTab ?? 'general');
 
   const sourceRows: { key: GoogleSource; name: string; icon: string }[] = [
     { key: 'calendar', name: 'Google Calendar', icon: 'ph-calendar-blank' },
@@ -680,7 +683,7 @@ function DriveCopies({ drive, needsReconnect, prefs, onPrefs, now }: { drive?: D
 
 const fmtSize = (b: number) => (b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`);
 
-type SettingsTab = 'general' | 'layout' | 'panels' | 'search' | 'trackers' | 'photos' | 'alerts';
+export type SettingsTab = 'general' | 'layout' | 'panels' | 'search' | 'trackers' | 'photos' | 'alerts';
 const SETTINGS_TABS: { key: SettingsTab; name: string }[] = [
   { key: 'general', name: 'General' },
   { key: 'layout', name: 'Layout' },
@@ -752,6 +755,7 @@ function LayoutSettings({ prefs, onPrefs, local, onLocal }: { prefs: Prefs; onPr
         </select>
         <span className="meta">Say a work laptop wants Horizon while home stays on Console. Picking above changes {local ? 'this browser only' : 'every device'}.</span>
       </div>
+      <HomeArrangement prefs={prefs} onPrefs={onPrefs} design={current} designName={DESIGNS.find((d) => d.key === current)?.name ?? ''} />
     </>
   );
 }

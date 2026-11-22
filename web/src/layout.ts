@@ -1,14 +1,15 @@
 // Grid areas for the home view, built from the panels that are switched on.
 // Desktop and wide layouts are columns of one or two stacked panels over the
 // bookmarks row; a column with one panel spans both rows.
-// Each design (Settings › Layout) arranges the columns its own way. Horizon's and
-// Focus's homes aren't this grid at all (see components/Horizon.tsx and FocusHome.tsx).
+// Each design (Settings › Layout) arranges the columns its own way, and the owner can put
+// them in another order there (prefs.homeLayouts); what's saved is fitted to the design here,
+// so a bad or old arrangement still gives a whole home. Horizon's and Focus's homes aren't
+// this grid at all (see components/Horizon.tsx and FocusHome.tsx); Focus only orders its tabs.
 
-import type { DesignKey } from '../../shared/types';
+import { HOME_AREAS, type DesignKey, type HomeArea, type HomeLayouts } from '../../shared/types';
 
 export type Layout = 'narrow' | 'desktop' | 'wide';
-/** `hero` is the clock-and-next tile (Bento, Focus); `wx` the weather and air panel Console and Bento print in full. */
-export type Area = 'today' | 'tasks' | 'notes' | 'pkgs' | 'photo' | 'photo2' | 'bm' | 'hero' | 'wx';
+export type Area = HomeArea;
 
 type Columns = { w: string; items: Area[] }[];
 
@@ -59,25 +60,124 @@ const POSTER: Columns = [
 
 const COLUMNS: Partial<Record<DesignKey, Columns>> = { console: CONSOLE, bento: BENTO, vista: VISTA, poster: POSTER };
 
-const NARROW_ORDER: Area[] = ['hero', 'today', 'tasks', 'photo', 'pkgs', 'wx', 'notes', 'photo2', 'bm'];
+export const NARROW_ORDER: Area[] = ['hero', 'today', 'tasks', 'photo', 'pkgs', 'wx', 'notes', 'photo2', 'bm'];
+
+/** The designs whose home is this grid of columns. */
+export const GRID_DESIGNS: DesignKey[] = ['broadsheet', 'console', 'bento', 'vista', 'poster'];
+
+/** Most panels one column stacks: the grid has two rows over the bookmarks. */
+export const COLUMN_MAX = 2;
+
+/** Most columns an arrangement can have. */
+export const COLUMNS_MAX = 6;
 
 /** The panels Focus keeps behind tabs, in tab order. */
 export const FOCUS_TABS = ['today', 'tasks', 'notes', 'pkgs'] as const;
 export type FocusTab = (typeof FOCUS_TABS)[number];
 
+/** Names for Settings › Layout. */
+export const AREA_NAMES: Record<Area, string> = {
+  today: 'Today',
+  tasks: 'Tasks',
+  notes: 'Notepad',
+  pkgs: 'Packages',
+  photo: 'Photo',
+  photo2: 'Second photo',
+  bm: 'Bookmarks',
+  hero: 'Clock and what’s next',
+  wx: 'Weather and air',
+};
+
+const builtIn = (design: DesignKey, layout: Layout): Columns => COLUMNS[design] ?? BROADSHEET[layout === 'wide' ? 'wide' : 'desktop'];
+
+/** Each once, known ones only, in the order given. */
+function known<T extends string>(list: unknown, allowed: readonly T[], seen = new Set<T>()): T[] {
+  if (!Array.isArray(list)) return [];
+  return list.filter((a): a is T => allowed.includes(a) && !seen.has(a) && !!seen.add(a));
+}
+
+/** The panels a design puts in its columns (the bookmarks row is apart), in its built-in order. */
+export function designAreas(design: DesignKey): Area[] {
+  const out = new Set<Area>();
+  for (const l of ['desktop', 'wide'] as const) for (const c of builtIn(design, l)) c.items.forEach((a) => out.add(a));
+  return [...out];
+}
+
+/** The design's own columns, as Settings › Layout starts from and "Reset to default" goes back to. */
+export function defaultColumns(design: DesignKey): Area[][] {
+  return builtIn(design, 'desktop').map((c) => [...c.items]);
+}
+
+/**
+ * A saved arrangement fitted to the design: its own panels only, each once, at most two to a column
+ * (a longer one carries on in a column of its own) and six columns. Any it leaves out go back in their
+ * built-in column, or a new one when that's full. Null when nothing usable was saved.
+ */
+export function arrangeColumns(design: DesignKey, saved: unknown): Area[][] | null {
+  if (!Array.isArray(saved)) return null;
+  const allowed = designAreas(design);
+  const seen = new Set<Area>();
+  const cols: Area[][] = [];
+  for (const c of saved) {
+    const items = known(c, allowed, seen);
+    for (let i = 0; i < items.length; i += COLUMN_MAX) cols.push(items.slice(i, i + COLUMN_MAX));
+  }
+  if (!cols.length) return null;
+  const home = defaultColumns(design);
+  for (const a of allowed) {
+    if (seen.has(a)) continue;
+    const at = cols[Math.min(home.findIndex((c) => c.includes(a)), cols.length - 1)];
+    if (at && at.length < COLUMN_MAX) at.push(a);
+    else cols.push([a]);
+  }
+  // Too many columns: the extra ones' panels join the first columns with room. There always is
+  // some, as six columns of two hold more than any design has (Bento's eight).
+  while (cols.length > COLUMNS_MAX) {
+    for (const a of cols.pop()!) cols.find((c) => c.length < COLUMN_MAX)?.push(a);
+  }
+  return cols;
+}
+
+/** The columns a design shows: what was saved for it, else its own. */
+export function columnsFor(design: DesignKey, saved?: HomeLayouts): Area[][] {
+  return arrangeColumns(design, saved?.[design]) ?? defaultColumns(design);
+}
+
+/** The phone's one column: what was saved, any panel it leaves out after it in the built-in order. */
+export function narrowOrder(saved?: HomeLayouts): Area[] {
+  const list = known(saved?.narrow?.[0], HOME_AREAS);
+  return [...list, ...NARROW_ORDER.filter((a) => !list.includes(a))];
+}
+
+/** Focus's tabs in the order saved, the rest after them. */
+export function focusOrder(saved?: HomeLayouts): FocusTab[] {
+  const list = known(saved?.focus?.[0], FOCUS_TABS);
+  return [...list, ...FOCUS_TABS.filter((t) => !list.includes(t))];
+}
+
 /** The tab Focus shows: the one asked for when its panel is switched on, else the first that is; null when none are. */
-export function focusTab(want: string | null, shown: Set<Area>): FocusTab | null {
-  const on = FOCUS_TABS.filter((t) => shown.has(t));
+export function focusTab(want: string | null, shown: Set<Area>, order: readonly FocusTab[] = FOCUS_TABS): FocusTab | null {
+  const on = order.filter((t) => shown.has(t));
   return on.find((t) => t === want) ?? on[0] ?? null;
 }
 
-export function gridLayout(layout: Layout, shown: Set<Area>, design: DesignKey = 'broadsheet'): { areas: string; columns: string; rows: string } {
+/** A column is as wide as the built-in column its top panel came from, so a wide lead stays wide wherever it goes. */
+function widthOf(design: DesignKey, layout: Layout, top: Area) {
+  return builtIn(design, layout).find((c) => c.items.includes(top))?.w ?? '1fr';
+}
+
+/**
+ * The grid's areas, columns and rows, and `order`: the panels as they read (down each column, left
+ * to right, then the bookmarks), which the page puts them in so Tab and screen readers go that way too.
+ */
+export function gridLayout(layout: Layout, shown: Set<Area>, design: DesignKey = 'broadsheet', saved?: HomeLayouts): { areas: string; columns: string; rows: string; order: Area[] } {
   const q = (row: string[]) => `'${row.join(' ')}'`;
   if (layout === 'narrow') {
-    const order = NARROW_ORDER.filter((a) => shown.has(a));
-    return { areas: order.map((a) => q([a])).join(' '), columns: 'minmax(0, 1fr)', rows: 'auto' };
+    const order = narrowOrder(saved).filter((a) => shown.has(a));
+    return { areas: order.map((a) => q([a])).join(' '), columns: 'minmax(0, 1fr)', rows: 'auto', order };
   }
-  const base = COLUMNS[design] ?? BROADSHEET[layout];
+  const mine = arrangeColumns(design, saved?.[design]);
+  const base: Columns = mine ? mine.map((items) => ({ w: widthOf(design, layout, items[0]), items })) : builtIn(design, layout);
   const cols = base.map((c) => ({ ...c, items: c.items.filter((a) => shown.has(a)) })).filter((c) => c.items.length);
   const rows: string[][] = [];
   if (cols.length) {
@@ -92,5 +192,6 @@ export function gridLayout(layout: Layout, shown: Set<Area>, design: DesignKey =
     areas: rows.map(q).join(' '),
     columns: cols.length ? cols.map((c) => `minmax(0, ${c.w})`).join(' ') : 'minmax(0, 1fr)',
     rows: [cols.length ? top : '', bm ? 'auto' : ''].filter(Boolean).join(' '),
+    order: [...cols.flatMap((c) => c.items), ...(bm ? (['bm'] as const) : [])],
   };
 }
