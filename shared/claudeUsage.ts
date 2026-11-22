@@ -15,6 +15,7 @@ export const CLAUDE_FEATURES: Record<string, string> = {
   ask: '⌘K',
   review: 'Weekly review',
   explain: 'Explain this log',
+  money: 'Bank statements',
   other: 'Other',
 };
 

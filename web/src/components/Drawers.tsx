@@ -16,11 +16,19 @@ import { Glide } from './Motion';
  * A panel from the right over a dimmed page. Drawn at the end of the page, outside the view that
  * opens it, so a view zoomed for a big screen (styles.css) doesn't zoom or misplace it.
  */
-export function Drawer({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+export function Drawer({ title, onClose, children, wide, foot }: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  /** Room for a list with columns, e.g. a bank statement's review. Phones always get the whole width. */
+  wide?: boolean;
+  /** Stays at the bottom while the body scrolls: the drawer's main buttons. */
+  foot?: React.ReactNode;
+}) {
   return createPortal(
     <>
       <div className="scrim" onClick={onClose} />
-      <aside className="drawer" role="dialog" aria-label={title}>
+      <aside className={'drawer' + (wide ? ' wide' : '')} role="dialog" aria-label={title}>
         <div className="drawer-head">
           <h2 className="drawer-title">{title}</h2>
           <button className="icon-btn md" title="Close" onClick={onClose}>
@@ -28,6 +36,7 @@ export function Drawer({ title, onClose, children }: { title: string; onClose: (
           </button>
         </div>
         <div className="drawer-body">{children}</div>
+        {foot && <div className="drawer-foot">{foot}</div>}
       </aside>
     </>,
     document.body,

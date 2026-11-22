@@ -548,6 +548,25 @@ export interface MoneyEntry {
   invoice?: string;
   /** Entries added together on repeat share this (and a subscription is one); absent for one-offs. */
   series?: string;
+  /**
+   * The bank statement lines it's the money for (shared/statement.ts keys), so importing
+   * a statement again skips them. Several for a busking session's tips; absent when typed in.
+   */
+  refs?: string[];
+}
+
+/**
+ * What a statement import remembers about where money went: the name and category you
+ * left on the last one, so the next statement starts from them. `id` is the match key:
+ * `m:` and the merchant as the bank writes it, or `p:` and a person's name.
+ */
+export interface MoneyRule {
+  id: string;
+  /** The note to use; empty keeps the one made from the bank's text. */
+  name: string;
+  category: MoneyCategory | '';
+  /** Money with this person is a move to or from this account of yours (your own PayNow from another bank). */
+  move?: string;
 }
 
 export type Every = 'week' | 'fortnight' | 'month';
@@ -619,6 +638,48 @@ export interface BillSuggestion {
   foundAt: string;
 }
 
+// ---------- importing a bank statement (shared/statement.ts, POST /api/money/statement) ----------
+
+/** What the page asks the server about a statement's dates and merchants. No people's names are sent. */
+export interface StatementAsk {
+  /** YYYY-MM-DD, the first and last day on the statement. */
+  from: string;
+  to: string;
+  /** Shops as the bank writes them, for Claude to name and put in a category. */
+  merchants: { text: string; dir: 'in' | 'out'; /** Where the card was used, e.g. IDN, when the bank says. */ country?: string }[];
+}
+
+/** A busking session: a calendar event or one of your NAC bookings. */
+export interface BuskSession {
+  /** YYYY-MM-DD it started (Singapore time). */
+  date: string;
+  /** It ran past midnight, so the next day's tips are its too. */
+  late: boolean;
+  /** Where, for the entry's note, e.g. "Paya Lebar". */
+  where: string;
+  from: 'calendar' | 'nac';
+}
+
+/** A bill or receipt email in the statement's dates. */
+export interface StatementEmail {
+  id: string;
+  payee: string;
+  subject: string;
+  amount: number;
+  date: string;
+  status: 'due' | 'paid';
+  category: MoneyCategory | '';
+}
+
+export interface StatementContext {
+  sessions: BuskSession[];
+  emails: StatementEmail[];
+  /** Claude's name and category for each merchant asked about it, by the bank's text. */
+  names: Record<string, { name: string; category: MoneyCategory | '' }>;
+  /** What couldn't be checked and why, shown in the review. */
+  notes: string[];
+}
+
 export interface MoneyAccount {
   id: string;
   name: string;
@@ -666,6 +727,8 @@ export interface Money {
   /** Repeating money out marked as subscriptions. */
   subs: Subscription[];
   goals: SavingsGoal[];
+  /** Names and categories learned from statement imports; missing in trackers from before them. */
+  rules?: MoneyRule[];
 }
 
 export type SetType = 'normal' | 'warmup' | 'dropset' | 'failure';

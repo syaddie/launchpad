@@ -899,7 +899,7 @@ export function App({ cached }: { cached: AppState | null }) {
             notify={showToast}
           />
         ) : view === 'money' ? (
-          <MoneyView money={data.money} now={now} saved={moneySaved} onChange={setMoney} onImport={importMoney} notify={showToast} together={design !== 'broadsheet' && layout !== 'narrow'} />
+          <MoneyView money={data.money} now={now} saved={moneySaved} onChange={setMoney} onImport={importMoney} notify={showToast} together={design !== 'broadsheet' && layout !== 'narrow'} bills={data.bills} onDropBill={google.dismissBill} />
         ) : view === 'music' ? (
           <MusicView now={now} notify={showToast} />
         ) : view === 'server' ? (

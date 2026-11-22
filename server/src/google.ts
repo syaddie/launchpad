@@ -1,7 +1,7 @@
 // Google OAuth plus the Calendar, Tasks, Gmail and Drive calls, using plain REST.
 import { config } from './config';
 import { store } from './store';
-import { addDays, startOfDay } from '../../shared/dates';
+import { addDays, parseYmd, startOfDay, ymd } from '../../shared/dates';
 import { BILL_SENDERS, type BillMail } from './bills';
 import { extractTrackingNumbers, htmlToText, labelFor, parseInboxMessage, type Candidate, type StoredEmail } from './gmail-parse';
 import type { CalEvent, CalendarInfo, Task, TaskList } from '../../shared/types';
@@ -257,6 +257,21 @@ export async function fetchCalendar(): Promise<{ calendars: CalendarInfo[]; even
   return { calendars, events };
 }
 
+/** Every event from `from` to `to` (YYYY-MM-DD, Singapore days) on the calendars shown, for a bank statement's review. */
+export async function fetchEventsBetween(from: string, to: string): Promise<CalEvent[]> {
+  const list = await gapi<{ items: any[] }>('https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader&maxResults=250');
+  const items = (list.items || []).filter((c) => !c.hidden && !c.deleted && c.selected !== false);
+  const q = { timeMin: `${from}T00:00:00+08:00`, timeMax: `${ymd(addDays(parseYmd(to), 1))}T00:00:00+08:00`, singleEvents: 'true', orderBy: 'startTime', maxResults: '2500' };
+  const events: CalEvent[] = [];
+  await Promise.all(
+    items.map(async (c) => {
+      const res = await gapi<{ items: any[] }>(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(c.id)}/events?${new URLSearchParams(q)}`);
+      for (const ev of res.items || []) if (ev.status !== 'cancelled') events.push(toCalEvent(c.id, ev));
+    }),
+  );
+  return events;
+}
+
 // ---------- Tasks ----------
 
 const TASKS = 'https://tasks.googleapis.com/tasks/v1';
@@ -416,15 +431,28 @@ export async function modifyEmails(ids: string[], change: { add?: string[]; remo
 }
 
 // Bills, due notices and receipts: subjects that say so, and senders that send them.
-const BILL_QUERY = [
-  'newer_than:7d -in:chats -in:spam -in:trash -in:sent -in:drafts -category:promotions',
-  '(subject:(bill OR statement OR receipt OR invoice OR payment OR paid OR "amount due" OR order OR renewal OR premium OR subscription OR trip OR ride OR booking)',
-  `OR from:(${BILL_SENDERS.join(' OR ')}))`,
-].join(' ');
+const billQuery = (when: string) =>
+  [
+    `${when} -in:chats -in:spam -in:trash -in:sent -in:drafts -category:promotions`,
+    '(subject:(bill OR statement OR receipt OR invoice OR payment OR paid OR "amount due" OR order OR renewal OR premium OR subscription OR trip OR ride OR booking)',
+    `OR from:(${BILL_SENDERS.join(' OR ')}))`,
+  ].join(' ');
+const BILL_QUERY = billQuery('newer_than:7d');
 
 /** Recent bill-like emails not in `seen`, with their text, for bills.ts to read. */
 export async function fetchBillMail(seen: Set<string>): Promise<BillMail[]> {
-  const ids = (await listMessageIds(BILL_QUERY, 40)).filter((id) => !seen.has(id));
+  return readBillMail((await listMessageIds(BILL_QUERY, 40)).filter((id) => !seen.has(id)));
+}
+
+/** Gmail's after:/before: take YYYY/MM/DD; before: is the day after the last one wanted. */
+const gmailDay = (d: string, plus = 0) => ymd(addDays(parseYmd(d), plus)).replace(/-/g, '/');
+
+/** Bill-like emails from `from` to `to` (YYYY-MM-DD), at most `max`, for a bank statement's review. */
+export async function fetchBillMailBetween(from: string, to: string, max: number): Promise<BillMail[]> {
+  return readBillMail(await listMessageIds(billQuery(`after:${gmailDay(from)} before:${gmailDay(to, 1)}`), max));
+}
+
+async function readBillMail(ids: string[]): Promise<BillMail[]> {
   const out: BillMail[] = [];
   for (let i = 0; i < ids.length; i += 8) {
     await Promise.all(
