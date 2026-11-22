@@ -459,7 +459,9 @@ export function TopBar({ data, now, title, subline, search, onSearch, searchRef,
           {!hidden.includes('top:cig') && (
             <button className="cig-btn tnum" title="Log a cigarette (C)" aria-label={`Log a cigarette. ${smokesToday} today.`} onClick={onLogSmoke}>
               <i className="ph-duotone ph-cigarette" aria-hidden="true" />
-              <span>{smokesToday}</span>
+              <span>
+                <Readout text={String(smokesToday)} id="smokes-today" />
+              </span>
             </button>
           )}
           {trained && !hidden.includes('top:training') && !hidden.includes('view:training') && (

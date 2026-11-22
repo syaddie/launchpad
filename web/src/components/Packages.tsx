@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { startOfDay } from '../../../shared/dates';
 import type { Package } from '../../../shared/types';
 import { chipOf, segColor, statusText } from '../util';
+import { Readout } from './Motion';
 
 interface Props {
   packages: Package[];
@@ -29,7 +30,9 @@ export function Packages({ packages, now, onOpen, onAdd, onKeep, onDismiss }: Pr
       </div>
       {active.length > 0 && (
         <div className="big-count" aria-hidden="true">
-          <b>{active.filter((p) => p.stage === 2).length || active.length}</b>
+          <b>
+            <Readout text={String(active.filter((p) => p.stage === 2).length || active.length)} id="packages-count" />
+          </b>
           <span>{active.some((p) => p.stage === 2) ? 'out for delivery' : 'on the way'}{active.some((p) => p.exception) && <em>{active.filter((p) => p.exception).length} need a look</em>}</span>
         </div>
       )}
@@ -47,7 +50,12 @@ export function Packages({ packages, now, onOpen, onAdd, onKeep, onDismiss }: Pr
               </div>
               <div className="segs">
                 {[0, 1, 2, 3].map((i) => (
-                  <span key={i} className="pkg-seg" style={{ background: segColor(p, i) }} />
+                  // Lit stages fill in turn as the panel appears; out for delivery, a light travels along the stage it's on.
+                  <span
+                    key={i}
+                    className={'pkg-seg' + (i <= p.stage ? ' lit' : '') + (i === p.stage && p.stage === 2 && !p.exception ? ' moving' : '')}
+                    style={{ backgroundColor: segColor(p, i), '--i': i } as CSSProperties}
+                  />
                 ))}
               </div>
               <div className="pkg-meta">

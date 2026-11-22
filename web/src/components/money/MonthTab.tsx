@@ -8,6 +8,7 @@ import { EntryRow } from './EntryRow';
 import { MonthCalendar, TodayLine } from './MonthCalendar';
 import { WhatIf } from './WhatIf';
 import { AccountSelect, Calc, CategoryCell, entryTitle, type Kind, KindSwitch, lastAccount, namesOf, NumCell, otherAccount, shortDate, signed } from './shared';
+import { Glide, Readout } from '../Motion';
 
 export const REPEATS: { key: Repeat; name: string }[] = [
   { key: 'once', name: 'Once' },
@@ -298,6 +299,7 @@ export function MonthTab({ money, today, month, onMonth, onChange, onOpenOwed, t
         </div>
         {!together && (
         <div className="tabs layout-tabs" role="group" aria-label="Show as">
+          <Glide on={layout} />
           {(['list', 'calendar'] as const).map((l) => (
             <button key={l} className={'tab' + (layout === l ? ' active' : '')} aria-pressed={layout === l} onClick={() => setLayout(l)}>
               <i className={'ph-duotone ' + (l === 'list' ? 'ph-list-bullets' : 'ph-calendar-blank')} />
@@ -383,7 +385,7 @@ function MonthStat({ label, value, note, sign, tone, hero }: { label: string; va
     <div className={'m-stat' + (hero ? ' hero' : '')}>
       <span className="meta">{label}</span>
       <span className={'serif tnum' + (tone === 'in' ? ' m-in' : '')} style={value < 0 && !sign ? { color: 'var(--wn)' } : undefined}>
-        {fmtMoney(value, sign)}
+        <Readout text={fmtMoney(value, sign)} id={`month-${label}`} />
       </span>
       <span className="meta">{note}</span>
     </div>

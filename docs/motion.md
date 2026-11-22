@@ -71,9 +71,10 @@ given: 2% overshoot for Broadsheet (damping 0.78), 7% for Vista (0.65), 12% for 
   further (`--hv-press`); a card gives a little. The focus ring closes in on what's focused, like a sight locking on.
   A ticked box's tick lands with a bounce. The individual `translate` and `scale` properties are used throughout, so
   motion never fights a `transform` an element is placed with.
-- **The active item's highlight glides** (`useGlide`): the rail and rows of tabs draw their active item's background on
-  one span that moves from item to item, so changing view or tab shows where you went from and to. The item
-  arriving takes its colours as the highlight reaches it.
+- **The active item's highlight glides** (`useGlide`, or `<Glide on={…} />` first in a row): the rail, every row of
+  tabs and every segmented control draw their active item's background on one span that moves from item to item, so
+  changing view or tab shows where you went from and to. The item arriving takes its colours as the highlight reaches
+  it. (Not Server's own tabs, which light two at once when Terminal and Files share the view.)
 - **Figures roll** (`Readout`): a changed digit leaves as its new one arrives, upward when the figure grew and downward
   when it shrank; the digits that didn't change stay still, and the units stay put when a figure grows a digit. The
   clock's minutes roll over. A figure remembers what it showed last (by its `id`), so coming back to a view shows it
@@ -93,9 +94,19 @@ given: 2% overshoot for Broadsheet (damping 0.78), 7% for Vista (0.65), 12% for 
 - **The opening.** The first view after the app opens comes in once, in each design's own way, its panels one after
   another; then `lp-opening` comes off the page (after 2.2s, or at the first change of view) and nothing replays it
   until the app is opened again.
+- **Meters fill and charts draw** as they appear (`lpSweepX`, `lpSweepY`, `lpDrawAcross` in motion.css's METERS AND
+  CHARTS): bars fill from empty, columns rise one after another (where the browser has `sibling-index()`; all at
+  once where it hasn't), lines draw across; and a bar slides to a new reading when it changes.
+- **Ticking things off.** A task's tick lands, its line is struck through and it dims for its 5-second undo; then it
+  folds away and the tasks below close up (`.task-item.leaving`). A task added slides in while it saves. The undo bar
+  rises in and sinks away.
+- **What's on now.** Today's event on now has a line along its foot that fills as the minutes go (how far through it
+  you are), and its "in 35 min" rolls down to the start. A package out for delivery has a light travelling along its
+  stage, and the stages fill in turn as the panel appears.
 - **Lists animate what's added to them**, not what was there when they appeared (that comes in with its view):
   `useSettled` marks a list `data-settled` two frames after it's drawn, and the list's items have an
-  `@starting-style` under that mark.
+  `@starting-style` under that mark. (Tasks do it more simply: a task still saving has the page's own id, so it's
+  marked `data-new` while it slides in.)
 
 ## Alive on its own
 

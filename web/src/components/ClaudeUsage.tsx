@@ -5,6 +5,7 @@ import { parseYmd } from '../../../shared/dates';
 import type { AppState } from '../../../shared/types';
 import { api } from '../api';
 import { fmtDay, niceMax } from '../util';
+import { Glide } from './Motion';
 
 /**
  * Server › Claude usage: what each feature's Claude calls used this month and last month,
@@ -32,6 +33,7 @@ export function ClaudeUsagePanel({ data, onOpenSettings }: { data: AppState; onO
       <h2 className="panel-title">Claude usage</h2>
       {report && (
         <div className="tabs">
+          <Glide on={which} />
           {report.months.map((m, i) => (
             <button key={m.key} className={'tab' + (i === which ? ' active' : '')} aria-pressed={i === which} onClick={() => setWhich(i as 0 | 1)}>
               {i === 0 ? 'This month' : monthName(m.key)}
@@ -114,7 +116,9 @@ export function ClaudeUsagePanel({ data, onOpenSettings }: { data: AppState; onO
             </div>
           </div>
 
+          {/* On a phone the table scrolls sideways rather than splitting its figures over two lines. */}
           {month.features.length ? (
+            <div className="sum-scroll">
             <table className="sheet cu-table">
               <thead>
                 <tr>
@@ -149,6 +153,7 @@ export function ClaudeUsagePanel({ data, onOpenSettings }: { data: AppState; onO
                 </tr>
               </tfoot>
             </table>
+            </div>
           ) : (
             <div className="meta">Nothing in {which === 0 ? 'this month' : monthName(month.key)} yet.</div>
           )}

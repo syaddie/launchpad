@@ -1,6 +1,6 @@
 import type { ViewKey } from '../../../shared/types';
 import { useActiveTabInView } from '../hooks/useActiveTabInView';
-import { useGlide } from './Motion';
+import { useGlide, Readout } from './Motion';
 
 export const VIEWS: { key: ViewKey; name: string; icon: string; letter: string }[] = [
   { key: 'home', name: 'Home', icon: 'ph-house', letter: 'H' },
@@ -47,7 +47,11 @@ export function Rail({ view, hidden, badges, onView, onPalette, onSettings }: {
           <i className={'ph-duotone ' + v.icon} aria-hidden="true" />
           <kbd className="rail-fkey" aria-hidden="true">F{VIEWS.indexOf(v) + 1}</kbd>
           <span className="rail-dot" aria-hidden="true" />
-          {!!badges[v.key] && <b className="rail-badge" aria-label={`${badges[v.key]} need you`}>{badges[v.key]}</b>}
+          {!!badges[v.key] && (
+            <b className="rail-badge" aria-label={`${badges[v.key]} need you`}>
+              <Readout text={String(badges[v.key])} id={`badge-${v.key}`} />
+            </b>
+          )}
           <span>{v.name}</span>
         </button>
       ))}

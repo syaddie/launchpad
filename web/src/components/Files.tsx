@@ -9,6 +9,7 @@ import { fmtBytes, hm } from '../util';
 import { authorizeLine, Copyable, keyRefused } from './Copyable';
 import { FilesTrash } from './FilesTrash';
 import { FileViewer } from './FileViewer';
+import { Glide } from './Motion';
 
 const join = (dir: string, name: string) => (dir === '/' ? '' : dir) + '/' + name;
 const parentOf = (p: string) => p.replace(/\/[^/]*$/, '') || '/';
@@ -805,6 +806,7 @@ export function FilesPanel({ publicKey, hidden, now, open, pins, onPins, onOpenT
             }}
           />
           <span className="tabs files-search-mode" role="radiogroup" aria-label="Search">
+            <Glide on={searchMode} />
             {(['name', 'content'] as const).map((m) => (
               <button key={m} type="button" role="radio" aria-checked={searchMode === m} className={'tab' + (searchMode === m ? ' active' : '')} onClick={() => setSearchMode(m)}>
                 {m === 'name' ? 'Names' : 'Contents'}

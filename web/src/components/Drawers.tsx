@@ -8,6 +8,7 @@ import { api, BACKUP_URL, DB_BACKUP_URL, snapshotUrl, ZIP_BACKUP_URL } from '../
 import { PhotoSettings } from './Photos';
 import { AlertSettings } from './AlertSettings';
 import { STEP_LABELS, ago, chipOf, fmtStamp, hm, segColor, statusText } from '../util';
+import { Glide } from './Motion';
 
 export function Drawer({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
@@ -235,6 +236,8 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
   const p = data.prefs;
   const g = data.google;
   const [name, setName] = useState(p.name);
+  // A name changed on another device, or put back by a restore, shows here too.
+  useEffect(() => setName(p.name), [p.name]);
   const [tab, setTab] = useState<SettingsTab>('general');
 
   const sourceRows: { key: GoogleSource; name: string; icon: string }[] = [
@@ -309,6 +312,7 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
   return (
     <>
       <div className="tabs settings-tabs" role="tablist">
+        <Glide on={tab} />
         {SETTINGS_TABS.map((t) => (
           <button key={t.key} role="tab" aria-selected={tab === t.key} className={'tab' + (tab === t.key ? ' active' : '')} onClick={() => setTab(t.key)}>
             {t.name}
@@ -425,6 +429,7 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
       <div className="drawer-section">
         <div className="drawer-label">Theme</div>
         <div className="segmented">
+          <Glide on={p.theme} />
           {(['system', 'light', 'dark'] as ThemeMode[]).map((t) => (
             <button key={t} className={p.theme === t ? 'on' : ''} onClick={() => onPrefs({ ...p, theme: t })}>
               {t[0].toUpperCase() + t.slice(1)}
@@ -483,6 +488,7 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
           style={{ width: '100%', minHeight: 90 }}
           aria-label="About you"
           maxLength={1000}
+          key={p.aboutMe}
           defaultValue={p.aboutMe}
           onBlur={(e) => e.target.value.trim() !== p.aboutMe && onPrefs({ ...p, aboutMe: e.target.value })}
         />
@@ -889,6 +895,8 @@ function NumberField({ label, value, min, max, suffix, decimals = 0, onSave }: {
   onSave: (v: number) => void;
 }) {
   const [v, setV] = useState(String(value || ''));
+  // A value changed elsewhere (another device, a restore) shows here too.
+  useEffect(() => setV(String(value || '')), [value]);
   const commit = () => {
     const f = 10 ** decimals;
     const n = Math.min(max, Math.max(min, Math.round((Number(v.replace(',', '.')) || 0) * f) / f));
@@ -938,6 +946,7 @@ function TrackerSettings({ prefs, onPrefs }: { prefs: Prefs; onPrefs: (p: Prefs)
       <div className="drawer-section">
         <div className="drawer-label">Internet speed test</div>
         <div className="segmented">
+          <Glide on={prefs.speedTestHours} />
           {[0, 1, 3, 6, 12, 24].map((h) => (
             <button key={h} className={prefs.speedTestHours === h ? 'on' : ''} onClick={() => onPrefs({ ...prefs, speedTestHours: h })}>
               {h ? `${h} h` : 'Off'}

@@ -7,6 +7,7 @@ import type { Notify } from '../hooks/useToast';
 import { ago, newId } from '../util';
 import { Drawer } from './Drawers';
 import { shrinkImage } from './Photos';
+import { Glide } from './Motion';
 
 interface Props {
   notes: Note[];
@@ -331,6 +332,7 @@ export function Notes({ notes, activeId, onActive, onChange, saved, onOpenFocus,
       <div className="note-head">
         <h2 className="panel-title">Notes</h2>
         <div className="note-tabs">
+          <Glide on={note.id} />
           {filter && (
             <span className="note-filter" title="Only notepads with this tag">
               #{filter}
@@ -660,6 +662,7 @@ export function FocusView({ notes, activeId, onActive, onChange, saved, onClose,
       <div className="focus-col">
         <div style={{ display: 'flex', alignItems: 'center', gap: 15 }}>
           <div className="tabs" style={{ flex: 1, minWidth: 0, overflowX: 'auto' }}>
+            <Glide on={note.id} />
             <NoteTabs notes={pinnedFirst(notes)} active={note} onActive={onActive} />
           </div>
           <span className="saved" style={{ opacity: saved || uploading ? 1 : 0 }}>

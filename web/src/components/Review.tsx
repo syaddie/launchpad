@@ -9,6 +9,7 @@ import type { AppState, ViewKey } from '../../../shared/types';
 import { api } from '../api';
 import { ago } from '../util';
 import { VIEWS } from './Rail';
+import { Readout } from './Motion';
 
 const VIEW_NAMES = Object.fromEntries(VIEWS.map((v) => [v.key, v.name])) as Record<ViewKey, string>;
 
@@ -28,7 +29,8 @@ const OLDEST = -104;
 const weekName = (offset: number) => (offset === 0 ? 'This week' : offset === -1 ? 'Last week' : `${-offset} weeks ago`);
 const kg = (n: number) => `${Math.round(n).toLocaleString('en-GB')} kg`;
 const signed = (n: number, fmt: (x: number) => string) => `${n > 0 ? '+' : n < 0 ? '−' : '±'}${fmt(Math.abs(n))}`;
-const moodColor = (level: number) => `color-mix(in srgb, var(--ac) ${[18, 36, 56, 78, 100][level - 1]}%, var(--sf))`;
+// A mood is drawn in --mood: the accent, except where the accent means alarm (Poster, designs.css).
+const moodColor = (level: number) => `color-mix(in srgb, var(--mood, var(--ac)) ${[18, 36, 56, 78, 100][level - 1]}%, var(--sf))`;
 const plural = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? one : many}`;
 
 /** The Review view: one week's numbers from every part of Launchpad, with Claude's recap. */
@@ -177,7 +179,7 @@ export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
           {r.mood.avg !== null ? <Big n={r.mood.avg.toFixed(1)} unit={`of 5, ${MOOD_WORDS[Math.round(r.mood.avg) - 1].toLowerCase()} on average`} /> : <Big n="–" unit="not rated" />}
           <div className="rv-week" aria-hidden="true">
             {moodDays.map(({ d, m, ahead }) => (
-              <span key={d.getTime()} className={'rv-day' + (ahead ? ' ahead' : '') + (m?.note ? ' written' : '')} title={`${DOW[d.getDay()]} ${d.getDate()}${m && m.level ? ` · ${MOOD_WORDS[m.level - 1]}` : ''}`} style={m && m.level ? { background: moodColor(m.level) } : undefined}>
+              <span key={d.getTime()} className={'rv-day' + (ahead ? ' ahead' : '') + (m?.note ? ' written' : '')} title={`${DOW[d.getDay()]} ${d.getDate()}${m && m.level ? ` · ${MOOD_WORDS[m.level - 1]}` : ''}`} style={m && m.level ? { background: moodColor(m.level), color: m.level >= 4 ? 'var(--on)' : undefined } : undefined}>
                 {DOW[d.getDay()][0]}
               </span>
             ))}
@@ -270,7 +272,7 @@ function Big({ n, unit, warn }: { n: number | string; unit: string; warn?: boole
   return (
     <span className="rv-big">
       <span className="serif tnum" style={warn ? { color: 'var(--wn)' } : undefined}>
-        {n}
+        <Readout text={String(n)} />
       </span>
       <span>{unit}</span>
     </span>

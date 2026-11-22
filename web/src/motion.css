@@ -196,6 +196,18 @@
 @keyframes lpTick { from { scale: 0.3; opacity: 0; } }
 .switch span { transition: left var(--m-move) var(--e-settle), background-color var(--m-hover); }
 
+/* An answer says how it went: a right one pops, a wrong one shakes its head (Digest's quick check and recall). */
+.dg-option.right { animation: lpRight var(--m-move) var(--e-settle) both; }
+.dg-option.wrong { animation: lpWrong 380ms var(--e-io) both; }
+@keyframes lpRight { 40% { scale: 1.03; } }
+@keyframes lpWrong { 20% { translate: -4px 0; } 40% { translate: 3px 0; } 60% { translate: -2px 0; } 80% { translate: 1px 0; } }
+/* A choice picked from a set (a mood, a craving's trigger or strength) settles into place. */
+:is(.mood-btn, .crv-chip, .acct-chip, .acct-kind, .design-pick).on { animation: lpChosen var(--m-move) var(--e-settle); }
+@keyframes lpChosen { from { scale: 0.92; } }
+/* The study timer in the top bar breathes while it runs. */
+.cig-btn.on > .ph-timer { animation: lpBreathe 2.4s var(--e-io) infinite; }
+@keyframes lpBreathe { 50% { opacity: 0.45; } }
+
 /* Console: a press is reverse video, for as long as it's held. */
 :root[data-design='console'] :is(.btn, .icon-btn, .cig-btn, .tab, .join, .edit-toggle, .segmented button, .seg button, .acct-chip, .crv-chip, .dg-pill, .mc-chip, .crumb):active:not(:disabled) {
   background-color: var(--ac);
@@ -269,23 +281,25 @@
   .lp-root[data-design='focus']:not([data-layout='narrow']) .rail > .glide { border-radius: 8px; background: var(--hv); }
 }
 
-/* Rows of tabs and segmented controls. Each design's active look, on the highlight. */
-.tabs > .glide { border-radius: var(--r-s); background: var(--hv); }
-.tabs[data-glide] > .tab.active { background: transparent; }
-.segmented, .seg, .fx-tabs { position: relative; }
+/* Rows of tabs and segmented controls (Glide, or useGlide). Each design's active look, on the highlight. */
+:has(> .glide) { position: relative; }
+:is(.tabs, .note-tabs) > .glide { border-radius: var(--r-s); background: var(--hv); }
+:is(.tabs, .note-tabs)[data-glide] > .tab.active { background: transparent; }
+/* A view's own row of tabs sits on the page, so its active tab is a panel's colour. */
+:is(.money-tabs, .server-tabs, .layout-tabs) > .glide { background: var(--sf); }
 .segmented > .glide { border-radius: var(--r-s); background: var(--rz); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
 .segmented[data-glide] > button.on { background: transparent; box-shadow: none; }
 .seg > .glide { border-radius: var(--r); background: var(--rz); box-shadow: 0 1px 2px rgba(34, 32, 30, 0.1); }
 .seg[data-glide] > button.on { background: transparent; box-shadow: none; }
 .fx-tabs > .glide { border-radius: 9px; background: var(--rz); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14), 0 0 0 1px var(--ln); }
 .fx-tabs[data-glide] > .fx-tab.on { background: transparent; box-shadow: none; }
-.lp-root[data-design='console'] .tabs > .glide { border-radius: 0; background: var(--ac); }
-.lp-root[data-design='bento'] .tabs > .glide { border-radius: 11px; background: var(--tx); }
+.lp-root[data-design='console'] :is(.tabs, .note-tabs) > .glide { border-radius: 0; background: var(--ac); }
+.lp-root[data-design='bento'] :is(.tabs, .note-tabs) > .glide { border-radius: 11px; background: var(--tx); }
 .lp-root[data-design='bento'] :is(.segmented, .seg) > .glide { border-radius: 14px; }
-.lp-root[data-design='horizon'] .tabs > .glide { border-radius: 12px; background: var(--tx); }
-.lp-root[data-design='vista'] .tabs > .glide { border-radius: 999px; }
-.lp-root[data-design='focus'] .tabs > .glide { background: var(--tx); }
-.lp-root[data-design='poster'] .tabs > .glide { border-radius: 0; background: var(--tx); }
+.lp-root[data-design='horizon'] :is(.tabs, .note-tabs) > .glide { border-radius: 12px; background: var(--tx); }
+.lp-root[data-design='vista'] :is(.tabs, .note-tabs) > .glide { border-radius: 999px; }
+.lp-root[data-design='focus'] :is(.tabs, .note-tabs) > .glide { background: var(--tx); }
+.lp-root[data-design='poster'] :is(.tabs, .note-tabs) > .glide { border-radius: 0; background: var(--tx); }
 .lp-root[data-design='console'] :is(.segmented, .seg) > .glide { border-radius: 0; }
 
 /* =====================================================================
@@ -294,6 +308,8 @@
    ===================================================================== */
 
 .readout-cells { display: inline-flex; white-space: pre; }
+/* A figure inside a rail badge keeps the badge's type, whatever a design does to the rail's labels. */
+.rail .rail-badge .readout * { font-size: inherit; font-weight: inherit; letter-spacing: inherit; text-transform: none; }
 .digit { position: relative; display: inline-block; }
 .digit-out { position: absolute; left: 0; top: 0; }
 .digit.rolling > .digit-in { animation: lpRollIn var(--m-roll) var(--e-out) both; }
@@ -319,6 +335,9 @@
 
 @keyframes lpFadeIn { from { opacity: 0; } }
 @keyframes lpFadeOut { to { opacity: 0; } }
+/* Anything leaving that has no way out of its own (the rules below give most of them one) sinks and fades. */
+.lp-presence[data-leaving] > * { animation: lpSinkOut var(--m-exit) var(--e-in) both; }
+@keyframes lpSinkOut { to { opacity: 0; translate: 0 calc(var(--m-rise) * 0.5); } }
 
 /* Popovers and menus drop from what opened them. */
 .popover { transform-origin: top center; animation: lpPopIn var(--m-state) var(--e-out) both; }
@@ -384,6 +403,26 @@
 
 @keyframes lpSweepX { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
 @keyframes lpSweepY { from { clip-path: inset(100% 0 0 0); } to { clip-path: inset(0 0 0 0); } }
+
+/* Bars that fill sideways: countdowns, muscles, study and grades, accounts and their shares, categories, disks,
+   today's cigarette line. They slide to a new reading too. */
+:is(.cd-bar > span, .tr-fill, .ln-track > span, .acct-bar > span, .cat-track > span, .day-line-past) {
+  animation: lpSweepX var(--m-sweep) var(--e-out) both;
+  transition: width var(--m-sweep) var(--e-out), left var(--m-sweep) var(--e-out);
+}
+:is(.acct-share, .disk-bar) { animation: lpSweepX var(--m-sweep) var(--e-out) both; }
+/* Columns that rise: cigarettes and cravings by day, training and study by week, study by day, Claude by day, money
+   in and out. One after another where the browser can count them (sibling-index), all at once where it can't. */
+:is(.cig-bar, .tr-wbar, .ln-weeks > span:not(.ln-goal), .cu-bar, .io-bar) {
+  animation: lpSweepY var(--m-sweep) var(--e-out) both;
+  transition: height var(--m-sweep) var(--e-out), opacity var(--m-hover) var(--e-out);
+}
+.ln-day-col { animation: lpSweepY var(--m-sweep) var(--e-out) both; }
+:is(.cig-col, .tr-wcol, .cu-col, .ln-day, .io-col) { --rise: calc((sibling-index() - 1) * 22ms); }
+:is(.cig-col, .tr-wcol, .cu-col, .ln-day, .io-col) :is(.cig-bar, .tr-wbar, .cu-bar, .ln-day-col, .io-bar) { animation-delay: var(--rise, 0ms); }
+.ln-weeks > span:not(.ln-goal) { animation-delay: calc((sibling-index() - 1) * 22ms); }
+/* Lines and dots draw across, left to right: sparklines, body weight, the network and speed charts, the balance. */
+:is(.tr-spark, .tr-wt-chart, .mini-chart > svg, .sc-plot > svg, .bal-chart > svg) { animation: lpDrawAcross calc(var(--m-sweep) * 1.4) var(--e-io) both; }
 
 /* =====================================================================
    VIEWS (viewTransition.ts)
@@ -597,6 +636,11 @@ html[data-design='poster']::view-transition-old(lp-title) { animation: none; opa
   @keyframes lpTitleOut { to { opacity: 0; } }
   @keyframes lpSweepX { from { opacity: 0; } }
   @keyframes lpSweepY { from { opacity: 0; } }
+  @keyframes lpSinkOut { to { opacity: 0; } }
+  @keyframes lpWrong { from { opacity: 0.6; } }
+  @keyframes lpRight { from { opacity: 0.6; } }
+  @keyframes lpChosen { from { opacity: 0.7; } }
+  .cig-btn.on > .ph-timer { animation: none; }
   /* Nothing moves by itself. */
   :root[data-design='vista'] .wallpaper img, :root[data-design='vista'].lp-opening .wallpaper img { animation: lpFadeIn 0.3s ease-out both; }
   :root[data-design='console'] .search::after { animation: none; }

@@ -505,6 +505,23 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .allday { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; padding: 5px 10px; border-radius: var(--r); background: var(--hv); font-size: 12px; color: var(--t2); }
 .dot { flex: none; border-radius: 50%; }
 .event { border-radius: var(--r); transition: opacity 0.3s, background 0.3s; }
+/* The event on now: how far through it you are, a line along its foot that fills as the minutes go (Today.tsx). */
+@property --through { syntax: '<percentage>'; inherits: false; initial-value: 0%; }
+.event { position: relative; }
+.event.now::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 2px;
+  height: 2px;
+  border-radius: 1px;
+  background: linear-gradient(to right, var(--ac) var(--through), color-mix(in srgb, var(--ac) 16%, transparent) var(--through));
+  pointer-events: none;
+  transition: --through 1.2s var(--e-io);
+  animation: lpThrough var(--m-sweep) var(--e-out) both;
+}
+@keyframes lpThrough { from { --through: 0%; } }
 .event.focus { background: var(--act); }
 .event-row { display: grid; grid-template-columns: 44px 8px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 8px 10px; border-radius: var(--r); cursor: pointer; }
 .event-row:hover { background: var(--hv); }
@@ -530,6 +547,18 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .task-title { flex: 1; min-width: 0; font-size: 14px; line-height: 20px; text-wrap: pretty; }
 .task-due { font-size: 12px; line-height: 20px; color: var(--t3); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .task-title.editable { cursor: pointer; }
+/* Ticked off: the line is struck through as the tick lands, and the task dims; once its undo window has passed it
+   folds away (Tasks.tsx). A task added here slides in while it saves. */
+.task-title { text-decoration: line-through; text-decoration-color: transparent; transition: text-decoration-color var(--m-state) var(--e-out); }
+.task.done { opacity: 0.45; }
+.task.done .task-title { text-decoration-color: currentColor; }
+.task-item { display: grid; grid-template-rows: 1fr; transition: grid-template-rows var(--m-move) var(--e-io), opacity var(--m-move) var(--e-out); }
+.task-item-in { min-height: 0; }
+.task-item.leaving { grid-template-rows: 0fr; opacity: 0; }
+.task-item.leaving > .task-item-in { overflow: hidden; }
+.task-item[data-new] { animation: lpTaskIn var(--m-move) var(--e-settle) both; }
+@keyframes lpTaskIn { from { opacity: 0; translate: 0 calc(var(--m-rise) * -1); } }
+@media (prefers-reduced-motion: reduce) { @keyframes lpTaskIn { from { opacity: 0; } } }
 .task-subcount { margin-left: 8px; font-size: 12px; color: var(--t3); }
 .task-subs { margin-left: 26px; }
 .task-sub .task { padding-top: 3px; padding-bottom: 3px; }
@@ -607,6 +636,17 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .pkg-status { font-size: 13px; color: var(--t2); }
 .segs { display: flex; gap: 3px; }
 .pkg-seg { flex: 1; height: 3px; border-radius: 2px; }
+/* A package's stages fill in turn as the panel appears. Out for delivery, a light travels along the stage it's on. */
+.pkg-seg.lit { animation: lpSweepX var(--m-sweep) var(--e-out) both; animation-delay: calc(var(--i, 0) * 90ms); }
+.pkg-seg.moving {
+  background-image: linear-gradient(90deg, transparent, color-mix(in srgb, var(--sf) 75%, transparent), transparent);
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  animation: lpSweepX var(--m-sweep) var(--e-out) both, lpOnItsWay 2.6s var(--e-io) infinite;
+  animation-delay: calc(var(--i, 0) * 90ms), 1s;
+}
+@keyframes lpOnItsWay { from { background-position: -70% 0; } to { background-position: 170% 0; } }
+@media (prefers-reduced-motion: reduce) { .pkg-seg.moving { animation: none; background-image: none; } }
 .pkg-meta { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--t3); min-width: 0; }
 .pkg-num { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .src-tag { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border: 1px solid var(--ln); border-radius: var(--r-s); font-size: 11px; white-space: nowrap; }
@@ -784,6 +824,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 @media (hover: none) { .news-actions { opacity: 1; } }
 .news-unhide { align-self: flex-start; margin: 6px 10px; font-size: 12px; color: var(--t3); }
 .news-tabs { margin-right: 6px; }
+.tab.active .tab-count { background: color-mix(in srgb, currentColor 16%, transparent); color: inherit; }
 .tab-count { margin-left: 6px; padding: 0 6px; border-radius: 9px; background: var(--act); color: var(--acd); font-size: 11px; font-weight: 600; }
 .news-muted { position: absolute; top: 34px; left: 0; z-index: 12; min-width: 200px; max-height: 320px; overflow: auto; }
 .reading-list { flex: 1; min-height: 0; max-width: 820px; width: 100%; }
@@ -892,6 +933,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .dg-missing .dg-body { padding-bottom: 6px; }
 .dg-bar { display: block; height: 12px; border-radius: 6px; background: var(--hv); animation: dgPulse 1.4s ease-in-out infinite; }
 .dg-bar.short { width: 60%; }
+.view-loading { flex: 1; min-height: 240px; border-radius: var(--r-p); background: var(--hv); opacity: 0; animation: dgPulse 1.4s ease-in-out 0.25s infinite, lpFadeIn 0.3s ease-out 0.25s forwards; }
 @keyframes dgPulse { 50% { opacity: 0.45; } }
 @media (prefers-reduced-motion: reduce) { .dg-bar { animation: none; } }
 
@@ -971,6 +1013,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .email-wrap { position: relative; }
 .email-wrap .inbox-acts { position: absolute; top: 6px; right: 8px; margin: 0; padding: 1px 4px; border-radius: var(--r-s); background: var(--rz); opacity: 0; transition: opacity 0.12s; }
 .email-wrap:hover .inbox-acts, .email-wrap:focus-within .inbox-acts { opacity: 1; }
+@media (hover: none) { .email-wrap .inbox-acts { position: static; opacity: 1; margin: 2px 10px 6px; padding: 0; background: none; } }
 .inbox-acts .icon-only { font-size: 15px; }
 .inbox-reconnect { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; flex: none; font-size: 13px; color: var(--t3); }
 /* Bills and receipts found in Gmail, waiting for Keep or Dismiss. */
@@ -1700,7 +1743,7 @@ i.file-pinned { color: var(--ac); }
 .ent-main { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; padding: 2px 0; border: none; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .ent-note { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14.5px; font-weight: 500; }
 .ent-none { color: var(--t3); font-weight: 400; }
-.ent-meta { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--t3); }
+.ent-meta { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; font-size: 12px; color: var(--t3); }
 .ent-amt { flex: none; min-width: 96px; text-align: right; font-size: 14.5px; font-weight: 500; }
 .ent-amt.in { color: var(--acd); font-weight: 600; }
 .ent.planned .ent-note, .ent.planned .ent-amt:not(.in) { color: var(--t2); }
@@ -1734,11 +1777,11 @@ i.file-pinned { color: var(--ac); }
 .acct-chip.on { border-color: var(--ac); background: var(--act); color: var(--acd); font-weight: 600; }
 .acct-filter .acct-chip { border-color: transparent; background: var(--sf); }
 .acct-filter .acct-chip.on { border-color: var(--tx); background: var(--tx); color: var(--bg); }
-.ent-acct { padding: 0 7px; border-radius: 9px; background: var(--hv); color: var(--t2); font-size: 11.5px; font-weight: 500; }
+.ent-acct { white-space: nowrap; padding: 0 7px; border-radius: 9px; background: var(--hv); color: var(--t2); font-size: 11.5px; font-weight: 500; }
 .ent-move { margin-right: 6px; color: var(--t3); font-size: 13px; vertical-align: -1px; }
 .ent.move .ent-amt { color: var(--t2); font-weight: 500; }
 /* An invoice's money: tagged, with what follows the invoice shown locked. */
-.ent-inv { display: inline-flex; align-items: center; gap: 4px; padding: 0 7px; border-radius: 9px; background: var(--act); color: var(--acd); font-size: 11.5px; font-weight: 600; }
+.ent-inv { white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; padding: 0 7px; border-radius: 9px; background: var(--act); color: var(--acd); font-size: 11.5px; font-weight: 600; }
 .ent-lock { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 8px; color: var(--t2); font-size: 13px; white-space: nowrap; }
 .ent-lock.ent-field-note { flex: 1 1 180px; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--tx); font-weight: 500; }
 .ent-lock.in { color: var(--acd); font-weight: 600; }
@@ -2105,11 +2148,14 @@ button.m-stat { cursor: default; }
 .cu-col.on .cu-bar { opacity: 1; box-shadow: 0 0 0 2px var(--sf); }
 .cu-bars:hover .cu-col:not(.on) .cu-bar { opacity: 0.45; }
 .cu-table td.cu-name { padding: 0 8px; }
+.cu-table :is(td, th) { white-space: nowrap; }
+[data-layout='narrow'] .cu-table { min-width: 560px; }
 .cu-table th:first-child { width: 34%; }
 
 /* ---------- Key figures (top of Today) ---------- */
-.key-figures { display: flex; gap: 6px; flex: 0 0 auto; margin: 0 0 10px; }
-.key-figure { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; border-radius: 4px; background: var(--bg); }
+/* As many across as fit, each as wide as its figure needs; a narrow panel wraps the rest onto a second row rather than cutting figures short. */
+.key-figures { display: flex; flex-wrap: wrap; gap: 6px; flex: 0 0 auto; margin: 0 0 10px; }
+.key-figure { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; border-radius: var(--r-s); background: var(--bg); }
 .key-figure-value { font-size: 17px; font-weight: 600; line-height: 1.2; color: var(--tx); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .key-figure-value.warn { color: var(--wn); }
 .key-figure-label { font-size: 11.5px; color: var(--t3); }

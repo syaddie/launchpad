@@ -5,6 +5,7 @@ import type { Invoice, Money, MoneyEntry } from '../../../../shared/types';
 import { localGet, localSet } from '../../api';
 import { dayDiff, newId, parseYmd } from '../../util';
 import { AccountSelect, DateCell, namesOf, type Notify, NumCell, shortDate, TextCell } from './shared';
+import { Readout } from '../Motion';
 
 /** `num` null means the suggested next number. */
 type InvoiceDraft = { num: string | null; event: string; amount: number | null; due: string; account: string };
@@ -72,7 +73,9 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
       <div className="m-stats">
         <div className="m-stat hero">
           <span className="meta">Still owed to you</span>
-          <span className="serif tnum">{fmtMoney(sumOf(open))}</span>
+          <span className="serif tnum">
+            <Readout text={fmtMoney(sumOf(open))} id="owed-open" />
+          </span>
           <span className="meta">{open.length ? `${plural(open.length, 'invoice')} waiting` : 'all paid up'}</span>
         </div>
         <div className={'m-stat' + (late.length ? ' late' : '')}>

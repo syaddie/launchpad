@@ -5,6 +5,7 @@ import type { DownloadJob, DownloadsInfo, InstagramInfo, UnpackRecord, Torrent, 
 import { api, localGet, localSet, type TorrentAdd } from '../api';
 import { fmtBytes, hm } from '../util';
 import { Copyable } from './Copyable';
+import { Glide } from './Motion';
 
 const POLL = 2000;
 
@@ -481,6 +482,7 @@ function AddBox({ shellReady, defaultDir, torrentsOn, instagram, video, onInstag
           )}
           {kind === 'video' && (
             <div className="segmented" role="radiogroup" aria-label="Format">
+              <Glide on={fmt} />
               {VIDEO_FORMATS.filter((f) => !audioOnly || f.audio).map((f) => (
                 <button key={f.key} type="button" role="radio" aria-checked={fmt === f.key} className={fmt === f.key ? 'on' : ''} onClick={() => setFormat(f.key)}>
                   {f.label}

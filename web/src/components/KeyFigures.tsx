@@ -1,6 +1,7 @@
 import { addDays, startOfDay, ymd } from '../../../shared/dates';
 import { balanceOn, fmtMoney } from '../../../shared/money';
 import type { AppState } from '../../../shared/types';
+import { Readout } from './Motion';
 
 /**
  * The key figures at the top of Today: the same few numbers every day, counted here from
@@ -42,7 +43,10 @@ export function KeyFigures({ data, now }: { data: AppState; now: Date }) {
     <div className="key-figures" aria-label="Today’s key figures">
       {figures.map((f) => (
         <div key={f.label} className="key-figure">
-          <span className={'tnum key-figure-value' + (f.warn ? ' warn' : '')}>{f.value}</span>
+          {/* A figure rolls to its new value when it changes, a task ticked off, mail read. */}
+          <span className={'tnum key-figure-value' + (f.warn ? ' warn' : '')}>
+            <Readout text={f.value} id={`key-${f.label}`} />
+          </span>
           <span className="key-figure-label">{f.label}</span>
         </div>
       ))}

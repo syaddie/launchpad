@@ -124,6 +124,22 @@ export function useGlide(ref: RefObject<HTMLElement | null>, active: unknown, se
 }
 
 /**
+ * The gliding highlight for a row of tabs or a segmented control, put first in the row: it lights
+ * whichever item of the row is active (`selector`, as `useGlide`) and glides when `on` changes.
+ * The row is the span's parent, so a row needs nothing else.
+ */
+export function Glide({ on, selector }: { on: unknown; selector?: string }) {
+  const self = useRef<HTMLSpanElement>(null);
+  const row = useRef<HTMLElement | null>(null);
+  // Declared before useGlide, so the row is known when it first measures.
+  useLayoutEffect(() => {
+    row.current = self.current?.parentElement ?? null;
+  });
+  useGlide(row, on, selector);
+  return <span ref={self} className="glide" aria-hidden="true" />;
+}
+
+/**
  * What each readout showed last, by its `id`. Coming back to a view then shows a figure as it was,
  * with nothing moving, and one that changed meanwhile rolls from what was last seen. Forgotten on
  * reload, so a new page shows every figure fresh.
