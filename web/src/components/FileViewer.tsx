@@ -89,7 +89,7 @@ export function FileViewer({ path, siblings, hidden, onStep, onClose }: {
           </button>
         </div>
       </div>
-      <div className={'files-viewer' + (kind === 'image' && zoom ? ' zoomed' : '') + (kind === 'audio' ? ' audio' : '')}>
+      <div className={'files-viewer' + (kind === 'image' && zoom ? ' zoomed' : '') + (kind === 'audio' ? ' audio' : '')} data-selectable="">
         {failed ? (
           cant
         ) : kind === 'image' ? (

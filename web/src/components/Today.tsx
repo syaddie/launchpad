@@ -174,7 +174,7 @@ export function Today({ data, now, wide, compact, onConnect, onRetry, addEvent, 
   };
 
   return (
-    <section className="panel" style={{ gridArea: 'today' }} aria-label="Today">
+    <section className="panel" style={{ gridArea: 'today' }} aria-label="Today" data-hide="panel:today">
       <div className="panel-head">
         <h2 className="panel-title">Today</h2>
         <span className="meta">{connected && calOn && !error && sync.lastSuccess ? `Synced ${ago(sync.lastSuccess, now)}` : ''}</span>

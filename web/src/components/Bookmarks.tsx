@@ -120,7 +120,7 @@ export function Bookmarks({ groups, onChange, search, edit, setEdit, linkCheck, 
   };
 
   return (
-    <section className={'panel bm-panel' + (edit ? ' edit-mode' : '')} style={{ gridArea: 'bm', zIndex: edit ? 5 : 1 }} aria-label="Bookmarks">
+    <section className={'panel bm-panel' + (edit ? ' edit-mode' : '')} style={{ gridArea: 'bm', zIndex: edit ? 5 : 1 }} aria-label="Bookmarks" data-hide="panel:bookmarks">
       <div className="panel-head" style={{ paddingBottom: 0 }}>
         <h2 className="panel-title">Bookmarks</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>

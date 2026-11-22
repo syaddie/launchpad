@@ -10,8 +10,8 @@ import type { AppState, Backup, BookmarkGroup, Craving, CravingTrigger, DesignKe
 import { api, localGet, localSet, type RestoreResult } from './api';
 import { AddEvent } from './components/AddEvent';
 import { Bookmarks } from './components/Bookmarks';
-import { closeMenu, ContextMenuHost, menuProps } from './components/ContextMenu';
-import { AddPackageDrawer, DESIGNS, Drawer, PackageDrawer, SettingsDrawer } from './components/Drawers';
+import { closeMenu, ContextMenuHost, copyText, menuProps, placeOf } from './components/ContextMenu';
+import { AddPackageDrawer, DESIGNS, Drawer, PANEL_ROWS, PackageDrawer, SettingsDrawer } from './components/Drawers';
 import { FocusHome, type FocusTabInfo } from './components/FocusHome';
 import { HeroPanel } from './components/Hero';
 import { HorizonHome } from './components/Horizon';
@@ -749,17 +749,41 @@ export function App({ cached }: { cached: AppState | null }) {
   const drawerTitle =
     drawer?.type === 'settings' ? 'Settings' : drawer?.type === 'add' ? 'Add package' : drawer?.type === 'exercise' ? drawer.title : drawer?.type === 'course' ? data.learn.courses.find((c) => c.id === drawer.id)?.name || 'Course' : drawerPkg ? 'Package' : '';
 
-  // Right-click on the page's empty space (not a panel, not text): the app-wide things.
+  // A right-click on anything without a menu of its own: what the panel or dialog it's in offers,
+  // then the app-wide things. A long press on a plain link lands here too (a mouse keeps the browser's).
+  const hidePanel = (key: string, name: string) => {
+    const before = data.prefs;
+    setPrefs({ ...before, hidden: [...before.hidden.filter((h) => h !== key), key] });
+    showToast(`Hid ${name}. Settings › Panels brings it back.`, { label: 'Undo', run: () => setPrefs(before) });
+  };
   const backgroundMenu = menuProps(
-    () => [
-      { label: 'Command palette', icon: 'ph-command', onSelect: () => setPalette(true) },
-      { label: 'Keyboard shortcuts', icon: 'ph-keyboard', onSelect: () => setShortcuts(true) },
-      view === 'home' && shown.has('bm') && !editBookmarks && { label: 'Edit bookmarks', icon: 'ph-pencil-simple', onSelect: () => setEditBookmarks(true) },
-      'sep',
-      { label: 'Settings', icon: 'ph-gear-six', onSelect: () => setDrawer({ type: 'settings' }) },
-    ],
-    'Launchpad',
-    { only: (t) => t.matches('.lp-root, .lp-shell, .lp-inner, .lp-grid, .hz-home, .hz-cols, .hz-col, .fx-home, main') },
+    (t) => {
+      const place = placeOf(t);
+      const link = t.closest('a[href]');
+      const url = link instanceof HTMLAnchorElement ? link.href : '';
+      const copyEl = t.closest<HTMLElement>('[data-copy]');
+      // As Settings › Panels names it ("Photos" for either photo panel).
+      const hideName = place?.hide && !hidden.has(place.hide) ? PANEL_ROWS.flatMap((s) => s.rows).find((r) => r.key === place.hide)?.name : undefined;
+      return [
+        url && { label: 'Open link', icon: 'ph-arrow-square-out', href: url, newTab: link?.getAttribute('target') === '_blank' },
+        url && link?.getAttribute('target') !== '_blank' && { label: 'Open in a new tab', icon: 'ph-browsers', href: url, newTab: true },
+        url && { label: 'Copy link', icon: 'ph-link', onSelect: () => copyText(url, showToast, 'Link copied') },
+        'sep',
+        // Text to copy whole, on phones where it can't be selected (`data-copy` names it).
+        copyEl && { label: `Copy ${copyEl.dataset.copy || 'text'}`, icon: 'ph-copy', onSelect: () => copyText(copyEl.dataset.copyText ?? copyEl.innerText, showToast) },
+        ...(place?.items ?? []),
+        hideName && { label: `Hide ${hideName}`, icon: 'ph-eye-slash', onSelect: () => hidePanel(place!.hide!, hideName) },
+        'sep',
+        !palette && { label: 'Command palette', icon: 'ph-command', onSelect: () => setPalette(true) },
+        !shortcuts && { label: 'Keyboard shortcuts', icon: 'ph-keyboard', onSelect: () => setShortcuts(true) },
+        // The Bookmarks panel's own Edit is already in its part of the menu.
+        view === 'home' && shown.has('bm') && !editBookmarks && place?.hide !== 'panel:bookmarks' && { label: 'Edit bookmarks', icon: 'ph-pencil-simple', onSelect: () => setEditBookmarks(true) },
+        'sep',
+        drawer?.type !== 'settings' && { label: 'Settings', icon: 'ph-gear-six', onSelect: () => setDrawer({ type: 'settings' }) },
+      ];
+    },
+    (t) => placeOf(t)?.name || 'Launchpad',
+    { root: true },
   );
 
   return (
@@ -793,6 +817,7 @@ export function App({ cached }: { cached: AppState | null }) {
             onConnect={connect}
             onOpenSettings={() => setDrawer({ type: 'settings' })}
             actions={{ onAction: google.inboxAction, onTask: google.emailToTask, onKeepBill: google.keepBill, onDismissBill: google.dismissBill }}
+            notify={showToast}
           />
         ) : view === 'you' ? (
           <You

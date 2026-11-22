@@ -403,7 +403,7 @@ function LessonCard({ card: c, act, onMerge, canAsk, onMark, onSwap, swapping, d
           </button>
         </span>
       </div>
-      <div className="dg-body">
+      <div className="dg-body" data-copy="lesson" data-copy-text={[c.title, c.hook, c.gist, c.formula && `$$${c.formula}$$`, c.where, legacy && c.takeaway].filter(Boolean).join('\n\n')}>
         <div className="dg-lead">
           <h3 className="dg-title">{c.title}</h3>
           {c.hook && (
