@@ -17,6 +17,13 @@ Don't guess these; ask before building:
 3. **Which panels matter most**, and which could be smaller or hidden by default?
 4. Screenshots or a description of where the empty space bothers you.
 
+### The owner's answers (2026-11-22)
+
+1. **Designs used, most first:** Vista, Focus, Broadsheet, Bento. The others only need to keep working.
+2. **By hand.** No automatic reordering.
+3. **All panels matter** (Today, Tasks, Weather, Hero, Notepad, Bookmarks, Photos, Packages). Nothing gets hidden by default.
+4. **Wide desktop screens** are where the empty space bothers them most.
+
 ## Where things are
 
 - `web/src/layout.ts`: grid columns per design (`BROADSHEET`, `CONSOLE`, `BENTO`, `VISTA`, `POSTER`), `NARROW_ORDER` for phones, `gridLayout()`. Horizon and Focus have their own homes (`components/Horizon.tsx`, `components/FocusHome.tsx`).

@@ -66,6 +66,18 @@ export type AccentKey = 'sage' | 'slate' | 'terracotta';
 export type DesignKey = 'broadsheet' | 'console' | 'bento' | 'horizon' | 'vista' | 'focus' | 'poster';
 /** Every design, for checking a saved or sent one is still known. */
 export const DESIGN_KEYS: DesignKey[] = ['broadsheet', 'console', 'bento', 'horizon', 'vista', 'focus', 'poster'];
+/**
+ * A panel's place on the home grid (web/src/layout.ts). `hero` is the clock-and-next tile (Bento,
+ * Focus); `wx` the weather and air panel Console and Bento print in full; `bm` the bookmarks row.
+ */
+export type HomeArea = 'today' | 'tasks' | 'notes' | 'pkgs' | 'photo' | 'photo2' | 'bm' | 'hero' | 'wx';
+export const HOME_AREAS: HomeArea[] = ['today', 'tasks', 'notes', 'pkgs', 'photo', 'photo2', 'bm', 'hero', 'wx'];
+/**
+ * Home arrangements set by hand in Settings › Layout: for each design, its columns of panels left to
+ * right; `narrow` is the phone's one column (shared by every design); Focus's one list is its tab order.
+ * A design that's missing uses its own built-in arrangement.
+ */
+export type HomeLayouts = Partial<Record<DesignKey | 'narrow', HomeArea[][]>>;
 export type GoogleSource = 'calendar' | 'tasks' | 'gmail';
 export type SourceKey = GoogleSource | 'carriers' | 'digest' | 'inbox' | 'weather' | 'speedtest';
 export type ViewKey = 'home' | 'digest' | 'inbox' | 'you' | 'training' | 'learn' | 'money' | 'server' | 'review' | 'music';
@@ -126,6 +138,8 @@ export interface Prefs {
   alerts: Record<AlertKind, boolean>;
   /** Unpack archives (a link, or what's in a torrent) next to them when they finish downloading. Missing in older saved prefs. */
   autoUnpack?: boolean;
+  /** Home panels put in order by hand (Settings › Layout). Missing in older saved prefs. */
+  homeLayouts?: HomeLayouts;
 }
 
 /** What a phone alert is about; each has its own switch in Settings › Alerts. */

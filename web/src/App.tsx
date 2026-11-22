@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { Fragment, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { STARTER_NOTES } from '../../shared/defaults';
 import { startOfDay, ymd } from '../../shared/dates';
 import { fmtStudy, timerMinutes } from '../../shared/learn';
@@ -34,7 +34,7 @@ import { useSidewaysWheel } from './hooks/useSidewaysWheel';
 import { useFlash, useToast } from './hooks/useToast';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Presence } from './components/Motion';
-import { focusTab, gridLayout, type Area, type FocusTab } from './layout';
+import { focusOrder, focusTab, gridLayout, type Area, type FocusTab } from './layout';
 import { loadable } from './loadable';
 import { viewStep } from './motion';
 import { endOpening, viewTransition } from './viewTransition';
@@ -628,13 +628,14 @@ export function App({ cached }: { cached: AppState | null }) {
   if (design === 'bento' || design === 'focus') shown.add('hero');
   const weatherOn = !!data.prefs.weatherArea && !hidden.has('top:weather');
   if ((design === 'console' || design === 'bento') && weatherOn) shown.add('wx');
-  const grid = gridLayout(layout, shown, design);
+  const grid = gridLayout(layout, shown, design, data.prefs.homeLayouts);
   const smokesToday = smokesOn(data.smokes, now).length;
   const inboxCount = inboxBadge(data);
 
   // Focus: what's waiting behind each tab.
-  const activeTab = focusTab(homeTab, shown);
-  const focusTabs: FocusTabInfo[] = [];
+  const tabOrder = focusOrder(data.prefs.homeLayouts);
+  const activeTab = focusTab(homeTab, shown, tabOrder);
+  let focusTabs: FocusTabInfo[] = [];
   if (design === 'focus') {
     const today = ymd(now);
     const calOn = data.google.connected && data.prefs.sources.calendar;
@@ -646,6 +647,8 @@ export function App({ cached }: { cached: AppState | null }) {
     if (shown.has('tasks')) focusTabs.push({ key: 'tasks', name: 'Tasks', icon: 'ph-check-square', count: overdue + dueToday, warn: overdue > 0 });
     if (shown.has('notes')) focusTabs.push({ key: 'notes', name: 'Notepad', icon: 'ph-notebook' });
     if (shown.has('pkgs')) focusTabs.push({ key: 'pkgs', name: 'Packages', icon: 'ph-package', count: onTheWay.length, warn: onTheWay.some((p) => p.exception) });
+    // In the order set in Settings › Layout.
+    focusTabs = tabOrder.flatMap((k) => focusTabs.filter((t) => t.key === k));
   }
 
   const keepPackage = (id: string) => {
@@ -695,6 +698,20 @@ export function App({ cached }: { cached: AppState | null }) {
   );
   const checkLinks = () => api.checkLinks().then((linkCheck) => update((d) => ({ ...d, linkCheck }))).catch((e) => showToast(`Couldn’t start the link check: ${e.message}`));
   const bookmarksPanel = <Bookmarks groups={data.bookmarks} onChange={setBookmarks} search={search} edit={editBookmarks} setEdit={setEditBookmarks} linkCheck={data.linkCheck} onCheckLinks={checkLinks} notify={showToast} />;
+  /** The home grid's panel for an area. */
+  const homePanel = (a: Area): ReactNode => {
+    switch (a) {
+      case 'today': return todayPanel;
+      case 'tasks': return tasksPanel;
+      case 'notes': return notesPanel;
+      case 'pkgs': return packagesPanel;
+      case 'photo': return <PhotoPanel photos={data.photos} area="photo" index={photoSlots.shown[0]} onStep={(d) => photoSlots.step(0, d)} />;
+      case 'photo2': return <PhotoPanel photos={data.photos} area="photo2" index={photoSlots.shown[1]} onStep={(d) => photoSlots.step(1, d)} />;
+      case 'hero': return heroPanel;
+      case 'wx': return <WeatherPanel data={data} now={now} />;
+      case 'bm': return bookmarksPanel;
+    }
+  };
 
   // ---------- command palette ----------
 
@@ -912,15 +929,10 @@ export function App({ cached }: { cached: AppState | null }) {
             />
           ) : (
           <main className="lp-grid" style={{ gridTemplateAreas: grid.areas, gridTemplateColumns: grid.columns, gridTemplateRows: grid.rows }}>
-            {shown.has('today') && todayPanel}
-            {shown.has('tasks') && tasksPanel}
-            {shown.has('photo') && <PhotoPanel photos={data.photos} area="photo" index={photoSlots.shown[0]} onStep={(d) => photoSlots.step(0, d)} />}
-            {shown.has('photo2') && <PhotoPanel photos={data.photos} area="photo2" index={photoSlots.shown[1]} onStep={(d) => photoSlots.step(1, d)} />}
-            {shown.has('hero') && heroPanel}
-            {shown.has('wx') && <WeatherPanel data={data} now={now} />}
-            {shown.has('notes') && notesPanel}
-            {shown.has('pkgs') && packagesPanel}
-            {shown.has('bm') && bookmarksPanel}
+            {/* In reading order (gridLayout), so Tab goes down each column as it's arranged. */}
+            {grid.order.map((a) => (
+              <Fragment key={a}>{homePanel(a)}</Fragment>
+            ))}
             {!shown.size && noPanels}
           </main>
           )

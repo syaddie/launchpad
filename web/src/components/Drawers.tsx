@@ -7,6 +7,7 @@ import type { AccentKey, AppState, Backup, BackupSnapshot, DesignKey, DriveStatu
 import { api, BACKUP_URL, DB_BACKUP_URL, snapshotUrl, ZIP_BACKUP_URL } from '../api';
 import { PhotoSettings } from './Photos';
 import { AlertSettings } from './AlertSettings';
+import { HomeArrangement } from './HomeArrangement';
 import { STEP_LABELS, ago, chipOf, fmtStamp, hm, segColor, statusText } from '../util';
 import { Glide } from './Motion';
 
@@ -752,6 +753,7 @@ function LayoutSettings({ prefs, onPrefs, local, onLocal }: { prefs: Prefs; onPr
         </select>
         <span className="meta">Say a work laptop wants Horizon while home stays on Console. Picking above changes {local ? 'this browser only' : 'every device'}.</span>
       </div>
+      <HomeArrangement prefs={prefs} onPrefs={onPrefs} design={current} designName={DESIGNS.find((d) => d.key === current)?.name ?? ''} />
     </>
   );
 }
