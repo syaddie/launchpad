@@ -668,6 +668,31 @@ export function nacStatus(now = new Date()): NacStatus {
   };
 }
 
+/**
+ * GET /api/guest/nac's slots, for a music-only sign-in (access.ts): the owner's own bookings
+ * count as taken, as they do for anyone else looking at NAC's pages, and nothing about the
+ * owner's watches or alerts is in it. Free windows, locations and the check's state are as is.
+ */
+export function guestNacStatus(s: NacStatus): NacStatus {
+  const taken = (d: NacDay): NacBooked[] =>
+    [...d.taken, ...d.mine]
+      .sort((a, b) => toMin(a.start) - toMin(b.start))
+      // Joined where one runs into the next with the same status, as the taken runs already are.
+      .reduce<NacBooked[]>((out, b) => {
+        const last = out[out.length - 1];
+        if (last && last.end === b.start && last.status === b.status) out[out.length - 1] = { ...last, end: b.end };
+        else out.push({ ...b });
+        return out;
+      }, []);
+  return {
+    ...s,
+    mine_on: false,
+    locations: s.locations.map((l) => ({ ...l, days: l.days.map((d) => ({ ...d, mine: [], taken: taken(d) })) })),
+    watches: [],
+    watch_alerts: 'off',
+  };
+}
+
 // ---------- the list of locations ----------
 
 /** The locations it checks, in order: the list as last changed in the app, or config's to start with. */

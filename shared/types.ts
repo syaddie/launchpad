@@ -1707,3 +1707,13 @@ export interface NacStatus extends NacSlots {
   /** Why Check now can't be used at the moment (one's running, the last was under 5 minutes ago, or it's backing off, or there are no locations), or null when it can. */
   can_check: string | null;
 }
+
+/**
+ * GET /api/guest/nac: Music's busking slots for a music-only sign-in (server/src/access.ts).
+ * The same slots as /api/nac, without the owner's bookings (they show as taken) or watches, and
+ * with the owner's look so the page matches the app.
+ */
+export interface GuestMusic {
+  nac: NacStatus;
+  look: { design: DesignKey; accent: AccentKey; theme: ThemeMode };
+}

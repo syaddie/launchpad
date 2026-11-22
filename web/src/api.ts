@@ -4,7 +4,7 @@ import type { TorrentFile, TorrentOptions, TorrentSpeed, VideoFormat } from '../
 import type { StatementAsk, StatementContext } from '../../shared/types';
 import type { ArchiveCard } from '../../shared/digest';
 import type { AppState, Backup, BackupSnapshot, CalEvent, Countdown, Craving, DigestCard, DigestFeedback, DirListing, DisksReport, LinkCheck, LogLine, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
-import type { AlertsInfo, NacLookup, NacStatus } from '../../shared/types';
+import type { AlertsInfo, GuestMusic, NacLookup, NacStatus } from '../../shared/types';
 import type { AskResult } from '../../shared/ask';
 import type { ShellAskResult, ShellAskStatus } from '../../shared/shellAsk';
 import type { UsageReport } from '../../shared/claudeUsage';
@@ -137,6 +137,27 @@ export function cachedNac(): NacStatus | null {
 export function cacheNac(s: NacStatus): void {
   try {
     localStorage.setItem(NAC_KEY, JSON.stringify(s));
+  } catch {
+    // ignore
+  }
+}
+
+/** The Music-only page's last reading (web/guest.html), kept apart so its preview never stands in for your own. */
+export const GUEST_KEY = 'launchpad:guest-music';
+
+export function cachedGuest(): GuestMusic | null {
+  try {
+    const raw = localStorage.getItem(GUEST_KEY);
+    const g = raw ? (JSON.parse(raw) as GuestMusic) : null;
+    return g && g.look && Array.isArray(g.nac?.locations) && Array.isArray(g.nac?.watching) ? g : null;
+  } catch {
+    return null;
+  }
+}
+
+export function cacheGuest(g: GuestMusic): void {
+  try {
+    localStorage.setItem(GUEST_KEY, JSON.stringify(g));
   } catch {
     // ignore
   }
@@ -286,6 +307,9 @@ export const api = {
   nacSlots: () => req<NacStatus>('GET', '/api/nac'),
   /** Check now: when the check will start. Refused (with why) within 5 minutes of the last, or while it's backing off. */
   checkNac: () => req<{ at: string }>('POST', '/api/nac/check', {}),
+  /** The Music-only page's two calls (server/src/access.ts). */
+  guestMusic: () => req<GuestMusic>('GET', '/api/guest/nac'),
+  guestCheckNac: () => req<{ at: string }>('POST', '/api/guest/nac/check', {}),
   /** Reads one location's NAC page (one request), so it can be added. */
   nacLookup: (link: string) => req<NacLookup>('POST', '/api/nac/lookup', { link }),
   nacAddPlace: (p: { id: string; name: string; short: string }) => req<NacStatus>('POST', '/api/nac/places', p),

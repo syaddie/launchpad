@@ -31,6 +31,7 @@ export function SlotCalendar({
   places,
   watched,
   jump,
+  mine = true,
   detail,
 }: {
   view: SlotView;
@@ -41,6 +42,8 @@ export function SlotCalendar({
   watched?: Set<string>;
   /** A day to show, picked elsewhere (the list of watched slots); n changes each time. */
   jump?: { date: string; n: number } | null;
+  /** Bookings can be yours (NAC_BUSKER_ID is set, and this isn't the Music-only page), so the legend says what ★ means. */
+  mine?: boolean;
   detail: (day: SlotDay) => ReactNode;
 }) {
   const byDate = useMemo(() => new Map(view.days.map((d) => [d.date, d])), [view.days]);
@@ -112,7 +115,7 @@ export function SlotCalendar({
               </div>
             ))}
           </div>
-          <Legend codes={codes} places={places} />
+          <Legend codes={codes} places={places} mine={mine} />
         </div>
         <div className="nac-cal-detail" ref={shown} aria-live="polite">
           {picked && detail(picked)}
@@ -171,7 +174,7 @@ function Cell({ date, day, today, first, on, watched, codes, onPick }: { date: s
 }
 
 /** Which code is which location, and what the marks mean. */
-function Legend({ codes, places }: { codes: Record<string, string>; places: { key: string; short: string }[] }) {
+function Legend({ codes, places, mine }: { codes: Record<string, string>; places: { key: string; short: string }[]; mine: boolean }) {
   return (
     <div className="nac-legend meta">
       <span className="nac-legend-places">
@@ -188,7 +191,7 @@ function Legend({ codes, places }: { codes: Record<string, string>; places: { ke
           </span>{' '}
           hours free
         </span>
-        <span className="nac-legend-item">★ yours</span>
+        {mine && <span className="nac-legend-item">★ yours</span>}
         <span className="nac-legend-item">
           <span className="nac-new-dot" aria-hidden="true" /> new since the check before
         </span>

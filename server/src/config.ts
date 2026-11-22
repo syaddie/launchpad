@@ -89,6 +89,11 @@ export const config = {
   access: {
     teamDomain: (env.CF_ACCESS_TEAM_DOMAIN || '').replace(/^https?:\/\//, '').replace(/\/+$/, ''),
     aud: env.CF_ACCESS_AUD || '',
+    /**
+     * Optional: the AUD tag of a second Access application, on its own hostname, for someone who
+     * should only see Music's busking slots (server/src/access.ts). Its sign-ins reach nothing else.
+     */
+    musicAud: env.CF_ACCESS_MUSIC_AUD || '',
   },
 };
 
