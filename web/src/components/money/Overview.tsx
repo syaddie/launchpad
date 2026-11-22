@@ -3,6 +3,7 @@ import type { Money } from '../../../../shared/types';
 import { AccountsPanel } from './Accounts';
 import { BalanceChart, InOutChart } from './charts';
 import { Calc, shortDate } from './shared';
+import { Readout } from '../Motion';
 
 export function Overview({ money, today, onOpenMonth, onChange }: { money: Money; today: string; onOpenMonth: (k: string) => void; onChange: (m: Money) => void }) {
   const keys = monthKeys(money, today);
@@ -21,27 +22,29 @@ export function Overview({ money, today, onOpenMonth, onChange }: { money: Money
         <div className="m-stat hero">
           <span className="meta">Balance today</span>
           <span className="serif tnum" style={actual < 0 ? { color: 'var(--wn)' } : undefined}>
-            {fmtMoney(actual)}
+            <Readout text={fmtMoney(actual)} id="money-today" />
           </span>
           <span className="meta">day-to-day accounts, from what’s done</span>
         </div>
         <div className="m-stat">
           <span className="meta">End of {monthName(thisMonth.key, true)}</span>
           <span className="serif tnum" style={thisMonth.closing < 0 ? { color: 'var(--wn)' } : undefined}>
-            {fmtMoney(thisMonth.closing)}
+            <Readout text={fmtMoney(thisMonth.closing)} id="money-month-end" />
           </span>
           <span className="meta">forecast</span>
         </div>
         <div className="m-stat">
           <span className="meta">Lowest ahead</span>
           <span className="serif tnum" style={low && low.balance < 0 ? { color: 'var(--wn)' } : undefined}>
-            {low ? fmtMoney(low.balance) : '—'}
+            <Readout text={low ? fmtMoney(low.balance) : '—'} id="money-lowest" />
           </span>
           <span className="meta">{low ? (low.date === today ? 'today' : `on ${shortDate(low.date)}`) : 'nothing ahead'}</span>
         </div>
         <button className={'m-stat' + (review.length ? ' warn' : '')} disabled={!review.length} onClick={() => onOpenMonth(review[0].date.slice(0, 7))}>
           <span className="meta">To check</span>
-          <span className="serif tnum">{review.length}</span>
+          <span className="serif tnum">
+            <Readout text={String(review.length)} id="money-to-check" />
+          </span>
           <span className="meta">{review.length ? 'planned entries that have passed ›' : 'all caught up'}</span>
         </button>
       </div>

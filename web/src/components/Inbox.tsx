@@ -4,6 +4,7 @@ import { localGet, localSet } from '../api';
 import type { InboxAction } from '../hooks/useGoogleActions';
 import { billLine, gmailUrl, liveEmails } from '../inboxActions';
 import { ago } from '../util';
+import { Glide } from './Motion';
 
 export { gmailUrl };
 
@@ -90,6 +91,7 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, a
     <main className="news inbox" aria-label="Inbox">
       <div className="news-head">
         <div className="segmented" role="tablist" aria-label="How far back">
+          <Glide on={range} />
           {RANGES.map((x) => (
             <button key={x.key} role="tab" aria-selected={x.key === range} className={x.key === range ? 'on' : ''} onClick={() => pick(x.key)}>
               {x.name}

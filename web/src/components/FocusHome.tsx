@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
+import { useGlide } from './Motion';
 import type { FocusTab } from '../layout';
 
 export interface FocusTabInfo {
@@ -28,6 +29,9 @@ export function FocusHome({ tabs, active, onTab, hero, photo, panel, bookmarks, 
   /** Shown when every tab's panel is switched off. */
   empty: ReactNode;
 }) {
+  // The tabs share one highlight that glides to the one picked (motion.css).
+  const tabsRef = useRef<HTMLDivElement>(null);
+  useGlide(tabsRef, `${active}:${tabs.length}`, '.fx-tab.on');
   // Left and Right move along the tabs, as a tab list should.
   const onKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const dir = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
@@ -46,7 +50,8 @@ export function FocusHome({ tabs, active, onTab, hero, photo, panel, bookmarks, 
       </div>
       <div className="fx-work">
         {tabs.length > 0 && (
-          <div className="fx-tabs" role="tablist" aria-label="Home panels" onKeyDown={onKey}>
+          <div ref={tabsRef} className="fx-tabs" role="tablist" aria-label="Home panels" onKeyDown={onKey}>
+            <span className="glide" aria-hidden="true" />
             {tabs.map((t) => (
               <button
                 key={t.key}

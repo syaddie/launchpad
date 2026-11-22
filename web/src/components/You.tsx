@@ -8,6 +8,7 @@ import {
 import type { AppState, Countdown, Craving, Mood, Prefs } from '../../../shared/types';
 import { fmtDay, hm, newId } from '../util';
 import { NoteLines, toggleLine } from './Notes';
+import { Glide, Readout } from './Motion';
 
 interface Props {
   data: AppState;
@@ -117,7 +118,9 @@ function Countdowns({ list, now, addSignal, onChange }: { list: Countdown[]; now
               <span className="cd-num">
                 {next.days > 1 ? (
                   <>
-                    <span className="serif tnum">{next.days}</span>
+                    <span className="serif tnum">
+                      <Readout text={String(next.days)} id="countdown-next" />
+                    </span>
                     <span className="cd-unit">days</span>
                   </>
                 ) : (
@@ -222,7 +225,7 @@ function Cigarettes({ smokes, counts, prefs, now, onLog, onUndo, onOpenSettings 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
             <span className="serif tnum cig-count" style={over ? { color: 'var(--wn)' } : undefined}>
-              {count}
+              <Readout text={String(count)} id="cigarettes-today" />
             </span>
             <span style={{ fontSize: 13, color: 'var(--t2)' }}>{limit ? `today, of ${limit}` : 'today'}</span>
           </div>
@@ -408,7 +411,9 @@ function Cravings({ cravings, counts, now, onLog, onSave, onRemove }: {
 
       <div className="cig-top">
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-          <span className="serif tnum cig-count">{todays}</span>
+          <span className="serif tnum cig-count">
+            <Readout text={String(todays)} id="cravings-today" />
+          </span>
           <span style={{ fontSize: 13, color: 'var(--t2)' }}>
             resisted today{smoked ? `, ${smoked} smoked` : ''}
           </span>
@@ -524,6 +529,7 @@ function CravingRow({ c, today, open, onToggle, onSave, onRemove }: {
       {open && (
         <div className="crv-edit" onKeyDown={(e) => e.key === 'Escape' && (e.stopPropagation(), onToggle())}>
           <div className="segmented" role="group" aria-label="How strong">
+            <Glide on={c.strength} />
             {STRENGTH_WORDS.map((w, i) => (
               <button key={w} className={c.strength === i + 1 ? 'on' : ''} aria-pressed={c.strength === i + 1} onClick={() => onSave({ ...c, strength: (i + 1) as 1 | 2 | 3 })}>
                 {w}
@@ -563,7 +569,8 @@ function CravingRow({ c, today, open, onToggle, onSave, onRemove }: {
 
 // ---------- mood and journal ----------
 
-export const moodColor = (level: number) => `color-mix(in srgb, var(--ac) ${[18, 36, 56, 78, 100][level - 1]}%, var(--sf))`;
+// Drawn in --mood: the accent, except where the accent means alarm (Poster, designs.css).
+export const moodColor = (level: number) => `color-mix(in srgb, var(--mood, var(--ac)) ${[18, 36, 56, 78, 100][level - 1]}%, var(--sf))`;
 const moodInk = (level: number) => (level >= 4 ? 'var(--on)' : 'var(--tx)');
 
 function MoodPanel({ ref, moods, now, picked, onPick, onMood }: {

@@ -7,6 +7,7 @@ import { api } from '../api';
 import type { Notify } from '../hooks/useToast';
 import { ago } from '../util';
 import { Formula, Tex } from './Tex';
+import { Glide } from './Motion';
 
 interface Props {
   data: AppState;
@@ -62,6 +63,7 @@ export function Digest({ data, now, busy, onRefresh, onSubjects, onMerge, onList
       <div className="news-head">
         <div className="news-topics">
           <div className="tabs news-tabs" role="tablist">
+            <Glide on={tab} />
             <button role="tab" aria-selected={tab === 'today'} className={'tab' + (tab === 'today' ? ' active' : '')} onClick={() => setTab('today')}>
               Today
             </button>

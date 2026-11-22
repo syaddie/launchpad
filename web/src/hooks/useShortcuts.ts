@@ -5,7 +5,8 @@ import { VIEWS } from '../components/Rail';
 
 export interface ShortcutState {
   view: ViewKey;
-  setView: Dispatch<SetStateAction<ViewKey>>;
+  /** Changes the view, with its motion (App). */
+  setView: (v: ViewKey) => void;
   design: DesignKey;
   palette: boolean;
   setPalette: Dispatch<SetStateAction<boolean>>;
@@ -92,7 +93,7 @@ export function useShortcuts(state: ShortcutState) {
       }
       if (drawer || focus) return;
       if (key === 'd') {
-        setView((v) => (v === 'digest' ? 'home' : 'digest'));
+        setView(view === 'digest' ? 'home' : 'digest');
         return;
       }
       if (key === 'c') {

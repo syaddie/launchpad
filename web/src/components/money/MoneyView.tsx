@@ -14,6 +14,7 @@ import { Owed } from './Owed';
 import { Subscriptions } from './Subscriptions';
 import { Wishlist } from './Wishlist';
 import { lastAccount, type Notify } from './shared';
+import { Glide } from '../Motion';
 
 type Tab = 'overview' | 'month' | 'wishlist' | 'subs' | 'owed';
 const TABS: { key: Tab; name: string }[] = [
@@ -89,6 +90,7 @@ export function MoneyView({ money: given, now, saved, onChange: save, onImport, 
     <main className="money" aria-label="Money">
       <div className="money-head">
         <div ref={tabsRef} className="tabs money-tabs" role="tablist">
+          <Glide on={tab} />
           {TABS.map((t) => (
             <button key={t.key} role="tab" aria-selected={tab === t.key} className={'tab' + (tab === t.key ? ' active' : '')} onClick={() => setTab(t.key)}>
               {t.name}

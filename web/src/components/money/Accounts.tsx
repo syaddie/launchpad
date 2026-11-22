@@ -58,7 +58,7 @@ export function AccountsPanel({ money, today, onChange }: { money: Money; today:
         </div>
         {money.accounts.length > 1 && (
           <button className="btn btn-primary btn-small" onClick={() => setOpen({ kind: 'move' })}>
-            <i className="ph-bold ph-arrows-left-right" />
+            <i className="ph-duotone ph-arrows-left-right" />
             Move money
           </button>
         )}
@@ -73,7 +73,7 @@ export function AccountsPanel({ money, today, onChange }: { money: Money; today:
         {money.accounts.length < MAX_ACCOUNTS && (
           <button className="acct-card acct-add" onClick={() => setOpen({ kind: 'account', id: null })}>
             <span className="acct-icon">
-              <i className="ph-bold ph-plus" aria-hidden="true" />
+              <i className="ph-duotone ph-plus" aria-hidden="true" />
             </span>
             <b>Add account</b>
             <span className="meta">A bank, cash, investments, or a pot for something you’re saving for</span>

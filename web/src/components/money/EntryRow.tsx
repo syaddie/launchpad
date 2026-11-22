@@ -35,7 +35,7 @@ export function EntryRow({ e, series, isSub, onSub, money, today, open, onOpen, 
       aria-pressed={!e.planned}
       onClick={() => onPatch({ planned: !e.planned })}
     >
-      <span className={'ent-tick' + (e.planned ? '' : ' on') + (late ? ' late' : '')}>{!e.planned && <i className="ph-bold ph-check" />}</span>
+      <span className={'ent-tick' + (e.planned ? '' : ' on') + (late ? ' late' : '')}>{!e.planned && <i className="ph-duotone ph-check" />}</span>
     </button>
   );
   const del = (
@@ -130,7 +130,7 @@ export function EntryRow({ e, series, isSub, onSub, money, today, open, onOpen, 
       {tick}
       <button className="ent-main" title="Change this entry" onClick={onOpen}>
         <span className="ent-note">
-          {e.kind === 'move' && <i className="ph-bold ph-arrows-left-right ent-move" aria-hidden="true" />}
+          {e.kind === 'move' && <i className="ph-duotone ph-arrows-left-right ent-move" aria-hidden="true" />}
           {e.kind !== 'move' && !e.note ? <span className="ent-none">No note</span> : title}
         </span>
         <span className="ent-meta">
@@ -138,13 +138,13 @@ export function EntryRow({ e, series, isSub, onSub, money, today, open, onOpen, 
           {e.kind !== 'move' && money.accounts.length > 1 && <span className="ent-acct">{names.get(e.account)}</span>}
           {isSub && (
             <span className="ent-inv" title="Listed in Subscriptions">
-              <i className="ph-bold ph-repeat" aria-hidden="true" />
+              <i className="ph-duotone ph-repeat" aria-hidden="true" />
               Subscription
             </span>
           )}
           {inv && (
             <span className="ent-inv" title="From an invoice in Owed">
-              <i className="ph-bold ph-link-simple" aria-hidden="true" />
+              <i className="ph-duotone ph-link-simple" aria-hidden="true" />
               {inv.num || 'Invoice'}
             </span>
           )}

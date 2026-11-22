@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { localGet, localSet } from '../api';
 import { MC_ALL_COMMANDS } from '../mcAllCommands';
 import { MC_COMMANDS, MC_GROUPS, fillFor, filterCommands, parsePins, togglePin } from '../mcCommands';
+import { Glide } from './Motion';
 
 type Tab = 'short' | 'all';
 
@@ -84,6 +85,7 @@ export function McCommandSheet({ canType, onFill }: { canType: boolean; onFill: 
     <div id="mc-sheet" className={'mc-sheet' + (tab === 'all' ? ' all' : '')} role="region" aria-label="Command cheatsheet" onKeyDown={walk}>
       <div className="mc-sheet-bar">
         <div className="tabs" role="tablist">
+          <Glide on={tab} />
           <button role="tab" aria-selected={tab === 'short'} className={'tab' + (tab === 'short' ? ' active' : '')} onClick={() => pick('short')}>
             Short list
           </button>
