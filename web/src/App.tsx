@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { STARTER_NOTES } from '../../shared/defaults';
-import { ymd } from '../../shared/dates';
+import { startOfDay, ymd } from '../../shared/dates';
 import { fmtStudy, timerMinutes } from '../../shared/learn';
 import { fmtKg } from '../../shared/training';
 import { fmtUsd } from '../../shared/claudeUsage';
@@ -10,6 +10,7 @@ import type { AppState, Backup, BookmarkGroup, Craving, CravingTrigger, DesignKe
 import { api, localGet, localSet, type RestoreResult } from './api';
 import { AddEvent } from './components/AddEvent';
 import { Bookmarks } from './components/Bookmarks';
+import { closeMenu, ContextMenuHost, menuProps } from './components/ContextMenu';
 import { AddPackageDrawer, DESIGNS, Drawer, PackageDrawer, SettingsDrawer } from './components/Drawers';
 import { FocusHome, type FocusTabInfo } from './components/FocusHome';
 import { HeroPanel } from './components/Hero';
@@ -35,7 +36,7 @@ import { focusTab, gridLayout, type Area, type FocusTab } from './layout';
 import { send } from './outbox';
 import { paletteAsk, paletteItems, paletteSearches, type AskHandlers, type PaletteContext } from './paletteItems';
 import type { PendingCall } from './pending';
-import { dayDiff, hm, inboxBadge, inMinutes, newId, parseYmd } from './util';
+import { dayDiff, hm, inboxBadge, inMinutes, newId, parseYmd, statusText } from './util';
 
 // The views off the home page load the first time they're opened, so a new tab downloads
 // and starts only what home needs. They're fetched in the background once the page is up
@@ -138,6 +139,9 @@ export function App({ cached }: { cached: AppState | null }) {
     document.documentElement.dataset.accent = data.prefs.accent;
     document.documentElement.dataset.design = design;
   }, [dark, data.prefs.accent, design]);
+
+  // A right-click menu belongs to the view it was opened in.
+  useEffect(() => closeMenu(), [view]);
 
   // Pick up anything the hourly digest run (or the inbox's) wrote since the last poll.
   useEffect(() => {
@@ -607,6 +611,17 @@ export function App({ cached }: { cached: AppState | null }) {
     patchPackage(id, { isNew: false });
     api.patchPackage(id, { isNew: false }).catch(onSaveError);
   };
+  /** Ask the carrier now rather than waiting for the next round. */
+  const refreshPackage = (id: string) => {
+    showToast('Checking for updates…');
+    api
+      .refreshPackage(id)
+      .then((pkg) => {
+        if (pkg) update((d) => ({ ...d, packages: d.packages.map((p) => (p.id === id ? pkg : p)) }));
+        showToast(pkg ? statusText(pkg, startOfDay(new Date())) : 'That package is no longer tracked.');
+      })
+      .catch((e) => showToast(`Couldn’t check: ${e.message}`));
+  };
   const notesPanel = (
     <Notes notes={notes} activeId={activeId} onActive={pickNote} onChange={setNotes} saved={saved} onOpenFocus={() => setFocus(true)} onEditing={onNoteEditing} notify={showToast} />
   );
@@ -618,12 +633,13 @@ export function App({ cached }: { cached: AppState | null }) {
       compact={shown.has('photo2') && layout !== 'narrow'}
       onConnect={connect}
       onRetry={() => api.sync('calendar').then(merge).catch(() => refresh())}
+      notify={showToast}
       addEvent={<AddEvent data={data} now={now} focusSignal={addEventSignal} onAdd={google.addEvent} onConnect={connect} />}
     />
   );
   const tasksPanel = <Tasks data={data} now={now} onConnect={connect} onAdd={addTask} onComplete={completeTask} onUpdate={google.updateTask} onMove={google.moveTask} onDelete={google.deleteTask} />;
   const packagesPanel = (
-    <Packages packages={data.packages} now={now} onOpen={(id) => setDrawer({ type: 'pkg', id })} onAdd={() => setDrawer({ type: 'add' })} onKeep={keepPackage} onDismiss={archivePackage} />
+    <Packages packages={data.packages} now={now} onOpen={(id) => setDrawer({ type: 'pkg', id })} onAdd={() => setDrawer({ type: 'add' })} onKeep={keepPackage} onDismiss={archivePackage} onRefresh={refreshPackage} notify={showToast} />
   );
   const heroPanel = <HeroPanel data={data} now={now} extras={extras.join(' · ')} />;
   const noPanels = (
@@ -692,11 +708,34 @@ export function App({ cached }: { cached: AppState | null }) {
   const drawerTitle =
     drawer?.type === 'settings' ? 'Settings' : drawer?.type === 'add' ? 'Add package' : drawer?.type === 'exercise' ? drawer.title : drawer?.type === 'course' ? data.learn.courses.find((c) => c.id === drawer.id)?.name || 'Course' : drawerPkg ? 'Package' : '';
 
+  // Right-click on the page's empty space (not a panel, not text): the app-wide things.
+  const backgroundMenu = menuProps(
+    () => [
+      { label: 'Command palette', icon: 'ph-command', onSelect: () => setPalette(true) },
+      { label: 'Keyboard shortcuts', icon: 'ph-keyboard', onSelect: () => setShortcuts(true) },
+      view === 'home' && shown.has('bm') && !editBookmarks && { label: 'Edit bookmarks', icon: 'ph-pencil-simple', onSelect: () => setEditBookmarks(true) },
+      'sep',
+      { label: 'Settings', icon: 'ph-gear-six', onSelect: () => setDrawer({ type: 'settings' }) },
+    ],
+    'Launchpad',
+    { only: (t) => t.matches('.lp-root, .lp-shell, .lp-inner, .lp-grid, .hz-home, .hz-cols, .hz-col, .fx-home, main') },
+  );
+
   return (
-    <div ref={rootRef} className="lp-root" data-layout={layout} data-design={design} data-view={view}>
+    <div ref={rootRef} className="lp-root" data-layout={layout} data-design={design} data-view={view} {...backgroundMenu}>
       {design === 'vista' && <Wallpaper photos={photoCount > 0 ? data.photos : []} index={photoSlots.shown[0]} onNext={() => photoSlots.step(0, 1)} />}
       <div className="lp-shell">
-      <Rail view={view} hidden={data.prefs.hidden} badges={{ inbox: inboxCount }} onView={setView} onPalette={() => setPalette(true)} onSettings={() => setDrawer({ type: 'settings' })} />
+      <Rail
+        view={view}
+        hidden={data.prefs.hidden}
+        badges={{ inbox: inboxCount }}
+        onView={setView}
+        onHide={(v) => {
+          const before = data.prefs;
+          setPrefs({ ...before, hidden: [...before.hidden.filter((h) => h !== `view:${v}`), `view:${v}`] });
+          showToast(`Hid ${VIEWS.find((x) => x.key === v)?.name} from the rail. ⌘K still opens it.`, { label: 'Undo', run: () => setPrefs(before) });
+        }}
+        onPalette={() => setPalette(true)} onSettings={() => setDrawer({ type: 'settings' })} />
       <div className="lp-inner">
         <TopBar data={data} now={now} title={view === 'home' ? undefined : VIEWS.find((v) => v.key === view)?.name} subline={subline} search={search} onSearch={setSearch} searchRef={searchRef} smokesToday={smokesToday} onLogSmoke={logSmoke} onOpenTraining={() => setView('training')} onOpenLearn={() => setView('learn')} />
         {serverIssue && <ServerBanner issue={serverIssue} waiting={waiting} onRetry={() => refresh()} />}
@@ -787,6 +826,10 @@ export function App({ cached }: { cached: AppState | null }) {
               onAddPackage={() => setDrawer({ type: 'add' })}
               onKeepPackage={keepPackage}
               onDismissPackage={archivePackage}
+              onRefreshPackage={refreshPackage}
+              onUpdateTask={google.updateTask}
+              onMoveTask={google.moveTask}
+              onDeleteTask={(t) => google.deleteTask(t)}
               onLogSmoke={logSmoke}
               onOpenLearn={() => setView('learn')}
               notify={showToast}
@@ -856,6 +899,8 @@ export function App({ cached }: { cached: AppState | null }) {
       {focus && <FocusView notes={notes} activeId={activeId} onActive={pickNote} onChange={setNotes} saved={saved} onClose={() => setFocus(false)} notify={showToast} />}
 
       {shortcuts && <Shortcuts onClose={() => setShortcuts(false)} />}
+
+      <ContextMenuHost />
 
       {palette && <Palette items={paletteItems(paletteCtx)} searches={(q) => paletteSearches(paletteCtx, q)} ask={paletteAsk(paletteCtx, !serverIssue)} onClose={() => setPalette(false)} />}
 

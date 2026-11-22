@@ -431,6 +431,26 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .menu button:hover:not(:disabled) { background: var(--hv); }
 .menu button:disabled { opacity: 0.4; cursor: default; }
 
+/* The right-click (and long-press) menu, ContextMenu.tsx: the .menu look, fixed over everything. */
+.ctx-menu { position: fixed; z-index: 70; min-width: 180px; max-width: min(300px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow-y: auto; overscroll-behavior: contain; outline: none; }
+.ctx-menu [role='menuitem'] { display: flex; gap: 8px; align-items: center; flex: none; padding: 6px 10px; border: none; border-radius: var(--r-s); background: transparent; color: var(--tx); font: inherit; font-size: 13px; text-align: left; text-decoration: none; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ctx-menu [role='menuitem'] i { flex: none; width: 16px; font-size: 15px; color: var(--t3); }
+/* Hover and keyboard focus look the same: the highlight is the focus mark. */
+.ctx-menu [role='menuitem']:hover:not(:disabled), .ctx-menu [role='menuitem']:focus { background: var(--hv); outline: none; }
+.ctx-menu [role='menuitem'].danger, .ctx-menu [role='menuitem'].danger i { color: var(--wn); }
+.ctx-menu [role='menuitem'].danger:hover:not(:disabled), .ctx-menu [role='menuitem'].danger:focus { background: var(--wnt); }
+.ctx-sep { height: 1px; margin: 4px 6px; background: var(--ln); flex: none; }
+/* Fingers need bigger rows. */
+@media (pointer: coarse) {
+  .ctx-menu { min-width: 210px; }
+  .ctx-menu [role='menuitem'] { padding: 10px 12px; font-size: 15px; }
+}
+/* What has a menu: a long press opens it, rather than iOS's link preview or a text selection. */
+[data-menu] { -webkit-touch-callout: none; }
+@media (pointer: coarse) {
+  [data-menu] { -webkit-user-select: none; user-select: none; }
+}
+
 /* A row of tabs that doesn't fit (a view's tabs on a phone) scrolls sideways rather than
    running off the edge. As a scroll container it may shrink below its content in a flex row. */
 .tabs { display: flex; gap: 2px; min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; }

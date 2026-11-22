@@ -5,6 +5,7 @@ import type { BookmarkGroup, LinkCheck } from '../../../shared/types';
 import { bookmarkOpened } from '../api';
 import type { Notify } from '../hooks/useToast';
 import { ago, newId } from '../util';
+import { copyText, menuProps, type MenuItem } from './ContextMenu';
 import { Drawer } from './Drawers';
 import { Fav, matchBookmark } from './TopBar';
 
@@ -97,6 +98,21 @@ export function Bookmarks({ groups, onChange, search, edit, setEdit, linkCheck, 
     setDragId(null);
     setDropG(null);
   };
+
+  const startEdit = (b: { id: string; name: string; url: string }) => {
+    setEdit(true);
+    setEditTile(b.id);
+    setDraft({ name: b.name, url: b.url });
+  };
+
+  const tileMenu = (b: { id: string; name: string; url: string }): MenuItem[] => [
+    !edit && { label: 'Open', icon: 'ph-arrow-square-in', href: b.url, onSelect: () => bookmarkOpened(b.id) },
+    !edit && { label: 'Open in new tab', icon: 'ph-arrow-square-out', href: b.url, newTab: true, onSelect: () => bookmarkOpened(b.id) },
+    !edit && { label: 'Copy link', icon: 'ph-link', onSelect: () => copyText(b.url, notify, 'Link copied') },
+    'sep',
+    { label: 'Edit…', icon: 'ph-pencil-simple', onSelect: () => startEdit(b) },
+    { label: 'Remove', icon: 'ph-trash', danger: true, confirm: `Remove the “${b.name}” bookmark?`, onSelect: () => removeTile(b.id) },
+  ];
 
   const removeGroup = (g: BookmarkGroup) => {
     if (g.items.length && !window.confirm(`Delete the “${g.name}” group and its ${g.items.length} bookmark${g.items.length === 1 ? '' : 's'}?`)) return;
@@ -224,12 +240,12 @@ export function Bookmarks({ groups, onChange, search, edit, setEdit, linkCheck, 
                       title={problem ? `${problem.kind === 'gone' ? 'Looks gone' : 'Didn’t open'}: ${problem.why} (checked ${ago(problem.at, new Date())})` : undefined}
                       draggable={edit}
                       style={{ opacity: dragId === b.id ? 0.35 : q && !matchBookmark(b, q) ? 0.3 : 1 }}
+                      {...menuProps(() => tileMenu(b), b.name)}
                       onAuxClick={(e) => !edit && e.button === 1 && bookmarkOpened(b.id)}
                       onClick={(e) => {
                         if (!edit) return bookmarkOpened(b.id);
                         e.preventDefault();
-                        setEditTile(b.id);
-                        setDraft({ name: b.name, url: b.url });
+                        startEdit(b);
                       }}
                       onDragStart={(e) => {
                         if (!edit) return;

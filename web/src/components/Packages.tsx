@@ -1,18 +1,40 @@
 import { useState } from 'react';
 import { startOfDay } from '../../../shared/dates';
 import type { Package } from '../../../shared/types';
+import { trackUrl } from '../../../shared/carriers';
 import { chipOf, segColor, statusText } from '../util';
+import { copyText, menuProps, type MenuItem } from './ContextMenu';
 
-interface Props {
-  packages: Package[];
-  now: Date;
+export interface PackageMenuActions {
   onOpen: (id: string) => void;
-  onAdd: () => void;
   onKeep: (id: string) => void;
   onDismiss: (id: string) => void;
+  onRefresh?: (id: string) => void;
+  notify?: (msg: string) => void;
 }
 
-export function Packages({ packages, now, onOpen, onAdd, onKeep, onDismiss }: Props) {
+/** Right-click on a package, here and in Horizon's cards. Archive can't be undone, so it asks. */
+export function packageMenu(p: Package, a: PackageMenuActions): MenuItem[] {
+  return [
+    { label: 'Details…', icon: 'ph-info', onSelect: () => a.onOpen(p.id) },
+    { label: `Track on ${p.carrier || 'the carrier’s site'}`, icon: 'ph-arrow-square-out', href: trackUrl(p.carrier, p.number), newTab: true },
+    { label: 'Copy tracking number', icon: 'ph-copy', onSelect: () => copyText(p.number, a.notify, 'Tracking number copied') },
+    a.onRefresh && p.stage < 3 && { label: 'Check for updates', icon: 'ph-arrows-clockwise', onSelect: () => a.onRefresh!(p.id) },
+    'sep',
+    p.isNew && { label: 'Keep tracking', icon: 'ph-check', onSelect: () => a.onKeep(p.id) },
+    { label: p.isNew ? 'Dismiss' : 'Archive', icon: 'ph-archive', danger: true, confirm: `${p.isNew ? 'Dismiss' : 'Archive'} “${p.label}”? It leaves the list for good.`, onSelect: () => a.onDismiss(p.id) },
+  ];
+}
+
+interface Props extends PackageMenuActions {
+  packages: Package[];
+  now: Date;
+  onAdd: () => void;
+}
+
+export function Packages({ packages, now, onAdd, ...actions }: Props) {
+  const { onOpen, onKeep, onDismiss } = actions;
+  const menu = (p: Package) => menuProps(() => packageMenu(p, actions), p.label);
   const [deliveredOpen, setDeliveredOpen] = useState(false);
   const today = startOfDay(now);
   const active = packages.filter((p) => p.stage < 3);
@@ -37,7 +59,7 @@ export function Packages({ packages, now, onOpen, onAdd, onKeep, onDismiss }: Pr
         {active.map((p) => {
           const chip = chipOf(p);
           return (
-            <div key={p.id} className="pkg" onClick={() => onOpen(p.id)}>
+            <div key={p.id} className="pkg" onClick={() => onOpen(p.id)} {...menu(p)}>
               <div className="pkg-top">
                 <span className="pkg-label">{p.label}</span>
                 <span className={'chip ' + chip.cls}>{chip.text}</span>
@@ -102,7 +124,7 @@ export function Packages({ packages, now, onOpen, onAdd, onKeep, onDismiss }: Pr
             </button>
             {deliveredOpen &&
               delivered.map((p) => (
-                <div key={p.id} className="delivered-row" onClick={() => onOpen(p.id)}>
+                <div key={p.id} className="delivered-row" onClick={() => onOpen(p.id)} {...menu(p)}>
                   <span style={{ minWidth: 0 }}>{p.label}</span>
                   <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--t3)', whiteSpace: 'nowrap' }}>{statusText(p, today)}</span>
                 </div>

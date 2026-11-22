@@ -1,5 +1,7 @@
 import type { ViewKey } from '../../../shared/types';
 import { useActiveTabInView } from '../hooks/useActiveTabInView';
+import { hashFor } from '../util';
+import { menuProps } from './ContextMenu';
 
 export const VIEWS: { key: ViewKey; name: string; icon: string; letter: string }[] = [
   { key: 'home', name: 'Home', icon: 'ph-house', letter: 'H' },
@@ -17,12 +19,14 @@ export const VIEWS: { key: ViewKey; name: string; icon: string; letter: string }
 
 /** The view switcher down the left edge (across the top on a phone). Hidden views stay reachable from ⌘K.
  * The designs restyle it: Console's F-key bar, Bento's dock, Horizon's row of tabs. */
-export function Rail({ view, hidden, badges, onView, onPalette, onSettings }: {
+export function Rail({ view, hidden, badges, onView, onHide, onPalette, onSettings }: {
   view: ViewKey;
   hidden: string[];
   /** A count on a view's button, e.g. inbox items that need you. */
   badges: Partial<Record<ViewKey, number>>;
   onView: (v: ViewKey) => void;
+  /** Hide a view from the rail (Settings › Panels brings it back). */
+  onHide?: (v: ViewKey) => void;
   onPalette: () => void;
   onSettings: () => void;
 }) {
@@ -39,6 +43,15 @@ export function Rail({ view, hidden, badges, onView, onPalette, onSettings }: {
           aria-current={v.key === view ? 'page' : undefined}
           title={`${v.name} (G then ${v.letter})`}
           onClick={() => onView(v.key)}
+          {...menuProps(
+            () => [
+              { label: `Open ${v.name}`, icon: v.icon, onSelect: () => onView(v.key) },
+              { label: 'Open in new tab', icon: 'ph-arrow-square-out', href: location.pathname + (hashFor(v.key) || ''), newTab: true },
+              v.key !== 'home' && onHide && 'sep',
+              v.key !== 'home' && onHide && { label: 'Hide from the rail', icon: 'ph-eye-slash', onSelect: () => onHide(v.key) },
+            ],
+            v.name,
+          )}
         >
           <i className={'ph-duotone ' + v.icon} aria-hidden="true" />
           <kbd className="rail-fkey" aria-hidden="true">F{VIEWS.indexOf(v) + 1}</kbd>

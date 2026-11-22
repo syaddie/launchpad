@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Snippet } from '../../../shared/types';
 import { cleanCommand, MAX_SHELL_ASK, type ShellAnswer, type ShellAskStatus } from '../../../shared/shellAsk';
 import { api } from '../api';
+import { menuProps, type MenuItem } from './ContextMenu';
 
 type Asked = { q: string; status: 'busy' } | { q: string; status: 'done'; answer: ShellAnswer } | { q: string; status: 'failed'; error: string };
 
@@ -231,14 +232,23 @@ export function SnippetsPanel({ canUse, cwd, onInsert, onRun, onClose }: {
     setError('');
   };
 
-  const remove = (id: string) => {
-    if (deleting !== id) return setDeleting(id);
+  const deleteNow = (id: string) => {
     setDeleting(null);
     api
       .deleteSnippet(id)
       .then(setList)
       .catch((e) => setError(e.message));
   };
+
+  const remove = (id: string) => (deleting !== id ? setDeleting(id) : deleteNow(id));
+
+  const snippetMenu = (s: Snippet): MenuItem[] => [
+    { label: 'Insert', icon: 'ph-cursor-text', disabled: !canUse, onSelect: () => onInsert(s.command) },
+    { label: 'Run', icon: 'ph-play', disabled: !canUse, onSelect: () => onRun(s.command) },
+    'sep',
+    { label: 'Edit', icon: 'ph-pencil-simple', onSelect: () => setEditing(s.id) },
+    { label: 'Delete', icon: 'ph-trash', danger: true, confirm: `Delete the “${s.name}” snippet?`, onSelect: () => deleteNow(s.id) },
+  ];
 
   return (
     <aside className="snippets" aria-label="Snippets">
@@ -273,7 +283,7 @@ export function SnippetsPanel({ canUse, cwd, onInsert, onRun, onClose }: {
             editing === s.id ? (
               <SnippetForm key={s.id} start={s} onCancel={() => setEditing(null)} onSave={(name, command) => api.editSnippet({ id: s.id, name, command }).then(saved)} />
             ) : (
-              <div key={s.id} className="snippet">
+              <div key={s.id} className="snippet" {...menuProps(() => snippetMenu(s), s.name)}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <span className="snippet-name">{s.name}</span>
                   <span className="snippet-tools">
