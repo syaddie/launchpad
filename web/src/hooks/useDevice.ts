@@ -69,23 +69,31 @@ export function useHashView(move: (from: ViewKey, to: ViewKey, apply: () => void
   current.current = view;
   const moveRef = useRef(move);
   moveRef.current = move;
+  // The view a change is on its way to (its motion runs before the view is set), so the same move isn't started
+  // twice: Back fires both popstate and hashchange.
+  const heading = useRef<ViewKey | null>(null);
   useEffect(() => {
     if (viewFromHash(location.hash) !== view) history.pushState(null, '', hashFor(view) || location.pathname + location.search);
   }, [view]);
-  useEffect(() => {
-    const onNav = (e: Event) => {
-      const to = viewFromHash(location.hash);
-      if (to === current.current) return;
-      if ((e as Event & { hasUAVisualTransition?: boolean }).hasUAVisualTransition) setView(to);
-      else moveRef.current(current.current, to, () => setView(to));
+  const moveTo = useCallback((to: ViewKey, animate = true) => {
+    if (to === heading.current || (heading.current === null && to === current.current)) return;
+    heading.current = to;
+    const apply = () => {
+      if (heading.current === to) heading.current = null;
+      setView(to);
     };
+    if (animate) moveRef.current(current.current, to, apply);
+    else apply();
+  }, []);
+  useEffect(() => {
+    const onNav = (e: Event) => moveTo(viewFromHash(location.hash), !(e as Event & { hasUAVisualTransition?: boolean }).hasUAVisualTransition);
     window.addEventListener('popstate', onNav);
     window.addEventListener('hashchange', onNav);
     return () => {
       window.removeEventListener('popstate', onNav);
       window.removeEventListener('hashchange', onNav);
     };
-  }, []);
-  const go = useCallback((to: ViewKey) => moveRef.current(current.current, to, () => setView(to)), []);
+  }, [moveTo]);
+  const go = useCallback((to: ViewKey) => moveTo(to), [moveTo]);
   return [view, go] as const;
 }

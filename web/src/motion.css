@@ -473,6 +473,12 @@ html[data-axis='x'][data-step='prev']::view-transition-new(lp-view) { animation-
 @keyframes lpViewOutXBack { to { opacity: 0; translate: calc(var(--m-travel) * 0.5) 0; } }
 @keyframes lpViewInXBack { from { opacity: 0; translate: calc(var(--m-travel) * -1) 0; } }
 
+/* The rest of the top bar changes in place, quickly: where it's the same in both views nothing shows, and where a
+   design lays it out differently on Home (Bento's and Focus's clock is in a tile there), the two meet only briefly. */
+html[data-step] .topbar { view-transition-name: lp-top; }
+::view-transition-group(lp-top) { animation: none; }
+::view-transition-old(lp-top), ::view-transition-new(lp-top) { inline-size: auto; block-size: auto; animation-duration: calc(var(--m-view) * 0.35); animation-timing-function: var(--e-out); }
+
 /* The title: the old one lifts away as the new one rises into its place. */
 ::view-transition-group(lp-title) { animation: none; }
 ::view-transition-old(lp-title), ::view-transition-new(lp-title) { inline-size: auto; block-size: auto; }
