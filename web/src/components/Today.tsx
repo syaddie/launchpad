@@ -1,9 +1,11 @@
-import { useState, type ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import { DOW, addDays, dayDiff, parseYmd, startOfDay } from '../../../shared/dates';
 import { fmtMinutes, gymWorkout, minutes, workingSets, workoutLabel } from '../../../shared/training';
 import type { AppState, CalEvent } from '../../../shared/types';
 import { ago, fmtDay, hm, inMinutes } from '../util';
+import { copyText, menuProps, type MenuItem } from './ContextMenu';
 import { KeyFigures } from './KeyFigures';
+import { Readout } from './Motion';
 
 interface Props {
   data: AppState;
@@ -15,6 +17,7 @@ interface Props {
   onRetry: () => Promise<void>;
   /** The add-an-event field (AddEvent.tsx), under the agenda. */
   addEvent?: ReactNode;
+  notify?: (msg: string) => void;
 }
 
 export interface TimedEvent extends CalEvent {
@@ -36,7 +39,17 @@ export function todayAgenda(data: AppState, now: Date) {
   return { timed, todays, cur, next, hidden };
 }
 
-export function Today({ data, now, wide, compact, onConnect, onRetry, addEvent }: Props) {
+/** Right-click on an event, here and in Horizon: its call and Google Calendar. */
+export function calEventMenu(e: CalEvent, notify?: (msg: string) => void): MenuItem[] {
+  return [
+    { label: 'Join call', icon: 'ph-video-camera', href: e.conferenceUrl || undefined, newTab: true, disabled: !e.conferenceUrl },
+    e.conferenceUrl && { label: 'Copy call link', icon: 'ph-link', onSelect: () => copyText(e.conferenceUrl!, notify, 'Call link copied') },
+    'sep',
+    { label: 'Open in Google Calendar', icon: 'ph-arrow-square-out', href: e.htmlLink || 'https://calendar.google.com', newTab: true },
+  ];
+}
+
+export function Today({ data, now, wide, compact, onConnect, onRetry, addEvent, notify }: Props) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [weekOpen, setWeekOpen] = useState(false);
   const [tomorrowOpen, setTomorrowOpen] = useState(false);
@@ -69,6 +82,16 @@ export function Today({ data, now, wide, compact, onConnect, onRetry, addEvent }
   const showTomorrow = tomorrowOpen || !compact;
   const count = (n: number) => `${n} event${n === 1 ? '' : 's'}`;
 
+  /** Timed ones can also show their details. */
+  const eventMenu = (e: CalEvent, details?: boolean) =>
+    menuProps(
+      () => [
+        ...calEventMenu(e, notify),
+        details && { label: expanded === e.id ? 'Hide details' : 'Show details', icon: expanded === e.id ? 'ph-caret-up' : 'ph-caret-down', onSelect: () => setExpanded(expanded === e.id ? null : e.id) },
+      ],
+      e.title,
+    );
+
   const row = (e: TimedEvent, kind: 'today' | 'tmr' | 'week') => {
     const cal = colors.get(e.calendarId);
     const past = kind === 'today' && e.e <= now;
@@ -79,9 +102,15 @@ export function Today({ data, now, wide, compact, onConnect, onRetry, addEvent }
     const label = isFocus ? (isCur ? `now · ends ${hm(e.e)}` : inMinutes(Math.max(1, Math.round((e.s.getTime() - now.getTime()) / 60000)))) : '';
     const open = expanded === e.id;
     const startsBefore = kind === 'today' && e.s < today;
+    // The event on now shows how far through it you are, along its foot (styles.css), filling as the minutes go.
+    const through = isCur ? Math.min(100, Math.max(0, ((now.getTime() - e.s.getTime()) / Math.max(1, e.e.getTime() - e.s.getTime())) * 100)) : null;
     return (
-      <div key={e.id} className={'event' + (isFocus ? ' focus' : '')} style={{ opacity: past && !gym ? 0.5 : 1 }}>
-        <div className="event-row" onClick={() => setExpanded(open ? null : e.id)}>
+      <div
+        key={e.id}
+        className={'event' + (isFocus ? ' focus' : '') + (through !== null ? ' now' : '')}
+        style={{ opacity: past && !gym ? 0.5 : 1, ...(through !== null ? ({ '--through': `${through.toFixed(1)}%` } as CSSProperties) : {}) }}
+      >
+        <div className="event-row" onClick={() => setExpanded(open ? null : e.id)} {...eventMenu(e, true)}>
           <div className="event-time">
             {kind === 'week' ? DOW[e.s.getDay()] : startsBefore ? '…' : hm(e.s)}
             {kind === 'today' && <div className="end">{hm(e.e)}</div>}
@@ -101,7 +130,11 @@ export function Today({ data, now, wide, compact, onConnect, onRetry, addEvent }
             )}
           </div>
           <div className="event-side">
-            {label && <span className="event-label">{label}</span>}
+            {label && (
+              <span className="event-label">
+                <Readout text={label} id={`event-${e.id}`} />
+              </span>
+            )}
             {isFocus && e.conferenceUrl && (
               <a className="join" href={e.conferenceUrl} target="_blank" rel="noopener" onClick={(ev) => ev.stopPropagation()}>
                 <i className="ph-duotone ph-video-camera" style={{ fontSize: 14 }} />
@@ -169,7 +202,7 @@ export function Today({ data, now, wide, compact, onConnect, onRetry, addEvent }
             const s = parseYmd(a.start);
             const day = s < today ? today : s;
             return (
-              <div key={a.id} className="allday">
+              <div key={a.id} className="allday" {...eventMenu(a)}>
                 <span className="dot" style={{ width: 6, height: 6, background: colors.get(a.calendarId)?.color || 'var(--t3)' }} />
                 <span className="tnum" style={{ color: 'var(--t3)' }}>
                   {DOW[day.getDay()]} {day.getDate()}

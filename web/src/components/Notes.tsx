@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { allTags, backlinks, findNote, imageMarkdown, linksIn, parseTags, pinnedFirst, renameLinks, searchNotes } from '../../../shared/notes';
 import type { Note, NoteVersion } from '../../../shared/types';
 import { api } from '../api';
 import type { Notify } from '../hooks/useToast';
 import { ago, newId } from '../util';
+import { menuProps, type MenuItem } from './ContextMenu';
 import { Drawer } from './Drawers';
 import { shrinkImage } from './Photos';
+import { Glide } from './Motion';
 
 interface Props {
   notes: Note[];
@@ -157,7 +159,7 @@ export function NoteTabs({
   renaming,
   setRenaming,
   onRename,
-  onMenu,
+  menu,
 }: {
   notes: Note[];
   active: Note;
@@ -165,7 +167,8 @@ export function NoteTabs({
   renaming?: string | null;
   setRenaming?: (id: string | null) => void;
   onRename?: (id: string, name: string) => void;
-  onMenu?: (id: string) => void;
+  /** What right-clicking (or long-pressing) a tab offers. */
+  menu?: (n: Note) => MenuItem[];
 }) {
   return (
     <>
@@ -193,20 +196,32 @@ export function NoteTabs({
               onActive(n.id);
               setRenaming?.(n.id);
             }}
-            onContextMenu={(e) => {
-              if (!onMenu) return;
-              e.preventDefault();
-              onActive(n.id);
-              onMenu(n.id);
-            }}
+            {...(menu ? menuProps(() => menu(n), n.name || 'Untitled') : {})}
           >
-            {n.pinned && <i className="ph-fill ph-push-pin note-pin" aria-label="Pinned" />}
+            {n.pinned && <i className="ph-duotone ph-push-pin note-pin" aria-label="Pinned" />}
             {n.name || 'Untitled'}
           </button>
         ),
       )}
     </>
   );
+}
+
+/** Below this the title and buttons leave the tabs too little room (a sliver, in most designs), so they get a row of their own. */
+const STACK_BELOW = 440;
+
+/** Whether the notepad's header is too narrow for the tabs to share a row with the title and buttons. */
+function useStackedHead() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [on, setOn] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setOn(e.contentRect.width < STACK_BELOW));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return { ref, on };
 }
 
 /** Highlight the words searched for. */
@@ -226,6 +241,7 @@ export function Notes({ notes, activeId, onActive, onChange, saved, onOpenFocus,
   const [tagMenu, setTagMenu] = useState(false);
   const [tagsDraft, setTagsDraft] = useState<string | null>(null);
   const [history, setHistory] = useState(false);
+  const stacked = useStackedHead();
   const menuRef = useRef<HTMLDivElement>(null);
   const tagMenuRef = useRef<HTMLDivElement>(null);
   const renameFrom = useRef<{ id: string; name: string } | null>(null);
@@ -299,13 +315,36 @@ export function Notes({ notes, activeId, onActive, onChange, saved, onOpenFocus,
     }
   };
 
-  const remove = () => {
+  const removeNote = (n: Note) => {
     if (notes.length < 2) return;
-    if (note.text.trim() && !window.confirm(`Delete “${note.name}”? This can’t be undone.`)) return;
-    const rest = notes.filter((n) => n.id !== note.id);
+    const rest = notes.filter((x) => x.id !== n.id);
     onChange(rest);
-    onActive(rest[0].id);
+    if (n.id === note.id) onActive(rest[0].id);
     setMenu(false);
+  };
+
+  const remove = () => {
+    if (note.text.trim() && !window.confirm(`Delete “${note.name}”? This can’t be undone.`)) return;
+    removeNote(note);
+  };
+
+  /** Right-click on a tab: the ⋯ menu's actions, for that notepad. */
+  const noteMenu = (n: Note): MenuItem[] => {
+    const pick = () => {
+      onActive(n.id);
+      setEditing(false);
+      setMenu(false);
+      setSearching(false);
+    };
+    return [
+      { label: 'Rename', icon: 'ph-pencil-simple', onSelect: () => setRenaming(n.id) },
+      { label: n.pinned ? 'Unpin' : 'Pin to the front', icon: 'ph-push-pin', onSelect: () => patch(n.id, { pinned: n.pinned ? undefined : true }) },
+      { label: 'Tags…', icon: 'ph-tag', onSelect: () => (pick(), setTagsDraft((n.tags ?? []).join(', '))) },
+      { label: 'History…', icon: 'ph-clock-counter-clockwise', onSelect: () => (pick(), setHistory(true)) },
+      { label: 'Focus view', icon: 'ph-arrows-out-simple', onSelect: () => (pick(), onOpenFocus()) },
+      'sep',
+      { label: 'Delete', icon: 'ph-trash', danger: true, disabled: notes.length < 2, confirm: n.text.trim() ? `Delete “${n.name}”? This can’t be undone.` : undefined, onSelect: () => removeNote(n) },
+    ];
   };
 
   const restore = (v: NoteVersion) => {
@@ -327,10 +366,11 @@ export function Notes({ notes, activeId, onActive, onChange, saved, onOpenFocus,
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
 
   return (
-    <section className="panel" style={{ gridArea: 'notes', overflow: 'visible', position: 'relative' }} aria-label="Notes">
-      <div className="note-head">
-        <h2 className="panel-title">Notes</h2>
+    <section className="panel" style={{ gridArea: 'notes', overflow: 'visible', position: 'relative' }} aria-label="Notepad">
+      <div ref={stacked.ref} className={'note-head' + (stacked.on ? ' stacked' : '')}>
+        <h2 className="panel-title">Notepad</h2>
         <div className="note-tabs">
+          <Glide on={note.id} />
           {filter && (
             <span className="note-filter" title="Only notepads with this tag">
               #{filter}
@@ -351,7 +391,7 @@ export function Notes({ notes, activeId, onActive, onChange, saved, onOpenFocus,
             renaming={renaming}
             setRenaming={setRenaming}
             onRename={rename}
-            onMenu={() => setMenu(true)}
+            menu={noteMenu}
           />
           <button className="icon-btn" style={{ width: 24, height: 24, color: 'var(--t3)', flex: 'none' }} title="New notepad" onClick={() => add()}>
             <i className="ph-duotone ph-plus" />
@@ -656,10 +696,11 @@ export function FocusView({ notes, activeId, onActive, onChange, saved, onClose,
   }, notify);
   const count = words(note.text);
   return (
-    <div className="focus-view" role="dialog" aria-label="Notes focus view">
+    <div className="focus-view" role="dialog" aria-label="Notepad focus view">
       <div className="focus-col">
         <div style={{ display: 'flex', alignItems: 'center', gap: 15 }}>
           <div className="tabs" style={{ flex: 1, minWidth: 0, overflowX: 'auto' }}>
+            <Glide on={note.id} />
             <NoteTabs notes={pinnedFirst(notes)} active={note} onActive={onActive} />
           </div>
           <span className="saved" style={{ opacity: saved || uploading ? 1 : 0 }}>

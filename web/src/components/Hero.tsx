@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { AppState } from '../../../shared/types';
 import { fmtDay, hm, inMinutes } from '../util';
 import { todayAgenda } from './Today';
+import { Readout } from './Motion';
 
 /** Bento's first tile: the clock, then what's happening now or next with its Join button. */
 export function HeroPanel({ data, now, extras }: { data: AppState; now: Date; /** The rest of the top bar's summary line: overdue tasks, packages, the nearest countdown. */ extras: string }) {
@@ -17,7 +18,9 @@ export function HeroPanel({ data, now, extras }: { data: AppState; now: Date; /*
   return (
     <section className="panel hero-panel" style={{ gridArea: 'hero' }} aria-label="Clock and what's next">
       <div className="hero-date">{fmtDay(tick)}</div>
-      <a className="hero-clock tnum clock-link" href="https://time.is/" target="_blank" rel="noopener" title="Check the time on time.is">{hm(tick)}</a>
+      <a className="hero-clock tnum clock-link" href="https://time.is/" target="_blank" rel="noopener" title="Check the time on time.is">
+        <Readout text={hm(tick)} id="hero-clock" />
+      </a>
       {ev ? (
         <div className="hero-next">
           <div className="hero-label">{label}</div>

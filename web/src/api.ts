@@ -468,3 +468,8 @@ export async function uploadFile(dir: string, file: File, overwrite: boolean, on
 }
 
 export const photoUrl = (id: string) => `/api/photos/${encodeURIComponent(id)}`;
+
+/** Tell the service worker which photos still exist, so it drops its offline copies of the rest (see public/sw.js). */
+export function keepPhotos(ids: string[]) {
+  navigator.serviceWorker?.controller?.postMessage({ type: 'photos', ids });
+}

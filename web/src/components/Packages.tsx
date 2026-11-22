@@ -1,18 +1,41 @@
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { startOfDay } from '../../../shared/dates';
 import type { Package } from '../../../shared/types';
+import { trackUrl } from '../../../shared/carriers';
 import { chipOf, segColor, statusText } from '../util';
+import { Readout } from './Motion';
+import { copyText, menuProps, type MenuItem } from './ContextMenu';
 
-interface Props {
-  packages: Package[];
-  now: Date;
+export interface PackageMenuActions {
   onOpen: (id: string) => void;
-  onAdd: () => void;
   onKeep: (id: string) => void;
   onDismiss: (id: string) => void;
+  onRefresh?: (id: string) => void;
+  notify?: (msg: string) => void;
 }
 
-export function Packages({ packages, now, onOpen, onAdd, onKeep, onDismiss }: Props) {
+/** Right-click on a package, here and in Horizon's cards. Archive can't be undone, so it asks. */
+export function packageMenu(p: Package, a: PackageMenuActions): MenuItem[] {
+  return [
+    { label: 'Details…', icon: 'ph-info', onSelect: () => a.onOpen(p.id) },
+    { label: `Track on ${p.carrier || 'the carrier’s site'}`, icon: 'ph-arrow-square-out', href: trackUrl(p.carrier, p.number), newTab: true },
+    { label: 'Copy tracking number', icon: 'ph-copy', onSelect: () => copyText(p.number, a.notify, 'Tracking number copied') },
+    a.onRefresh && p.stage < 3 && { label: 'Check for updates', icon: 'ph-arrows-clockwise', onSelect: () => a.onRefresh!(p.id) },
+    'sep',
+    p.isNew && { label: 'Keep tracking', icon: 'ph-check', onSelect: () => a.onKeep(p.id) },
+    { label: p.isNew ? 'Dismiss' : 'Archive', icon: 'ph-archive', danger: true, confirm: `${p.isNew ? 'Dismiss' : 'Archive'} “${p.label}”? It leaves the list for good.`, onSelect: () => a.onDismiss(p.id) },
+  ];
+}
+
+interface Props extends PackageMenuActions {
+  packages: Package[];
+  now: Date;
+  onAdd: () => void;
+}
+
+export function Packages({ packages, now, onAdd, ...actions }: Props) {
+  const { onOpen, onKeep, onDismiss } = actions;
+  const menu = (p: Package) => menuProps(() => packageMenu(p, actions), p.label);
   const [deliveredOpen, setDeliveredOpen] = useState(false);
   const today = startOfDay(now);
   const active = packages.filter((p) => p.stage < 3);
@@ -29,7 +52,9 @@ export function Packages({ packages, now, onOpen, onAdd, onKeep, onDismiss }: Pr
       </div>
       {active.length > 0 && (
         <div className="big-count" aria-hidden="true">
-          <b>{active.filter((p) => p.stage === 2).length || active.length}</b>
+          <b>
+            <Readout text={String(active.filter((p) => p.stage === 2).length || active.length)} id="packages-count" />
+          </b>
           <span>{active.some((p) => p.stage === 2) ? 'out for delivery' : 'on the way'}{active.some((p) => p.exception) && <em>{active.filter((p) => p.exception).length} need a look</em>}</span>
         </div>
       )}
@@ -37,7 +62,7 @@ export function Packages({ packages, now, onOpen, onAdd, onKeep, onDismiss }: Pr
         {active.map((p) => {
           const chip = chipOf(p);
           return (
-            <div key={p.id} className="pkg" onClick={() => onOpen(p.id)}>
+            <div key={p.id} className="pkg" onClick={() => onOpen(p.id)} {...menu(p)}>
               <div className="pkg-top">
                 <span className="pkg-label">{p.label}</span>
                 <span className={'chip ' + chip.cls}>{chip.text}</span>
@@ -47,7 +72,12 @@ export function Packages({ packages, now, onOpen, onAdd, onKeep, onDismiss }: Pr
               </div>
               <div className="segs">
                 {[0, 1, 2, 3].map((i) => (
-                  <span key={i} className="pkg-seg" style={{ background: segColor(p, i) }} />
+                  // Lit stages fill in turn as the panel appears; out for delivery, a light travels along the stage it's on.
+                  <span
+                    key={i}
+                    className={'pkg-seg' + (i <= p.stage ? ' lit' : '') + (i === p.stage && p.stage === 2 && !p.exception ? ' moving' : '')}
+                    style={{ backgroundColor: segColor(p, i), '--i': i } as CSSProperties}
+                  />
                 ))}
               </div>
               <div className="pkg-meta">
@@ -102,7 +132,7 @@ export function Packages({ packages, now, onOpen, onAdd, onKeep, onDismiss }: Pr
             </button>
             {deliveredOpen &&
               delivered.map((p) => (
-                <div key={p.id} className="delivered-row" onClick={() => onOpen(p.id)}>
+                <div key={p.id} className="delivered-row" onClick={() => onOpen(p.id)} {...menu(p)}>
                   <span style={{ minWidth: 0 }}>{p.label}</span>
                   <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--t3)', whiteSpace: 'nowrap' }}>{statusText(p, today)}</span>
                 </div>

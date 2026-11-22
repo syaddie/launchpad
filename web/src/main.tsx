@@ -3,19 +3,21 @@ import { createRoot } from 'react-dom/client';
 import '@phosphor-icons/web/duotone/style.css';
 import './styles.css';
 import './designs.css';
+import './motion.css';
 import { loadCachedState } from './api';
 import { App } from './App';
 import { loadOutbox } from './outbox';
 
 // The copy kept in the browser comes first, so a new tab paints with your data at once,
-// along with any edits still waiting to be saved.
-Promise.all([loadCachedState(), loadOutbox()]).then(([cached]) =>
+// along with any edits still waiting to be saved. Its first paint is the opening (motion.css).
+Promise.all([loadCachedState(), loadOutbox()]).then(([cached]) => {
+  document.documentElement.classList.add('lp-opening');
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <App cached={cached} />
     </StrictMode>,
-  ),
-);
+  );
+});
 
 // Installable on a phone's home screen, and opens even when the server can't be reached (see public/sw.js).
 // Service workers need HTTPS or localhost, so on the plain-HTTP LAN address this quietly does nothing.

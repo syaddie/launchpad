@@ -4,7 +4,9 @@ import { cleanVideoFormat, VIDEO_FORMATS, videoLink, videoNoun, type VideoSite }
 import type { DownloadJob, DownloadsInfo, InstagramInfo, UnpackRecord, Torrent, TorrentFile, TorrentOptions, TorrentsInfo, TorrentSpeed, TorrentStatus, VideoFormat, VideoInfo } from '../../../shared/types';
 import { api, localGet, localSet, type TorrentAdd } from '../api';
 import { fmtBytes, hm } from '../util';
+import { menuProps } from './ContextMenu';
 import { Copyable } from './Copyable';
+import { Glide } from './Motion';
 
 const POLL = 2000;
 
@@ -481,6 +483,7 @@ function AddBox({ shellReady, defaultDir, torrentsOn, instagram, video, onInstag
           )}
           {kind === 'video' && (
             <div className="segmented" role="radiogroup" aria-label="Format">
+              <Glide on={fmt} />
               {VIDEO_FORMATS.filter((f) => !audioOnly || f.audio).map((f) => (
                 <button key={f.key} type="button" role="radio" aria-checked={fmt === f.key} className={fmt === f.key ? 'on' : ''} onClick={() => setFormat(f.key)}>
                   {f.label}
@@ -756,8 +759,20 @@ function JobRow({ j, onCancel, onRetry, onOpenFolder }: { j: DownloadJob; onCanc
   const partly = j.state === 'done' && !!j.ig?.failed;
   const folder = j.ig?.folder ?? j.dir;
   const kindIcon = j.video ? siteIcon(j.video.site, j.video.format) : j.ig ? 'ph-instagram-logo' : 'ph-download-simple';
+  const canRetry = j.state === 'failed' || j.state === 'cancelled';
+  const canOpen = j.state === 'done' || (j.state === 'cancelled' && !!j.ig?.files);
+  // Cancel isn't asked about: Try again starts it over.
+  const menu = menuProps(
+    () => [
+      canOpen && { label: 'Open the folder in Files', icon: 'ph-folder-open', onSelect: onOpenFolder },
+      canRetry && { label: 'Try again', icon: 'ph-arrow-clockwise', onSelect: onRetry },
+      going && 'sep',
+      going && { label: 'Cancel', icon: 'ph-x', danger: true, onSelect: onCancel },
+    ],
+    j.name,
+  );
   return (
-    <div className="dl-item">
+    <div className="dl-item" {...menu}>
       <i
         className={'ph-duotone ' + (j.state === 'done' ? (partly ? 'ph-warning-circle' : 'ph-check-circle') : j.state === 'failed' ? 'ph-warning-circle' : j.state === 'cancelled' ? 'ph-x-circle' : kindIcon)}
         style={{ color: j.state === 'failed' || partly ? 'var(--wn)' : j.state === 'done' ? 'var(--ac)' : 'var(--t3)' }}
@@ -1006,7 +1021,21 @@ function Torrents({ info, error, onInfo, onOpenFolder }: { info: TorrentsInfo | 
               .join(' · ');
             const expanded = open === t.hash;
             return (
-              <div key={t.hash} className={'dl-item torrent' + (expanded ? ' open' : '')}>
+              <div
+                key={t.hash}
+                className={'dl-item torrent' + (expanded ? ' open' : '')}
+                {...menuProps(
+                  () => [
+                    { label: canResume(t) ? 'Resume' : 'Pause', icon: canResume(t) ? 'ph-play' : 'ph-pause', onSelect: () => act(api.torrentAction([t.hash], canResume(t) ? 'start' : 'stop')) },
+                    { label: expanded ? 'Hide its files' : 'Its files', icon: expanded ? 'ph-caret-up' : 'ph-caret-down', onSelect: () => setOpen(expanded ? null : t.hash) },
+                    onOpenFolder && t.hostDir && { label: 'Open the folder in Files', icon: 'ph-folder-open', onSelect: () => onOpenFolder(t.hostDir!) },
+                    'sep',
+                    { label: 'Remove, keep the files', icon: 'ph-minus-circle', danger: true, confirm: `Remove “${t.name}” from qBittorrent? Its files stay where they are.`, onSelect: () => act(api.torrentAction([t.hash], 'delete')) },
+                    { label: 'Remove and delete the files', icon: 'ph-trash', danger: true, confirm: `Remove “${t.name}” and delete its files? This can’t be undone.`, onSelect: () => act(api.torrentAction([t.hash], 'deleteFiles')) },
+                  ],
+                  t.name,
+                )}
+              >
                 <span className={'chip ' + st.cls}>{st.text}</span>
                 <div className="dl-item-main">
                   <button type="button" className="dl-name tor-name" title={t.name} aria-expanded={expanded} onClick={() => setOpen(expanded ? null : t.hash)}>

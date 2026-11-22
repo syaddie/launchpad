@@ -4,6 +4,8 @@ import { localGet, localSet } from '../api';
 import type { InboxAction } from '../hooks/useGoogleActions';
 import { billLine, gmailUrl, liveEmails } from '../inboxActions';
 import { ago } from '../util';
+import { Glide } from './Motion';
+import { menuProps, type MenuItem } from './ContextMenu';
 
 export { gmailUrl };
 
@@ -90,6 +92,7 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, a
     <main className="news inbox" aria-label="Inbox">
       <div className="news-head">
         <div className="segmented" role="tablist" aria-label="How far back">
+          <Glide on={range} />
           {RANGES.map((x) => (
             <button key={x.key} role="tab" aria-selected={x.key === range} className={x.key === range ? 'on' : ''} onClick={() => pick(x.key)}>
               {x.name}
@@ -106,7 +109,7 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, a
           )}
           {st.lastError && <span style={{ color: 'var(--wn)' }} title={st.lastError}>Couldn’t update</span>}
           <span>{busy ? 'Updating…' : st.lastSuccess ? `Updated ${ago(st.lastSuccess, now)}` : ''}</span>
-          <button className="icon-btn md" title="Check for new mail and summarise it now" disabled={busy} onClick={onRefresh}>
+          <button className="icon-btn md" title="Check for new mail and summarise it now" aria-busy={busy} disabled={busy} onClick={onRefresh}>
             <i className={'ph-duotone ph-arrow-clockwise' + (busy ? ' spin' : '')} />
           </button>
         </div>
@@ -129,7 +132,19 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, a
           </div>
           <div className="scroll">
             {bills.map((b) => (
-              <div key={b.id} className="bill-row">
+              <div
+                key={b.id}
+                className="bill-row"
+                {...menuProps(
+                  () => [
+                    { label: 'Add to Money', icon: 'ph-wallet', onSelect: () => actions.onKeepBill(b) },
+                    { label: 'Open the email', icon: 'ph-arrow-square-out', href: gmailUrl(google.email, b.threadId), newTab: true },
+                    'sep',
+                    { label: 'Dismiss', icon: 'ph-x', danger: true, confirm: `Dismiss “${b.subject}”? It won’t be suggested again.`, onSelect: () => actions.onDismissBill(b) },
+                  ],
+                  b.subject,
+                )}
+              >
                 <div className="bill-what">
                   {billLine(b)}
                   <a href={gmailUrl(google.email, b.threadId)} target="_blank" rel="noopener" title={b.source === 'claude' ? 'Read by Claude' : undefined}>
@@ -222,6 +237,19 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, a
 
 type Acts = InboxActions & { canModify: boolean };
 
+/** Right-click on an email or a digest item: what its buttons do, plus opening it in Gmail. */
+function mailMenu(mails: InboxEmail[], account: string | undefined, acts: Acts | undefined, task: () => void): MenuItem[] {
+  const n = mails.length > 1 ? ` all ${mails.length}` : '';
+  const newest = mails.reduce<InboxEmail | undefined>((a, m) => (!a || m.at > a.at ? m : a), undefined);
+  return [
+    newest && { label: 'Open in Gmail', icon: 'ph-arrow-square-out', href: gmailUrl(account, newest.threadId), newTab: true },
+    'sep',
+    acts?.canModify && mails.length > 0 && { label: `Archive${n}`, icon: 'ph-archive', onSelect: () => acts.onAction(mails, 'archive') },
+    acts?.canModify && mails.some((m) => m.unread) && { label: `Mark${n} read`, icon: 'ph-envelope-open', onSelect: () => acts.onAction(mails, 'read') },
+    acts && mails.length > 0 && { label: 'Make a task', icon: 'ph-check-square', onSelect: task },
+  ];
+}
+
 function Item({ it, byId, account, acts }: { it: InboxItem; byId: Map<string, InboxEmail>; account?: string; acts?: Acts }) {
   const mails = liveEmails(it, byId);
   // One link per sender, to their newest email in the item.
@@ -229,7 +257,7 @@ function Item({ it, byId, account, acts }: { it: InboxItem; byId: Map<string, In
   const anyUnread = mails.some((m) => m.unread);
   const n = mails.length > 1 ? ` all ${mails.length}` : '';
   return (
-    <article className="story">
+    <article className="story" {...menuProps(() => mailMenu(mails, account, acts, () => acts?.onTask({ item: it, emails: mails })), it.headline)}>
       <div className="story-headline">
         {it.headline}
         {it.due && <span className="chip chip-warn inbox-due">{it.due}</span>}
@@ -271,7 +299,7 @@ function Item({ it, byId, account, acts }: { it: InboxItem; byId: Map<string, In
 
 function EmailRow({ e, now, account, acts }: { e: InboxEmail; now: Date; account?: string; acts?: Acts }) {
   return (
-    <div className="email-wrap">
+    <div className="email-wrap" {...menuProps(() => mailMenu([e], account, acts, () => acts?.onTask({ email: e })), e.subject)}>
       <a className={'headline email-row' + (e.unread ? ' unread' : '')} href={gmailUrl(account, e.threadId)} target="_blank" rel="noopener">
         <span className="split">
           <span className="email-from">

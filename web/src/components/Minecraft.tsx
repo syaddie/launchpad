@@ -8,6 +8,7 @@ import { McBackupsView, fmtSize, fmtWhen } from './McBackups';
 import { McCommandSheet } from './McCommandSheet';
 import { McCrashesView, savedOf } from './McCrashes';
 import { McPlayersView } from './McPlayers';
+import { Glide } from './Motion';
 
 const LOG_EVERY = 1500;
 const LIST_EVERY = 10_000;
@@ -476,6 +477,7 @@ function Console({ s, onChanged, onSaved, onEdit }: { s: McStatus; onChanged: ()
         )}
       </div>
       <div className="tabs mc-views" role="tablist" aria-label={`${s.name} views`}>
+        <Glide on={view} />
         {VIEWS.map((v) => (
           <button key={v.key} role="tab" aria-selected={view === v.key} className={'tab' + (view === v.key ? ' active' : '')} onClick={() => setView(v.key)}>
             <i className={'ph-duotone ' + v.icon} />

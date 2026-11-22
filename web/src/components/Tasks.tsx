@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { dayDiff, parseDue, parseDueWord, parseYmd, startOfDay } from '../../../shared/dates';
+import { Presence, Readout, useGlide } from './Motion';
+import { addDays, dayDiff, parseDue, parseDueWord, parseYmd, startOfDay, ymd } from '../../../shared/dates';
 import type { AppState, Task } from '../../../shared/types';
 import { fmtDay, shortDay } from '../util';
+import { menuProps, type MenuItem } from './ContextMenu';
 
 interface Props {
   data: AppState;
@@ -17,6 +19,8 @@ interface Props {
 }
 
 const UNDO_MS = 5000;
+/** How long a ticked-off task takes to fold away once its undo window has passed (motion's --m-move, about). */
+const FOLD_MS = 360;
 
 /** Google's order among siblings. */
 const byPosition = (a: Task, b: Task) => ((a.position ?? '') < (b.position ?? '') ? -1 : (a.position ?? '') > (b.position ?? '') ? 1 : 0);
@@ -28,19 +32,41 @@ export function Tasks({ data, now, onConnect, onAdd, onComplete, onUpdate, onMov
   const [undo, setUndo] = useState<{ task: Task; kind: 'complete' | 'delete' } | null>(null);
   const timer = useRef(0);
   const pending = useRef<{ task: Task; kind: 'complete' | 'delete' } | null>(null);
+  // Tasks ticked off whose undo window has passed, folding away before they go (styles.css, .task-item.leaving).
+  const [leaving, setLeaving] = useState<string[]>([]);
+  const folding = useRef(new Map<string, { task: Task; timer: number }>());
+  const tabsRef = useRef<HTMLDivElement>(null);
 
   const finalize = (keepalive = false) => {
     clearTimeout(timer.current);
     const p = pending.current;
-    if (p?.kind === 'complete') onComplete(p.task, keepalive);
-    if (p?.kind === 'delete') onDelete?.(p.task, keepalive);
     pending.current = null;
     setUndo(null);
+    if (p?.kind === 'complete') {
+      if (keepalive) onComplete(p.task, true);
+      else {
+        const done = () => {
+          folding.current.delete(p.task.id);
+          onComplete(p.task);
+          setLeaving((l) => l.filter((id) => id !== p.task.id));
+        };
+        folding.current.set(p.task.id, { task: p.task, timer: window.setTimeout(done, FOLD_MS) });
+        setLeaving((l) => [...l, p.task.id]);
+      }
+    }
+    if (p?.kind === 'delete') onDelete?.(p.task, keepalive);
   };
 
-  // Don't lose a completion or a delete if the tab closes during the undo window.
+  // Don't lose a completion or a delete if the tab closes during the undo window, or while a task folds away.
   useEffect(() => {
-    const h = () => finalize(true);
+    const h = () => {
+      for (const { task, timer: t } of folding.current.values()) {
+        clearTimeout(t);
+        onComplete(task, true);
+      }
+      folding.current.clear();
+      finalize(true);
+    };
     window.addEventListener('pagehide', h);
     return () => window.removeEventListener('pagehide', h);
   });
@@ -94,21 +120,49 @@ export function Tasks({ data, now, onConnect, onAdd, onComplete, onUpdate, onMov
     setText('');
   };
 
+  // The list's tabs share one highlight that glides to the list picked (motion.css).
+  useGlide(tabsRef, `${currentList}:${lists.length}`, '.tab.active');
+
+  /** Right-click on a task: what its editor does, without opening it. Delete keeps the 5-second undo. */
+  const taskMenu = (t: Task, sub: boolean): MenuItem[] => {
+    const todayYmd = ymd(today);
+    const tomorrowYmd = ymd(addDays(today, 1));
+    return [
+      undo?.kind === 'complete' && undo.task.id === t.id
+        ? { label: 'Undo complete', icon: 'ph-arrow-counter-clockwise', onSelect: undoNow }
+        : { label: 'Complete', icon: 'ph-check-circle', onSelect: () => later(t, 'complete') },
+      (onUpdate || onDelete) && { label: 'Edit…', icon: 'ph-pencil-simple', onSelect: () => setOpen(t.id) },
+      onUpdate && 'sep',
+      onUpdate && t.due !== todayYmd && { label: 'Due today', icon: 'ph-calendar-check', onSelect: () => onUpdate(t, { due: todayYmd }) },
+      onUpdate && t.due !== tomorrowYmd && { label: 'Due tomorrow', icon: 'ph-calendar-plus', onSelect: () => onUpdate(t, { due: tomorrowYmd }) },
+      onUpdate && t.due && { label: 'No due date', icon: 'ph-calendar-x', onSelect: () => onUpdate(t, { due: null }) },
+      'sep',
+      ...(onMove && !sub
+        ? data.taskLists.filter((l) => l.id !== t.listId).map((l): MenuItem => ({ label: `Move to ${l.title}`, icon: 'ph-arrow-bend-up-right', onSelect: () => onMove(t, l.id) }))
+        : []),
+      'sep',
+      onDelete && { label: 'Delete', icon: 'ph-trash', danger: true, onSelect: () => later(t, 'delete') },
+    ];
+  };
+
   const row = (t: Task, sub = false) => {
-    const done = undo?.kind === 'complete' && undo.task.id === t.id;
+    const gone = leaving.includes(t.id);
+    const done = (undo?.kind === 'complete' && undo.task.id === t.id) || gone;
     const o = off(t);
     const due = o == null || o === 0 ? '' : o < 0 ? fmtDay(parseYmd(t.due!)) : shortDay(parseYmd(t.due!), today);
     const subs = sub ? [] : subsOf(t.id);
     const editable = !!(onUpdate || onDelete);
     return (
-      <div key={t.id} className={sub ? 'task-sub' : undefined}>
-        <div className={'task' + (open === t.id ? ' open' : '')} style={{ opacity: done ? 0.45 : 1 }}>
-          <button className={'check' + (done ? ' on' : '')} aria-label={done ? 'Undo' : 'Complete'} onClick={() => later(t, 'complete')}>
+      // A task added here slides in while it's being saved (its id is still the page's own); once ticked off and past
+      // its undo window, it folds away.
+      <div key={t.id} className={'task-item' + (sub ? ' task-sub' : '') + (gone ? ' leaving' : '')} data-new={t.id.startsWith('tmp-') || undefined}>
+        <div className="task-item-in">
+        <div className={'task' + (open === t.id ? ' open' : '') + (done ? ' done' : '')} {...menuProps(() => taskMenu(t, sub), t.title)}>
+          <button className={'check' + (done ? ' on' : '')} aria-label={done ? 'Undo' : 'Complete'} disabled={gone} onClick={() => later(t, 'complete')}>
             {done && <i className="ph-duotone ph-check" />}
           </button>
           <span
             className={'task-title' + (editable ? ' editable' : '')}
-            style={{ textDecoration: done ? 'line-through' : 'none' }}
             onClick={() => editable && setOpen(open === t.id ? null : t.id)}
             title={editable ? 'Edit' : undefined}
           >
@@ -134,6 +188,7 @@ export function Tasks({ data, now, onConnect, onAdd, onComplete, onUpdate, onMov
           />
         )}
         {subs.length > 0 && (open === t.id || subs.length <= 3) && <div className="task-subs">{subs.map((s) => row(s, true))}</div>}
+        </div>
       </div>
     );
   };
@@ -143,7 +198,8 @@ export function Tasks({ data, now, onConnect, onAdd, onComplete, onUpdate, onMov
       <div className="panel-head" style={{ flexWrap: 'wrap' }}>
         <h2 className="panel-title">Tasks</h2>
         {connected && on && lists.length > 0 && (
-          <div className="tabs">
+          <div className="tabs" ref={tabsRef}>
+            <span className="glide" aria-hidden="true" />
             {lists.map((l) => (
               <button key={l} className={'tab' + (l === currentList ? ' active' : '')} onClick={() => setList(l)}>
                 {l}
@@ -156,7 +212,9 @@ export function Tasks({ data, now, onConnect, onAdd, onComplete, onUpdate, onMov
         <>
           {/* Bento leads each tile with one number; the other designs hide this. */}
           <div className="big-count" aria-hidden="true">
-            <b>{vis.length}</b>
+            <b>
+              <Readout text={String(vis.length)} id="tasks-open" />
+            </b>
             <span>
               open
               {groups[0]?.label === 'Overdue' && <em>{groups[0].items.length} overdue</em>}
@@ -186,6 +244,7 @@ export function Tasks({ data, now, onConnect, onAdd, onComplete, onUpdate, onMov
             ))}
             {!groups.length && <div style={{ padding: '5px 10px', fontSize: 13, color: 'var(--t3)' }}>Nothing here. Enjoy it.</div>}
           </div>
+          <Presence show={!!undo}>
           {undo && (
             <div className="undo">
               <span style={{ flex: 1, minWidth: 0, color: 'var(--t2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -196,6 +255,7 @@ export function Tasks({ data, now, onConnect, onAdd, onComplete, onUpdate, onMov
               </button>
             </div>
           )}
+          </Presence>
         </>
       ) : connected ? (
         <div className="empty">

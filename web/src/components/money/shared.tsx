@@ -3,6 +3,7 @@ import { CATEGORIES, fmtMoney, mainAccount, parseMoney } from '../../../../share
 import type { Money, MoneyCategory, MoneyEntry } from '../../../../shared/types';
 import { localGet } from '../../api';
 import { fmtDay, parseYmd } from '../../util';
+import { Glide } from '../Motion';
 
 export type Notify = (msg: string, action?: { label: string; run: () => void }) => void;
 /** Enter and ↑/↓ move between rows of the same column, like a spreadsheet; Esc leaves the cell. */
@@ -158,6 +159,7 @@ export const otherAccount = (money: Money, id: string) => (money.accounts.find((
 export function KindSwitch({ kind, label, onChange }: { kind: Kind; label: string; onChange: (k: Kind) => void }) {
   return (
     <div className="seg" role="group" aria-label={label}>
+      <Glide on={kind} />
       {(['out', 'in', 'move'] as const).map((k) => (
         <button key={k} type="button" className={kind === k ? 'on' : undefined} aria-pressed={kind === k} title={k === 'move' ? 'Move money from one account to another' : undefined} onClick={() => onChange(k)}>
           {k === 'out' ? 'Out' : k === 'in' ? 'In' : 'Move'}

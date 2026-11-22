@@ -7,6 +7,7 @@ import type { AppState, Bookmark, BookmarkOpens, SearchEngine, SourceKey, Weathe
 import { bookmarkOpened } from '../api';
 import { fmtMinutes, lastTrained, minutes, workoutLabel } from '../../../shared/training';
 import { ago, favicon, fmtDay, hm, host, psiBand, uvBand, weatherIcon, weatherLabel } from '../util';
+import { Readout } from './Motion';
 
 interface Props {
   data: AppState;
@@ -40,7 +41,10 @@ function Clock({ weather, showAir }: { weather: Weather | null; showAir: boolean
   }, []);
   return (
     <div className="clock-row">
-      <a className="serif clock clock-link" href="https://time.is/" target="_blank" rel="noopener" title="Check the time on time.is">{hm(now)}</a>
+      {/* The minutes roll over as they change (motion.css). */}
+      <a className="serif clock clock-link" href="https://time.is/" target="_blank" rel="noopener" title="Check the time on time.is">
+        <Readout text={hm(now)} id="clock" />
+      </a>
       <span className="tnum clock-date">
         {fmtDay(now)} · {tzLabel()}
       </span>
@@ -455,7 +459,9 @@ export function TopBar({ data, now, title, subline, search, onSearch, searchRef,
           {!hidden.includes('top:cig') && (
             <button className="cig-btn tnum" title="Log a cigarette (C)" aria-label={`Log a cigarette. ${smokesToday} today.`} onClick={onLogSmoke}>
               <i className="ph-duotone ph-cigarette" aria-hidden="true" />
-              <span>{smokesToday}</span>
+              <span>
+                <Readout text={String(smokesToday)} id="smokes-today" />
+              </span>
             </button>
           )}
           {trained && !hidden.includes('top:training') && !hidden.includes('view:training') && (

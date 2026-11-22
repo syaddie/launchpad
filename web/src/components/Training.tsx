@@ -8,6 +8,7 @@ import {
 import type { AppState, ExerciseMuscles, Training, Workout } from '../../../shared/types';
 import { localGet, localSet } from '../api';
 import { ago, fmtDay, hm, niceMax } from '../util';
+import { Glide, Readout } from './Motion';
 
 type Muscles = Record<string, ExerciseMuscles>;
 
@@ -316,6 +317,7 @@ function MusclePanel({ workouts, today, muscles, goal: perWeek, onOpenSettings }
       <div className="panel-head">
         <h2 className="panel-title">Sets per muscle</h2>
         <div className="segmented" role="group" aria-label="Range">
+          <Glide on={days} />
           {RANGES.map((r) => (
             <button key={r.days} className={days === r.days ? 'on' : ''} aria-pressed={days === r.days} onClick={() => (setDays(r.days), localSet('trainingRange', String(r.days)))}>
               {r.name}
@@ -523,6 +525,7 @@ function BodyWeight({ weights, today, focusSignal, onSave }: {
       <div className="panel-head">
         <h2 className="panel-title">Body weight</h2>
         <div className="segmented" role="group" aria-label="Range">
+          <Glide on={days} />
           {WEIGHT_RANGES.map((r) => (
             <button key={r.days} className={days === r.days ? 'on' : ''} aria-pressed={days === r.days} onClick={() => (setDays(r.days), localSet('weightRange', String(r.days)))}>
               {r.name}
@@ -535,7 +538,9 @@ function BodyWeight({ weights, today, focusSignal, onSave }: {
         {last ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <span style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-              <span className="serif tnum tr-wt-now">{fmtKg(last.kg)}</span>
+              <span className="serif tnum tr-wt-now">
+                <Readout text={fmtKg(last.kg)} id="weight-now" />
+              </span>
               <span style={{ fontSize: 13, color: 'var(--t2)' }}>kg {when(last.date)}</span>
             </span>
             <span className="meta tnum">
@@ -781,6 +786,7 @@ function WeightAndTraining({ workouts, weights, today, weeks, onWeeks }: {
       <div className="panel-head">
         <h2 className="panel-title">Weight and training</h2>
         <div className="segmented" role="group" aria-label="Range">
+          <Glide on={weeks} />
           {BW_RANGES.map((r) => (
             <button key={r.weeks} className={weeks === r.weeks ? 'on' : ''} aria-pressed={weeks === r.weeks} onClick={() => onWeeks(r.weeks)}>
               {r.name}

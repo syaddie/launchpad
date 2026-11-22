@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import type { ViewKey } from '../../../shared/types';
 import type { Layout } from '../layout';
 import { hashFor, viewFromHash } from '../util';
@@ -60,20 +60,40 @@ export function useLayout(ref: RefObject<HTMLElement | null>): Layout {
 /**
  * The view lives in the URL's hash (#money), so a reload stays put and Back and Forward
  * move between views. Home has no hash, so a new tab is still the plain "/".
+ * `move(from, to, apply)` changes the view (App animates it); Back and Forward go through it
+ * too, unless the browser has already animated the change itself (a phone's back swipe).
  */
-export function useHashView() {
+export function useHashView(move: (from: ViewKey, to: ViewKey, apply: () => void) => void) {
   const [view, setView] = useState<ViewKey>(() => viewFromHash(location.hash));
+  const current = useRef(view);
+  current.current = view;
+  const moveRef = useRef(move);
+  moveRef.current = move;
+  // The view a change is on its way to (its motion runs before the view is set), so the same move isn't started
+  // twice: Back fires both popstate and hashchange.
+  const heading = useRef<ViewKey | null>(null);
   useEffect(() => {
     if (viewFromHash(location.hash) !== view) history.pushState(null, '', hashFor(view) || location.pathname + location.search);
   }, [view]);
+  const moveTo = useCallback((to: ViewKey, animate = true) => {
+    if (to === heading.current || (heading.current === null && to === current.current)) return;
+    heading.current = to;
+    const apply = () => {
+      if (heading.current === to) heading.current = null;
+      setView(to);
+    };
+    if (animate) moveRef.current(current.current, to, apply);
+    else apply();
+  }, []);
   useEffect(() => {
-    const onNav = () => setView(viewFromHash(location.hash));
+    const onNav = (e: Event) => moveTo(viewFromHash(location.hash), !(e as Event & { hasUAVisualTransition?: boolean }).hasUAVisualTransition);
     window.addEventListener('popstate', onNav);
     window.addEventListener('hashchange', onNav);
     return () => {
       window.removeEventListener('popstate', onNav);
       window.removeEventListener('hashchange', onNav);
     };
-  }, []);
-  return [view, setView] as const;
+  }, [moveTo]);
+  const go = useCallback((to: ViewKey) => moveTo(to), [moveTo]);
+  return [view, go] as const;
 }

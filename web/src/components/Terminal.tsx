@@ -275,7 +275,7 @@ function Shell({ session, onSession, hidden, publicKey, onStatus, onFailed, onCw
     const ro = new ResizeObserver(refit);
     ro.observe(box.current!);
     const mo = new MutationObserver(() => (t.options.theme = theme()));
-    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-mode', 'data-accent'] });
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-mode', 'data-accent', 'data-design'] });
     // Open once the font is in, so the cells are measured with it rather than the fallback.
     const font = document.fonts ? document.fonts.load("13px 'Geist Mono'").catch(() => {}) : Promise.resolve();
     font.then(() => {

@@ -13,6 +13,7 @@ import { ErrorBoundary } from './ErrorBoundary';
 import { DownloadsPanel } from './Downloads';
 import { FilesPanel } from './Files';
 import { MinecraftPanel } from './Minecraft';
+import { Glide, Readout } from './Motion';
 
 const POLL = 5_000;
 
@@ -344,7 +345,7 @@ function Gauge({ name, pct, detail }: { name: string; pct: number; detail: strin
         </svg>
         <div className="gauge-text">
           <span className="serif tnum">
-            {Math.round(v)}
+            <Readout text={String(Math.round(v))} id={`gauge-${name}`} />
             <small>%</small>
           </span>
           <span>{name}</span>
@@ -564,6 +565,7 @@ function SpeedPanel({ speed, plan, every, now, lastError, onTest, onOpenSettings
         <h2 className="panel-title">Internet speed</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div className="tabs">
+            <Glide on={range} />
             {RANGES.map((x) => (
               <button key={x.key} className={'tab' + (x.key === range ? ' active' : '')} aria-pressed={x.key === range} onClick={() => setRange(x.key)}>
                 {x.name}
@@ -696,7 +698,7 @@ function ServicesPanel({ s, data, now, onChanged }: { s: ServerStats; data: AppS
       )}
       <div className="scroll">
         {s.containers ? (
-          s.containers.map((c) => <ContainerRow key={c.id || c.name} c={c} canRestart={s.canRestart} onLogs={() => setLogsOf(c.id)} onRestarted={restarted(c.name)} />)
+          s.containers.map((c) => <ContainerRow key={c.id || c.name} c={c} canRestart={s.canRestart} onLogs={() => setLogsOf(c.id)} onRestarted={restarted(c.name)} notify={(text) => setNote({ text, failed: false })} />)
         ) : (
           <div className="empty" style={{ gap: 6 }}>
             <p style={{ fontSize: 13 }}>
