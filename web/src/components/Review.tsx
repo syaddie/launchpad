@@ -118,7 +118,7 @@ export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
             <span className="sec-label">Claude’s recap</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {note && <span className="meta">{busy ? 'Writing a new one…' : `Written ${ago(note.writtenAt, now)}`}</span>}
-              <button className="icon-btn" title="Write the recap again" disabled={busy} onClick={() => onRefresh(week)}>
+              <button className="icon-btn" title="Write the recap again" aria-busy={busy} disabled={busy} onClick={() => onRefresh(week)}>
                 <i className={'ph-duotone ph-arrows-clockwise' + (busy ? ' spin' : '')} />
               </button>
             </div>

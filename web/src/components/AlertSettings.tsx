@@ -59,7 +59,8 @@ export function AlertSettings({ prefs, onPrefs, now }: { prefs: Prefs; onPrefs: 
   useEffect(() => {
     load().then((i) => i && setUrl(i.topicUrl));
     // What was sent lately, kept up to date while this is open.
-    const t = setInterval(load, 60_000);
+    // A later load fills the topic in if the first one failed (and leaves one being typed alone).
+    const t = setInterval(() => load().then((i) => i && setUrl((u) => u || i.topicUrl)), 60_000);
     return () => clearInterval(t);
   }, []);
 

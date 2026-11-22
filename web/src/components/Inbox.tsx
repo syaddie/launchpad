@@ -108,7 +108,7 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, a
           )}
           {st.lastError && <span style={{ color: 'var(--wn)' }} title={st.lastError}>Couldn’t update</span>}
           <span>{busy ? 'Updating…' : st.lastSuccess ? `Updated ${ago(st.lastSuccess, now)}` : ''}</span>
-          <button className="icon-btn md" title="Check for new mail and summarise it now" disabled={busy} onClick={onRefresh}>
+          <button className="icon-btn md" title="Check for new mail and summarise it now" aria-busy={busy} disabled={busy} onClick={onRefresh}>
             <i className={'ph-duotone ph-arrow-clockwise' + (busy ? ' spin' : '')} />
           </button>
         </div>
