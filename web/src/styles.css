@@ -121,6 +121,19 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
   margin: 0 auto;
 }
 [data-layout='wide'] .lp-inner { gap: 30px; padding: 64px 96px; max-width: 2200px; }
+/* Big screens: Home's panels grow with the screen (text, rows, photos), instead of the same small
+   panels with more empty space round them. Keyed to the window, not data-layout, so the zoom can't
+   change what useLayout measures and flip itself off. Only Home's panels (Focus's too); overlays
+   that cover the window (the notepad's focus view, menus, toasts) are outside them. */
+@media (min-width: 1800px) and (min-height: 1000px) {
+  .lp-root[data-view='home']:not([data-layout='narrow']) :is(.lp-grid, .fx-home) { zoom: 1.1; }
+}
+@media (min-width: 2300px) and (min-height: 1250px) {
+  .lp-root[data-view='home']:not([data-layout='narrow']) :is(.lp-grid, .fx-home) { zoom: 1.2; }
+}
+@media (min-width: 3000px) and (min-height: 1600px) {
+  .lp-root[data-view='home']:not([data-layout='narrow']) :is(.lp-grid, .fx-home) { zoom: 1.35; }
+}
 [data-layout='narrow'] .lp-inner { height: auto; gap: 15px; padding: 20px 15px 30px; }
 
 .lp-grid {
