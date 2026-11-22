@@ -121,19 +121,17 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
   margin: 0 auto;
 }
 [data-layout='wide'] .lp-inner { gap: 30px; padding: 64px 96px; max-width: 2200px; }
-/* Big screens: Home's panels grow with the screen (text, rows, photos), instead of the same small
-   panels with more empty space round them. Keyed to the window, not data-layout, so the zoom can't
-   change what useLayout measures and flip itself off. Only Home's panels (Focus's too); overlays
-   that cover the window (the notepad's focus view, menus, toasts) are outside them. */
-@media (min-width: 1800px) and (min-height: 1000px) {
-  .lp-root[data-view='home']:not([data-layout='narrow']) :is(.lp-grid, .fx-home) { zoom: 1.1; }
-}
-@media (min-width: 2300px) and (min-height: 1250px) {
-  .lp-root[data-view='home']:not([data-layout='narrow']) :is(.lp-grid, .fx-home) { zoom: 1.2; }
-}
-@media (min-width: 3000px) and (min-height: 1600px) {
-  .lp-root[data-view='home']:not([data-layout='narrow']) :is(.lp-grid, .fx-home) { zoom: 1.35; }
-}
+/* Big screens: every view's content grows with the screen (text, rows, photos, charts), instead of
+   the same small panels with more empty space round them. Keyed to the window, not data-layout, so
+   the zoom can't change what useLayout measures and flip itself off. The view's <main> only: the
+   rail and top bar stay put, and what covers the window (drawers, menus, toasts, the notepad's
+   focus view) is drawn outside it. */
+@media (min-width: 1800px) and (min-height: 1000px) { :root { --view-zoom: 1.1; } }
+@media (min-width: 2300px) and (min-height: 1250px) { :root { --view-zoom: 1.2; } }
+@media (min-width: 3000px) and (min-height: 1600px) { :root { --view-zoom: 1.35; } }
+.lp-root:not([data-layout='narrow']) .lp-inner > main { zoom: var(--view-zoom, 1); }
+/* The terminal stays 1:1: xterm measures its own cells and places the mouse by them. */
+.lp-root:not([data-layout='narrow']) .lp-inner > main .term-panel { zoom: calc(1 / var(--view-zoom, 1)); }
 [data-layout='narrow'] .lp-inner { height: auto; gap: 15px; padding: 20px 15px 30px; }
 
 .lp-grid {
@@ -2652,6 +2650,27 @@ button.nac-cell:hover { background: var(--hv); }
   .nac-chip-h { margin-left: 0; }
   .nac-cell { min-height: 76px; gap: 6px; padding: 8px; }
 }
+/* Bigger than a laptop's panel: room for bigger dates, codes and hours. */
+@container (min-width: 1300px) {
+  .nac-cal-title { font-size: 18px; }
+  .nac-cal-dow { font-size: 12px; }
+  .nac-cell-num { font-size: 14px; line-height: 22px; }
+  .nac-chip { padding: 1px 7px; font-size: 12.5px; line-height: 17px; }
+  .nac-chip.new { padding-right: 14px; }
+  .nac-chip.new::after { right: 5px; }
+  .nac-cell-note { font-size: 13px; }
+  .nac-legend { font-size: 13px; }
+}
+/* Not a phone: the weeks share the panel's height, so a tall window gets tall days rather than
+   empty space under the calendar. Each wrapper down to the rows passes the height on; the picked
+   day beside it stays at the top. */
+.lp-root:not([data-layout='narrow']) .music .nac-cal-wrap { flex: 1 0 auto; display: flex; flex-direction: column; }
+.lp-root:not([data-layout='narrow']) .music .nac-cal-split { flex: 1 0 auto; align-items: stretch; }
+.lp-root:not([data-layout='narrow']) .music .nac-cal-detail { align-self: start; }
+/* Each week an equal share of the height; one only takes more when its chips need it, so the weeks
+   are even when there's room and still fit when there isn't. */
+.lp-root:not([data-layout='narrow']) .music .nac-cal { flex: 1 0 auto; }
+.lp-root:not([data-layout='narrow']) .music .nac-cal-row:not(.nac-cal-head) { flex: 1 1 0; }
 /* A phone: one-letter day names, codes without hours (the picked day below has the times). */
 @container (max-width: 560px) {
   .nac-cal, .nac-cal-row { gap: 3px; }

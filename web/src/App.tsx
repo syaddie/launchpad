@@ -179,6 +179,10 @@ export function App({ cached }: { cached: AppState | null }) {
     const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
     if (bg) for (const m of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) m.content = bg;
   }, [dark, data.prefs.accent, design]);
+  // On the page too, so drawers drawn outside .lp-root (portals) get the phone's layout.
+  useLayoutEffect(() => {
+    document.documentElement.dataset.layout = layout;
+  }, [layout]);
 
   // A right-click menu belongs to the view it was opened in.
   useEffect(() => closeMenu(), [view]);

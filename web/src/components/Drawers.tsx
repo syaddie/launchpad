@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CARRIERS, detectCarrier, trackUrl } from '../../../shared/carriers';
 import { startOfDay } from '../../../shared/dates';
 import { DEFAULT_ENGINES } from '../../../shared/defaults';
@@ -11,8 +12,12 @@ import { HomeArrangement } from './HomeArrangement';
 import { STEP_LABELS, ago, chipOf, fmtStamp, hm, segColor, statusText } from '../util';
 import { Glide } from './Motion';
 
+/**
+ * A panel from the right over a dimmed page. Drawn at the end of the page, outside the view that
+ * opens it, so a view zoomed for a big screen (styles.css) doesn't zoom or misplace it.
+ */
 export function Drawer({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (
+  return createPortal(
     <>
       <div className="scrim" onClick={onClose} />
       <aside className="drawer" role="dialog" aria-label={title}>
@@ -24,7 +29,8 @@ export function Drawer({ title, onClose, children }: { title: string; onClose: (
         </div>
         <div className="drawer-body">{children}</div>
       </aside>
-    </>
+    </>,
+    document.body,
   );
 }
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { MON } from '../../../shared/dates';
 import type { ContainerInfo, LogLine } from '../../../shared/types';
 import { api, localGet, localSet } from '../api';
@@ -218,7 +219,7 @@ export function LogsDrawer({ c, canRestart, onClose, onRestarted }: { c: Contain
   const shown = all.filter((l) => (streams === 'all' || l.stream === streams) && (!q || l.text.toLowerCase().includes(q)));
   const today = new Date();
 
-  return (
+  return createPortal(
     <>
       <div className="scrim" onClick={onClose} />
       <aside className="drawer logs-drawer" role="dialog" aria-label={`Logs of ${c.name}`}>
@@ -318,6 +319,8 @@ export function LogsDrawer({ c, canRestart, onClose, onRestarted }: { c: Contain
           </span>
         </div>
       </aside>
-    </>
+    </>,
+    // Outside the Server view, so a view zoomed for a big screen doesn't zoom it (Drawers.tsx' Drawer).
+    document.body,
   );
 }
