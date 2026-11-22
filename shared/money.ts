@@ -6,6 +6,7 @@
 // their money as a linked entry, kept in step here.
 // Also cleaning for what the page sends, and reading the old workbook on import.
 import { MON, addDays, dayDiff, pad2, parseYmd, ymd } from './dates';
+import { cleanInvoiceDoc, cleanInvoiceSetup, docTotal } from './invoice';
 import type { AccountKind, Every, Invoice, Money, MoneyAccount, MoneyCategory, MoneyEntry, MoneyRule, SavingsGoal, Subscription, WishItem, WishPriority, WishStatus } from './types';
 import type { XCell, XSheet } from './xlsx';
 
@@ -445,6 +446,12 @@ export function nextInvoiceNum(invoices: Invoice[]): string {
   return best ? best.prefix + String(best.n + 1).padStart(best.width, '0') : 'INV-001';
 }
 
+/** The number a new invoice gets: after the highest in Owed and the last one made, which may not be in Owed. */
+export function suggestInvoiceNum(money: Money): string {
+  const last = money.invoiceSetup?.lastNum.trim();
+  return nextInvoiceNum(last ? [...money.invoices, { id: '', num: last, event: '', amount: 0, due: '' }] : money.invoices);
+}
+
 export type Repeat = 'once' | 'week' | 'fortnight' | 'month';
 
 /** The dates a repeating entry lands on, from `date` to the end of the month `until` (YYYY-MM). Monthly ones keep their day, or the month's last. */
@@ -558,8 +565,12 @@ export function cleanMoney(v: unknown, today = new Date()): Money {
   const invoices = (Array.isArray(m.invoices) ? m.invoices : []).slice(0, MAX_INVOICES).flatMap((x: Partial<Invoice>): Invoice[] => {
     const a = amount(x?.amount);
     if (!x || !isDate(x.due) || a === null) return [];
-    return [{ id: str(x.id, 40), num: str(x.num, 24), event: str(x.event, 120), amount: Math.abs(a), due: x.due }];
+    // One made in the form is worth what its rows add up to; rows that come to nothing can't be owed.
+    const doc = cleanInvoiceDoc(x.doc);
+    const total = doc ? docTotal(doc.lines) : 0;
+    return [{ id: str(x.id, 40), num: str(x.num, 24), event: str(x.event, 120), amount: total > 0 ? total : Math.abs(a), due: x.due, ...(doc && total > 0 ? { doc } : {}) }];
   });
+  const invoiceSetup = cleanInvoiceSetup(m.invoiceSetup);
   const wishlist = (Array.isArray(m.wishlist) ? m.wishlist : []).slice(0, MAX_WISHES).map((x: Partial<WishItem>): WishItem => ({
     id: str(x?.id, 40),
     name: str(x?.name, 80),
@@ -607,6 +618,7 @@ export function cleanMoney(v: unknown, today = new Date()): Money {
     subs,
     goals: ids(goals, 'g'),
     ...(rules.length ? { rules } : {}),
+    ...(invoiceSetup ? { invoiceSetup } : {}),
   });
 }
 

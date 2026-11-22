@@ -608,6 +608,83 @@ export interface Invoice {
   amount: number;
   /** YYYY-MM-DD: when it should be paid by. */
   due: string;
+  /** What it prints as, when it was made in the invoice form; its amount is then these rows' total. */
+  doc?: InvoiceDoc;
+}
+
+/** One row on an invoice: a set, a fee, or (with a negative rate) a discount. */
+export interface InvoiceLine {
+  desc: string;
+  /** A second, smaller line under the description; may be empty. */
+  note: string;
+  qty: number;
+  rate: number;
+}
+
+/** Who an invoice is billed to. */
+export interface InvoiceClient {
+  company: string;
+  /** The person it's for ("Attn: …"); may be empty. */
+  attn: string;
+  /** Lines separated by newlines. */
+  address: string;
+  phone: string;
+}
+
+/** You, at the top of an invoice. */
+export interface InvoiceFrom {
+  name: string;
+  address: string;
+  phone: string;
+  email: string;
+}
+
+/** A way to pay you, printed as a box at the bottom: "PayNow", "T1234567A", "NRIC". */
+export interface InvoicePay {
+  label: string;
+  value: string;
+  note: string;
+}
+
+/**
+ * Everything an invoice prints besides its number, event, amount and due date (the
+ * Invoice's own). Your details and terms are a copy, so an old invoice prints as it was sent.
+ */
+export interface InvoiceDoc {
+  /** YYYY-MM-DD: the invoice's date. */
+  issued: string;
+  client: InvoiceClient;
+  /** YYYY-MM-DD, or empty when it isn't printed. */
+  eventDate: string;
+  venue: string;
+  lines: InvoiceLine[];
+  from: InvoiceFrom;
+  pay: InvoicePay[];
+  terms: string;
+  thanks: string;
+}
+
+/** A row you add often, one tap away in the invoice form. A null rate is filled in each time. */
+export interface InvoiceItem {
+  id: string;
+  desc: string;
+  note: string;
+  rate: number | null;
+}
+
+/** What each new invoice starts from; updated every time one is made. */
+export interface InvoiceSetup {
+  from: InvoiceFrom;
+  pay: InvoicePay[];
+  terms: string;
+  thanks: string;
+  /** Days from the invoice's date to its due date. */
+  dueDays: number;
+  /** Who you've billed, latest first. */
+  clients: InvoiceClient[];
+  items: InvoiceItem[];
+  /** The last number used, so one made without adding it to Owed still moves the count on. */
+  lastNum: string;
 }
 
 export type AccountKind = 'bank' | 'cash' | 'invest' | 'pot';
@@ -729,6 +806,8 @@ export interface Money {
   goals: SavingsGoal[];
   /** Names and categories learned from statement imports; missing in trackers from before them. */
   rules?: MoneyRule[];
+  /** Your details, saved clients and quick-add rows for the invoice form; missing until the first invoice is made. */
+  invoiceSetup?: InvoiceSetup;
 }
 
 export type SetType = 'normal' | 'warmup' | 'dropset' | 'failure';

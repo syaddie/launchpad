@@ -1863,7 +1863,7 @@ i.file-pinned { color: var(--ac); }
 .m-stat.late .serif, .m-stat.late .meta { color: var(--wn); }
 .owed .composer .cell.owed-num { display: inline-block; width: 112px; height: 34px; font-size: 15px; background: var(--bg); }
 .owed-hint { display: inline-flex; align-items: center; gap: 6px; color: var(--acd); }
-.sheet.owed-sheet { min-width: 940px; }
+.sheet.owed-sheet { min-width: 974px; }
 .sheet.owed-sheet .ent-check { margin: 0 auto; }
 .sheet.owed-sheet tr.late td:first-child { box-shadow: inset 3px 0 0 var(--wn); }
 .sheet.owed-sheet td.amt .cell { color: var(--acd); font-weight: 600; }
@@ -2817,3 +2817,138 @@ button.nac-cell:hover { background: var(--hv); }
 .nac-watch-go:hover { text-decoration: underline; }
 .nac-watch-freed { color: var(--t2); }
 .nac-cell-bell { flex: none; margin-left: auto; font-size: 12px; line-height: 1; color: var(--acd); }
+
+/* ---------- Owed › invoices: the form (InvoiceDrawer.tsx) and the page it prints (InvoicePage.tsx) ---------- */
+
+.owed .you-panel > .panel-head { flex-wrap: wrap; align-items: center; }
+.owed-head-meta { flex: 1 1 260px; min-width: 0; }
+.owed-new { flex: none; }
+.sheet.owed-sheet .owed-doc-amt { cursor: pointer; }
+.sheet.owed-sheet .owed-doc-amt:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* Its own width, so rows and fields can rearrange in a drawer of any size, phones included. */
+.inv-form { container-type: inline-size; display: flex; flex-direction: column; gap: 26px; }
+.inv-form-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.inv-restored { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: baseline; }
+.inv-fields { display: flex; flex-wrap: wrap; gap: 10px 12px; }
+.inv-fields > .field { flex: 1 1 150px; min-width: 0; }
+.inv-fields > .field.wide { flex: 2 1 240px; }
+.inv-form .field > .input { width: 100%; box-sizing: border-box; min-width: 0; }
+.inv-form textarea.input { resize: vertical; }
+.inv-sec-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.inv-rows { display: flex; flex-direction: column; }
+.inv-row { display: grid; grid-template-columns: minmax(0, 1fr) 64px 112px 96px 32px; grid-template-areas: "desc qty rate amt x"; gap: 6px 8px; align-items: start; padding: 10px 0; border-top: 1px solid var(--ln); }
+.inv-row-head { padding: 0 0 6px; border-top: none; font-size: 12px; }
+.inv-row-head > span { text-align: right; }
+.inv-row-head > .inv-c-desc { text-align: left; }
+.inv-c-desc { grid-area: desc; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.inv-c-desc .input { width: 100%; box-sizing: border-box; }
+.inv-c-qty { grid-area: qty; min-width: 0; }
+.inv-c-rate { grid-area: rate; min-width: 0; }
+.inv-c-amt { grid-area: amt; min-width: 0; overflow-wrap: anywhere; text-align: right; }
+.inv-row:not(.inv-row-head) .inv-c-amt { min-height: 36px; display: flex; align-items: center; justify-content: flex-end; font-weight: 600; }
+.inv-c-x { grid-area: x; margin-top: 2px; }
+.inv-num-in { width: 100%; box-sizing: border-box; text-align: right; }
+.inv-num-in.bad { border-color: var(--wn); color: var(--wn); }
+.inv-note { color: var(--t2); }
+.inv-off-app { color: var(--acd); }
+.inv-empty { margin: 10px 0 0; }
+.inv-chip-rate { color: var(--t3); }
+.inv-hint { margin: 0; }
+.inv-check { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.inv-check input { flex: none; width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--ac); }
+.inv-check > span { display: flex; flex-direction: column; gap: 2px; }
+.inv-check-title { font-weight: 600; color: var(--tx); }
+.inv-owed-acct { padding-left: 28px; }
+.inv-you > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.inv-you-body { margin-top: 12px; }
+.inv-you-body p.meta { margin: 0; }
+.inv-pay-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.2fr) 32px; gap: 8px; align-items: center; }
+.inv-pay-row .input { width: 100%; box-sizing: border-box; min-width: 0; }
+@container (max-width: 520px) {
+  .inv-row { grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr) 32px; grid-template-areas: "desc desc desc x" "qty rate amt amt"; }
+  .inv-row-head { display: none; }
+  .inv-pay-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 32px; }
+  .inv-pay-row > .input:nth-child(3) { grid-column: 1 / 3; }
+  .inv-pay-row > button { grid-row: 1; grid-column: 3; }
+}
+.inv-foot-total { display: inline-flex; align-items: baseline; gap: 6px; }
+.inv-foot-total b { font-size: 18px; }
+.inv-foot-why { flex: 1 1 160px; min-width: 0; color: var(--wn); }
+.inv-foot-btns { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-left: auto; }
+.inv-preview { overflow: hidden; border-radius: var(--r); background: #fff; box-shadow: 0 0 0 1px var(--ln), 0 8px 24px rgba(0, 0, 0, 0.08); }
+.inv-print-tip { margin: 0; overflow-wrap: anywhere; }
+
+/* The page itself: the "Minimal" design, A4 at 96 px to the inch. Its colours are fixed, not the theme's. */
+.inv-page {
+  box-sizing: border-box;
+  width: 794px;
+  min-height: 1123px;
+  padding: 72px;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  color: #16161a;
+  font-family: Inter, "Helvetica Neue", Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.55;
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.inv-page * { box-sizing: border-box; }
+.inv-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 32px; }
+.inv-from { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.inv-name { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.inv-muted { color: #5c5c66; }
+.inv-lines { white-space: pre-line; overflow-wrap: anywhere; }
+.inv-num { flex: none; max-width: 45%; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; }
+.inv-kicker { font-size: 12px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: #3346d3; }
+.inv-num-big { font-size: 44px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; overflow-wrap: anywhere; }
+.inv-rule { height: 1px; margin: 40px 0 32px; background: #16161a; }
+.inv-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; }
+.inv-cell { min-width: 0; overflow-wrap: anywhere; }
+.inv-label { margin-bottom: 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: #5c5c66; }
+.inv-strong { font-weight: 600; }
+.inv-medium { font-weight: 500; }
+.inv-dates { display: flex; flex-direction: column; gap: 14px; }
+.inv-due { display: flex; flex-direction: column; align-items: flex-end; text-align: right; }
+.inv-due-amt { font-size: 36px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; color: #3346d3; overflow-wrap: anywhere; }
+.inv-event { margin-top: 44px; overflow-wrap: anywhere; }
+.inv-event-name { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+.inv-table { width: 100%; margin-top: 28px; border-collapse: collapse; table-layout: fixed; }
+.inv-table th { padding: 0 0 10px; border-bottom: 1px solid #16161a; font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: #5c5c66; text-align: right; }
+.inv-table th:first-child { text-align: left; }
+.inv-table td { padding: 12px 0; border-bottom: 1px solid #dcdce2; text-align: right; vertical-align: top; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.inv-table td:first-child { padding-right: 16px; text-align: left; }
+.inv-table td:last-child { font-weight: 500; }
+.inv-table td.inv-off { color: #0f7a4f; }
+.inv-total-row { display: flex; justify-content: flex-end; margin-top: 20px; }
+.inv-total { width: 256px; display: flex; justify-content: space-between; align-items: baseline; padding-top: 10px; border-top: 1px solid #16161a; font-weight: 600; font-variant-numeric: tabular-nums; }
+.inv-total b { font-size: 20px; font-weight: 600; }
+.inv-grow { flex: 1 0 40px; }
+.inv-pay { display: grid; gap: 16px; }
+.inv-pay > div { min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 18px 20px; border-radius: 10px; background: #f4f4f7; overflow-wrap: anywhere; }
+.inv-pay .inv-label { margin: 0; }
+.inv-pay-value { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.inv-terms { margin: 20px 0 0; font-size: 12px; line-height: 1.6; color: #5c5c66; white-space: pre-line; overflow-wrap: anywhere; text-wrap: pretty; }
+.inv-foot { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-top: 28px; padding-top: 20px; border-top: 1px solid #dcdce2; }
+.inv-foot .inv-muted { flex: none; font-size: 12px; }
+
+/* Printing an invoice (printInvoice): only its page, edge to edge on A4. */
+.inv-print { display: none; }
+@media print {
+  /* The first page is the design edge to edge; any after it get room at the top and bottom. */
+  @page { size: A4; margin: 16mm 0; }
+  @page :first { margin: 0; }
+  html.inv-printing, html.inv-printing body { background: #fff !important; }
+  html.inv-printing body > :not(.inv-print) { display: none !important; }
+  html.inv-printing .inv-print { display: block; }
+  /* A4 in millimetres: 794 x 1123 px is half a pixel over, enough for a blank second page. */
+  html.inv-printing .inv-page { width: 210mm; min-height: 296mm; }
+  /* A long invoice runs onto more pages between rows, never through one, the boxes or the footer. */
+  html.inv-printing :is(.inv-table tr, .inv-total-row, .inv-pay, .inv-foot) { break-inside: avoid; }
+}
