@@ -7,6 +7,7 @@ Whatever the change, it isn't finished until there are no loose ends:
 - **No bugs.** Try more than the happy path: empty and full states (nothing there, a lot there), errors, and anything else the change touches.
 - **Clean in every design and every screen size, phones included.** Check each of the app's designs (Broadsheet, Console, Bento, Horizon, Vista, Focus, Poster; the full list is `DESIGN_KEYS` in `shared/types.ts`) at desktop, wide and phone (narrow) sizes. Nothing should be cut off, overlapping, squashed to nothing, or impossible to scroll to.
 - **Seen working in the app**, not just in tests. If you couldn't check something, say so.
+- **Right-click menus come with it.** Anything new you can act on (a row, a tile, a card, a list item) gets a context menu in the same change, with the actions its buttons already have: spread `menuProps(() => [...items], label)` from `web/src/components/ContextMenu.tsx` on it. Mark what removes or stops something `danger`, and give it `confirm` text when it can't be undone. Leave fields and plain text alone, so the browser's own menu (copy, paste) still works there. Check it with a right-click, the keyboard (Shift+F10, arrows, Enter, Esc) and a long press at phone size. If a new feature has nothing worth a menu, say so.
 
 ## Merging to main
 

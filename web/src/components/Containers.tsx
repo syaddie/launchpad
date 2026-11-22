@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { MON } from '../../../shared/dates';
 import type { ContainerInfo, LogLine } from '../../../shared/types';
 import { api, localGet, localSet } from '../api';
+import { copyText, menuProps } from './ContextMenu';
 import { ExplainBox, ExplainButton, useExplain, useExplainStatus } from './Explain';
 
 const SELF_NOTE = 'This is Launchpad itself, which can’t restart itself from here. On the server: docker compose restart launchpad';
@@ -59,10 +60,24 @@ const chipOf = (c: ContainerInfo) => {
 };
 
 /** One container in the Services panel, with its logs and, when the restart proxy is there, a restart. */
-export function ContainerRow({ c, canRestart, onLogs, onRestarted }: { c: ContainerInfo; canRestart: boolean; onLogs: () => void; onRestarted: (error: string | null) => void }) {
+export function ContainerRow({ c, canRestart, onLogs, onRestarted, notify }: { c: ContainerInfo; canRestart: boolean; onLogs: () => void; onRestarted: (error: string | null) => void; notify?: (msg: string) => void }) {
   const chip = chipOf(c);
+  const restart = () =>
+    api
+      .restartContainer(c.id)
+      .then(() => onRestarted(null))
+      .catch((e) => onRestarted(e.message));
+  const menu = menuProps(
+    () => [
+      c.id && { label: 'View logs', icon: 'ph-scroll', onSelect: onLogs },
+      { label: 'Copy name', icon: 'ph-copy', onSelect: () => copyText(c.name, notify, `Copied ${c.name}`) },
+      canRestart && c.id && 'sep',
+      canRestart && c.id && (c.self ? { label: 'Restart (not from here)', icon: 'ph-arrow-clockwise', disabled: true } : { label: 'Restart', icon: 'ph-arrow-clockwise', danger: true, confirm: `Restart ${c.name}? It stops for a moment.`, onSelect: restart }),
+    ],
+    c.name,
+  );
   return (
-    <div className="container-row">
+    <div className="container-row" {...menu}>
       <span className="dot" style={{ width: 8, height: 8, background: chip.dot }} />
       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <span className="mono" style={{ fontSize: 13 }}>

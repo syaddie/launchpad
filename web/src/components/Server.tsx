@@ -698,7 +698,7 @@ function ServicesPanel({ s, data, now, onChanged }: { s: ServerStats; data: AppS
       )}
       <div className="scroll">
         {s.containers ? (
-          s.containers.map((c) => <ContainerRow key={c.id || c.name} c={c} canRestart={s.canRestart} onLogs={() => setLogsOf(c.id)} onRestarted={restarted(c.name)} />)
+          s.containers.map((c) => <ContainerRow key={c.id || c.name} c={c} canRestart={s.canRestart} onLogs={() => setLogsOf(c.id)} onRestarted={restarted(c.name)} notify={(text) => setNote({ text, failed: false })} />)
         ) : (
           <div className="empty" style={{ gap: 6 }}>
             <p style={{ fontSize: 13 }}>

@@ -5,6 +5,7 @@ import type { Note, NoteVersion } from '../../../shared/types';
 import { api } from '../api';
 import type { Notify } from '../hooks/useToast';
 import { ago, newId } from '../util';
+import { menuProps, type MenuItem } from './ContextMenu';
 import { Drawer } from './Drawers';
 import { shrinkImage } from './Photos';
 import { Glide } from './Motion';
@@ -158,7 +159,7 @@ export function NoteTabs({
   renaming,
   setRenaming,
   onRename,
-  onMenu,
+  menu,
 }: {
   notes: Note[];
   active: Note;
@@ -166,7 +167,8 @@ export function NoteTabs({
   renaming?: string | null;
   setRenaming?: (id: string | null) => void;
   onRename?: (id: string, name: string) => void;
-  onMenu?: (id: string) => void;
+  /** What right-clicking (or long-pressing) a tab offers. */
+  menu?: (n: Note) => MenuItem[];
 }) {
   return (
     <>
@@ -194,12 +196,7 @@ export function NoteTabs({
               onActive(n.id);
               setRenaming?.(n.id);
             }}
-            onContextMenu={(e) => {
-              if (!onMenu) return;
-              e.preventDefault();
-              onActive(n.id);
-              onMenu(n.id);
-            }}
+            {...(menu ? menuProps(() => menu(n), n.name || 'Untitled') : {})}
           >
             {n.pinned && <i className="ph-duotone ph-push-pin note-pin" aria-label="Pinned" />}
             {n.name || 'Untitled'}
@@ -300,13 +297,36 @@ export function Notes({ notes, activeId, onActive, onChange, saved, onOpenFocus,
     }
   };
 
-  const remove = () => {
+  const removeNote = (n: Note) => {
     if (notes.length < 2) return;
-    if (note.text.trim() && !window.confirm(`Delete “${note.name}”? This can’t be undone.`)) return;
-    const rest = notes.filter((n) => n.id !== note.id);
+    const rest = notes.filter((x) => x.id !== n.id);
     onChange(rest);
-    onActive(rest[0].id);
+    if (n.id === note.id) onActive(rest[0].id);
     setMenu(false);
+  };
+
+  const remove = () => {
+    if (note.text.trim() && !window.confirm(`Delete “${note.name}”? This can’t be undone.`)) return;
+    removeNote(note);
+  };
+
+  /** Right-click on a tab: the ⋯ menu's actions, for that notepad. */
+  const noteMenu = (n: Note): MenuItem[] => {
+    const pick = () => {
+      onActive(n.id);
+      setEditing(false);
+      setMenu(false);
+      setSearching(false);
+    };
+    return [
+      { label: 'Rename', icon: 'ph-pencil-simple', onSelect: () => setRenaming(n.id) },
+      { label: n.pinned ? 'Unpin' : 'Pin to the front', icon: 'ph-push-pin', onSelect: () => patch(n.id, { pinned: n.pinned ? undefined : true }) },
+      { label: 'Tags…', icon: 'ph-tag', onSelect: () => (pick(), setTagsDraft((n.tags ?? []).join(', '))) },
+      { label: 'History…', icon: 'ph-clock-counter-clockwise', onSelect: () => (pick(), setHistory(true)) },
+      { label: 'Focus view', icon: 'ph-arrows-out-simple', onSelect: () => (pick(), onOpenFocus()) },
+      'sep',
+      { label: 'Delete', icon: 'ph-trash', danger: true, disabled: notes.length < 2, confirm: n.text.trim() ? `Delete “${n.name}”? This can’t be undone.` : undefined, onSelect: () => removeNote(n) },
+    ];
   };
 
   const restore = (v: NoteVersion) => {
@@ -353,7 +373,7 @@ export function Notes({ notes, activeId, onActive, onChange, saved, onOpenFocus,
             renaming={renaming}
             setRenaming={setRenaming}
             onRename={rename}
-            onMenu={() => setMenu(true)}
+            menu={noteMenu}
           />
           <button className="icon-btn" style={{ width: 24, height: 24, color: 'var(--t3)', flex: 'none' }} title="New notepad" onClick={() => add()}>
             <i className="ph-duotone ph-plus" />

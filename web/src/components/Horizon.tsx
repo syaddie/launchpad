@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { addDays, dayDiff, DOW, parseDue, parseYmd, startOfDay } from '../../../shared/dates';
+import { addDays, dayDiff, DOW, parseDue, parseYmd, startOfDay, ymd } from '../../../shared/dates';
 import { fmtStudy, timerMinutes } from '../../../shared/learn';
 import { smokesOn } from '../../../shared/trackers';
 import type { AppState, CalEvent, Package, Task } from '../../../shared/types';
 import { chipOf, fmtDay, hm, inMinutes, segColor, statusText, weatherLabel } from '../util';
+import { menuProps, type MenuItem } from './ContextMenu';
 import { KeyFigures } from './KeyFigures';
-import { todayAgenda } from './Today';
+import { packageMenu } from './Packages';
+import { calEventMenu, todayAgenda } from './Today';
 
 // Horizon's home: everything sorted by when, not by what. A ribbon of today's
 // hours across the top, then four columns: Now, Later today, This week, Anytime.
@@ -25,6 +27,10 @@ interface Props {
   onAddPackage: () => void;
   onKeepPackage: (id: string) => void;
   onDismissPackage: (id: string) => void;
+  onRefreshPackage?: (id: string) => void;
+  onUpdateTask?: (t: Task, patch: { title?: string; due?: string | null }) => void;
+  onMoveTask?: (t: Task, listId: string) => void;
+  onDeleteTask?: (t: Task) => void;
   onLogSmoke: () => void;
   onOpenLearn: () => void;
   notify: (msg: string, action?: { label: string; run: () => void }) => void;
@@ -143,15 +149,34 @@ export function HorizonHome(props: Props) {
       {pending.includes(t.id) && <i className="ph-duotone ph-check" />}
     </button>
   );
+  /** Right-click on a task: the Tasks panel's menu, less Edit (Horizon has no editor), with Delete asking first. */
+  const taskMenu = (t: Task): MenuItem[] => {
+    const todayYmd = ymd(today);
+    const tomorrowYmd = ymd(addDays(today, 1));
+    const up = props.onUpdateTask;
+    return [
+      { label: pending.includes(t.id) ? 'Undo complete' : 'Complete', icon: pending.includes(t.id) ? 'ph-arrow-counter-clockwise' : 'ph-check-circle', onSelect: () => toggle(t) },
+      'sep',
+      up && t.due !== todayYmd && { label: 'Due today', icon: 'ph-calendar-check', onSelect: () => up(t, { due: todayYmd }) },
+      up && t.due !== tomorrowYmd && { label: 'Due tomorrow', icon: 'ph-calendar-plus', onSelect: () => up(t, { due: tomorrowYmd }) },
+      up && t.due && { label: 'No due date', icon: 'ph-calendar-x', onSelect: () => up(t, { due: null }) },
+      'sep',
+      ...(props.onMoveTask && !t.parent
+        ? data.taskLists.filter((l) => l.id !== t.listId).map((l): MenuItem => ({ label: `Move to ${l.title}`, icon: 'ph-arrow-bend-up-right', onSelect: () => props.onMoveTask!(t, l.id) }))
+        : []),
+      'sep',
+      props.onDeleteTask && { label: 'Delete', icon: 'ph-trash', danger: true, confirm: `Delete “${t.title}”? It can’t be brought back.`, onSelect: () => props.onDeleteTask!(t) },
+    ];
+  };
   const taskRow = (t: Task, when?: string, warn?: boolean) => (
-    <div key={t.id} className={'hz-row' + (pending.includes(t.id) ? ' done' : '')}>
+    <div key={t.id} className={'hz-row' + (pending.includes(t.id) ? ' done' : '')} {...menuProps(() => taskMenu(t), t.title)}>
       {checkbox(t)}
       <span className="hz-grow">{t.title}</span>
       {when && <span className={'hz-when' + (warn ? ' warn' : '')}>{when}</span>}
     </div>
   );
   const eventRow = (e: Timed, dim = false) => (
-    <a key={e.id} className={'hz-row hz-event' + (dim ? ' dim' : '')} href={e.htmlLink || undefined} target="_blank" rel="noopener">
+    <a key={e.id} className={'hz-row hz-event' + (dim ? ' dim' : '')} href={e.htmlLink || undefined} target="_blank" rel="noopener" {...menuProps(() => calEventMenu(e, props.notify), e.title)}>
       <span className="hz-time tnum">{hm(e.s)}</span>
       <span className="dot" style={{ width: 8, height: 8, background: colors.get(e.calendarId) || 'var(--t3)' }} />
       <span className="hz-grow">{e.title}</span>
@@ -161,7 +186,15 @@ export function HorizonHome(props: Props) {
   const pkgCard = (p: Package) => {
     const chip = chipOf(p);
     return (
-      <div key={p.id} className="hz-card hz-click" role="button" tabIndex={0} onClick={() => props.onOpenPackage(p.id)} onKeyDown={(e) => e.key === 'Enter' && props.onOpenPackage(p.id)}>
+      <div
+        key={p.id}
+        className="hz-card hz-click"
+        role="button"
+        tabIndex={0}
+        onClick={() => props.onOpenPackage(p.id)}
+        onKeyDown={(e) => e.key === 'Enter' && props.onOpenPackage(p.id)}
+        {...menuProps(() => packageMenu(p, { onOpen: props.onOpenPackage, onKeep: props.onKeepPackage, onDismiss: props.onDismissPackage, onRefresh: props.onRefreshPackage, notify: props.notify }), p.label)}
+      >
         <div className="hz-tagline">
           <span className="hz-tag">Package</span>
           <span className={'chip ' + chip.cls}>{chip.text}</span>

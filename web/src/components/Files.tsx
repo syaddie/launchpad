@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { MON } from '../../../shared/dates';
 import { archiveOf, previewOf, SEARCH_LIMIT, SEARCH_MAX_FILE_MB, SEARCH_SECONDS, type FileJob, type FolderSize, type SearchEnd, type SearchHit, type TrashOutcome } from '../../../shared/files';
@@ -6,6 +6,7 @@ import type { DirListing, FileEntry } from '../../../shared/types';
 import { api, downloadUrl, localGet, localSet, uploadFile, UploadError } from '../api';
 import { downloadZip, filesApi, searchFiles } from '../filesApi';
 import { fmtBytes, hm } from '../util';
+import { closeMenu, menuProps, openMenu, useDismiss, type MenuItem } from './ContextMenu';
 import { authorizeLine, Copyable, keyRefused } from './Copyable';
 import { FilesTrash } from './FilesTrash';
 import { FileViewer } from './FileViewer';
@@ -75,36 +76,6 @@ interface Search {
   error: string;
 }
 
-/** Closes a popover on a click outside it, Escape, or the page scrolling under it. */
-function useDismiss(open: boolean, refs: RefObject<HTMLElement | null>[], close: () => void) {
-  const closeRef = useRef(close);
-  closeRef.current = close;
-  useEffect(() => {
-    if (!open) return;
-    const down = (e: Event) => !refs.some((r) => r.current?.contains(e.target as Node)) && closeRef.current();
-    const key = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.stopPropagation();
-      closeRef.current();
-    };
-    const scroll = (e: Event) => !refs.some((r) => r.current?.contains(e.target as Node)) && closeRef.current();
-    // Only a change of width moves things: a phone's address bar sliding away changes just the height.
-    const width = window.innerWidth;
-    const resize = () => window.innerWidth !== width && closeRef.current();
-    document.addEventListener('pointerdown', down, true);
-    window.addEventListener('keydown', key, true);
-    window.addEventListener('scroll', scroll, true);
-    window.addEventListener('resize', resize);
-    return () => {
-      document.removeEventListener('pointerdown', down, true);
-      window.removeEventListener('keydown', key, true);
-      window.removeEventListener('scroll', scroll, true);
-      window.removeEventListener('resize', resize);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-}
-
 /** A menu fixed to where its button is, flipped above it when there's no room below. */
 function FloatingMenu({ at, onClose, children, label }: { at: DOMRect; onClose: () => void; children: ReactNode; label: string }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -164,7 +135,8 @@ export function FilesPanel({ publicKey, hidden, now, open, pins, onPins, onOpenT
   const [jobs, setJobs] = useState<FileJob[]>([]);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
-  const [rowMenu, setRowMenu] = useState<{ name: string; at: DOMRect } | null>(null);
+  /** The row whose ⋯ menu is open, to light its button. */
+  const [rowMenu, setRowMenu] = useState<string | null>(null);
   const [toolMenu, setToolMenu] = useState<{ kind: 'pins' | 'pack'; at: DOMRect } | null>(null);
   const [search, setSearch] = useState<Search | null>(null);
   const [searchText, setSearchText] = useState('');
@@ -575,7 +547,29 @@ export function FilesPanel({ publicKey, hidden, now, open, pins, onPins, onOpenT
   const chosenPaths = chosen.map((e) => join(listing.path, e.name));
   const allChosen = entries.length > 0 && chosen.length === entries.length;
   const pinned = pins.includes(listing.path);
-  const menuEntry = rowMenu ? entries.find((e) => e.name === rowMenu.name) : undefined;
+  /** A row's menu, from its ⋯ button or a right-click. Trash isn't asked about: Trash brings it back. */
+  const rowItems = (e: FileEntry): MenuItem[] => {
+    const path = join(listing.path, e.name);
+    const dir = e.kind === 'dir';
+    const preview = e.kind === 'file' && previewOf(e.name);
+    return [
+      e.kind !== 'other' && { label: dir ? 'Open' : preview ? 'Preview' : 'Open', icon: dir ? 'ph-folder-open' : preview ? 'ph-eye' : 'ph-file-text', onSelect: () => (dir ? go(path) : openFile(path)) },
+      e.kind === 'file' && !!archiveOf(e.name) && { label: 'Unpack here', icon: 'ph-package', onSelect: () => unpack(path) },
+      dir && { label: 'Open the terminal here', icon: 'ph-terminal-window', onSelect: () => onOpenTerminal(path) },
+      dir && { label: 'Calculate size', icon: 'ph-ruler', onSelect: () => measure([path]) },
+      dir && { label: pins.includes(path) ? 'Unpin' : 'Pin', icon: 'ph-star', onSelect: () => togglePin(path) },
+      'sep',
+      { label: 'Copy to…', icon: 'ph-copy', onSelect: () => setClip({ mode: 'copy', dir: listing.path, names: [e.name] }) },
+      { label: 'Move to…', icon: 'ph-arrows-out-cardinal', onSelect: () => setClip({ mode: 'move', dir: listing.path, names: [e.name] }) },
+      { label: 'Rename', icon: 'ph-pencil-simple', onSelect: () => (setRenaming(e.name), setCreating(false)) },
+      'sep',
+      dir ? { label: 'Download as .zip', icon: 'ph-download-simple', onSelect: () => zip([path]) } : e.kind === 'file' && { label: 'Download', icon: 'ph-download-simple', href: downloadUrl(path) },
+      { label: 'Pack as .zip', icon: 'ph-file-zip', onSelect: () => pack([path], 'zip') },
+      { label: 'Pack as .tar.gz', icon: 'ph-file-zip', onSelect: () => pack([path], 'tar.gz') },
+      'sep',
+      { label: 'Move to the trash', icon: 'ph-trash', danger: true, onSelect: () => trash([path]) },
+    ];
+  };
 
   const pick = (name: string, shift: boolean) => {
     setSelected((s) => {
@@ -1105,6 +1099,7 @@ export function FilesPanel({ publicKey, hidden, now, open, pins, onPins, onOpenT
                   data-name={e.name}
                   className={'file-row' + (selected.has(e.name) ? ' chosen' : '') + (highlight === e.name ? ' highlight' : '') + (clip?.dir === listing.path && clip.names.includes(e.name) ? ' clipped' : '')}
                   role="listitem"
+                  {...menuProps(() => rowItems(e), e.name)}
                 >
                   <input
                     type="checkbox"
@@ -1149,11 +1144,16 @@ export function FilesPanel({ publicKey, hidden, now, open, pins, onPins, onOpenT
                       <i className="ph-duotone ph-trash" />
                     </button>
                     <button
-                      className={'icon-btn' + (rowMenu?.name === e.name ? ' on' : '')}
+                      className={'icon-btn' + (rowMenu === e.name ? ' on' : '')}
                       title="More"
                       aria-label={`More for ${e.name}`}
                       aria-haspopup="menu"
-                      onClick={(ev) => setRowMenu(rowMenu?.name === e.name ? null : { name: e.name, at: ev.currentTarget.getBoundingClientRect() })}
+                      aria-expanded={rowMenu === e.name}
+                      onClick={(ev) => {
+                        if (rowMenu === e.name) return closeMenu();
+                        const opened = openMenu({ items: rowItems(e), label: `More for ${e.name}`, anchor: ev.currentTarget.getBoundingClientRect(), keyboard: ev.detail === 0, onClose: () => setRowMenu(null) });
+                        if (opened) setRowMenu(e.name);
+                      }}
                     >
                       <i className="ph-duotone ph-dots-three" />
                     </button>
@@ -1178,108 +1178,7 @@ export function FilesPanel({ publicKey, hidden, now, open, pins, onPins, onOpenT
         </>
       )}
 
-      {rowMenu && menuEntry && (
-        <FloatingMenu at={rowMenu.at} onClose={() => setRowMenu(null)} label={`More for ${menuEntry.name}`}>
-          <RowMenuItems
-            entry={menuEntry}
-            path={join(listing.path, menuEntry.name)}
-            pinned={pins.includes(join(listing.path, menuEntry.name))}
-            close={() => setRowMenu(null)}
-            onOpen={(p) => (setRowMenu(null), menuEntry.kind === 'dir' ? go(p) : openFile(p))}
-            onTerminal={(p) => (setRowMenu(null), onOpenTerminal(p))}
-            onSize={(p) => (setRowMenu(null), measure([p]))}
-            onPin={togglePin}
-            onUnpack={unpack}
-            onPack={(p, f) => pack([p], f)}
-            onZip={(p) => zip([p])}
-            onClip={(mode) => (setRowMenu(null), setClip({ mode, dir: listing.path, names: [menuEntry.name] }))}
-            onRename={() => (setRowMenu(null), setRenaming(menuEntry.name), setCreating(false))}
-            onTrash={(p) => (setRowMenu(null), trash([p]))}
-          />
-        </FloatingMenu>
-      )}
     </section>
-  );
-}
-
-/** What the ⋯ on a row offers, for a folder or a file. */
-function RowMenuItems({ entry, path, pinned, close, onOpen, onTerminal, onSize, onPin, onUnpack, onPack, onZip, onClip, onRename, onTrash }: {
-  entry: FileEntry;
-  path: string;
-  pinned: boolean;
-  close: () => void;
-  onOpen: (p: string) => void;
-  onTerminal: (p: string) => void;
-  onSize: (p: string) => void;
-  onPin: (p: string) => void;
-  onUnpack: (p: string) => void;
-  onPack: (p: string, format: 'zip' | 'tar.gz') => void;
-  onZip: (p: string) => void;
-  onClip: (mode: 'copy' | 'move') => void;
-  onRename: () => void;
-  onTrash: (p: string) => void;
-}) {
-  const dir = entry.kind === 'dir';
-  const preview = entry.kind === 'file' && previewOf(entry.name);
-  return (
-    <>
-      {entry.kind !== 'other' && (
-        <button role="menuitem" onClick={() => onOpen(path)}>
-          <i className={'ph-duotone ' + (dir ? 'ph-folder-open' : preview ? 'ph-eye' : 'ph-file-text')} />
-          {dir ? 'Open' : preview ? 'Preview' : 'Open'}
-        </button>
-      )}
-      {entry.kind === 'file' && archiveOf(entry.name) && (
-        <button role="menuitem" onClick={() => onUnpack(path)}>
-          <i className="ph-duotone ph-package" /> Unpack here
-        </button>
-      )}
-      {dir && (
-        <>
-          <button role="menuitem" onClick={() => onTerminal(path)}>
-            <i className="ph-duotone ph-terminal-window" /> Open the terminal here
-          </button>
-          <button role="menuitem" onClick={() => onSize(path)}>
-            <i className="ph-duotone ph-ruler" /> Calculate size
-          </button>
-          <button role="menuitem" onClick={() => onPin(path)}>
-            <i className={'ph-duotone ph-star' + (pinned ? ' file-pinned' : '')} /> {pinned ? 'Unpin' : 'Pin'}
-          </button>
-        </>
-      )}
-      <div className="files-menu-sep" />
-      <button role="menuitem" onClick={() => onClip('copy')}>
-        <i className="ph-duotone ph-copy" /> Copy to…
-      </button>
-      <button role="menuitem" onClick={() => onClip('move')}>
-        <i className="ph-duotone ph-arrows-out-cardinal" /> Move to…
-      </button>
-      <button role="menuitem" onClick={onRename}>
-        <i className="ph-duotone ph-pencil-simple" /> Rename
-      </button>
-      <div className="files-menu-sep" />
-      {dir ? (
-        <button role="menuitem" onClick={() => onZip(path)}>
-          <i className="ph-duotone ph-download-simple" /> Download as .zip
-        </button>
-      ) : (
-        entry.kind === 'file' && (
-          <a role="menuitem" className="files-menu-link" href={downloadUrl(path)} onClick={close}>
-            <i className="ph-duotone ph-download-simple" /> Download
-          </a>
-        )
-      )}
-      <button role="menuitem" onClick={() => onPack(path, 'zip')}>
-        <i className="ph-duotone ph-file-zip" /> Pack as .zip
-      </button>
-      <button role="menuitem" onClick={() => onPack(path, 'tar.gz')}>
-        <i className="ph-duotone ph-file-zip" /> Pack as .tar.gz
-      </button>
-      <div className="files-menu-sep" />
-      <button role="menuitem" onClick={() => onTrash(path)}>
-        <i className="ph-duotone ph-trash" /> Move to the trash
-      </button>
-    </>
   );
 }
 

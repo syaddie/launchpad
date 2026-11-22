@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Presence, Readout, useGlide } from './Motion';
-import { dayDiff, parseDue, parseDueWord, parseYmd, startOfDay } from '../../../shared/dates';
+import { addDays, dayDiff, parseDue, parseDueWord, parseYmd, startOfDay, ymd } from '../../../shared/dates';
 import type { AppState, Task } from '../../../shared/types';
 import { fmtDay, shortDay } from '../util';
+import { menuProps, type MenuItem } from './ContextMenu';
 
 interface Props {
   data: AppState;
@@ -122,6 +123,28 @@ export function Tasks({ data, now, onConnect, onAdd, onComplete, onUpdate, onMov
   // The list's tabs share one highlight that glides to the list picked (motion.css).
   useGlide(tabsRef, `${currentList}:${lists.length}`, '.tab.active');
 
+  /** Right-click on a task: what its editor does, without opening it. Delete keeps the 5-second undo. */
+  const taskMenu = (t: Task, sub: boolean): MenuItem[] => {
+    const todayYmd = ymd(today);
+    const tomorrowYmd = ymd(addDays(today, 1));
+    return [
+      undo?.kind === 'complete' && undo.task.id === t.id
+        ? { label: 'Undo complete', icon: 'ph-arrow-counter-clockwise', onSelect: undoNow }
+        : { label: 'Complete', icon: 'ph-check-circle', onSelect: () => later(t, 'complete') },
+      (onUpdate || onDelete) && { label: 'Edit…', icon: 'ph-pencil-simple', onSelect: () => setOpen(t.id) },
+      onUpdate && 'sep',
+      onUpdate && t.due !== todayYmd && { label: 'Due today', icon: 'ph-calendar-check', onSelect: () => onUpdate(t, { due: todayYmd }) },
+      onUpdate && t.due !== tomorrowYmd && { label: 'Due tomorrow', icon: 'ph-calendar-plus', onSelect: () => onUpdate(t, { due: tomorrowYmd }) },
+      onUpdate && t.due && { label: 'No due date', icon: 'ph-calendar-x', onSelect: () => onUpdate(t, { due: null }) },
+      'sep',
+      ...(onMove && !sub
+        ? data.taskLists.filter((l) => l.id !== t.listId).map((l): MenuItem => ({ label: `Move to ${l.title}`, icon: 'ph-arrow-bend-up-right', onSelect: () => onMove(t, l.id) }))
+        : []),
+      'sep',
+      onDelete && { label: 'Delete', icon: 'ph-trash', danger: true, onSelect: () => later(t, 'delete') },
+    ];
+  };
+
   const row = (t: Task, sub = false) => {
     const gone = leaving.includes(t.id);
     const done = (undo?.kind === 'complete' && undo.task.id === t.id) || gone;
@@ -134,7 +157,7 @@ export function Tasks({ data, now, onConnect, onAdd, onComplete, onUpdate, onMov
       // its undo window, it folds away.
       <div key={t.id} className={'task-item' + (sub ? ' task-sub' : '') + (gone ? ' leaving' : '')} data-new={t.id.startsWith('tmp-') || undefined}>
         <div className="task-item-in">
-        <div className={'task' + (open === t.id ? ' open' : '') + (done ? ' done' : '')}>
+        <div className={'task' + (open === t.id ? ' open' : '') + (done ? ' done' : '')} {...menuProps(() => taskMenu(t, sub), t.title)}>
           <button className={'check' + (done ? ' on' : '')} aria-label={done ? 'Undo' : 'Complete'} disabled={gone} onClick={() => later(t, 'complete')}>
             {done && <i className="ph-duotone ph-check" />}
           </button>
