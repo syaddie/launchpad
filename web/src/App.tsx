@@ -11,7 +11,7 @@ import { api, localGet, localSet, type RestoreResult } from './api';
 import { AddEvent } from './components/AddEvent';
 import { Bookmarks } from './components/Bookmarks';
 import { closeMenu, ContextMenuHost, copyText, menuProps, placeOf } from './components/ContextMenu';
-import { AddPackageDrawer, DESIGNS, Drawer, PANEL_ROWS, PackageDrawer, SettingsDrawer } from './components/Drawers';
+import { AddPackageDrawer, DESIGNS, Drawer, PANEL_ROWS, PackageDrawer, SettingsDrawer, type SettingsTab } from './components/Drawers';
 import { FocusHome, type FocusTabInfo } from './components/FocusHome';
 import { HeroPanel } from './components/Hero';
 import { HorizonHome } from './components/Horizon';
@@ -81,7 +81,7 @@ function preloadViews() {
   loadTerminal().catch(() => {});
 }
 
-type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings' } | { type: 'exercise'; title: string } | { type: 'course'; id: string; item?: string } | null;
+type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings'; tab?: SettingsTab } |{ type: 'exercise'; title: string } | { type: 'course'; id: string; item?: string } | null;
 
 /** How long a change of view waits for the new view's code before going ahead without it. */
 const CODE_WAIT_MS = 400;
@@ -698,6 +698,20 @@ export function App({ cached }: { cached: AppState | null }) {
   );
   const checkLinks = () => api.checkLinks().then((linkCheck) => update((d) => ({ ...d, linkCheck }))).catch((e) => showToast(`Couldn’t start the link check: ${e.message}`));
   const bookmarksPanel = <Bookmarks groups={data.bookmarks} onChange={setBookmarks} search={search} edit={editBookmarks} setEdit={setEditBookmarks} linkCheck={data.linkCheck} onCheckLinks={checkLinks} notify={showToast} />;
+  /** A photo panel; its menu also manages and hides them. */
+  const photoPanel = (area: 'photo' | 'photo2') => {
+    const slot = area === 'photo' ? 0 : 1;
+    return (
+      <PhotoPanel
+        photos={data.photos}
+        area={area}
+        index={photoSlots.shown[slot]}
+        onStep={(d) => photoSlots.step(slot, d)}
+        onManage={() => setDrawer({ type: 'settings', tab: 'photos' })}
+        onHide={() => hidePanel('panel:photos', 'Photos')}
+      />
+    );
+  };
   /** The home grid's panel for an area. */
   const homePanel = (a: Area): ReactNode => {
     switch (a) {
@@ -705,8 +719,8 @@ export function App({ cached }: { cached: AppState | null }) {
       case 'tasks': return tasksPanel;
       case 'notes': return notesPanel;
       case 'pkgs': return packagesPanel;
-      case 'photo': return <PhotoPanel photos={data.photos} area="photo" index={photoSlots.shown[0]} onStep={(d) => photoSlots.step(0, d)} />;
-      case 'photo2': return <PhotoPanel photos={data.photos} area="photo2" index={photoSlots.shown[1]} onStep={(d) => photoSlots.step(1, d)} />;
+      case 'photo': return photoPanel('photo');
+      case 'photo2': return photoPanel('photo2');
       case 'hero': return heroPanel;
       case 'wx': return <WeatherPanel data={data} now={now} />;
       case 'bm': return bookmarksPanel;
@@ -790,6 +804,9 @@ export function App({ cached }: { cached: AppState | null }) {
         copyEl && { label: `Copy ${copyEl.dataset.copy || 'text'}`, icon: 'ph-copy', onSelect: () => copyText(copyEl.dataset.copyText ?? copyEl.innerText, showToast) },
         ...(place?.items ?? []),
         hideName && { label: `Hide ${hideName}`, icon: 'ph-eye-slash', onSelect: () => hidePanel(place!.hide!, hideName) },
+        // Vista's photos are the wallpaper, so a right-click on it (outside every panel) is about them.
+        view === 'home' && design === 'vista' && !place && photoCount > 1 && { label: 'Next photo', icon: 'ph-caret-right', onSelect: () => photoSlots.step(0, 1) },
+        view === 'home' && design === 'vista' && !place && photoCount > 0 && { label: 'Manage photos…', icon: 'ph-images', onSelect: () => setDrawer({ type: 'settings', tab: 'photos' }) },
         'sep',
         !palette && { label: 'Command palette', icon: 'ph-command', onSelect: () => setPalette(true) },
         !shortcuts && { label: 'Keyboard shortcuts', icon: 'ph-keyboard', onSelect: () => setShortcuts(true) },
@@ -890,7 +907,7 @@ export function App({ cached }: { cached: AppState | null }) {
               active={activeTab}
               onTab={setHomeTab}
               hero={heroPanel}
-              photo={shown.has('photo') && <PhotoPanel photos={data.photos} area="photo" index={photoSlots.shown[0]} onStep={(d) => photoSlots.step(0, d)} />}
+              photo={shown.has('photo') && photoPanel('photo')}
               panel={activeTab === 'today' ? todayPanel : activeTab === 'tasks' ? tasksPanel : activeTab === 'notes' ? notesPanel : packagesPanel}
               bookmarks={shown.has('bm') && bookmarksPanel}
               empty={noPanels}
@@ -920,8 +937,8 @@ export function App({ cached }: { cached: AppState | null }) {
               photos={
                 photoCount > 0 && (
                   <div className="hz-photos">
-                    {photoCount > 0 && <PhotoPanel photos={data.photos} area="photo" index={photoSlots.shown[0]} onStep={(d) => photoSlots.step(0, d)} />}
-                    {photoCount > 1 && <PhotoPanel photos={data.photos} area="photo2" index={photoSlots.shown[1]} onStep={(d) => photoSlots.step(1, d)} />}
+                    {photoCount > 0 && photoPanel('photo')}
+                    {photoCount > 1 && photoPanel('photo2')}
                   </div>
                 )
               }
@@ -949,6 +966,8 @@ export function App({ cached }: { cached: AppState | null }) {
           <Suspense fallback={null}>
           {drawer.type === 'settings' && (
             <SettingsDrawer
+              key={drawer.tab ?? 'general'}
+              startTab={drawer.tab}
               data={data}
               now={now}
               dark={dark}

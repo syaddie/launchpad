@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Snippet } from '../../../shared/types';
 import { cleanCommand, MAX_SHELL_ASK, type ShellAnswer, type ShellAskStatus } from '../../../shared/shellAsk';
 import { api } from '../api';
-import { menuProps, type MenuItem } from './ContextMenu';
+import { closeMenu, menuProps, openMenu, type MenuItem } from './ContextMenu';
 
 type Asked = { q: string; status: 'busy' } | { q: string; status: 'done'; answer: ShellAnswer } | { q: string; status: 'failed'; error: string };
 
@@ -205,7 +205,8 @@ export function SnippetsPanel({ canUse, cwd, onInsert, onRun, onClose }: {
   const [editing, setEditing] = useState<string | 'new' | null>(null);
   /** What a new snippet starts with: empty, or a command Claude wrote. */
   const [draft, setDraft] = useState<Partial<Snippet>>({});
-  const [deleting, setDeleting] = useState<string | null>(null);
+  /** The snippet whose ⋯ menu is open, to light its button. */
+  const [menuFor, setMenuFor] = useState<string | null>(null);
   const asking = useCommandAsk(cwd);
 
   const newSnippet = (start: Partial<Snippet> = {}) => {
@@ -220,12 +221,6 @@ export function SnippetsPanel({ canUse, cwd, onInsert, onRun, onClose }: {
       .catch((e) => setError(e.message));
   }, []);
 
-  useEffect(() => {
-    if (!deleting) return;
-    const t = window.setTimeout(() => setDeleting(null), 4000);
-    return () => clearTimeout(t);
-  }, [deleting]);
-
   const saved = (l: Snippet[]) => {
     setList(l);
     setEditing(null);
@@ -233,14 +228,11 @@ export function SnippetsPanel({ canUse, cwd, onInsert, onRun, onClose }: {
   };
 
   const deleteNow = (id: string) => {
-    setDeleting(null);
     api
       .deleteSnippet(id)
       .then(setList)
       .catch((e) => setError(e.message));
   };
-
-  const remove = (id: string) => (deleting !== id ? setDeleting(id) : deleteNow(id));
 
   const snippetMenu = (s: Snippet): MenuItem[] => [
     { label: 'Insert', icon: 'ph-cursor-text', disabled: !canUse, onSelect: () => onInsert(s.command) },
@@ -287,18 +279,19 @@ export function SnippetsPanel({ canUse, cwd, onInsert, onRun, onClose }: {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <span className="snippet-name">{s.name}</span>
                   <span className="snippet-tools">
-                    <button className="icon-btn" title="Edit" aria-label={`Edit ${s.name}`} onClick={() => setEditing(s.id)}>
-                      <i className="ph-duotone ph-pencil-simple" />
+                    {/* Edit and Delete (and Insert, Run) are in here, as on a right-click or long press. */}
+                    <button
+                      className={'icon-btn' + (menuFor === s.id ? ' on' : '')}
+                      title="More"
+                      aria-label={`More for ${s.name}`}
+                      aria-haspopup="menu"
+                      onClick={(e) => {
+                        if (menuFor === s.id) return closeMenu();
+                        if (openMenu({ items: snippetMenu(s), label: s.name, anchor: e.currentTarget.getBoundingClientRect(), keyboard: e.detail === 0, onClose: () => setMenuFor(null) })) setMenuFor(s.id);
+                      }}
+                    >
+                      <i className="ph-duotone ph-dots-three" />
                     </button>
-                    {deleting === s.id ? (
-                      <button className="btn btn-primary btn-small" onClick={() => remove(s.id)}>
-                        Delete?
-                      </button>
-                    ) : (
-                      <button className="icon-btn" title="Delete" aria-label={`Delete ${s.name}`} onClick={() => remove(s.id)}>
-                        <i className="ph-duotone ph-trash" />
-                      </button>
-                    )}
                   </span>
                 </div>
                 <code className="snippet-cmd" title={s.command}>

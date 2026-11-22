@@ -5,7 +5,7 @@ import type { Note, NoteVersion } from '../../../shared/types';
 import { api } from '../api';
 import type { Notify } from '../hooks/useToast';
 import { ago, newId } from '../util';
-import { menuProps, type MenuItem } from './ContextMenu';
+import { closeMenu, menuProps, openMenu, type MenuItem } from './ContextMenu';
 import { Drawer } from './Drawers';
 import { shrinkImage } from './Photos';
 import { Glide } from './Motion';
@@ -234,6 +234,7 @@ function Marked({ text, words }: { text: string; words: string[] }) {
 export function Notes({ notes, activeId, onActive, onChange, saved, onOpenFocus, onEditing, notify }: Props) {
   const [editing, setEditing] = useState(false);
   const [renaming, setRenamingState] = useState<string | null>(null);
+  /** The ⋯ menu is open (it's the shared one; this only lights the button). */
   const [menu, setMenu] = useState(false);
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
@@ -242,7 +243,6 @@ export function Notes({ notes, activeId, onActive, onChange, saved, onOpenFocus,
   const [tagsDraft, setTagsDraft] = useState<string | null>(null);
   const [history, setHistory] = useState(false);
   const stacked = useStackedHead();
-  const menuRef = useRef<HTMLDivElement>(null);
   const tagMenuRef = useRef<HTMLDivElement>(null);
   const renameFrom = useRef<{ id: string; name: string } | null>(null);
   const tags = allTags(notes);
@@ -256,13 +256,9 @@ export function Notes({ notes, activeId, onActive, onChange, saved, onOpenFocus,
   useEffect(() => onEditing(editing), [editing, onEditing]);
 
   useEffect(() => {
-    if (!menu && !tagMenu) return;
+    if (!tagMenu) return;
     const close = (e: MouseEvent | KeyboardEvent) => {
-      const inside = (r: React.RefObject<HTMLDivElement | null>) => r.current?.contains(e.target as Node);
-      if (e instanceof KeyboardEvent ? e.key === 'Escape' : !inside(menuRef) && !inside(tagMenuRef)) {
-        setMenu(false);
-        setTagMenu(false);
-      }
+      if (e instanceof KeyboardEvent ? e.key === 'Escape' : !tagMenuRef.current?.contains(e.target as Node)) setTagMenu(false);
     };
     window.addEventListener('mousedown', close);
     window.addEventListener('keydown', close);
@@ -270,7 +266,7 @@ export function Notes({ notes, activeId, onActive, onChange, saved, onOpenFocus,
       window.removeEventListener('mousedown', close);
       window.removeEventListener('keydown', close);
     };
-  }, [menu, tagMenu]);
+  }, [tagMenu]);
 
   const patch = (id: string, p: Partial<Note>) => onChange(latest.current.notes.map((n) => (n.id === id ? { ...n, ...p } : n)));
   const setText = (text: string) => patch(note.id, { text });
@@ -320,23 +316,25 @@ export function Notes({ notes, activeId, onActive, onChange, saved, onOpenFocus,
     const rest = notes.filter((x) => x.id !== n.id);
     onChange(rest);
     if (n.id === note.id) onActive(rest[0].id);
-    setMenu(false);
   };
 
-  const remove = () => {
-    if (note.text.trim() && !window.confirm(`Delete “${note.name}”? This can’t be undone.`)) return;
-    removeNote(note);
-  };
-
-  /** Right-click on a tab: the ⋯ menu's actions, for that notepad. */
+  /**
+   * The ⋯ menu (for the open notepad) and a right-click on a tab (for that one): what the whole
+   * Notepad offers, then that notepad's own actions. These were buttons in the header once.
+   */
   const noteMenu = (n: Note): MenuItem[] => {
     const pick = () => {
       onActive(n.id);
       setEditing(false);
-      setMenu(false);
       setSearching(false);
     };
     return [
+      { label: 'New notepad', icon: 'ph-plus', onSelect: () => (setTag(''), add()) },
+      searching
+        ? { label: 'Close the search', icon: 'ph-x', onSelect: () => setSearching(false) }
+        : { label: 'Search every notepad', icon: 'ph-magnifying-glass', onSelect: () => (setTagsDraft(null), setSearching(true)) },
+      tags.length > 0 && { label: 'Show a tag…', icon: 'ph-funnel', onSelect: () => setTagMenu(true) },
+      'sep',
       { label: 'Rename', icon: 'ph-pencil-simple', onSelect: () => setRenaming(n.id) },
       { label: n.pinned ? 'Unpin' : 'Pin to the front', icon: 'ph-push-pin', onSelect: () => patch(n.id, { pinned: n.pinned ? undefined : true }) },
       { label: 'Tags…', icon: 'ph-tag', onSelect: () => (pick(), setTagsDraft((n.tags ?? []).join(', '))) },
@@ -385,7 +383,6 @@ export function Notes({ notes, activeId, onActive, onChange, saved, onOpenFocus,
             onActive={(id) => {
               onActive(id);
               setEditing(false);
-              setMenu(false);
               setSearching(false);
             }}
             renaming={renaming}
@@ -393,22 +390,22 @@ export function Notes({ notes, activeId, onActive, onChange, saved, onOpenFocus,
             onRename={rename}
             menu={noteMenu}
           />
-          <button className="icon-btn" style={{ width: 24, height: 24, color: 'var(--t3)', flex: 'none' }} title="New notepad" onClick={() => add()}>
-            <i className="ph-duotone ph-plus" />
-          </button>
         </div>
         <span className="saved" style={{ opacity: saved || uploading ? 1 : 0 }}>
           {uploading ? 'Adding image…' : 'Saved'}
         </span>
         <span className="note-tools">
-          <button className={'icon-btn' + (searching ? ' on' : '')} title="Search every notepad" onClick={() => setSearching(!searching)}>
-            <i className="ph-duotone ph-magnifying-glass" />
-          </button>
-          <button className="icon-btn" title="Notepad options" onClick={() => setMenu(!menu)}>
+          {/* New notepad, search, tags, focus view and the rest live in here (and on a tab's right-click). */}
+          <button
+            className={'icon-btn' + (menu || searching ? ' on' : '')}
+            title="Notepad options"
+            aria-haspopup="menu"
+            onClick={(e) => {
+              if (menu) return closeMenu();
+              if (openMenu({ items: noteMenu(note), label: `Notepad: ${note.name || 'Untitled'}`, anchor: e.currentTarget.getBoundingClientRect(), keyboard: e.detail === 0, onClose: () => setMenu(false) })) setMenu(true);
+            }}
+          >
             <i className="ph-duotone ph-dots-three" />
-          </button>
-          <button className="icon-btn" title="Focus view" onClick={onOpenFocus}>
-            <i className="ph-duotone ph-arrows-out-simple" />
           </button>
         </span>
         {tagMenu && (
@@ -433,61 +430,6 @@ export function Notes({ notes, activeId, onActive, onChange, saved, onOpenFocus,
                 <span className="meta tnum" style={{ marginLeft: 'auto' }}>{t.count}</span>
               </button>
             ))}
-          </div>
-        )}
-        {menu && (
-          <div ref={menuRef} className="popover menu note-menu">
-            <button
-              onClick={() => {
-                setRenaming(note.id);
-                setMenu(false);
-              }}
-            >
-              <i className="ph-duotone ph-pencil-simple" />
-              Rename
-            </button>
-            <button
-              onClick={() => {
-                patch(note.id, { pinned: note.pinned ? undefined : true });
-                setMenu(false);
-              }}
-            >
-              <i className="ph-duotone ph-push-pin" />
-              {note.pinned ? 'Unpin' : 'Pin to the front'}
-            </button>
-            <button
-              onClick={() => {
-                setTagsDraft((note.tags ?? []).join(', '));
-                setMenu(false);
-              }}
-            >
-              <i className="ph-duotone ph-tag" />
-              Tags…
-            </button>
-            <button
-              onClick={() => {
-                setHistory(true);
-                setMenu(false);
-              }}
-            >
-              <i className="ph-duotone ph-clock-counter-clockwise" />
-              History…
-            </button>
-            {tags.length > 0 && (
-              <button
-                onClick={() => {
-                  setTagMenu(true);
-                  setMenu(false);
-                }}
-              >
-                <i className="ph-duotone ph-funnel" />
-                Show a tag…
-              </button>
-            )}
-            <button onClick={remove} disabled={notes.length < 2} style={{ color: 'var(--wn)' }}>
-              <i className="ph-duotone ph-trash" />
-              Delete
-            </button>
           </div>
         )}
       </div>

@@ -7,8 +7,8 @@ import { ExplainBox, ExplainButton, useExplain, useExplainStatus } from './Expla
 
 const SELF_NOTE = 'This is Launchpad itself, which can’t restart itself from here. On the server: docker compose restart launchpad';
 
-/** Restart, after a second click to confirm. */
-function RestartButton({ c, onDone, label }: { c: ContainerInfo; onDone: (error: string | null) => void; label?: boolean }) {
+/** Restart, after a second click to confirm (in the logs drawer; a row has it in its menu). */
+function RestartButton({ c, onDone }: { c: ContainerInfo; onDone: (error: string | null) => void }) {
   const [state, setState] = useState<'idle' | 'confirm' | 'busy'>('idle');
   useEffect(() => {
     if (state !== 'confirm') return;
@@ -18,9 +18,9 @@ function RestartButton({ c, onDone, label }: { c: ContainerInfo; onDone: (error:
 
   if (c.self) {
     return (
-      <button className={label ? 'btn btn-secondary btn-small' : 'icon-btn'} disabled title={SELF_NOTE} style={{ opacity: 0.4, cursor: 'default' }}>
+      <button className="btn btn-secondary btn-small" disabled title={SELF_NOTE} style={{ opacity: 0.4, cursor: 'default' }}>
         <i className="ph-duotone ph-arrow-clockwise" />
-        {label && 'Restart'}
+        Restart
       </button>
     );
   }
@@ -34,13 +34,6 @@ function RestartButton({ c, onDone, label }: { c: ContainerInfo; onDone: (error:
       .catch((e) => onDone(e.message))
       .finally(() => setState('idle'));
   };
-  if (state === 'idle' && !label) {
-    return (
-      <button className="icon-btn" title={`Restart ${c.name}`} aria-label={`Restart ${c.name}`} onClick={click}>
-        <i className="ph-duotone ph-arrow-clockwise" />
-      </button>
-    );
-  }
   return (
     <button className={'btn btn-small ' + (state === 'idle' ? 'btn-secondary' : 'btn-primary')} disabled={state === 'busy'} onClick={click} title={state === 'confirm' ? 'Click again to restart it' : undefined}>
       <i className={'ph-duotone ' + (state === 'busy' ? 'ph-circle-notch spin' : 'ph-arrow-clockwise')} />
@@ -95,7 +88,7 @@ export function ContainerRow({ c, canRestart, onLogs, onRestarted, notify }: { c
             <i className="ph-duotone ph-scroll" />
           </button>
         )}
-        {canRestart && c.id && <RestartButton c={c} onDone={onRestarted} />}
+        {/* Restart is in the row's menu (right-click or long press) and in the logs, both asking first. */}
       </span>
     </div>
   );
@@ -241,7 +234,6 @@ export function LogsDrawer({ c, canRestart, onClose, onRestarted }: { c: Contain
             {canRestart && (
               <RestartButton
                 c={c}
-                label
                 onDone={(err) => {
                   onRestarted(err);
                   if (!err) atBottom.current = true;
