@@ -17,7 +17,8 @@
 // and the keep-last-good run are TypeScript copies of schedule-sync's sync.py (fetch,
 // parse_date, parse_time, write_csv, run), which can't be imported from here.
 //
-// No busker's name is ever read, and profile IDs are only compared with NAC_BUSKER_ID while a
+// No busker's name is ever read, and profile IDs are only compared with NAC_BUSKER_ID (and the
+// Music-only page's busker's, config's nac.guestBuskerId) while a
 // card is parsed: nothing stored, logged or sent to the page holds either.
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
@@ -69,6 +70,8 @@ export class NacError extends Error {}
 export interface NacCard {
   status: string;
   mine: boolean;
+  /** The Music-only page's busker's (config's nac.guestBuskerId); never also mine. */
+  guest: boolean;
   date: string;
   start: number;
   end: number;
@@ -158,7 +161,7 @@ const GUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
  * (`dash-bx-menus`) and runs to the next one. A card without a status, date or time means
  * NAC's markup has changed, and fails the check rather than leaving its slot looking free.
  */
-export function parseCards(html: string, today: string, mineId: string): NacCard[] {
+export function parseCards(html: string, today: string, mineId: string, guestId = ''): NacCard[] {
   const starts = [...html.matchAll(CARD)].map((m) => m.index);
   return starts.map((at, i) => {
     const card = html.slice(at, starts[i + 1] ?? html.length);
@@ -172,6 +175,7 @@ export function parseCards(html: string, today: string, mineId: string): NacCard
     return {
       status,
       mine: !!mineId && profile === mineId,
+      guest: !!guestId && profile === guestId && profile !== mineId,
       date: parseNacDate(clean(date), today),
       start,
       end,
@@ -183,7 +187,7 @@ export function parseCards(html: string, today: string, mineId: string): NacCard
 const titleOf = (html: string) => clean(/<title[^>]*>([^<]{1,120})/i.exec(html)?.[1] ?? '').slice(0, 80);
 
 /** A location's page: its name and open hours from the header, then the first cards. */
-export function parsePage(html: string, today: string, mineId: string): NacPage {
+export function parsePage(html: string, today: string, mineId: string, guestId = ''): NacPage {
   const first = html.search(CARD);
   const head = first < 0 ? html : html.slice(0, first);
   const name = /id="div-header"[\s\S]*?<h2[^>]*>([^<]*)<\/h2>/i.exec(head)?.[1];
@@ -194,7 +198,7 @@ export function parsePage(html: string, today: string, mineId: string): NacPage 
   }
   const [open, close] = parseNacRange(hours);
   const size = /id="take"[^>]*value="(\d+)"/i.exec(html)?.[1] ?? /value="(\d+)"[^>]*id="take"/i.exec(html)?.[1];
-  return { name: clean(name), open, close, pageSize: size ? Number(size) : null, cards: parseCards(html.slice(Math.max(first, 0)), today, mineId) };
+  return { name: clean(name), open, close, pageSize: size ? Number(size) : null, cards: parseCards(html.slice(Math.max(first, 0)), today, mineId, guestId) };
 }
 
 /**
@@ -265,8 +269,8 @@ export interface NacRead {
 const cardKey = (c: NacCard) => c.id || `${c.status}|${c.date}|${c.start}|${c.end}`;
 
 /** A location's page, then its load-more list until a call returns fewer than `TAKE` (sync.py's fetch_cards). */
-export async function readPlace(place: NacPlace, fetcher: Fetcher, wait: () => Promise<void>, today: string, mineId: string): Promise<NacRead> {
-  const page = parsePage(await fetcher(pageUrl(place), 'page'), today, mineId);
+export async function readPlace(place: NacPlace, fetcher: Fetcher, wait: () => Promise<void>, today: string, mineId: string, guestId = ''): Promise<NacRead> {
+  const page = parsePage(await fetcher(pageUrl(place), 'page'), today, mineId, guestId);
   const cards = [...page.cards];
   const seen = new Set(cards.map(cardKey));
   // A page showing fewer cards than it can hold has shown them all.
@@ -275,7 +279,7 @@ export async function readPlace(place: NacPlace, fetcher: Fetcher, wait: () => P
     for (let n = 0; ; n++) {
       if (n === MAX_PAGES) throw new NacError(`more than ${MAX_PAGES * TAKE} bookings in the list, more than it reads`);
       await wait();
-      const got = parseCards(fetchFragment(await fetcher(moreUrl(place, skip, TAKE), 'more')), today, mineId);
+      const got = parseCards(fetchFragment(await fetcher(moreUrl(place, skip, TAKE), 'more')), today, mineId, guestId);
       if (skip > 0 && got.length && !seen.has(cardKey(got[0]))) throw new NacError('the list of bookings changed while it was being read, so it’ll try again');
       for (const c of got) {
         if (seen.has(cardKey(c))) continue;
@@ -290,12 +294,12 @@ export async function readPlace(place: NacPlace, fetcher: Fetcher, wait: () => P
 }
 
 /** Every location, one request at a time. The first failure stops the check. */
-export async function readAll(places: NacPlace[], fetcher: Fetcher, wait: () => Promise<void>, today: string, mineId: string): Promise<NacRead[]> {
+export async function readAll(places: NacPlace[], fetcher: Fetcher, wait: () => Promise<void>, today: string, mineId: string, guestId = ''): Promise<NacRead[]> {
   const out: NacRead[] = [];
   for (const place of places) {
     if (out.length) await wait();
     try {
-      out.push(await readPlace(place, fetcher, wait, today, mineId));
+      out.push(await readPlace(place, fetcher, wait, today, mineId, guestId));
     } catch (e) {
       throw new NacError(`${place.short}: ${e instanceof NacError ? e.message : reason(e)}`);
     }
@@ -307,7 +311,7 @@ export async function readAll(places: NacPlace[], fetcher: Fetcher, wait: () => 
 
 // ---------- free, taken, yours ----------
 
-type Kind = 'free' | 'mine' | 'taken';
+type Kind = 'free' | 'mine' | 'guest' | 'taken';
 interface Block {
   start: number;
   end: number;
@@ -368,7 +372,9 @@ export function buildLocation(read: NacRead, prev: NacLocation | undefined, now:
       if (!over.length) return { ...b, kind: 'free', status: '' };
       const top = [...over].sort((x, y) => rank(x.status) - rank(y.status))[0];
       const mine = over.filter((c) => c.mine);
-      return mine.length ? { ...b, kind: 'mine', status: [...mine].sort((x, y) => rank(x.status) - rank(y.status))[0].status } : { ...b, kind: 'taken', status: top.status };
+      const guest = over.filter((c) => c.guest);
+      const first = (cs: NacCard[]) => [...cs].sort((x, y) => rank(x.status) - rank(y.status))[0].status;
+      return mine.length ? { ...b, kind: 'mine', status: first(mine) } : guest.length ? { ...b, kind: 'guest', status: first(guest) } : { ...b, kind: 'taken', status: top.status };
     });
     if (!blocks.length) continue;
     const span = (r: { start: number; end: number }) => ({ start: hhmm(r.start), end: hhmm(r.end) });
@@ -378,7 +384,7 @@ export function buildLocation(read: NacRead, prev: NacLocation | undefined, now:
       return { ...span(r), new: fresh };
     });
     const booked = (kind: Kind): NacBooked[] => runsOf(blocks, kind).map((r) => ({ ...span(r), status: r.status }));
-    days.push({ date, free, mine: booked('mine'), taken: booked('taken') });
+    days.push({ date, free, mine: booked('mine'), taken: booked('taken'), guest: booked('guest') });
   }
   for (const c of oddPassed) log(`${place.short} ${c.date} ${hhmm(c.start)}-${hhmm(c.end)}: a Passed booking on a slot that hasn’t ended, counted as taken`);
   return {
@@ -484,6 +490,8 @@ export interface CheckOptions {
   fetcher?: Fetcher;
   wait?: () => Promise<void>;
   mineId?: string;
+  /** The Music-only page's busker; config's nac.guestBuskerId by default. */
+  guestId?: string;
   file?: string;
   /** The clock; called at the start (for what's ended) and at the end (for the next check). */
   now?: () => Date;
@@ -497,6 +505,7 @@ export interface CheckOptions {
 export async function runCheck(opts: CheckOptions = {}): Promise<NacSlots> {
   const places = opts.places ?? nacPlaces();
   const mineId = opts.mineId ?? config.nac.buskerId;
+  const guestId = opts.guestId ?? config.nac.guestBuskerId;
   const file = opts.file ?? snapshotFile();
   const clock = opts.now ?? (() => new Date());
   const log = opts.log ?? ((m: string) => console.warn(`[nac] ${m}`));
@@ -507,7 +516,7 @@ export async function runCheck(opts: CheckOptions = {}): Promise<NacSlots> {
   const started = clock();
   let next: NacSlots;
   try {
-    const reads = await readAll(places, fetcher, wait, sgtYmd(started), mineId);
+    const reads = await readAll(places, fetcher, wait, sgtYmd(started), mineId, guestId);
     const unknown = unknownStatuses(reads);
     for (const s of unknown) log(`NAC used the status “${s}”, which isn’t one we know; those bookings count as taken`);
     const at = sgtIso(started);
@@ -520,6 +529,7 @@ export async function runCheck(opts: CheckOptions = {}): Promise<NacSlots> {
       failures: 0,
       unknown_statuses: unknown,
       mine_on: !!mineId,
+      guest_on: !!guestId,
       // The first check, or a location new to the list, has nothing to compare with, so nothing is new.
       locations: reads.map((r) => buildLocation(r, prev?.last_good_at ? prev.locations.find((l) => l.key === r.place.key && l.url === pageUrl(r.place)) : undefined, started, log)),
     };
@@ -645,10 +655,12 @@ export function statusOf(saved: NacSlots | null, st: ReturnType<NacScheduler['st
 }
 
 /**
- * GET /api/nac. Only the locations on the list now, in its order and under their names now, so
- * a change to the list shows straight away; one added since the last check isn't in it yet.
+ * The saved result as it stands now, with both buskers' bookings apart: what /api/nac
+ * (ownerNacStatus) and /api/guest/nac (guestNacStatus) are made from. Only the locations on the
+ * list now, in its order and under their names now, so a change to the list shows straight away;
+ * one added since the last check isn't in it yet.
  */
-export function nacStatus(now = new Date()): NacStatus {
+export function rawNacStatus(now = new Date()): NacStatus {
   const places = nacPlaces();
   const s = statusOf(readSnapshot(), scheduler?.state() ?? { running: false, queued: null, planned: null }, now, !!config.nac.buskerId);
   const locations = places.flatMap((p) => {
@@ -668,26 +680,42 @@ export function nacStatus(now = new Date()): NacStatus {
   };
 }
 
+/** Bookings from several lists in time order, joined where one runs into the next with the same status, as the taken runs already are. */
+function joinBooked(...lists: (NacBooked[] | undefined)[]): NacBooked[] {
+  return lists
+    .flatMap((l) => l ?? [])
+    .sort((a, b) => toMin(a.start) - toMin(b.start))
+    .reduce<NacBooked[]>((out, b) => {
+      const last = out[out.length - 1];
+      if (last && last.end === b.start && last.status === b.status) out[out.length - 1] = { ...last, end: b.end };
+      else out.push({ ...b });
+      return out;
+    }, []);
+}
+
+/** The result's days, each made over by `day`; `guest` and `guest_on` never leave the server as they are. */
+function viewOf(s: NacStatus, day: (d: NacDay) => NacDay): NacStatus {
+  const { guest_on: _, ...rest } = s;
+  return { ...rest, locations: s.locations.map((l) => ({ ...l, days: l.days.map((d) => day(d)) })) };
+}
+
+/** GET /api/nac: the Music-only page's busker's bookings count as taken, like anyone else's. */
+export function ownerNacStatus(s: NacStatus): NacStatus {
+  return viewOf(s, ({ guest, ...d }) => ({ ...d, taken: joinBooked(d.taken, guest) }));
+}
+
+export const nacStatus = (now = new Date()): NacStatus => ownerNacStatus(rawNacStatus(now));
+
 /**
- * GET /api/guest/nac's slots, for a music-only sign-in (access.ts): the owner's own bookings
- * count as taken, as they do for anyone else looking at NAC's pages, and nothing about the
- * owner's watches or alerts is in it. Free windows, locations and the check's state are as is.
+ * GET /api/guest/nac, for a music-only sign-in (access.ts): their own bookings (config's
+ * nac.guestBuskerId) are theirs, and the owner's count as taken, as they do for anyone else
+ * looking at NAC's pages. Nothing about the owner's watches or alerts is in it. Free windows,
+ * locations and the check's state are as is.
  */
 export function guestNacStatus(s: NacStatus): NacStatus {
-  const taken = (d: NacDay): NacBooked[] =>
-    [...d.taken, ...d.mine]
-      .sort((a, b) => toMin(a.start) - toMin(b.start))
-      // Joined where one runs into the next with the same status, as the taken runs already are.
-      .reduce<NacBooked[]>((out, b) => {
-        const last = out[out.length - 1];
-        if (last && last.end === b.start && last.status === b.status) out[out.length - 1] = { ...last, end: b.end };
-        else out.push({ ...b });
-        return out;
-      }, []);
   return {
-    ...s,
-    mine_on: false,
-    locations: s.locations.map((l) => ({ ...l, days: l.days.map((d) => ({ ...d, mine: [], taken: taken(d) })) })),
+    ...viewOf(s, ({ guest, ...d }) => ({ ...d, mine: joinBooked(guest), taken: joinBooked(d.taken, d.mine) })),
+    mine_on: !!s.guest_on,
     watches: [],
     watch_alerts: 'off',
   };

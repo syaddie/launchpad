@@ -53,7 +53,7 @@ import { alertsInfo, sendTest, setTopicUrl } from './notify';
 import { startAlerts } from './alerts';
 import { startMcAlerts } from './mc-alerts';
 import { startUnpacking, unpackRecords } from './unpack';
-import { addPlace, addWatch, editPlaces, guestNacStatus, lookupPlace, NacError, nacStatus, removeWatch, requestNacCheck, startNac } from './nac';
+import { addPlace, addWatch, editPlaces, guestNacStatus, lookupPlace, NacError, nacStatus, rawNacStatus, removeWatch, requestNacCheck, startNac } from './nac';
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
 import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
@@ -1377,13 +1377,13 @@ app.delete('/api/nac/watches/:id', (c) => (removeWatch(c.req.param('id')), c.jso
 
 // ---------- Music, for a music-only sign-in ----------
 
-// The busking slots without your bookings or watches (nac.ts guestNacStatus), and your look so the
+// The busking slots with their bookings as theirs, yours as taken and none of your watches (nac.ts guestNacStatus), and your look so the
 // page matches the app. These two are all a music-only sign-in can reach (access.ts); your own
 // sign-in can use them too, for the preview at /guest.
 app.get('/api/guest/nac', (c) => {
   const p = store.prefs();
   const look: GuestMusic['look'] = { design: p.design || 'broadsheet', accent: p.accent || 'sage', theme: p.theme || 'system' };
-  return c.json({ nac: guestNacStatus(nacStatus()), look } satisfies GuestMusic);
+  return c.json({ nac: guestNacStatus(rawNacStatus()), look } satisfies GuestMusic);
 });
 
 app.post('/api/guest/nac/check', (c) => {

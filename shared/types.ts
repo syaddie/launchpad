@@ -1593,6 +1593,12 @@ export interface NacDay {
   /** Your own bookings (matched by NAC_BUSKER_ID). */
   mine: NacBooked[];
   taken: NacBooked[];
+  /**
+   * The Music-only page's busker's bookings (config's nac.guestBuskerId), kept apart in the saved
+   * result so that page can show them as theirs; /api/nac counts them as taken. Missing in results
+   * saved before it was added.
+   */
+  guest?: NacBooked[];
 }
 
 export interface NacLocation {
@@ -1634,6 +1640,8 @@ export interface NacSlots {
   unknown_statuses: string[];
   /** NAC_BUSKER_ID was set, so your own bookings were told apart. */
   mine_on: boolean;
+  /** The Music-only page's busker's bookings were told apart too (`guest` on each day). Only in the saved result. */
+  guest_on?: boolean;
   locations: NacLocation[];
 }
 
