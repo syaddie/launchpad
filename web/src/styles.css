@@ -133,6 +133,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 /* The terminal stays 1:1: xterm measures its own cells and places the mouse by them. */
 .lp-root:not([data-layout='narrow']) .lp-inner > main .term-panel { zoom: calc(1 / var(--view-zoom, 1)); }
 [data-layout='narrow'] .lp-inner { height: auto; gap: 15px; padding: 20px 15px 30px; }
+/* The Music-only page (web/src/guest.tsx) has no rail, so no .lp-shell: its content sits over Vista's wallpaper by itself. */
+.lp-guest > .lp-inner { position: relative; z-index: 1; }
 
 .lp-grid {
   flex: 1;

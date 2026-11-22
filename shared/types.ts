@@ -1593,6 +1593,12 @@ export interface NacDay {
   /** Your own bookings (matched by NAC_BUSKER_ID). */
   mine: NacBooked[];
   taken: NacBooked[];
+  /**
+   * The Music-only page's busker's bookings (config's nac.guestBuskerId), kept apart in the saved
+   * result so that page can show them as theirs; /api/nac counts them as taken. Missing in results
+   * saved before it was added.
+   */
+  guest?: NacBooked[];
 }
 
 export interface NacLocation {
@@ -1634,6 +1640,8 @@ export interface NacSlots {
   unknown_statuses: string[];
   /** NAC_BUSKER_ID was set, so your own bookings were told apart. */
   mine_on: boolean;
+  /** The Music-only page's busker's bookings were told apart too (`guest` on each day). Only in the saved result. */
+  guest_on?: boolean;
   locations: NacLocation[];
 }
 
@@ -1706,4 +1714,14 @@ export interface NacStatus extends NacSlots {
   queued_at: string | null;
   /** Why Check now can't be used at the moment (one's running, the last was under 5 minutes ago, or it's backing off, or there are no locations), or null when it can. */
   can_check: string | null;
+}
+
+/**
+ * GET /api/guest/nac: Music's busking slots for a music-only sign-in (server/src/access.ts).
+ * The same slots as /api/nac, without the owner's bookings (they show as taken) or watches, and
+ * with the owner's look so the page matches the app.
+ */
+export interface GuestMusic {
+  nac: NacStatus;
+  look: { design: DesignKey; accent: AccentKey; theme: ThemeMode };
 }

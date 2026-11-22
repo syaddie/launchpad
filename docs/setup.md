@@ -256,6 +256,19 @@ A server started some other way (systemd, `nohup`) shows up with its log, but La
 - **When NAC fails or blocks it** (anything but a plain 200, or a page that isn't the usual one), the check stops there, the last good data stays with a warning saying when it's from, and the next tries wait longer: 1 h, 1.5 h, 2.5 h, then every 4.5 h until one works. It never tries to get around NAC's bot protection.
 - **What a check costs NAC.** About 2 requests per location, but NAC's load-more answers carry every busker's photo inline, so a check downloads tens of MB (about 77 MB across the four locations on 20 Nov 2026). Every 10 minutes that's about 11 GB a day for four locations.
 - **Running it without NAC** (development): `NAC_FIXTURES=test/fixtures/nac` reads saved pages instead; see test/fixtures/nac/README.md.
+- **Sharing it with someone (a Music-only link).** Someone else can have the busking slots at their own address, say `music.syaddy.com`, with their own sign-in, and reach nothing else of Launchpad. They see the same slots and locations and can press Check now, but can't change the locations or watch slots. Their own bookings show as theirs (★) when their NAC busker profile ID is `nac.guestBuskerId` in `server/src/config.ts`, and yours show to them as taken; in your Music, theirs show as taken like anyone else's. Same container, same tunnel:
+  1. Your tunnel → **Public Hostname** → **Add a public hostname**: subdomain `music`, domain `syaddy.com`, service **HTTP** `launchpad:8080`, the same as Launchpad's.
+  2. **Zero Trust → Access → Applications → Add an application → Self-hosted**, a new one, not Launchpad's: domain `music.syaddy.com`, session duration **1 month**, policy **Allow**, Include **Emails** → their email. They sign in with a code Cloudflare emails them (One-time PIN, on by default under Settings → Authentication). Don't add this address to Launchpad's own application.
+  3. Copy this new application's **AUD Tag** into `.env` and restart:
+     ```
+     CF_ACCESS_MUSIC_AUD=the-music-aud-tag
+     ```
+     ```bash
+     docker compose up -d launchpad
+     ```
+  4. Send them `https://music.syaddy.com`. To see what they see, open `https://launchpad.syaddy.com/guest`.
+
+  Launchpad tells the two sign-ins apart by which application signed the token (`server/src/access.ts`), not by the address, so a Music-only sign-in can't reach anything else at any address. Until `CF_ACCESS_MUSIC_AUD` is set, their sign-in is refused outright. To take it away, remove their email from the policy (or delete the application).
 
 ## Backups
 

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- The Music-only page, for a music-only sign-in (server/src/access.ts). No manifest or service worker: it's a page to open, not an app. -->
+    <title>Busking slots</title>
+    <meta name="robots" content="noindex" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="theme-color" content="#f1efeb" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1d1c1a" media="(prefers-color-scheme: dark)" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@200..700&family=Geist+Mono:wght@400&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500;700&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400..700&family=Archivo:wght@400..900&display=swap"
+    />
+    <script>
+      // The look the last visit was given (the owner's design, accent and theme), before first paint, so it never flashes the wrong colours.
+      (function () {
+        var l = {};
+        try { l = (JSON.parse(localStorage.getItem('launchpad:guest-music') || '{}') || {}).look || {}; } catch (e) {}
+        var d = l.design || 'broadsheet';
+        var t = l.theme || 'system';
+        var dark = d === 'console' || t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.mode = dark ? 'dark' : 'light';
+        document.documentElement.dataset.accent = l.accent || 'sage';
+        document.documentElement.dataset.design = d;
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/guest.tsx"></script>
+  </body>
+</html>

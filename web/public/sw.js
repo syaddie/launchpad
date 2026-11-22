@@ -140,6 +140,8 @@ self.addEventListener('fetch', (e) => {
   if (url.pathname === '/api/favicon' || url.pathname.startsWith('/api/note-images/')) return e.respondWith(file(req));
   if (url.pathname.startsWith('/api/photos/')) return e.respondWith(photo(req));
   if (url.pathname.startsWith('/api/')) return;
+  // The Music-only page's preview (server/src/access.ts) is another page: kept as the shell, it would open in Launchpad's place offline.
+  if (url.pathname === '/guest' || url.pathname === '/guest.html') return;
   if (req.mode === 'navigate') e.respondWith(page(req));
   else if (url.pathname.startsWith('/assets/')) e.respondWith(asset(req));
   else e.respondWith(other(req));

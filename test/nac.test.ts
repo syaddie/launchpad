@@ -10,11 +10,13 @@ import {
   emptySlots,
   fetchFragment,
   fixtureFetcher,
+  guestNacStatus,
   liveFetch,
   makeScheduler,
   NacError,
   nextCheck,
   nextSlot,
+  ownerNacStatus,
   parseCards,
   parseNacDate,
   parseNacRange,
@@ -29,7 +31,7 @@ import {
   type Fetcher,
 } from '../server/src/nac';
 import { ampm, fmtClock, fmtRange, sgtIso, slotView } from '../shared/nac';
-import type { NacLocation, NacSlots } from '../shared/types';
+import type { NacBooked, NacLocation, NacSlots, NacStatus } from '../shared/types';
 
 const DIR = path.join(__dirname, 'fixtures/nac');
 const META = JSON.parse(fs.readFileSync(path.join(DIR, 'meta.json'), 'utf8')) as { today: string; now: string; later: string; mine: string };
@@ -51,7 +53,7 @@ let n = 0;
 const freshFile = () => path.join(tmp, `run-${++n}`, 'snapshot.json');
 
 /** A check on a fixtures folder, counting what it asked for. */
-async function check(folder: string, opts: { file?: string; now?: Date; mineId?: string; fetcher?: Fetcher; places?: NacPlace[] } = {}) {
+async function check(folder: string, opts: { file?: string; now?: Date; mineId?: string; guestId?: string; fetcher?: Fetcher; places?: NacPlace[] } = {}) {
   const now = opts.now ?? NOW;
   const urls: string[] = [];
   const inner = opts.fetcher ?? fixtureFetcher(path.join(DIR, folder), PLACES, now);
@@ -62,6 +64,7 @@ async function check(folder: string, opts: { file?: string; now?: Date; mineId?:
     fetcher: (url, kind) => (urls.push(url), inner(url, kind)),
     wait: async () => void waits++,
     mineId: opts.mineId ?? MINE,
+    guestId: opts.guestId ?? '',
     file: opts.file ?? freshFile(),
     now: () => now,
     log: (m) => logs.push(m),
@@ -163,7 +166,7 @@ describe('reading NAC’s pages', () => {
     expect(p).toMatchObject({ name: 'MRT STATION - DTL TAMPINES', open: 600, close: 840, pageSize: 12 });
     expect(p.cards).toHaveLength(12);
     // The slot that's over has no booking id.
-    expect(p.cards[0]).toEqual({ status: 'Passed', mine: false, date: '2026-11-20', start: 600, end: 660, id: '' });
+    expect(p.cards[0]).toEqual({ status: 'Passed', mine: false, guest: false, date: '2026-11-20', start: 600, end: 660, id: '' });
     expect(p.cards[1]).toMatchObject({ status: 'Published', date: '2026-11-20', start: 660, end: 720 });
     expect(p.cards[1].id).toMatch(/^b0000000-/);
   });
@@ -235,6 +238,59 @@ describe('reading NAC’s pages', () => {
 
 // ---------- a whole check ----------
 
+describe('the Music-only page’s busker', () => {
+  /** A made-up busker in the fixtures, standing in for config's nac.guestBuskerId. */
+  const GUEST = 'a0000000-0000-4000-8000-000000000003';
+  const hours = (l: NacBooked[] = []) => l.reduce((n, b) => n + (Number(b.end.slice(0, 2)) || 24) - Number(b.start.slice(0, 2)), 0);
+  const asStatus = (s: NacSlots) => s as NacStatus;
+
+  it('tells their cards apart by ID, never as yours too', () => {
+    const html = read('tampines.html');
+    const cards = parsePage(html, META.today, MINE, GUEST).cards;
+    expect(cards.some((c) => c.guest)).toBe(true);
+    expect(cards.every((c) => !(c.guest && c.mine))).toBe(true);
+    expect(JSON.stringify(cards)).not.toContain('a0000000-');
+    // The same ID as yours: yours wins.
+    expect(parsePage(html, META.today, GUEST, GUEST).cards.some((c) => c.guest)).toBe(false);
+  });
+
+  it('keeps their bookings apart, and your Music comes out exactly as without them', async () => {
+    const without = (await check('.')).result;
+    const withGuest = (await check('.', { guestId: GUEST })).result;
+    expect(withGuest.guest_on).toBe(true);
+    const guestHours = withGuest.locations.reduce((n, l) => n + l.days.reduce((m, d) => m + hours(d.guest), 0), 0);
+    expect(guestHours).toBeGreaterThan(0);
+    // Yours: theirs count as taken, joined just as a check joins taken runs, and nothing else differs.
+    const own = ownerNacStatus(asStatus(withGuest));
+    expect(own).not.toHaveProperty('guest_on');
+    expect(own.locations).toEqual(without.locations.map((l) => ({ ...l, days: l.days.map(({ guest, ...d }) => (expect(guest).toEqual([]), d)) })));
+  });
+
+  it('shows them their bookings as theirs and yours as taken', async () => {
+    const raw = (await check('.', { guestId: GUEST })).result;
+    const g = guestNacStatus(asStatus({ ...raw, watches: [], watching: [] } as unknown as NacSlots));
+    expect(g.mine_on).toBe(true);
+    expect(g).not.toHaveProperty('guest_on');
+    raw.locations.forEach((l, i) =>
+      l.days.forEach((d, j) => {
+        const gd = g.locations[i].days[j];
+        expect(gd).not.toHaveProperty('guest');
+        expect(gd.mine).toEqual(d.guest);
+        expect(hours(gd.taken)).toBe(hours(d.taken) + hours(d.mine));
+        expect(gd.free).toEqual(d.free);
+      }),
+    );
+  });
+
+  it('shows them nothing as theirs from a result saved before they were added', () => {
+    const old = { ...emptySlots(true), locations: [{ key: 'x', days: [{ date: '2026-11-24', free: [], mine: [{ start: '10:00', end: '11:00', status: 'Published' }], taken: [] }] }] } as unknown as NacStatus;
+    const g = guestNacStatus(old);
+    expect(g.mine_on).toBe(false);
+    expect(g.locations[0].days[0]).toEqual({ date: '2026-11-24', free: [], mine: [], taken: [{ start: '10:00', end: '11:00', status: 'Published' }] });
+    expect(ownerNacStatus(old).locations[0].days[0]).toEqual(old.locations[0].days[0]);
+  });
+});
+
 describe('a check', () => {
   it('asks for each page and its load-more list, one at a time', async () => {
     const { result, urls, waits } = await check('.');
@@ -267,17 +323,18 @@ describe('a check', () => {
       free: [{ start: '14:00', end: '15:00', new: false }, { start: '17:00', end: '19:00', new: false }],
       mine: [],
       taken: [{ start: '10:00', end: '14:00', status: 'Confirmed' }, { start: '15:00', end: '17:00', status: 'Published' }, { start: '19:00', end: '22:00', status: 'Published' }],
+      guest: [],
     });
     expect(day(loc(result, 'changi-village'), '2026-11-24').free).toEqual([{ start: '10:00', end: '11:00', new: false }]);
     expect(day(loc(result, 'tampines'), '2026-11-24')).toMatchObject({ free: [], taken: [{ start: '10:00', end: '14:00', status: 'Published' }] });
-    expect(day(loc(result, 'pasir-ris'), '2026-11-24')).toEqual({ date: '2026-11-24', free: [{ start: '12:00', end: '14:00', new: false }], mine: [{ start: '10:00', end: '12:00', status: 'Confirmed' }], taken: [] });
+    expect(day(loc(result, 'pasir-ris'), '2026-11-24')).toEqual({ date: '2026-11-24', free: [{ start: '12:00', end: '14:00', new: false }], mine: [{ start: '10:00', end: '12:00', status: 'Confirmed' }], taken: [], guest: [] });
 
     // Busker 07 shares your name; their slot is taken, yours is yours.
     expect(day(loc(result, 'pasir-ris'), '2026-12-03')).toMatchObject({ mine: [{ start: '12:00', end: '14:00' }], taken: [{ start: '10:00', end: '11:00' }], free: [{ start: '11:00', end: '12:00' }] });
     expect(day(loc(result, 'tampines'), '2026-11-29')).toMatchObject({ mine: [], taken: [{ start: '10:00', end: '11:00' }, { start: '13:00', end: '14:00' }], free: [{ start: '11:00', end: '13:00' }] });
 
     // A day inside the horizon with no bookings is free all day.
-    expect(day(loc(result, 'tampines'), '2026-12-02')).toEqual({ date: '2026-12-02', free: [{ start: '10:00', end: '14:00', new: false }], mine: [], taken: [] });
+    expect(day(loc(result, 'tampines'), '2026-12-02')).toEqual({ date: '2026-12-02', free: [{ start: '10:00', end: '14:00', new: false }], mine: [], taken: [], guest: [] });
     // Nothing past the last booking seen.
     expect(loc(result, 'changi-village').days.some((d) => d.date > '2026-12-06')).toBe(false);
     // The first check has nothing to compare with.
@@ -287,8 +344,8 @@ describe('a check', () => {
   it('leaves out today’s blocks that have ended', async () => {
     const { result } = await check('.');
     // At 12:20 the 10–11 (Passed) and 11–12 slots are over; 12–1 is still on.
-    expect(day(loc(result, 'tampines'), '2026-11-20')).toEqual({ date: '2026-11-20', free: [], mine: [], taken: [{ start: '12:00', end: '13:00', status: 'Published' }, { start: '13:00', end: '14:00', status: 'Confirmed' }] });
-    expect(day(loc(result, 'pasir-ris'), '2026-11-20')).toEqual({ date: '2026-11-20', free: [{ start: '13:00', end: '14:00', new: false }], mine: [], taken: [{ start: '12:00', end: '13:00', status: 'Confirmed' }] });
+    expect(day(loc(result, 'tampines'), '2026-11-20')).toEqual({ date: '2026-11-20', free: [], mine: [], taken: [{ start: '12:00', end: '13:00', status: 'Published' }, { start: '13:00', end: '14:00', status: 'Confirmed' }], guest: [] });
+    expect(day(loc(result, 'pasir-ris'), '2026-11-20')).toEqual({ date: '2026-11-20', free: [{ start: '13:00', end: '14:00', new: false }], mine: [], taken: [{ start: '12:00', end: '13:00', status: 'Confirmed' }], guest: [] });
     // After Tampines closes, today isn't listed for it.
     const late = await check('.', { now: new Date('2026-11-20T14:05:00+08:00') });
     expect(loc(late.result, 'tampines').days[0].date).toBe('2026-11-21');
@@ -370,6 +427,7 @@ describe('a check', () => {
       free: [{ start: '11:00', end: '12:00', new: false }, { start: '13:00', end: '14:00', new: false }],
       mine: [],
       taken: [{ start: '10:00', end: '11:00', status: 'Cancelled' }, { start: '12:00', end: '13:00', status: 'Published' }],
+      guest: [],
     });
     expect(logs.some((l) => l.includes('“Cancelled”'))).toBe(true);
   });

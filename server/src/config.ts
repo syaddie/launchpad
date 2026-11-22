@@ -69,6 +69,11 @@ export const config = {
   nac: {
     /** Optional: your NAC busker profile ID (the id in your public profile's address, or the whole address), so your own bookings show as yours. Without it they count as taken. */
     buskerId: (env.NAC_BUSKER_ID || '').match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)?.[0].toLowerCase() ?? '',
+    /**
+     * The busker who uses the Music-only page (CF_ACCESS_MUSIC_AUD, server/src/access.ts): their bookings
+     * show as theirs there, and as taken in your Music. Their public NAC profile ID, which isn't a secret.
+     */
+    guestBuskerId: 'd2c0110c-cf3a-4875-8995-cf5b0163a595',
     /** Set, but with no profile ID in it. */
     buskerIdInvalid: !!(env.NAC_BUSKER_ID || '').trim() && !/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(env.NAC_BUSKER_ID || ''),
     /** Development only: read saved pages from this folder (e.g. test/fixtures/nac) instead of asking NAC. See test/fixtures/nac/README.md. */
@@ -89,6 +94,11 @@ export const config = {
   access: {
     teamDomain: (env.CF_ACCESS_TEAM_DOMAIN || '').replace(/^https?:\/\//, '').replace(/\/+$/, ''),
     aud: env.CF_ACCESS_AUD || '',
+    /**
+     * Optional: the AUD tag of a second Access application, on its own hostname, for someone who
+     * should only see Music's busking slots (server/src/access.ts). Its sign-ins reach nothing else.
+     */
+    musicAud: env.CF_ACCESS_MUSIC_AUD || '',
   },
 };
 

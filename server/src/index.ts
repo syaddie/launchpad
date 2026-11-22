@@ -7,8 +7,8 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
-import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { WebSocketServer } from 'ws';
+import { accessGate, makeAccess } from './access';
 import { config, googleConfigured } from './config';
 import { authUrl, completeTask, createEvent, createTask, deleteTask, exchangeCode, GoogleError, modifyEmails, moveTask, revoke, updateTask } from './google';
 import { asTab, checkDb, docVersion, store, updatePackages } from './store';
@@ -53,7 +53,7 @@ import { alertsInfo, sendTest, setTopicUrl } from './notify';
 import { startAlerts } from './alerts';
 import { startMcAlerts } from './mc-alerts';
 import { startUnpacking, unpackRecords } from './unpack';
-import { addPlace, addWatch, editPlaces, lookupPlace, NacError, nacStatus, removeWatch, requestNacCheck, startNac } from './nac';
+import { addPlace, addWatch, editPlaces, guestNacStatus, lookupPlace, NacError, nacStatus, rawNacStatus, removeWatch, requestNacCheck, startNac } from './nac';
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
 import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
@@ -67,34 +67,28 @@ import { ask, MAX_ASK } from './ask';
 import { claudeEnabled } from './claude';
 import { shellAskRequest, shellAskStatus } from './shellask';
 import { summariseUsage } from '../../shared/claudeUsage';
-import type { DownloadsInfo, Mood, NewsLists, Package, Photo, Prefs, SavedDoc, SourceKey } from '../../shared/types';
+import type { DownloadsInfo, GuestMusic, Mood, NewsLists, Package, Photo, Prefs, SavedDoc, SourceKey } from '../../shared/types';
 
 const app = new Hono();
 
 // ---------- Cloudflare Access (optional) ----------
 
-const accessOn = !!(config.access.teamDomain && config.access.aud);
-const jwks = accessOn ? createRemoteJWKSet(new URL(`https://${config.access.teamDomain}/cdn-cgi/access/certs`)) : null;
+// Who's asking (access.ts): your own sign-in reaches everything; a music-only one (CF_ACCESS_MUSIC_AUD)
+// gets the Music-only page and its two API routes, and nothing else.
+const access = makeAccess(config.access);
+const accessOn = access.on;
 
-/** Why a request without a valid Access token is refused, or null when it may pass. */
-async function accessDenied(token: string | undefined): Promise<string | null> {
-  if (!jwks) return null;
-  if (!token) return 'Forbidden: open Launchpad through its Cloudflare Access URL.';
-  try {
-    await jwtVerify(token, jwks, { issuer: `https://${config.access.teamDomain}`, audience: config.access.aud });
-    return null;
-  } catch {
-    return 'Forbidden: invalid Cloudflare Access token.';
+/** The Music-only page (web/guest.html), read once it's asked for. Null without a built web app (development). */
+let guestPage: string | null | undefined;
+function guestHtml(): string | null {
+  if (guestPage === undefined) {
+    const file = path.join(config.webDir, 'guest.html');
+    guestPage = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
   }
+  return guestPage;
 }
 
-if (accessOn) {
-  app.use('*', async (c, next) => {
-    if (c.req.path === '/healthz') return next();
-    const denied = await accessDenied(c.req.header('cf-access-jwt-assertion'));
-    return denied ? c.text(denied, 403) : next();
-  });
-}
+if (accessOn) app.use('*', accessGate(access, guestHtml));
 
 // Docker's HEALTHCHECK restarts the container when this fails, so it only checks what a restart could fix: the database.
 // It skips Cloudflare Access, so it says nothing about what went wrong; /api/health does.
@@ -1381,6 +1375,23 @@ app.post('/api/nac/watches', async (c) => {
 
 app.delete('/api/nac/watches/:id', (c) => (removeWatch(c.req.param('id')), c.json(nacStatus())));
 
+// ---------- Music, for a music-only sign-in ----------
+
+// The busking slots with their bookings as theirs, yours as taken and none of your watches (nac.ts guestNacStatus), and your look so the
+// page matches the app. These two are all a music-only sign-in can reach (access.ts); your own
+// sign-in can use them too, for the preview at /guest.
+app.get('/api/guest/nac', (c) => {
+  const p = store.prefs();
+  const look: GuestMusic['look'] = { design: p.design || 'broadsheet', accent: p.accent || 'sage', theme: p.theme || 'system' };
+  return c.json({ nac: guestNacStatus(rawNacStatus()), look } satisfies GuestMusic);
+});
+
+app.post('/api/guest/nac/check', (c) => {
+  if (foreignOrigin(c.req.header('origin'), c.req.header('host'))) return c.json({ error: 'Cross-site request refused' }, 403);
+  const r = requestNacCheck();
+  return r.ok ? c.json({ at: r.at }) : c.json({ error: r.error }, 409);
+});
+
 // ---------- errors ----------
 
 app.onError((err, c) => {
@@ -1402,6 +1413,11 @@ if (fs.existsSync(config.webDir)) {
   });
   app.use('*', serveStatic({ root }));
   const index = fs.readFileSync(path.join(config.webDir, 'index.html'), 'utf8');
+  // The Music-only page, as a music-only sign-in sees it (access.ts serves it to them at every address).
+  app.get('/guest', (c) => {
+    const html = guestHtml();
+    return html ? c.html(html) : c.notFound();
+  });
   // A bundle that's gone (renamed by a deploy a tab opened before) is a 404, not the page: a script that
   // turns out to be HTML fails to load and, with the service worker, would be kept in its place.
   app.get('*', (c) => (c.req.path.startsWith('/assets/') ? c.notFound() : c.html(index)));
@@ -1419,7 +1435,8 @@ server.on('upgrade', async (req, socket, head) => {
   const refuse = (status: string) => socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\n\r\n`);
   if (url.pathname !== '/api/terminal') return refuse('404 Not Found');
   const token = req.headers['cf-access-jwt-assertion'];
-  if (foreignOrigin(req.headers.origin, req.headers.host) || (await accessDenied(Array.isArray(token) ? token[0] : token))) return refuse('403 Forbidden');
+  // Your own sign-in only: a music-only one never reaches the terminal.
+  if (foreignOrigin(req.headers.origin, req.headers.host) || (await access.scope(Array.isArray(token) ? token[0] : token)) !== 'full') return refuse('403 Forbidden');
   wss.handleUpgrade(req, socket, head, (ws) => {
     attachTerminal(ws, url.searchParams.get('session'), Number(url.searchParams.get('cols')), Number(url.searchParams.get('rows'))).catch((e) => {
       console.error('[terminal]', e.message);
