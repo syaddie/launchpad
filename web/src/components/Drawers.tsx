@@ -697,7 +697,7 @@ export const DESIGNS: { key: DesignKey; name: string; blurb: string }[] = [
   { key: 'bento', name: 'Bento', blurb: 'Tiles that lead with one big number, a colour for each part of life, and a dock at the bottom. Follows Theme.' },
   { key: 'horizon', name: 'Horizon', blurb: 'Today’s hours across the top, then Now, Later today, This week and Anytime. Follows Theme.' },
   { key: 'vista', name: 'Vista', blurb: 'Your photos as the backdrop, frosted-glass panels, and a big clock and search in the middle. Follows Theme and Accent.' },
-  { key: 'focus', name: 'Focus', blurb: 'The clock and what’s next on the left; Today, Tasks, Notes and Packages one at a time behind tabs, with room to breathe. Follows Theme and Accent.' },
+  { key: 'focus', name: 'Focus', blurb: 'The clock and what’s next on the left; Today, Tasks, Notepad and Packages one at a time behind tabs, with room to breathe. Follows Theme and Accent.' },
   { key: 'poster', name: 'Poster', blurb: 'Big type, hard rules and one red: a Swiss poster. Numbered panels and a solid nav bar. Follows Theme.' },
 ];
 
@@ -771,7 +771,7 @@ export const PANEL_ROWS: { section: string; hint?: string; rows: { key: string; 
       { key: 'panel:today', name: 'Today' },
       { key: 'panel:briefing', name: 'Key figures', meta: 'Events left, tasks due, unread, packages and balance, at the top of Today' },
       { key: 'panel:tasks', name: 'Tasks' },
-      { key: 'panel:notes', name: 'Notes' },
+      { key: 'panel:notes', name: 'Notepad' },
       { key: 'panel:packages', name: 'Packages' },
       { key: 'panel:photos', name: 'Photos' },
       { key: 'panel:bookmarks', name: 'Bookmarks' },

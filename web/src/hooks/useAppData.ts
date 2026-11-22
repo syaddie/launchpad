@@ -5,7 +5,7 @@ import { starterMoney } from '../../../shared/money';
 import { EMPTY_NEWS_LISTS } from '../../../shared/news';
 import { EMPTY_TRAINING } from '../../../shared/training';
 import type { AppState, SavedDoc } from '../../../shared/types';
-import { api, cacheState, ServerError, TAB_ID } from '../api';
+import { api, cacheState, keepPhotos, ServerError, TAB_ID } from '../api';
 import type { ServerIssue } from '../components/ServerBanner';
 import { flush, pendingCount, pendingItems, setOutboxHandlers, subscribeOutbox } from '../outbox';
 import { applyPending, pendingDocs } from '../pending';
@@ -141,6 +141,8 @@ export function useAppData({ cached, notify, onSaveError, onNotesSaved, onMoneyS
           merge(s);
           setServerIssue(null);
           if (!Array.isArray(keys)) lastRefresh.current = Date.now();
+          // Only a list the server just gave: one from the cache or the empty first paint could be out of date.
+          if (Array.isArray(s.photos)) keepPhotos(s.photos.map((p) => p.id));
           // The server answers again: send what was saved while it didn't. A full fetch also
           // looks for edits another tab left in the queue; a partial one only for this tab's.
           if (!Array.isArray(keys) || pendingCount()) void flush();

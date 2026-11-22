@@ -118,7 +118,7 @@ export function paletteItems(c: PaletteContext): PaletteItem[] {
     ...readingItems(c),
     // Notepads by name, tag or anything in them, once something's typed.
     ...data.notes.map((n) => ({
-      id: 'n:' + n.id, group: 'Notes', label: n.name || 'Untitled', icon: 'ph-notebook', onlyWhenTyping: true,
+      id: 'n:' + n.id, group: 'Notepad', label: n.name || 'Untitled', icon: 'ph-notebook', onlyWhenTyping: true,
       sub: n.tags?.length ? n.tags.map((t) => '#' + t).join(' ') : undefined,
       words: `notepad note ${n.text.slice(0, 5000)}`,
       run: () => c.openNote(n.id),
