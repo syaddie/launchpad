@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import { ymd } from '../../../../shared/dates';
 import { fmtMoney, invoiceRows, moneyFromWorkbook, monthName, sortEntries, syncInvoices } from '../../../../shared/money';
-import type { Money, MoneyEntry } from '../../../../shared/types';
+import type { BillSuggestion, Money, MoneyEntry } from '../../../../shared/types';
+import { parseStatement, type Applied, type Statement } from '../../../../shared/statement';
 import { unmarked } from '../../../../shared/subscriptions';
 import { readXlsx } from '../../../../shared/xlsx';
 import { localGet, localSet } from '../../api';
@@ -14,6 +15,7 @@ import { Owed } from './Owed';
 import { Subscriptions } from './Subscriptions';
 import { Wishlist } from './Wishlist';
 import { lastAccount, type Notify } from './shared';
+import { StatementDrawer } from './StatementDrawer';
 import { Glide } from '../Motion';
 
 type Tab = 'overview' | 'month' | 'wishlist' | 'subs' | 'owed';
@@ -35,6 +37,10 @@ interface Props {
   notify: Notify;
   /** Month shows its calendar and list side by side instead of one at a time. */
   together?: boolean;
+  /** Bill and receipt emails waiting in Inbox, matched against a bank statement. */
+  bills?: BillSuggestion[];
+  /** A statement had the money for one of them: it's taken out of Inbox. */
+  onDropBill?: (b: BillSuggestion) => void;
 }
 
 /**
@@ -43,7 +49,7 @@ interface Props {
  * monthly summary and the charts are worked out from the entries (shared/money.ts).
  * Invoices in Owed each have their money as an entry, kept in step on every change.
  */
-export function MoneyView({ money: given, now, saved, onChange: save, onImport, notify, together }: Props) {
+export function MoneyView({ money: given, now, saved, onChange: save, onImport, notify, together, bills = [], onDropBill }: Props) {
   // A copy kept by the page before subscriptions and goals (or an edit queued then) has neither.
   const money: Money = given.subs && given.goals ? given : { ...given, subs: given.subs ?? [], goals: given.goals ?? [] };
   const today = ymd(now);
@@ -56,6 +62,8 @@ export function MoneyView({ money: given, now, saved, onChange: save, onImport, 
   const [importMonth, setImportMonth] = useState(today.slice(0, 7));
   const [importError, setImportError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  const csvRef = useRef<HTMLInputElement>(null);
+  const [statement, setStatement] = useState<Statement | null>(null);
   // For toast actions that run after more edits.
   const latest = useRef(money);
   latest.current = money;
@@ -84,6 +92,23 @@ export function MoneyView({ money: given, now, saved, onChange: save, onImport, 
     } catch (e) {
       setImportError(`Couldn’t read ${f.name}: ${(e as Error).message}`);
     }
+  };
+
+  const readStatement = async (f: File) => {
+    setImportError('');
+    try {
+      setStatement(parseStatement(await f.text()));
+    } catch (e) {
+      setImportError(`Couldn’t read ${f.name}: ${(e as Error).message}`);
+    }
+  };
+  const applyStatement = (a: Applied, summary: string) => {
+    onImport(a.money, summary);
+    for (const id of a.dropBills) {
+      const b = bills.find((x) => x.id === id);
+      if (b) onDropBill?.(b);
+    }
+    setStatement(null);
   };
 
   return (
@@ -122,11 +147,28 @@ export function MoneyView({ money: given, now, saved, onChange: save, onImport, 
               </button>
             </>
           ) : (
-            <button className="btn btn-ghost btn-small" title="Read the Tracker and Wishlist sheets of the Money tracker workbook, replacing what’s here" onClick={() => setImporting(true)}>
-              <i className="ph-duotone ph-upload-simple" />
-              Import .xlsx
-            </button>
+            <>
+              <button className="btn btn-ghost btn-small" title="Add what’s new on a POSB or DBS transaction history (CSV), checked against what’s here first" onClick={() => csvRef.current?.click()}>
+                <i className="ph-duotone ph-bank" />
+                Bank statement
+              </button>
+              <button className="btn btn-ghost btn-small" title="Read the Tracker and Wishlist sheets of the Money tracker workbook, replacing what’s here" onClick={() => setImporting(true)}>
+                <i className="ph-duotone ph-upload-simple" />
+                Import .xlsx
+              </button>
+            </>
           )}
+          <input
+            ref={csvRef}
+            type="file"
+            accept=".csv,text/csv"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = '';
+              if (f) readStatement(f);
+            }}
+          />
           <input
             ref={fileRef}
             type="file"
@@ -140,6 +182,7 @@ export function MoneyView({ money: given, now, saved, onChange: save, onImport, 
           />
         </div>
       </div>
+      {statement && <StatementDrawer statement={statement} money={money} bills={bills} notify={notify} onApply={applyStatement} onClose={() => setStatement(null)} />}
       {tab === 'overview' && <Overview money={money} today={today} onOpenMonth={openMonth} onChange={onChange} />}
       {tab === 'month' && <MonthTab money={money} today={today} month={month} onMonth={setMonth} onChange={onChange} onOpenOwed={() => setTab('owed')} together={together} />}
       {tab === 'subs' && <Subscriptions money={money} today={today} onChange={onChange} onOpenMonth={openMonth} notify={notify} />}

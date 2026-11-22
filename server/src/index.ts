@@ -57,6 +57,7 @@ import { addPlace, addWatch, editPlaces, lookupPlace, NacError, nacStatus, remov
 import { CARRIERS, detectCarrier } from '../../shared/carriers';
 import { cleanLearn } from '../../shared/learn';
 import { cleanMoney } from '../../shared/money';
+import { cleanAsk, MAX_SPAN_DAYS, statementContext } from './statement';
 import { MAX_KG, MIN_KG, cleanKg, cleanTraining } from '../../shared/training';
 import { refreshLearnNote } from './learn';
 import { refreshReviewNote, startReviewNotes, tasksDoneIn } from './review';
@@ -597,6 +598,16 @@ app.put('/api/money', bodyLimit({ maxSize: 1024 * 1024, onError: (c) => c.json({
   if (stale) return stale;
   store.setMoney(cleanMoney(body));
   return saved(c, 'money');
+});
+
+/**
+ * For importing a bank statement: busking sessions and bill emails in its dates, and Claude's
+ * names for its shops. The page reads the statement itself and sends only the dates and shops.
+ */
+app.post('/api/money/statement', bodyLimit({ maxSize: 256 * 1024, onError: (c) => c.json({ error: 'That statement has too many shops to look up at once.' }, 413) }), async (c) => {
+  const ask = cleanAsk(await c.req.json().catch(() => null));
+  if (!ask) return c.json({ error: `Expected the statement’s first and last day, at most ${MAX_SPAN_DAYS} days apart` }, 400);
+  return c.json(await statementContext(ask));
 });
 
 // ---------- training ----------

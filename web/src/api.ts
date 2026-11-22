@@ -1,6 +1,7 @@
 import type { DownloadJob, DownloadsInfo, InstagramInfo, McDiagnosis, McLog, McServer, McStatus, TorrentsInfo } from '../../shared/types';
 import type { ExplainResult, ExplainStatus, McBackups, McCrashes, McMeters, McPlayerAction, McPlayers } from '../../shared/types';
 import type { TorrentFile, TorrentOptions, TorrentSpeed, VideoFormat } from '../../shared/types';
+import type { StatementAsk, StatementContext } from '../../shared/types';
 import type { ArchiveCard } from '../../shared/digest';
 import type { AppState, Backup, BackupSnapshot, CalEvent, Countdown, Craving, DigestCard, DigestFeedback, DirListing, DisksReport, LinkCheck, LogLine, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
 import type { AlertsInfo, NacLookup, NacStatus } from '../../shared/types';
@@ -227,6 +228,7 @@ export const api = {
   modifyInbox: (ids: string[], action: 'archive' | 'unarchive' | 'read' | 'unread') => req('POST', '/api/inbox/modify', { ids, action }),
   /** Done with a bill suggestion (kept or dismissed). */
   dropBill: (id: string) => req('DELETE', `/api/bills/${encodeURIComponent(id)}`),
+  statementContext: (ask: StatementAsk) => req<StatementContext>('POST', '/api/money/statement', ask, false, undefined, 150_000),
   addPackage: (number: string, label: string, carrier: string) => req<Package>('POST', '/api/packages', { number, label, carrier }),
   patchPackage: (id: string, patch: Partial<Pick<Package, 'label' | 'isNew' | 'archived'>>) =>
     req<Package>('PATCH', `/api/packages/${encodeURIComponent(id)}`, patch),

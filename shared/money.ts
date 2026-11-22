@@ -6,7 +6,7 @@
 // their money as a linked entry, kept in step here.
 // Also cleaning for what the page sends, and reading the old workbook on import.
 import { MON, addDays, dayDiff, pad2, parseYmd, ymd } from './dates';
-import type { AccountKind, Every, Invoice, Money, MoneyAccount, MoneyCategory, MoneyEntry, SavingsGoal, Subscription, WishItem, WishPriority, WishStatus } from './types';
+import type { AccountKind, Every, Invoice, Money, MoneyAccount, MoneyCategory, MoneyEntry, MoneyRule, SavingsGoal, Subscription, WishItem, WishPriority, WishStatus } from './types';
 import type { XCell, XSheet } from './xlsx';
 
 export const MAX_ENTRIES = 5000;
@@ -15,6 +15,9 @@ export const MAX_ACCOUNTS = 30;
 export const MAX_INVOICES = 500;
 export const MAX_SUBS = 200;
 export const MAX_GOALS = 50;
+export const MAX_RULES = 1000;
+/** Bank lines one entry can be the money for: a long busking session's tips. */
+export const MAX_REFS = 400;
 export const CATEGORIES: MoneyCategory[] = ['Food', 'Transport', 'Shopping', 'Bills', 'Family', 'Fun', 'Travel', 'Pay', 'Other'];
 export const PRIORITIES: Exclude<WishPriority, ''>[] = ['High', 'Medium', 'Low'];
 export const STATUSES: Exclude<WishStatus, ''>[] = ['Wanted', 'Saving up', 'Purchased', 'Dropped'];
@@ -536,6 +539,7 @@ export function cleanMoney(v: unknown, today = new Date()): Money {
       const kind = to ? 'move' : (x.kind === 'in') !== a < 0 ? 'in' : 'out';
       const invoice = str(x.invoice, 40);
       const series = str(x.series, 40);
+      const refs = Array.isArray(x.refs) ? [...new Set(x.refs.filter((r): r is string => typeof r === 'string' && /^b[0-9a-z-]{1,30}$/.test(r)))].slice(0, MAX_REFS) : [];
       return [{
         id: str(x.id, 40),
         date: x.date,
@@ -548,6 +552,7 @@ export function cleanMoney(v: unknown, today = new Date()): Money {
         to,
         ...(invoice ? { invoice } : {}),
         ...(series ? { series } : {}),
+        ...(refs.length ? { refs } : {}),
       }];
     });
   const invoices = (Array.isArray(m.invoices) ? m.invoices : []).slice(0, MAX_INVOICES).flatMap((x: Partial<Invoice>): Invoice[] => {
@@ -585,6 +590,14 @@ export function cleanMoney(v: unknown, today = new Date()): Money {
       saved: Math.abs(amount(x?.saved) ?? 0),
     };
   });
+  const seenRule = new Set<string>();
+  const rules = (Array.isArray(m.rules) ? m.rules : []).flatMap((x: Partial<MoneyRule>): MoneyRule[] => {
+    const id = str(x?.id, 80);
+    if (!/^[mp]:./.test(id) || seenRule.has(id)) return [];
+    seenRule.add(id);
+    const move = id.startsWith('p:') && known.has(x!.move as string) ? x!.move! : '';
+    return [{ id, name: str(x!.name, 120).trim(), category: CATEGORIES.includes(x!.category as MoneyCategory) ? (x!.category as MoneyCategory) : '', ...(move ? { move } : {}) }];
+  }).slice(-MAX_RULES);
   return syncInvoices({
     start: isDate(m.start) ? m.start : starterMoney(today).start,
     accounts,
@@ -593,6 +606,7 @@ export function cleanMoney(v: unknown, today = new Date()): Money {
     invoices: ids(invoices, 'i'),
     subs,
     goals: ids(goals, 'g'),
+    ...(rules.length ? { rules } : {}),
   });
 }
 
