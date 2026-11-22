@@ -36,6 +36,9 @@
   /* Scrollbar thumbs. */
   --sb: color-mix(in srgb, var(--t3) 42%, transparent);
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  /* Healthy, done, all well: the accent, except where the accent means alarm (Poster's red, designs.css). */
+  --ok: var(--ac);
+  --okt: var(--act);
 }
 :root[data-mode='dark'] {
   --bg: #161513;
@@ -87,9 +90,14 @@ button { font: inherit; color: inherit; }
 h1, h2 { margin: 0; }
 :focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
 input:focus-visible, textarea:focus-visible, select:focus-visible { outline: none; }
-/* Asked for less motion (a system setting): things appear rather than slide or fade. */
+/* Asked for less motion (a system setting): motion.css takes the travel out of everything and keeps quick fades.
+   The few small slides here fade instead. */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  * { scroll-behavior: auto !important; }
+  @keyframes lpSlide { from { opacity: 0; } }
+  @keyframes lpRise { from { opacity: 0; } }
+  @keyframes lpPop { from { opacity: 0; } }
+  @keyframes lpView { from { opacity: 0; } }
 }
 
 .serif { font-family: var(--f-display); }
@@ -171,7 +179,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .rail-badge { position: absolute; top: 4px; right: 8px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--ac); color: var(--on); font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
 .rail-btn span { font-size: 11px; line-height: 1.2; }
 .rail-btn:hover { background: var(--hv); color: var(--tx); }
-.rail-btn:active { transform: scale(0.96); }
 .rail-btn.on { background: var(--act); color: var(--acd); }
 .rail-btn.on span { font-weight: 600; }
 .rail-sep { flex: none; width: 32px; height: 1px; margin: auto 0 8px; background: var(--ln); }
@@ -302,7 +309,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 
 .sync { position: relative; width: 30px; height: 34px; display: grid; place-items: center; z-index: 14; }
 .sync-dot { width: 7px; height: 7px; border-radius: 50%; transition: background 0.3s; }
-.sync-tip { position: absolute; top: 38px; right: -40px; width: 300px; padding: 10px 15px; display: flex; flex-direction: column; gap: 5px; }
+/* Anchored to the dot's right edge, so it never runs past the window (the dot is at the right of every top bar). */
+.sync-tip { position: absolute; top: 38px; right: 0; width: 300px; max-width: calc(100vw - 24px); padding: 10px 15px; display: flex; flex-direction: column; gap: 5px; transform-origin: top right; }
 .sync-line { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; }
 [data-layout='narrow'] .sync-tip { right: 0; max-width: calc(100vw - 30px); }
 
@@ -350,14 +358,12 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
   transition: background 0.15s, border-color 0.15s, color 0.15s, filter 0.15s, transform 0.12s var(--ease);
 }
 .btn:hover { text-decoration: none; }
-.btn:active:not(:disabled):not(.disabled) { transform: translateY(1px); }
 .btn-primary { background: var(--ac); color: var(--on); font-weight: 600; }
-.btn-primary:hover { filter: brightness(0.94); }
-.btn-primary:disabled { opacity: 0.45; cursor: default; filter: none; }
+.btn-primary:hover:not(:disabled):not(.disabled) { filter: brightness(0.94); }
 .btn-secondary { border: 1px solid var(--ln); background: transparent; color: var(--tx); font-weight: 500; }
-.btn-secondary:hover { background: var(--hv); }
+.btn-secondary:hover:not(:disabled):not(.disabled) { background: var(--hv); }
 .btn-ghost { background: transparent; color: var(--t2); }
-.btn-ghost:hover { background: var(--hv); }
+.btn-ghost:hover:not(:disabled):not(.disabled) { background: var(--hv); }
 .btn-small { padding: 3px 8px; border-radius: var(--r-s); font-size: 12px; font-weight: 500; gap: 5px; }
 .btn-link { border: none; background: none; padding: 0; color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 
@@ -678,13 +684,14 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 
 .switch { position: relative; flex: none; width: 34px; height: 20px; padding: 0; border: none; border-radius: 10px; background: color-mix(in srgb, var(--t3) 38%, transparent); cursor: pointer; transition: background 0.2s; }
 .switch.on { background: var(--ac); }
+.switch:disabled { opacity: 0.45; cursor: default; }
 .switch span { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); transition: left 0.2s var(--ease); }
-.switch.on span { left: 16px; }
+.switch.on span { left: 16px; background: var(--on); }
 .segmented { display: inline-flex; align-self: flex-start; padding: 2px; border-radius: var(--r); background: var(--hv); }
 .segmented button { padding: 5px 15px; border: none; border-radius: var(--r-s); background: transparent; color: var(--t2); font-size: 13px; cursor: pointer; }
 .segmented button.on { background: var(--rz); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); color: var(--tx); font-weight: 600; }
 
-.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60; max-width: calc(100vw - 24px); padding: 10px 16px; font-size: 13px; color: var(--tx); animation: lpPop 0.2s var(--ease); }
+.toast { position: fixed; left: 12px; right: 12px; bottom: var(--toast-bottom, 24px); z-index: 60; width: max-content; max-width: min(640px, calc(100vw - 24px)); margin-inline: auto; padding: 10px 16px; font-size: 13px; color: var(--tx); text-wrap: pretty; }
 
 /* ---------- photos ---------- */
 
@@ -717,7 +724,10 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .photo-focus { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35); pointer-events: none; }
 .photo-x { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; padding: 0; border: none; border-radius: 50%; background: var(--rz); box-shadow: var(--sh); color: var(--t2); display: grid; place-items: center; font-size: 11px; cursor: pointer; }
 .photo-x:hover { color: var(--wn); }
-.btn.disabled { opacity: 0.45; cursor: default; }
+/* A button that can't be used now is dimmed and doesn't answer a pointer (every kind of button). One that's busy
+   (aria-busy: it's working on what you asked) stays bright, with the working cursor: busy isn't unavailable. */
+.btn:disabled, .btn.disabled { opacity: 0.45; cursor: default; filter: none; }
+:is(.btn, .icon-btn, .cig-btn)[aria-busy='true']:disabled { opacity: 1; cursor: progress; }
 
 /* ---------- news ---------- */
 
@@ -726,7 +736,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 @keyframes lpSpin { to { transform: rotate(360deg); } }
 .spin { animation: lpSpin 0.9s linear infinite; }
 
-.news { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 15px; animation: lpView 0.22s var(--ease); }
+.news { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 15px; }
 .news-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; flex: none; }
 .news-topics { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .topic-chip { display: inline-flex; align-items: center; gap: 2px; height: 30px; padding: 0 4px 0 12px; border-radius: 15px; background: var(--sf); font-size: 13px; font-weight: 500; }
@@ -1035,7 +1045,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 
 /* ---------- you ---------- */
 
-.you, .server { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 20px; animation: lpView 0.22s var(--ease); }
+.you, .server { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 20px; }
 [data-layout='wide'] .you, [data-layout='wide'] .server { gap: 30px; }
 [data-layout='narrow'] .you, [data-layout='narrow'] .server { overflow: visible; gap: 15px; }
 .you-row, .server-row { display: flex; flex-wrap: wrap; gap: 20px; align-items: stretch; }
@@ -1562,7 +1572,7 @@ i.file-pinned { color: var(--ac); }
 
 /* ---------- money ---------- */
 
-.money { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 15px; animation: lpView 0.22s var(--ease); }
+.money { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 15px; }
 [data-layout='narrow'] .money { gap: 12px; }
 .money-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; flex: none; }
 .money-tabs .tab { font-size: 14px; padding: 4px 12px; }

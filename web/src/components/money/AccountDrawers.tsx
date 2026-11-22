@@ -245,7 +245,7 @@ export function MoveDrawer({ money, today, onChange, onClose }: { money: Money; 
               setTo(from);
             }}
           >
-            <i className="ph-bold ph-arrows-left-right" />
+            <i className="ph-duotone ph-arrows-left-right" />
           </button>
           <div className="field">
             <label htmlFor="move-to">To</label>

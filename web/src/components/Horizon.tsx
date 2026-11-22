@@ -140,7 +140,7 @@ export function HorizonHome(props: Props) {
 
   const checkbox = (t: Task) => (
     <button className={'check' + (pending.includes(t.id) ? ' on' : '')} aria-label={`Complete “${t.title}”`} aria-pressed={pending.includes(t.id)} onClick={() => toggle(t)}>
-      {pending.includes(t.id) && <i className="ph-bold ph-check" />}
+      {pending.includes(t.id) && <i className="ph-duotone ph-check" />}
     </button>
   );
   const taskRow = (t: Task, when?: string, warn?: boolean) => (
@@ -296,7 +296,7 @@ export function HorizonHome(props: Props) {
               <div className="hz-sub">Tasks due today</div>
               {dueToday.map((t) => taskRow(t))}
               <div className="hz-add">
-                <i className="ph ph-plus" aria-hidden="true" />
+                <i className="ph-duotone ph-plus" aria-hidden="true" />
                 <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTask()} placeholder="Add a task… try “call bank fri”" aria-label="Add a task" />
                 {pd.due && text.trim() && <span className="hz-when accent-text">Due {fmtDay(parseYmd(pd.due))}</span>}
               </div>

@@ -1,5 +1,6 @@
 import type { ViewKey } from '../../../shared/types';
 import { useActiveTabInView } from '../hooks/useActiveTabInView';
+import { useGlide } from './Motion';
 
 export const VIEWS: { key: ViewKey; name: string; icon: string; letter: string }[] = [
   { key: 'home', name: 'Home', icon: 'ph-house', letter: 'H' },
@@ -29,8 +30,11 @@ export function Rail({ view, hidden, badges, onView, onPalette, onSettings }: {
   const views = VIEWS.filter((v) => v.key === 'home' || v.key === view || !hidden.includes(`view:${v.key}`));
   // On a phone the rail (Bento's dock, Console's F-key bar) scrolls sideways: keep the view you're on in sight.
   const ref = useActiveTabInView<HTMLElement>(view, '.rail-btn.on', true);
+  // The view you're on is lit by one highlight that glides from button to button (motion.css).
+  useGlide(ref, `${view}:${views.length}`, '.rail-btn.on');
   return (
     <nav ref={ref} className="rail" aria-label="Views">
+      <span className="glide" aria-hidden="true" />
       {views.map((v) => (
         <button
           key={v.key}

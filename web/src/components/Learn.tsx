@@ -323,7 +323,7 @@ function DuePanel({ learn, today, adding, setAdding, onChange, onOpen, notify }:
               return (
                 <div key={a.id} className={'ln-due-row' + (done ? ' done' : '')}>
                   <button className={'check' + (done ? ' on' : '')} aria-label={`${done ? 'Not handed in' : 'Handed in'}: ${a.title}`} aria-pressed={done} onClick={() => toggle(a)}>
-                    {done && <i className="ph-bold ph-check" />}
+                    {done && <i className="ph-duotone ph-check" />}
                   </button>
                   <button className="ln-due-body" title="Open the course" onClick={() => onOpen(a.courseId, a.id)}>
                     <span className="ln-due-title">{a.title}</span>

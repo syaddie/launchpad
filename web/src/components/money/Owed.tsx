@@ -221,7 +221,7 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
                 <tr className="owed-split">
                   <td colSpan={8}>
                     <button className="owed-toggle" aria-expanded={showPaid} onClick={() => setShowPaid(!showPaid)}>
-                      <i className={'ph-bold ' + (showPaid ? 'ph-caret-down' : 'ph-caret-right')} aria-hidden="true" />
+                      <i className={'ph-duotone ' + (showPaid ? 'ph-caret-down' : 'ph-caret-right')} aria-hidden="true" />
                       Paid · {paid.length}
                     </button>
                   </td>
@@ -234,7 +234,7 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
                         <td className="c">
                           <button className="ent-check" title="Untick if it hasn’t come in after all" aria-label={`Mark ${row.inv.num || 'invoice'} as not paid`} aria-pressed onClick={() => setPaid(row, false)}>
                             <span className="ent-tick on">
-                              <i className="ph-bold ph-check" />
+                              <i className="ph-duotone ph-check" />
                             </span>
                           </button>
                         </td>

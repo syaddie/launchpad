@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import type { ViewKey } from '../../../shared/types';
 import type { Layout } from '../layout';
 import { hashFor, viewFromHash } from '../util';
@@ -60,14 +60,25 @@ export function useLayout(ref: RefObject<HTMLElement | null>): Layout {
 /**
  * The view lives in the URL's hash (#money), so a reload stays put and Back and Forward
  * move between views. Home has no hash, so a new tab is still the plain "/".
+ * `move(from, to, apply)` changes the view (App animates it); Back and Forward go through it
+ * too, unless the browser has already animated the change itself (a phone's back swipe).
  */
-export function useHashView() {
+export function useHashView(move: (from: ViewKey, to: ViewKey, apply: () => void) => void) {
   const [view, setView] = useState<ViewKey>(() => viewFromHash(location.hash));
+  const current = useRef(view);
+  current.current = view;
+  const moveRef = useRef(move);
+  moveRef.current = move;
   useEffect(() => {
     if (viewFromHash(location.hash) !== view) history.pushState(null, '', hashFor(view) || location.pathname + location.search);
   }, [view]);
   useEffect(() => {
-    const onNav = () => setView(viewFromHash(location.hash));
+    const onNav = (e: Event) => {
+      const to = viewFromHash(location.hash);
+      if (to === current.current) return;
+      if ((e as Event & { hasUAVisualTransition?: boolean }).hasUAVisualTransition) setView(to);
+      else moveRef.current(current.current, to, () => setView(to));
+    };
     window.addEventListener('popstate', onNav);
     window.addEventListener('hashchange', onNav);
     return () => {
@@ -75,5 +86,6 @@ export function useHashView() {
       window.removeEventListener('hashchange', onNav);
     };
   }, []);
-  return [view, setView] as const;
+  const go = useCallback((to: ViewKey) => moveRef.current(current.current, to, () => setView(to)), []);
+  return [view, go] as const;
 }

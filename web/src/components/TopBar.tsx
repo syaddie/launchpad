@@ -7,6 +7,7 @@ import type { AppState, Bookmark, BookmarkOpens, SearchEngine, SourceKey, Weathe
 import { bookmarkOpened } from '../api';
 import { fmtMinutes, lastTrained, minutes, workoutLabel } from '../../../shared/training';
 import { ago, favicon, fmtDay, hm, host, psiBand, uvBand, weatherIcon, weatherLabel } from '../util';
+import { Readout } from './Motion';
 
 interface Props {
   data: AppState;
@@ -40,7 +41,10 @@ function Clock({ weather, showAir }: { weather: Weather | null; showAir: boolean
   }, []);
   return (
     <div className="clock-row">
-      <a className="serif clock clock-link" href="https://time.is/" target="_blank" rel="noopener" title="Check the time on time.is">{hm(now)}</a>
+      {/* The minutes roll over as they change (motion.css). */}
+      <a className="serif clock clock-link" href="https://time.is/" target="_blank" rel="noopener" title="Check the time on time.is">
+        <Readout text={hm(now)} id="clock" />
+      </a>
       <span className="tnum clock-date">
         {fmtDay(now)} · {tzLabel()}
       </span>

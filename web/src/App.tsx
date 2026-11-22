@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { STARTER_NOTES } from '../../shared/defaults';
 import { ymd } from '../../shared/dates';
 import { fmtStudy, timerMinutes } from '../../shared/learn';
@@ -6,7 +6,7 @@ import { fmtKg } from '../../shared/training';
 import { fmtUsd } from '../../shared/claudeUsage';
 import { fmtMoney, sortEntries } from '../../shared/money';
 import { MOOD_WORDS, cravingsOn, nearestCountdown, smokesOn } from '../../shared/trackers';
-import type { AppState, Backup, BookmarkGroup, Craving, CravingTrigger, DesignKey, Countdown, Learn, Money, Mood, Note, Package, Photo, Prefs, Task, Training } from '../../shared/types';
+import type { AppState, Backup, BookmarkGroup, Craving, CravingTrigger, DesignKey, Countdown, Learn, Money, Mood, Note, Package, Photo, Prefs, Task, Training, ViewKey } from '../../shared/types';
 import { api, localGet, localSet, type RestoreResult } from './api';
 import { AddEvent } from './components/AddEvent';
 import { Bookmarks } from './components/Bookmarks';
@@ -31,7 +31,11 @@ import { useHashView, useLayout, useMinuteNow, useSystemDark } from './hooks/use
 import { useShortcuts } from './hooks/useShortcuts';
 import { useFlash, useToast } from './hooks/useToast';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { Presence } from './components/Motion';
 import { focusTab, gridLayout, type Area, type FocusTab } from './layout';
+import { loadable } from './loadable';
+import { viewStep } from './motion';
+import { endOpening, viewTransition } from './viewTransition';
 import { send } from './outbox';
 import { paletteAsk, paletteItems, paletteSearches, type AskHandlers, type PaletteContext } from './paletteItems';
 import type { PendingCall } from './pending';
@@ -52,26 +56,52 @@ const loadTerminal = () => import('./components/Terminal');
 const loadTraining = () => import('./components/Training');
 const loadYou = () => import('./components/You');
 const loadMusic = () => import('./components/music/MusicView');
-const Inbox = lazy(() => loadInbox().then((m) => ({ default: m.Inbox })));
-const LearnView = lazy(() => loadLearn().then((m) => ({ default: m.LearnView })));
-const CourseDrawer = lazy(() => loadLearn().then((m) => ({ default: m.CourseDrawer })));
-const MoneyView = lazy(() => loadMoney().then((m) => ({ default: m.MoneyView })));
-const Digest = lazy(() => loadDigest().then((m) => ({ default: m.Digest })));
-const ReviewView = lazy(() => loadReview().then((m) => ({ default: m.ReviewView })));
-const Server = lazy(() => loadServer().then((m) => ({ default: m.Server })));
-const TrainingView = lazy(() => loadTraining().then((m) => ({ default: m.TrainingView })));
-const ExerciseDrawer = lazy(() => loadTraining().then((m) => ({ default: m.ExerciseDrawer })));
-const You = lazy(() => loadYou().then((m) => ({ default: m.You })));
-const MusicView = lazy(() => loadMusic().then((m) => ({ default: m.MusicView })));
+// Once fetched, each renders at once, without a loading placeholder (loadable.tsx).
+const Inbox = loadable(() => loadInbox().then((m) => m.Inbox));
+const LearnView = loadable(() => loadLearn().then((m) => m.LearnView));
+const CourseDrawer = loadable(() => loadLearn().then((m) => m.CourseDrawer));
+const MoneyView = loadable(() => loadMoney().then((m) => m.MoneyView));
+const Digest = loadable(() => loadDigest().then((m) => m.Digest));
+const ReviewView = loadable(() => loadReview().then((m) => m.ReviewView));
+const Server = loadable(() => loadServer().then((m) => m.Server));
+const TrainingView = loadable(() => loadTraining().then((m) => m.TrainingView));
+const ExerciseDrawer = loadable(() => loadTraining().then((m) => m.ExerciseDrawer));
+const You = loadable(() => loadYou().then((m) => m.You));
+const MusicView = loadable(() => loadMusic().then((m) => m.MusicView));
+
+/** Each view's code, by view; Home's is always there. */
+const VIEW_CODE: Partial<Record<ViewKey, { preload: () => Promise<unknown>; ready: () => boolean }>> = {
+  digest: Digest, inbox: Inbox, you: You, training: TrainingView, learn: LearnView, money: MoneyView, server: Server, review: ReviewView, music: MusicView,
+};
 
 function preloadViews() {
-  for (const load of [loadDigest, loadInbox, loadLearn, loadMoney, loadMusic, loadReview, loadServer, loadTerminal, loadTraining, loadYou]) load().catch(() => {});
+  for (const v of [Digest, Inbox, LearnView, CourseDrawer, MoneyView, MusicView, ReviewView, Server, TrainingView, ExerciseDrawer, You]) v.preload().catch(() => {});
+  loadTerminal().catch(() => {});
 }
 
 type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings' } | { type: 'exercise'; title: string } | { type: 'course'; id: string; item?: string } | null;
 
+/** How long a change of view waits for the new view's code before going ahead without it. */
+const CODE_WAIT_MS = 400;
+
+/**
+ * Changes the view with the motion that goes with it (motion.css): along the rail, whichever way
+ * the rail runs. A view whose code isn't in yet is waited for a moment, so the motion goes to the
+ * view itself rather than to its loading placeholder.
+ */
+function moveView(from: ViewKey, to: ViewKey, apply: () => void) {
+  const go = () => {
+    const rail = document.querySelector('.rail');
+    document.documentElement.dataset.axis = rail && getComputedStyle(rail).flexDirection.startsWith('row') ? 'x' : 'y';
+    viewTransition(viewStep(from, to), apply);
+  };
+  const code = VIEW_CODE[to];
+  if (!code || code.ready()) go();
+  else Promise.race([code.preload(), new Promise((r) => window.setTimeout(r, CODE_WAIT_MS))]).then(go, go);
+}
+
 export function App({ cached }: { cached: AppState | null }) {
-  const [view, setView] = useHashView();
+  const [view, setView] = useHashView(moveView);
   const [palette, setPalette] = useState(false);
   const [shortcuts, setShortcuts] = useState(false);
   const [addCountdown, setAddCountdown] = useState(0);
@@ -103,7 +133,7 @@ export function App({ cached }: { cached: AppState | null }) {
   };
   const [saved, flashSaved, setSaved] = useFlash();
   const [moneySaved, flashMoneySaved, setMoneySaved] = useFlash();
-  const { toast, showToast, hideToast } = useToast();
+  const { toast, showToast, hideToast, holdToast } = useToast();
   const rootRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const noteEditing = useRef(false);
@@ -117,6 +147,12 @@ export function App({ cached }: { cached: AppState | null }) {
 
   const { data, update, savers, merge, replace, refresh, serverIssue, waiting } = useAppData({ cached, notify: showToast, onSaveError, onNotesSaved: flashSaved, onMoneySaved: flashMoneySaved, noteEditing });
   const photoSlots = usePhotoSlots(data.photos.length);
+
+  // The opening (motion.css) plays once as the app starts; after that, only changes move.
+  useEffect(() => {
+    const t = window.setTimeout(endOpening, 2200);
+    return () => window.clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     const idle = window.requestIdleCallback ?? ((f: () => void) => window.setTimeout(f, 1500));
@@ -821,6 +857,8 @@ export function App({ cached }: { cached: AppState | null }) {
       </div>
       </div>
 
+      {/* Each of these animates out before it goes (Presence, motion.css). */}
+      <Presence show={!!(drawer && drawerTitle)}>
       {drawer && drawerTitle && (
         <Drawer title={drawerTitle} onClose={() => setDrawer(null)}>
           <Suspense fallback={null}>
@@ -852,30 +890,46 @@ export function App({ cached }: { cached: AppState | null }) {
           </Suspense>
         </Drawer>
       )}
+      </Presence>
 
-      {focus && <FocusView notes={notes} activeId={activeId} onActive={pickNote} onChange={setNotes} saved={saved} onClose={() => setFocus(false)} notify={showToast} />}
+      <Presence show={focus}>
+        {focus && <FocusView notes={notes} activeId={activeId} onActive={pickNote} onChange={setNotes} saved={saved} onClose={() => setFocus(false)} notify={showToast} />}
+      </Presence>
 
-      {shortcuts && <Shortcuts onClose={() => setShortcuts(false)} />}
+      <Presence show={shortcuts}>{shortcuts && <Shortcuts onClose={() => setShortcuts(false)} />}</Presence>
 
-      {palette && <Palette items={paletteItems(paletteCtx)} searches={(q) => paletteSearches(paletteCtx, q)} ask={paletteAsk(paletteCtx, !serverIssue)} onClose={() => setPalette(false)} />}
+      <Presence show={palette}>
+        {palette && <Palette items={paletteItems(paletteCtx)} searches={(q) => paletteSearches(paletteCtx, q)} ask={paletteAsk(paletteCtx, !serverIssue)} onClose={() => setPalette(false)} />}
+      </Presence>
 
-      {toast && (
-        <div className="popover toast" role="status">
-          {toast.msg}
-          {toast.action && (
-            <button
-              className="btn-link"
-              style={{ marginLeft: 12, color: 'var(--tx)', fontWeight: 600 }}
-              onClick={() => {
-                toast.action!.run();
-                hideToast();
-              }}
-            >
-              {toast.action.label}
-            </button>
-          )}
-        </div>
-      )}
+      <Presence show={!!toast}>
+        {toast && (
+          // A message with an Undo shows how long it has left (motion.css); pointing at it holds it.
+          <div
+            key={toast.id}
+            className="popover toast"
+            role="status"
+            data-life={toast.action ? '' : undefined}
+            style={{ '--toast-life': `${toast.life}ms` } as CSSProperties}
+            onMouseEnter={() => holdToast(true)}
+            onMouseLeave={() => holdToast(false)}
+          >
+            {toast.msg}
+            {toast.action && (
+              <button
+                className="btn-link"
+                style={{ marginLeft: 12, color: 'var(--tx)', fontWeight: 600 }}
+                onClick={() => {
+                  toast.action!.run();
+                  hideToast();
+                }}
+              >
+                {toast.action.label}
+              </button>
+            )}
+          </div>
+        )}
+      </Presence>
     </div>
   );
 }

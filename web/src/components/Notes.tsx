@@ -200,7 +200,7 @@ export function NoteTabs({
               onMenu(n.id);
             }}
           >
-            {n.pinned && <i className="ph-fill ph-push-pin note-pin" aria-label="Pinned" />}
+            {n.pinned && <i className="ph-duotone ph-push-pin note-pin" aria-label="Pinned" />}
             {n.name || 'Untitled'}
           </button>
         ),

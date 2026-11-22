@@ -249,7 +249,7 @@ export function Bookmarks({ groups, onChange, search, edit, setEdit, linkCheck, 
                     >
                       <Fav b={b} />
                       <span className="tile-name">{b.name}</span>
-                      {problem && <i className="ph-fill ph-warning-circle tile-broken" aria-label={`Link problem: ${problem.why}`} />}
+                      {problem && <i className="ph-duotone ph-warning-circle tile-broken" aria-label={`Link problem: ${problem.why}`} />}
                     </a>
                     {isDaily && <span className="tile-num mono">{ii + 1}</span>}
                     {edit && (
