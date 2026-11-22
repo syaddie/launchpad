@@ -1,0 +1,54 @@
+# Batch 4: layout pass (arrange panels, less clutter, less empty space)
+
+Three items from the owner's lists, done together because they all change how the home screen is laid out:
+
+- **I1:** rearrange panels based on what the owner looks at most.
+- **I3:** now that right-click / long-press menus exist, remove on-screen controls the menu already covers.
+- **P5:** too much empty space; use it to show things bigger and clearer.
+
+**Do batch 2 first** (`docs/batch-2-context-menu-spec.md`). Removing buttons (I3) is only safe once the menu opens everywhere with a right-click and a long press. Branch from `main` (e.g. `claude/layout-pass`).
+
+## Ask the owner first
+
+Don't guess these; ask before building:
+
+1. **Which designs do you actually use**, on desktop and on your phone? (`DESIGN_KEYS` in `shared/types.ts`: Broadsheet, Console, Bento, Horizon, Vista, Focus, Poster.) Spend the effort there; the rest only need to keep working.
+2. **"Rearrange by what I see most": by hand, or automatic?** Recommended: by hand. Settings › Layout lets you order the panels (and maybe make one wider or taller) per design. At most, it offers a one-time "suggested order" based on what you click. A layout that reshuffles itself is disorienting, and what you *look at* can't really be measured.
+3. **Which panels matter most**, and which could be smaller or hidden by default?
+4. Screenshots or a description of where the empty space bothers you.
+
+## Where things are
+
+- `web/src/layout.ts`: grid columns per design (`BROADSHEET`, `CONSOLE`, `BENTO`, `VISTA`, `POSTER`), `NARROW_ORDER` for phones, `gridLayout()`. Horizon and Focus have their own homes (`components/Horizon.tsx`, `components/FocusHome.tsx`).
+- `web/src/App.tsx`: which panels are shown (`shown`, `prefs.hidden`), the home grid.
+- `web/src/designs.css`, `web/src/styles.css`: per-design styling and spacing.
+- Prefs live in `AppState.prefs` (`shared/types.ts`, defaults in `shared/defaults.ts`).
+
+## I1: panel order (assuming "by hand")
+
+- Store a per-design order (and optional size) in prefs, e.g. `prefs.layout[design] = { columns: Area[][] }`. **Add new keys only.** Don't rename or rewrite existing store keys. Missing or invalid values fall back to today's built-in layout, so nothing existing is lost.
+- `gridLayout()` takes the saved arrangement when there is one and still filters out hidden panels.
+- UI in Settings › Layout: a list per column you can reorder (drag, plus up/down buttons for keyboard and touch), and "Reset to default". Every row gets a context menu (Move up / Move down / Move to column… / Hide) per `CLAUDE.md`.
+- Phone order (`NARROW_ORDER`) is editable the same way.
+- Unit-test `gridLayout()` with saved arrangements: empty, every panel hidden, unknown area names, a column emptied out.
+
+## I3: declutter
+
+- Go panel by panel and list each on-screen button/icon whose action is also in that thing's context menu. Propose to the owner which go (with before/after screenshots) **before** removing them.
+- Keep anything that's the main action of a thing (e.g. checking off a task), and keep at least one visible way into each feature, since long press isn't discoverable on a phone. Moving a cluster of icons into a single "⋯" button that opens the same menu is a good middle ground.
+- Keyboard users must still reach every action (Shift+F10 on the item, or the ⋯ button).
+
+## P5: empty space
+
+- For each design the owner uses, at desktop, wide and phone sizes: screenshot it with typical data *and* with little data (empty panels), and mark where space is wasted.
+- Fixes to consider: panels that shrink to their content when nearly empty, bigger text and photos where there's room, fewer fixed heights, tighter padding at wide sizes. Don't just stretch everything.
+- Empty states still have to look intentional, not like a broken panel.
+
+## Done when
+
+- The owner's answers above are in, and the result matches them.
+- Every design still works at desktop, wide and phone sizes: nothing cut off, overlapping, squashed or unreachable, with a lot of data and with none.
+- Saved layouts survive a reload and a backup/restore, and "Reset to default" works.
+- Every removed button's action is still reachable by right-click, long press, keyboard, or a ⋯ button.
+- `npm run typecheck` and tests pass (on Windows: `TZ=Asia/Singapore npx vitest run` from Git Bash; the `backup.test.ts` EPERM is expected).
+- This batch is full of judgement calls, so **show the owner screenshots and get a yes before merging to `main`.**
