@@ -318,7 +318,7 @@ function Shell({ session, onSession, hidden, publicKey, onStatus, onFailed, onCw
 
   return (
     <div className="term-shell" style={hidden ? { display: 'none' } : undefined}>
-      <div ref={box} className="term-box" />
+      <div ref={box} className="term-box" data-selectable="" />
       {overlay && (
         <div className="term-overlay" role="status">
           <p>{overlay.text}</p>

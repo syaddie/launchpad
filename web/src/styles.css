@@ -466,10 +466,20 @@ textarea.input { height: auto; padding-block: 8px; line-height: 1.45; }
   .ctx-menu { min-width: 210px; }
   .ctx-menu [role='menuitem'] { padding: 10px 12px; font-size: 15px; }
 }
-/* What has a menu: a long press opens it, rather than iOS's link preview or a text selection. */
-[data-menu] { -webkit-touch-callout: none; }
+/* On a touch screen a long press anywhere opens our menu (ContextMenu.tsx), so text isn't selectable
+   and iOS shows no link preview or image callout. On body, not the app's root: drawers and popovers
+   are drawn into body. What stays selectable, with the native long press: fields, and text worth
+   copying in part that no menu copies (`SELECTABLE` there: the note viewer, the journal, the file
+   viewer, the terminal, container logs, code). Text copied whole gets a Copy item instead (an inbox
+   story or email, the inbox summary, a lesson). Images keep the native "Save" only inside those (a note's, the file viewer's);
+   the photo panels show the owner's own uploads, so a long press there opens our menu (Previous,
+   Next, Hide Photos) like anywhere else. */
 @media (pointer: coarse) {
-  [data-menu] { -webkit-user-select: none; user-select: none; }
+  body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  input, textarea, select, [contenteditable]:not([contenteditable='false']),
+  [data-selectable], [data-selectable] *, pre, pre *, code {
+    -webkit-user-select: text; user-select: text; -webkit-touch-callout: default;
+  }
 }
 
 /* A row of tabs that doesn't fit (a view's tabs on a phone) scrolls sideways rather than

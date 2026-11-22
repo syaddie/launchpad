@@ -42,7 +42,7 @@ export function Packages({ packages, now, onAdd, ...actions }: Props) {
   const delivered = packages.filter((p) => p.stage === 3);
 
   return (
-    <section className="panel" style={{ gridArea: 'pkgs' }} aria-label="Packages">
+    <section className="panel" style={{ gridArea: 'pkgs' }} aria-label="Packages" data-hide="panel:packages">
       <div className="panel-head">
         <h2 className="panel-title">Packages</h2>
         <button className="btn btn-ghost btn-small" onClick={onAdd}>

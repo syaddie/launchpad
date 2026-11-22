@@ -292,6 +292,7 @@ export function LogsDrawer({ c, canRestart, onClose, onRestarted }: { c: Contain
         <div
           ref={scroller}
           className="logs-body mono"
+          data-selectable=""
           onScroll={(e) => {
             const el = e.currentTarget;
             atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;

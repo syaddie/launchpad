@@ -194,7 +194,7 @@ export function Tasks({ data, now, onConnect, onAdd, onComplete, onUpdate, onMov
   };
 
   return (
-    <section className="panel" style={{ gridArea: 'tasks' }} aria-label="Tasks">
+    <section className="panel" style={{ gridArea: 'tasks' }} aria-label="Tasks" data-hide="panel:tasks">
       <div className="panel-head" style={{ flexWrap: 'wrap' }}>
         <h2 className="panel-title">Tasks</h2>
         {connected && on && lists.length > 0 && (

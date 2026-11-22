@@ -62,7 +62,7 @@ export function PhotoPanel({ photos, area, index: i, onStep }: PanelProps) {
   const p = photos[i];
 
   return (
-    <section className="photo-panel" style={{ gridArea: area }} aria-label={area === 'photo' ? 'Photos' : 'More photos'}>
+    <section className="photo-panel" style={{ gridArea: area }} aria-label={area === 'photo' ? 'Photos' : 'More photos'} data-hide="panel:photos">
       <img key={p.id} src={photoUrl(p.id)} alt={`Photo ${i + 1} of ${n}`} style={{ objectPosition: focusPos(p) }} />
       {n > 1 && (
         <div className="photo-bar">

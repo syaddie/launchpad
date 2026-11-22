@@ -366,7 +366,7 @@ export function Notes({ notes, activeId, onActive, onChange, saved, onOpenFocus,
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
 
   return (
-    <section className="panel" style={{ gridArea: 'notes', overflow: 'visible', position: 'relative' }} aria-label="Notepad">
+    <section className="panel" style={{ gridArea: 'notes', overflow: 'visible', position: 'relative' }} aria-label="Notepad" data-hide="panel:notes">
       <div ref={stacked.ref} className={'note-head' + (stacked.on ? ' stacked' : '')}>
         <h2 className="panel-title">Notepad</h2>
         <div className="note-tabs">
@@ -585,7 +585,7 @@ export function Notes({ notes, activeId, onActive, onChange, saved, onOpenFocus,
             {...dropHandlers}
           />
         ) : (
-          <div onClick={() => setEditing(true)} style={{ minHeight: '100%', cursor: 'text' }}>
+          <div onClick={() => setEditing(true)} style={{ minHeight: '100%', cursor: 'text' }} data-selectable="">
             {note.text ? (
               <NoteLines text={note.text} onToggle={(i, c) => setText(toggleLine(note.text, i, c))} notes={notes} onLink={openLink} />
             ) : (
@@ -671,7 +671,7 @@ function HistoryDrawer({ note, onClose, onRestore }: { note: Note; onClose: () =
               Put this back
             </button>
           </div>
-          <div className="note-preview">{v.text ? <NoteLines text={v.text} /> : <span className="meta">Empty</span>}</div>
+          <div className="note-preview" data-selectable="">{v.text ? <NoteLines text={v.text} /> : <span className="meta">Empty</span>}</div>
         </div>
       )}
     </Drawer>

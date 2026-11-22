@@ -5,7 +5,7 @@ import type { InboxAction } from '../hooks/useGoogleActions';
 import { billLine, gmailUrl, liveEmails } from '../inboxActions';
 import { ago } from '../util';
 import { Glide } from './Motion';
-import { menuProps, type MenuItem } from './ContextMenu';
+import { copyText, menuProps, type MenuItem } from './ContextMenu';
 
 export { gmailUrl };
 
@@ -25,6 +25,7 @@ interface Props {
   onConnect: () => void;
   onOpenSettings: () => void;
   actions?: InboxActions;
+  notify?: (msg: string) => void;
 }
 
 const RANGES: { key: InboxRange; name: string; words: string; ms: number }[] = [
@@ -38,7 +39,7 @@ const COLUMNS: { kind: InboxItem['kind']; title: string; empty: string }[] = [
   { kind: 'fyi', title: 'In passing', empty: '' },
 ];
 
-export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, actions }: Props) {
+export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, actions, notify }: Props) {
   const [range, setRange] = useState<InboxRange>(() => (localGet('inboxRange') === '7d' ? '7d' : '2d'));
   const [allOpen, setAllOpen] = useState(false);
   const r = RANGES.find((x) => x.key === range)!;
@@ -83,7 +84,7 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, a
   const list = (
     <>
       {emails.map((e) => (
-        <EmailRow key={e.id} e={e} now={now} account={google.email} acts={acts} />
+        <EmailRow key={e.id} e={e} now={now} account={google.email} acts={acts} notify={notify} />
       ))}
     </>
   );
@@ -192,7 +193,7 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, a
             {inbox.error && <div className="news-note" style={{ color: 'var(--wn)' }}>{inbox.error}</div>}
             {digest ? (
               <>
-                <p className="inbox-overview">{digest.overview}</p>
+                <p className="inbox-overview" data-copy="summary">{digest.overview}</p>
                 {digest.skimmed && <p className="inbox-skimmed">{digest.skimmed}</p>}
               </>
             ) : (
@@ -212,7 +213,7 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, a
                   <div className="scroll" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     {digest && !items.length && c.empty && <div className="news-note">{c.empty}</div>}
                     {items.map((it) => (
-                      <Item key={it.emails.join(',') || it.headline} it={it} byId={byId} account={google.email} acts={acts} />
+                      <Item key={it.emails.join(',') || it.headline} it={it} byId={byId} account={google.email} acts={acts} notify={notify} />
                     ))}
                     {c.kind === 'fyi' && (
                       <>
@@ -238,7 +239,8 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, a
 type Acts = InboxActions & { canModify: boolean };
 
 /** Right-click on an email or a digest item: what its buttons do, plus opening it in Gmail. */
-function mailMenu(mails: InboxEmail[], account: string | undefined, acts: Acts | undefined, task: () => void): MenuItem[] {
+/** `copy`: what the item says, to copy whole (on a phone its text can't be selected). */
+function mailMenu(mails: InboxEmail[], account: string | undefined, acts: Acts | undefined, task: () => void, copy: { label: string; text: string; notify?: (msg: string) => void }): MenuItem[] {
   const n = mails.length > 1 ? ` all ${mails.length}` : '';
   const newest = mails.reduce<InboxEmail | undefined>((a, m) => (!a || m.at > a.at ? m : a), undefined);
   return [
@@ -247,17 +249,19 @@ function mailMenu(mails: InboxEmail[], account: string | undefined, acts: Acts |
     acts?.canModify && mails.length > 0 && { label: `Archive${n}`, icon: 'ph-archive', onSelect: () => acts.onAction(mails, 'archive') },
     acts?.canModify && mails.some((m) => m.unread) && { label: `Mark${n} read`, icon: 'ph-envelope-open', onSelect: () => acts.onAction(mails, 'read') },
     acts && mails.length > 0 && { label: 'Make a task', icon: 'ph-check-square', onSelect: task },
+    'sep',
+    copy.text && { label: copy.label, icon: 'ph-copy', onSelect: () => copyText(copy.text, copy.notify) },
   ];
 }
 
-function Item({ it, byId, account, acts }: { it: InboxItem; byId: Map<string, InboxEmail>; account?: string; acts?: Acts }) {
+function Item({ it, byId, account, acts, notify }: { it: InboxItem; byId: Map<string, InboxEmail>; account?: string; acts?: Acts; notify?: (msg: string) => void }) {
   const mails = liveEmails(it, byId);
   // One link per sender, to their newest email in the item.
   const senders = [...new Map(mails.map((m) => [m.fromEmail, m])).values()];
   const anyUnread = mails.some((m) => m.unread);
   const n = mails.length > 1 ? ` all ${mails.length}` : '';
   return (
-    <article className="story" {...menuProps(() => mailMenu(mails, account, acts, () => acts?.onTask({ item: it, emails: mails })), it.headline)}>
+    <article className="story" {...menuProps(() => mailMenu(mails, account, acts, () => acts?.onTask({ item: it, emails: mails }), { label: 'Copy summary', text: [it.headline, it.summary].filter(Boolean).join('\n'), notify }), it.headline)}>
       <div className="story-headline">
         {it.headline}
         {it.due && <span className="chip chip-warn inbox-due">{it.due}</span>}
@@ -297,9 +301,9 @@ function Item({ it, byId, account, acts }: { it: InboxItem; byId: Map<string, In
   );
 }
 
-function EmailRow({ e, now, account, acts }: { e: InboxEmail; now: Date; account?: string; acts?: Acts }) {
+function EmailRow({ e, now, account, acts, notify }: { e: InboxEmail; now: Date; account?: string; acts?: Acts; notify?: (msg: string) => void }) {
   return (
-    <div className="email-wrap" {...menuProps(() => mailMenu([e], account, acts, () => acts?.onTask({ email: e })), e.subject)}>
+    <div className="email-wrap" {...menuProps(() => mailMenu([e], account, acts, () => acts?.onTask({ email: e }), { label: 'Copy subject and preview', text: [e.subject, e.snippet].filter(Boolean).join('\n'), notify }), e.subject)}>
       <a className={'headline email-row' + (e.unread ? ' unread' : '')} href={gmailUrl(account, e.threadId)} target="_blank" rel="noopener">
         <span className="split">
           <span className="email-from">

@@ -778,6 +778,7 @@ function Journal({ date, mood, isToday, onSave }: { date: string; mood: Mood | u
       ) : (
         <div
           className="journal-view"
+          data-selectable=""
           role="button"
           tabIndex={0}
           aria-label={`Write in the journal for ${date}`}

@@ -3,8 +3,12 @@
 //
 //   <div {...menuProps(() => [{ label: 'Open', icon: 'ph-arrow-square-out', onSelect: open }, 'sep', …], `Actions for ${name}`)}>
 //
-// The browser's own menu is kept everywhere else, and on fields, on selected text and with Shift held,
-// so copy and paste still work. On a touch screen a long press opens the same menu.
+// App puts one more on its root ({ root: true }): whatever has no menu of its own gets the app-wide one,
+// so a right-click anywhere opens ours. Drawers, the palette and popovers drawn into document.body are
+// outside the root on the page, but React passes their events up to it all the same, so they're covered too.
+// The browser's own menu is kept on fields, on selected text, with Shift held, and on plain links,
+// so copy, paste and "Open in new tab" still work. On a touch screen a long press opens the same menu;
+// text there isn't selectable, except fields and what's marked to copy from (styles.css, `selectable`).
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -96,11 +100,64 @@ export function closeMenu() {
 
 const editable = (t: EventTarget | null) => t instanceof Element && !!t.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])');
 
-/** Places the browser's menu is more use: fields, text that's selected, and Shift held. */
-function keepNative(e: { target: EventTarget; currentTarget: Element; shiftKey: boolean }) {
-  if (e.shiftKey || editable(e.target)) return true;
+/**
+ * Text worth copying on a phone, where text otherwise isn't selectable: a long press there selects
+ * as usual rather than opening a menu. Matches the list in styles.css.
+ */
+export const SELECTABLE = '[data-selectable], pre, code';
+const selectableArea = (t: EventTarget | null) => t instanceof Element && !!t.closest(SELECTABLE);
+
+/** A link with no menu of ours keeps the browser's (open in a new tab, copy the address). */
+const plainLink = (t: EventTarget | null) => t instanceof Element && !!t.closest('a[href]');
+
+/** Whether the point is on any of the boxes (a selection's lines), give or take a pixel. */
+export function onRects(x: number, y: number, rects: ArrayLike<{ left: number; right: number; top: number; bottom: number }>) {
+  for (let i = 0; i < rects.length; i++) {
+    const r = rects[i];
+    if (x >= r.left - 1 && x <= r.right + 1 && y >= r.top - 1 && y <= r.bottom + 1) return true;
+  }
+  return false;
+}
+
+const selectedRange = () => {
   const sel = window.getSelection();
-  return !!sel && !sel.isCollapsed && sel.rangeCount > 0 && sel.toString().trim() !== '' && sel.getRangeAt(0).intersectsNode(e.currentTarget);
+  return sel && !sel.isCollapsed && sel.rangeCount > 0 && sel.toString().trim() !== '' ? sel.getRangeAt(0) : null;
+};
+
+// The selection as it was when the latest press began. A Mac selects the word under a right-click
+// before the menu event arrives; that word isn't text the owner selected, so it's judged by this.
+let pressedOn: { at: number; range: Range | null } | null = null;
+const PRESS_FRESH_MS = 2000;
+const notePress = () => void (pressedOn = { at: performance.now(), range: selectedRange()?.cloneRange() ?? null });
+const freshPress = () => (pressedOn && performance.now() - pressedOn.at < PRESS_FRESH_MS ? pressedOn : null);
+
+/** Right-clicked on text that was already selected (or, from the keyboard, with text selected in it). */
+function onSelection(target: Element, x: number, y: number, keyboard: boolean) {
+  if (keyboard) return !!selectedRange()?.intersectsNode(target);
+  const p = freshPress();
+  const range = p ? p.range : selectedRange();
+  return !!range && onRects(x, y, range.getClientRects());
+}
+
+/** Undo a selection the right-click itself made (a Mac's word), once our menu has opened instead. */
+function undoPressSelection() {
+  const p = freshPress();
+  const sel = window.getSelection();
+  const now = selectedRange();
+  if (!p || !sel || !now) return;
+  const was = p.range;
+  if (was && now.compareBoundaryPoints(Range.START_TO_START, was) === 0 && now.compareBoundaryPoints(Range.END_TO_END, was) === 0) return;
+  sel.removeAllRanges();
+  if (was) sel.addRange(was);
+}
+
+/**
+ * Where a menu opened from the keyboard goes: under the focused thing, or at its top when it's big
+ * (the page itself, a long list) or its bottom is off screen.
+ */
+export function keyboardSpot(r: { left: number; top: number; bottom: number }, vh: number) {
+  const big = r.bottom > vh || r.bottom - r.top > vh / 2;
+  return { x: Math.max(r.left, 0), y: big ? Math.max(r.top, 0) : r.bottom };
 }
 
 let press: { timer: number; x: number; y: number; fired: boolean; ev: Event } | null = null;
@@ -127,31 +184,39 @@ function swallowNextClick() {
 
 /**
  * Handlers that give an element a right-click (and long-press) menu. `items` is called when it opens,
- * so it always reflects the current state. `only` limits it to some targets (a background, not what's on it).
+ * with what was clicked, so it always reflects the current state. `root` is for App's own: it takes
+ * whatever nothing inside claimed, except plain links and our open menu.
  */
-export function menuProps(items: () => MenuItem[], label: string, opts: { only?: (target: Element, el: Element) => boolean } = {}) {
-  const allowed = (target: EventTarget, el: Element) => !opts.only || (target instanceof Element && opts.only(target, el));
+export function menuProps(items: (target: Element) => MenuItem[], label: string | ((target: Element) => string), opts: { root?: boolean } = {}) {
+  const name = (t: Element) => (typeof label === 'string' ? label : label(t));
+  // Events from our own menu reach the root too, through React (it's drawn from inside the app).
+  // A plain link keeps the browser's menu for a mouse; a long press on one gets ours (App adds its items).
+  const allowed = (t: EventTarget, touch: boolean): t is Element => t instanceof Element && !t.closest('.ctx-menu') && !(opts.root && !touch && plainLink(t));
   return {
     // Marks it for CSS: no iOS link preview or text selection on a long press.
-    ...(opts.only ? {} : { 'data-menu': '' }),
+    ...(opts.root ? { 'data-menu-root': '' } : { 'data-menu': '' }),
     onContextMenu: (e: ReactMouseEvent<HTMLElement>) => {
-      // An element inside with its own menu got there first.
-      if (e.defaultPrevented || !allowed(e.target, e.currentTarget) || keepNative(e)) return;
       const touch = (e.nativeEvent as PointerEvent).pointerType === 'touch';
+      // Android fires this for a long press too, sometimes after the timer below has opened the menu.
+      if (touch && press?.fired && !e.defaultPrevented) return e.preventDefault();
+      // An element inside with its own menu got there first.
+      const t = e.target;
+      if (e.defaultPrevented || !allowed(t, touch) || e.shiftKey || editable(t) || (touch && selectableArea(t))) return;
       // The ContextMenu key or Shift+F10: no pointer position (Chrome reports '' as the pointer type).
       const keyboard = (e.nativeEvent as PointerEvent).pointerType === '' || (e.clientX === 0 && e.clientY === 0);
-      const r = e.currentTarget.getBoundingClientRect();
-      const opened = openMenu({ items: items(), label, x: keyboard ? r.left : e.clientX, y: keyboard ? r.bottom : e.clientY, keyboard });
-      if (!opened) return;
+      if (onSelection(t, e.clientX, e.clientY, keyboard)) return;
+      const at = keyboard ? keyboardSpot(t.getBoundingClientRect(), document.documentElement.clientHeight) : { x: e.clientX, y: e.clientY };
+      if (!openMenu({ items: items(t), label: name(t), ...at, keyboard })) return;
       e.preventDefault();
-      // Android fires this for a long press too; the timer below mustn't open it a second time.
+      if (!keyboard) undoPressSelection();
       if (touch && press) {
         clearTimeout(press.timer);
         press.fired = true;
       }
     },
     onPointerDown: (e: ReactPointerEvent<HTMLElement>) => {
-      if (e.pointerType !== 'touch' || !e.isPrimary || press?.ev === e.nativeEvent || !allowed(e.target, e.currentTarget) || editable(e.target)) return;
+      const t = e.target;
+      if (e.pointerType !== 'touch' || !e.isPrimary || press?.ev === e.nativeEvent || !allowed(t, true) || editable(t) || selectableArea(t)) return;
       cancelPress();
       const { clientX: x, clientY: y } = e;
       const p = {
@@ -160,7 +225,7 @@ export function menuProps(items: () => MenuItem[], label: string, opts: { only?:
         fired: false,
         ev: e.nativeEvent,
         timer: window.setTimeout(() => {
-          if (press !== p || !openMenu({ items: items(), label, x, y })) return;
+          if (press !== p || !openMenu({ items: items(t), label: name(t), x, y })) return;
           p.fired = true;
           // A little buzz on Android; Chrome refuses (and logs) it before the page's first tap.
           if (navigator.userActivation?.hasBeenActive) navigator.vibrate?.(10);
@@ -180,6 +245,54 @@ export function menuProps(items: () => MenuItem[], label: string, opts: { only?:
       if (press && !press.fired) cancelPress();
     },
   };
+}
+
+// ---------- the place that was clicked ----------
+
+/** A control's name as a menu label: "Previous (←)" reads "Previous". */
+export const actionLabel = (s: string) => s.replace(/\s+/g, ' ').trim().replace(/\s*\([^)]*\)$/, '');
+const labelOf = (el: Element) => actionLabel(el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '');
+const iconOf = (el: Element) => [...(el.querySelector('i')?.classList ?? [])].find((c) => c.startsWith('ph-') && c !== 'ph-duotone');
+const visible = (el: Element) => el.getClientRects().length > 0;
+
+const PANEL = '.panel, .photo-panel';
+
+/** Pressing one of the page's own controls from the menu, so the two can't fall out of step. */
+function asAction(el: HTMLElement, label = labelOf(el)): MenuAction {
+  const a = el instanceof HTMLAnchorElement ? el : null;
+  return { label, icon: iconOf(el), ...(a ? { href: a.href, newTab: a.target === '_blank', download: a.hasAttribute('download') } : { onSelect: () => el.click() }) };
+}
+
+/**
+ * The panel or dialog a right-click landed in, for the app-wide menu: its name, its Settings › Panels
+ * key when it can be hidden (`data-hide`), and what its header offers (Packages' "Add package", a
+ * drawer's Close), as items that press those very buttons.
+ */
+export function placeOf(target: Element): { name: string; hide?: string; items: MenuAction[] } | null {
+  const dialog = target.closest<HTMLElement>('[role="dialog"]');
+  const panel = target.closest<HTMLElement>(PANEL);
+  // The nearest of the two: a panel inside a drawer is the place, not the drawer.
+  const box = panel && (!dialog || dialog.contains(panel)) ? panel : dialog;
+  if (!box) return null;
+  const title = box.querySelector(box === dialog ? '.drawer-title, h2' : '.panel-title');
+  const name = actionLabel(box.getAttribute('aria-label') || (title ? title.textContent ?? '' : ''));
+  const items: MenuAction[] = [];
+  if (box === dialog) {
+    const close = [...box.querySelectorAll<HTMLElement>('button')].find((b) => /^close\b/i.test(b.getAttribute('aria-label') || b.getAttribute('title') || ''));
+    const scrim = box.previousElementSibling;
+    if (close && visible(close)) items.push({ ...asAction(close, 'Close'), icon: 'ph-x' });
+    else if (scrim instanceof HTMLElement && scrim.matches('.scrim')) items.push({ label: 'Close', icon: 'ph-x', onSelect: () => scrim.click() });
+  } else {
+    const head = [...box.querySelectorAll('.panel-head, .note-head, .photo-bar')].find((h) => h.closest(PANEL) === box);
+    const controls = head ? [...head.querySelectorAll<HTMLElement>('button, a[href]')] : [];
+    for (const c of controls) {
+      if (items.length >= 4) break;
+      const label = labelOf(c);
+      if (!label || label.length > 40 || !visible(c) || c.matches('.tab, [role="tab"], :disabled, [aria-disabled="true"]') || c.closest(PANEL) !== box) continue;
+      items.push(asAction(c, label));
+    }
+  }
+  return { name, hide: box.closest('[data-hide]')?.getAttribute('data-hide') ?? undefined, items };
 }
 
 // ---------- closing ----------
@@ -223,19 +336,25 @@ export function useDismiss(open: boolean, refs: RefObject<HTMLElement | null>[],
 /** Mounted once, in App: draws whichever menu is open. */
 export function ContextMenuHost() {
   const open = useSyncExternalStore(subscribe, () => current);
-  // Shift+F10 and the Menu key, on whatever has focus. Browsers don't all turn these into a
-  // right-click, so do it here; one with no menu of ours still gets the browser's.
+  // Shift+F10 and the Menu key, on whatever has focus (the app itself when nothing has). Browsers
+  // don't all turn these into a right-click, so do it here; one with no menu of ours still gets the browser's.
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.key !== 'ContextMenu' && !(e.shiftKey && e.key === 'F10')) return;
-      const el = document.activeElement;
-      if (current || !(el instanceof HTMLElement) || el === document.body || editable(el)) return;
+      const focused = document.activeElement;
+      const el = focused instanceof HTMLElement && focused !== document.body ? focused : document.querySelector('[data-menu-root]');
+      if (current || !(el instanceof HTMLElement) || editable(el)) return;
       const ev = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
       el.dispatchEvent(ev);
       if (ev.defaultPrevented) e.preventDefault();
     };
     window.addEventListener('keydown', key);
-    return () => window.removeEventListener('keydown', key);
+    // Before the press can change the selection (see notePress).
+    window.addEventListener('pointerdown', notePress, true);
+    return () => {
+      window.removeEventListener('keydown', key);
+      window.removeEventListener('pointerdown', notePress, true);
+    };
   }, []);
   return open ? <Menu key={open.id} open={open} /> : null;
 }

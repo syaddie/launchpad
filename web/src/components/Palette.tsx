@@ -158,7 +158,9 @@ export function Palette({ items, searches, ask, onClose }: {
                   role="option"
                   aria-selected={i === cur}
                   className={'palette-row' + (i === cur ? ' sel' : '') + (it.id === 'ask' ? ' ask' + (asked?.q === q.trim() ? (asked.status === 'ready' ? ' ready' : asked.status === 'failed' ? ' failed' : '') : '') : '')}
-                  onMouseMove={() => i !== cur && setSel(i)}
+                  // A mouse only: a finger lifting sends a mouse move too, and selecting (and scrolling
+                  // to) the row under it would close the menu a long press just opened.
+                  onPointerMove={(e) => e.pointerType === 'mouse' && i !== cur && setSel(i)}
                   onClick={() => run(it)}
                 >
                   <span className="palette-icon">{it.icon.startsWith('ph-') ? <i className={'ph-duotone ' + it.icon + (it.icon === 'ph-circle-notch' ? ' spin' : '')} /> : it.icon}</span>
