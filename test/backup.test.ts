@@ -51,9 +51,11 @@ describe('backup', () => {
     store.setMinecraft([mc]);
     const bugis = { key: 'bugis', id: 'd0000000-0000-4000-8000-000000000001', nac: 'BUGIS JUNCTION', name: 'Bugis Junction', short: 'Bugis' };
     store.setNacPlaces([bugis]);
+    const watch = { id: 'w-backup1', place: 'bugis', date: '2026-12-05', start: '14:00', end: '18:00', created: '2026-11-21T00:00:00.000Z', freed: null, found: [] };
+    store.setNacWatches([watch]);
     const b = backup.exportBackup();
     expect(b.version).toBe(2);
-    for (const k of ['bookmarks', 'notes', 'prefs', 'countdowns', 'smokes', 'moods', 'cravings', 'weights', 'money', 'learn', 'training', 'exerciseMuscles', 'packages', 'snippets', 'minecraft', 'nacPlaces'] as const) expect(b).toHaveProperty(k);
+    for (const k of ['bookmarks', 'notes', 'prefs', 'countdowns', 'smokes', 'moods', 'cravings', 'weights', 'money', 'learn', 'training', 'exerciseMuscles', 'packages', 'snippets', 'minecraft', 'nacPlaces', 'nacWatches'] as const) expect(b).toHaveProperty(k);
     // Every cigarette, not just the 60 days the page gets.
     expect(b.smokes).toHaveLength(2);
     expect(JSON.stringify(b)).not.toMatch(/refreshToken/);
@@ -67,6 +69,7 @@ describe('backup', () => {
     store.setSnippets([]);
     store.setMinecraft([]);
     store.setNacPlaces([]);
+    store.setNacWatches([]);
     const restored = backup.restoreBackup(JSON.parse(JSON.stringify(b)));
     expect(restored).toContain('money');
     expect(store.countdowns()).toEqual(b.countdowns);
@@ -80,6 +83,7 @@ describe('backup', () => {
     expect(store.snippets()).toEqual([{ id: 's1', name: 'Disk usage', command: 'df -h' }]);
     expect(store.minecraft()).toEqual([mc]);
     expect(store.nacPlaces()).toEqual([bugis]);
+    expect(store.nacWatches()).toEqual([watch]);
     expect(backup.describeRestored(['nacPlaces'])).toEqual(['1 busking location']);
   });
 

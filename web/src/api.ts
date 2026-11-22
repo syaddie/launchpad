@@ -289,6 +289,9 @@ export const api = {
   nacAddPlace: (p: { id: string; name: string; short: string }) => req<NacStatus>('POST', '/api/nac/places', p),
   /** The list's order and names; locations left out are removed. */
   nacEditPlaces: (places: { key: string; name: string; short: string }[]) => req<NacStatus>('PUT', '/api/nac/places', { places }),
+  /** Watch a slot: the phone is told once when any of it frees up. */
+  nacWatch: (w: { place: string; date: string; start: string; end: string }) => req<NacStatus>('POST', '/api/nac/watches', w),
+  nacUnwatch: (id: string) => req<NacStatus>('DELETE', `/api/nac/watches/${encodeURIComponent(id)}`),
   speedTest: () => req<ServerStats['speed']>('POST', '/api/speedtest', {}),
   shell: () => req<ShellInfo>('GET', '/api/shell'),
   trustHostKey: () => req<ShellInfo>('POST', '/api/shell/trust', {}),

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { addDaysYmd, fmtClock, fmtNacDay, fmtRange, hoursOf, nacCodes, sgtYmd, slotView, type SlotDay, type SlotRow } from '../../../../shared/nac';
+import { addDaysYmd, fmtClock, fmtNacDay, fmtRange, hoursOf, nacCodes, sgtMinutes, sgtYmd, slotView, type SlotDay, type SlotRow } from '../../../../shared/nac';
 import type { NacBooked, NacFree, NacStatus } from '../../../../shared/types';
 import { api, cachedNac, cacheNac } from '../../api';
 import { NacPlaces } from './NacPlaces';
 import { SlotCalendar } from './SlotCalendar';
+import { menuProps } from '../ContextMenu';
+import { rowMenu, WatchForm, WatchLines, WatchList, type WatchProps } from './SlotWatch';
 
 /** The server checks NAC every 10 minutes; this only reads what it found, so asking often costs nothing. */
 const POLL = 60_000;
@@ -35,6 +37,9 @@ export function SlotFinder({ now, notify }: { now: Date; notify: (msg: string) =
   const [loadError, setLoadError] = useState('');
   const [editing, setEditing] = useState(false);
   const [asking, setAsking] = useState(false);
+  const [watchBusy, setWatchBusy] = useState(false);
+  /** A day to show in the calendar, picked from the watched slots (n so picking the same one again still jumps). */
+  const [jump, setJump] = useState<{ date: string; n: number } | null>(null);
   /** The check asked for here, by when the one before it was made, so its result can be told when it's in. */
   const askedAfter = useRef<string | null | undefined>(undefined);
 
@@ -96,6 +101,24 @@ export function SlotFinder({ now, notify }: { now: Date; notify: (msg: string) =
     cacheNac(r);
   };
   const waiting = s?.queued_at && !s.running && Date.parse(s.queued_at) > now.getTime() + 30_000 ? fmtClock(s.queued_at, now) : '';
+
+  const addWatch = (w: { place: string; date: string; start: string; end: string }) => {
+    setWatchBusy(true);
+    return api
+      .nacWatch(w)
+      .then((r) => (saved(r), true))
+      .catch((e) => (notify((e as Error).message), false))
+      .finally(() => setWatchBusy(false));
+  };
+  const removeWatch = (id: string) =>
+    api
+      .nacUnwatch(id)
+      .then(saved)
+      .catch((e) => notify((e as Error).message));
+  /** What a day's rows need to watch their slots. */
+  const watchOf = (date: string): WatchProps | null =>
+    s ? { date, fromMin: date === today ? sgtMinutes(now) : null, watches: (s.watches ?? []).filter((x) => x.date === date), alerts: s.watch_alerts ?? 'ok', busy: watchBusy, now, onAdd: addWatch, onRemove: removeWatch } : null;
+  const watched = useMemo(() => new Set((s?.watches ?? []).filter((x) => !x.freed).map((x) => x.date)), [s?.watches]);
 
   return (
     <section className={'panel you-panel nac' + (s && !s.ok ? ' stale' : '')} aria-label="Busking slots">
@@ -176,6 +199,7 @@ export function SlotFinder({ now, notify }: { now: Date; notify: (msg: string) =
           ) : (
             <>
               <Notes s={s} noBookings={view!.noBookings} />
+              <WatchList s={{ ...s, watches: s.watches ?? [] }} now={now} onPick={(date) => setJump((j) => ({ date, n: (j?.n ?? 0) + 1 }))} onAdd={addWatch} onRemove={removeWatch} />
               {view!.days.length > 0 && (
                 <p className="nac-sum">
                   {view!.freeWindows ? (
@@ -190,7 +214,7 @@ export function SlotFinder({ now, notify }: { now: Date; notify: (msg: string) =
                 </p>
               )}
               {view!.days.length ? (
-                <SlotCalendar view={view!} today={today} codes={codes} places={s.locations} detail={(d) => <Day day={d} today={today} />} />
+                <SlotCalendar view={view!} today={today} codes={codes} places={s.locations} watched={watched} jump={jump} detail={(d) => <Day day={d} today={today} w={watchOf(d.date)} />} />
               ) : (
                 <p className="nac-empty">The last good data doesn’t reach today, so there’s nothing to show until a check works.</p>
               )}
@@ -230,7 +254,7 @@ function Notes({ s, noBookings }: { s: NacStatus; noBookings: string[] }) {
   );
 }
 
-function Day({ day, today }: { day: SlotDay; today: string }) {
+function Day({ day, today, w }: { day: SlotDay; today: string; w: WatchProps | null }) {
   const label = fmtNacDay(day.date);
   const rel = day.date === today ? 'Today' : day.date === addDaysYmd(today, 1) ? 'Tomorrow' : '';
   const open = day.rows.some((r) => r.kind === 'open');
@@ -242,7 +266,7 @@ function Day({ day, today }: { day: SlotDay; today: string }) {
       </h3>
       <ul className="nac-rows">
         {day.rows.map((r) => (
-          <Row key={r.key} row={r} />
+          <Row key={r.key} row={r} w={w && { ...w, watches: w.watches.filter((x) => x.place === r.key) }} />
         ))}
       </ul>
     </article>
@@ -252,9 +276,13 @@ function Day({ day, today }: { day: SlotDay; today: string }) {
 const freeLabel = (w: NacFree) => `Free ${fmtRange(w).replace('–', 'to')}, ${hoursOf(w)} hours${w.new ? ', new since the check before' : ''}`;
 const usual = (b: NacBooked) => ['published', 'confirmed'].includes(b.status.toLowerCase());
 
-function Row({ row }: { row: SlotRow }) {
+function Row({ row, w }: { row: SlotRow; w: WatchProps | null }) {
+  const [watching, setWatching] = useState(false);
+  const on = !!w?.watches.some((x) => !x.freed);
+  // A day that's over has nothing left to free up.
+  const canWatch = !!w && row.kind !== 'done';
   return (
-    <li className={'nac-row ' + row.kind}>
+    <li className={'nac-row ' + row.kind + (canWatch ? ' watchable' : '')} {...menuProps(() => rowMenu(row, w, { canWatch, openForm: () => setWatching(true) }), w ? `${row.short}, ${fmtNacDay(w.date)}` : row.short)}>
       <a className="nac-loc" href={row.url} target="_blank" rel="noopener noreferrer" title={`${row.name} on the NAC portal`}>
         {row.short}
       </a>
@@ -280,6 +308,20 @@ function Row({ row }: { row: SlotRow }) {
           </span>
         ))}
       </span>
+      {canWatch && (
+        <button
+          type="button"
+          className={'icon-btn nac-watch-btn' + (on || watching ? ' on' : '')}
+          aria-expanded={watching}
+          title={on ? 'Watching: tell me about another slot here' : 'Watch a slot here: tell me when it frees up'}
+          aria-label={`Watch a slot at ${row.short}`}
+          onClick={() => setWatching(!watching)}
+        >
+          <i className={'ph-duotone ' + (on ? 'ph-bell-ringing' : 'ph-bell')} />
+        </button>
+      )}
+      {w && w.watches.length > 0 && <WatchLines row={row} w={w} />}
+      {canWatch && watching && <WatchForm row={row} w={w!} onClose={() => setWatching(false)} />}
     </li>
   );
 }

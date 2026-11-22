@@ -17,11 +17,11 @@ import { cleanLearn } from '../../shared/learn';
 import { cleanNewsLists } from '../../shared/news';
 import { cleanHistory } from '../../shared/notes';
 import { cleanMoney } from '../../shared/money';
-import { cleanNacPlaces } from '../../shared/nac';
+import { cleanNacPlaces, cleanNacWatches } from '../../shared/nac';
 import { cleanCravings } from '../../shared/trackers';
 import { cleanTraining } from '../../shared/training';
 import type {
-  BillSuggestion, BookmarkGroup, BookmarkOpens, CalEvent, LinkCheck, CalendarInfo, Countdown, Craving, DigestStore, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NacPlace, NewsLists, Note, NoteVersion, McServer, McWatchRecord, Package, Prefs, ReviewNote, Snippet, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
+  BillSuggestion, BookmarkGroup, BookmarkOpens, CalEvent, LinkCheck, CalendarInfo, Countdown, Craving, DigestStore, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NacPlace, NacWatch, NewsLists, Note, NoteVersion, McServer, McWatchRecord, Package, Prefs, ReviewNote, Snippet, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
 } from '../../shared/types';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
@@ -298,6 +298,9 @@ export const store = {
   /** The busking locations Music › Busking slots checks; null until the list is first changed, so config's four (nac.ts's nacPlaces()). */
   nacPlaces: (): NacPlace[] | null => cleanNacPlaces(get<unknown>('nacPlaces', null)),
   setNacPlaces: (v: NacPlace[]) => set('nacPlaces', cleanNacPlaces(v) ?? []),
+  /** Busking slots watched for a cancellation (nac.ts). */
+  nacWatches: (): NacWatch[] => cleanNacWatches(get<unknown>('nacWatches', [])),
+  setNacWatches: (v: NacWatch[]) => set('nacWatches', cleanNacWatches(v)),
   /** Restart if it crashes: per server, whether it gave up and what it noticed and did lately. */
   mcWatch: () => get<Record<string, McWatchRecord>>('mcWatch', {}),
   setMcWatch: (v: Record<string, McWatchRecord>) => set('mcWatch', v),

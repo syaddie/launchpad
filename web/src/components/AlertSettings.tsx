@@ -10,6 +10,7 @@ const KINDS: { key: AlertKind; name: string; meta: string }[] = [
   { key: 'containers', name: 'Containers', meta: 'One that stops, turns unhealthy or keeps restarting' },
   { key: 'disks', name: 'Disks', meta: 'The disk Launchpad’s data is on 90% full, or SMART saying a disk is failing' },
   { key: 'minecraft', name: 'Minecraft', meta: 'A saved server that crashes, and when Launchpad gives up restarting one' },
+  { key: 'busking', name: 'Busking slots', meta: 'A slot you’re watching in Music that frees up; tap it to open the location on the NAC portal' },
 ];
 
 const ICONS: Record<AlertRecord['type'], string> = { problem: 'ph-warning', fixed: 'ph-check-circle', paused: 'ph-bell-slash', event: 'ph-siren', test: 'ph-bell-ringing' };

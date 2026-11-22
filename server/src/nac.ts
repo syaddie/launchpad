@@ -23,9 +23,10 @@ import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config, type NacPlace } from './config';
+import { kindOn, notify, topicUrl } from './notify';
 import { store } from './store';
-import { addDaysYmd, daysBetween, DOW3, fmtClock, guessNacNames, hhmm, MONTH_NAMES, NAC_MAX_PLACES, NAC_NAME_MAX, NAC_SHORT_MAX, nacPlaceId, nacPlaceKey, sgtIso, sgtMinutes, sgtYmd, toMin, weekdayOf } from '../../shared/nac';
-import type { NacBooked, NacDay, NacFree, NacLocation, NacLookup, NacSlots, NacStatus } from '../../shared/types';
+import { addDaysYmd, cleanNacWatches, daysBetween, DOW3, fmtClock, fmtNacDay, fmtRange, guessNacNames, hhmm, MONTH_NAMES, NAC_MAX_PLACES, NAC_MAX_WATCHES, NAC_NAME_MAX, NAC_SHORT_MAX, NAC_WATCH_DAYS, nacPlaceId, nacPlaceKey, sgtIso, sgtMinutes, sgtYmd, toMin, watchHits, weekdayOf } from '../../shared/nac';
+import type { NacBooked, NacDay, NacFree, NacLocation, NacLookup, NacSlots, NacStatus, NacWatch } from '../../shared/types';
 
 const BASE_URL = 'https://eservices.nac.gov.sg/Busking';
 /** schedule-sync's style: generic, nothing personal in it. */
@@ -621,7 +622,8 @@ export function startNac(): void {
   if (config.nac.buskerIdInvalid) console.warn('[nac] NAC_BUSKER_ID has no profile ID in it, so your own bookings will show as taken');
   if (config.nac.fixtures) console.log(`[nac] reading saved pages from ${config.nac.fixtures}, not NAC`);
   // With no locations on the list there's nothing to ask, but the clock keeps going for when one's added.
-  scheduler = makeScheduler({ check: () => (nacPlaces().length ? inTurn(() => runCheck()) : Promise.resolve()), read: () => readSnapshot(), fixtures: !!config.nac.fixtures });
+  // After each check, watched slots that have just freed up go to the phone.
+  scheduler = makeScheduler({ check: () => (nacPlaces().length ? inTurn(() => runCheck()).then((r) => alertWatches(r)) : Promise.resolve()), read: () => readSnapshot(), fixtures: !!config.nac.fixtures });
   scheduler.start();
 }
 
@@ -634,7 +636,7 @@ export function requestNacCheck(): { ok: true; at: string } | { ok: false; error
 }
 
 /** The saved result with what the scheduler is doing: the next check is whichever comes first, one waiting to run or the planned one. */
-export function statusOf(saved: NacSlots | null, st: ReturnType<NacScheduler['state']>, now: Date, mineOn: boolean): Omit<NacStatus, 'watching' | 'fixtures' | 'max_places'> {
+export function statusOf(saved: NacSlots | null, st: ReturnType<NacScheduler['state']>, now: Date, mineOn: boolean): Omit<NacStatus, 'watching' | 'fixtures' | 'max_places' | 'watches' | 'watch_alerts'> {
   const s = saved ?? emptySlots(mineOn);
   const t = now.getTime();
   const due = Date.parse(s.next_check ?? '');
@@ -660,6 +662,8 @@ export function nacStatus(now = new Date()): NacStatus {
     can_check: places.length ? s.can_check : NOTHING_TO_CHECK,
     watching: places.map((p) => ({ key: p.key, name: p.name, short: p.short, nac: p.nac, url: pageUrl(p) })),
     max_places: NAC_MAX_PLACES,
+    watches: store.nacWatches().filter((w) => w.date >= sgtYmd(now) && places.some((p) => p.key === w.place)),
+    watch_alerts: !topicUrl() ? 'no-topic' : !kindOn('busking') ? 'off' : 'ok',
     fixtures: !!config.nac.fixtures,
   };
 }
@@ -730,7 +734,79 @@ export function editPlaces(list: unknown): NacPlace[] {
     out.push({ ...p, name: nameOf(e.name, NAC_NAME_MAX) || p.name, short: nameOf(e.short, NAC_SHORT_MAX) || p.short });
   }
   store.setNacPlaces(out);
+  // A location taken off the list takes its watched slots with it.
+  const watches = store.nacWatches();
+  const kept = watches.filter((w) => out.some((p) => p.key === w.place));
+  if (kept.length !== watches.length) store.setNacWatches(kept);
   return out;
+}
+
+// ---------- watched slots ----------
+
+const listOf = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+
+/**
+ * POST /api/nac/watches: watch a slot at a location on the list, today or up to NAC_WATCH_DAYS
+ * ahead (past the last booking seen too: the day opening for booking counts as freeing up).
+ * The same slot watched again is the watch already there.
+ */
+export function addWatch(body: { place?: unknown; date?: unknown; start?: unknown; end?: unknown }, now = new Date()): NacWatch {
+  const place = nacPlaces().find((p) => p.key === body?.place);
+  if (!place) throw new NacError('That location isn’t on the list any more.');
+  const today = sgtYmd(now);
+  const date = String(body?.date ?? '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || addDaysYmd(date, 0) !== date) throw new NacError('That isn’t a day.');
+  if (date < today) throw new NacError('That day has passed.');
+  if (date > addDaysYmd(today, NAC_WATCH_DAYS)) throw new NacError(`Slots can be watched up to ${NAC_WATCH_DAYS} days ahead.`);
+  const w: NacWatch = { id: randomBytes(9).toString('base64url'), place: place.key, date, start: String(body?.start ?? ''), end: String(body?.end ?? ''), created: now.toISOString(), freed: null, found: [] };
+  if (!cleanNacWatches([w]).length) throw new NacError('Those hours don’t read as a slot.');
+  const watches = store.nacWatches().filter((x) => x.date >= today);
+  const same = watches.find((x) => !x.freed && x.place === w.place && x.date === w.date && x.start === w.start && x.end === w.end);
+  if (same) return same;
+  if (watches.filter((x) => !x.freed).length >= NAC_MAX_WATCHES) throw new NacError(`That’s ${NAC_MAX_WATCHES} slots watched already. Stop watching one first.`);
+  store.setNacWatches([...watches, w].slice(-NAC_MAX_WATCHES));
+  return w;
+}
+
+/** DELETE /api/nac/watches/:id: stop watching it (or clear one that's freed up). */
+export function removeWatch(id: string): void {
+  const watches = store.nacWatches();
+  const kept = watches.filter((w) => w.id !== id);
+  if (kept.length !== watches.length) store.setNacWatches(kept);
+}
+
+/**
+ * After a check that worked: each watched slot with a window that's just freed up (a free window
+ * marked new, within its hours) is marked freed and goes to the phone, once. Watches whose day is
+ * over are dropped. Returns the ones that freed up. `send` is notify().
+ */
+export async function alertWatches(result: NacSlots, now = new Date(), send: typeof notify = notify): Promise<NacWatch[]> {
+  const today = sgtYmd(now);
+  const all = store.nacWatches();
+  const kept = all.filter((w) => w.date >= today);
+  const freed: NacWatch[] = [];
+  for (const w of result.ok ? kept : []) {
+    if (w.freed) continue;
+    const loc = result.locations.find((l) => l.key === w.place);
+    const found = watchHits(w, loc?.days.find((d) => d.date === w.date));
+    if (!found.length) continue;
+    w.freed = now.toISOString();
+    w.found = found;
+    freed.push(w);
+  }
+  if (freed.length || kept.length !== all.length) store.setNacWatches(kept);
+  for (const w of freed) {
+    const loc = result.locations.find((l) => l.key === w.place)!;
+    const times = listOf(w.found.map(fmtRange));
+    await send({
+      kind: 'busking',
+      key: `busking:${w.id}`,
+      title: `Busking slot free: ${loc.short}, ${fmtNacDay(w.date)}`,
+      body: `${times} ${w.found.length === 1 ? 'is' : 'are'} free now at ${loc.name}. Book it on the NAC portal before someone else does.`,
+      click: loc.url,
+    });
+  }
+  return freed;
 }
 
 // ---------- saved pages instead of NAC (development) ----------

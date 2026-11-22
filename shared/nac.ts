@@ -1,7 +1,7 @@
 // The NAC Slot Finder's time maths and what the Music view shows, shared by the server
 // (server/src/nac.ts) and the page. Everything is Singapore time, worked out from the
 // moment itself rather than the runtime's time zone: SGT is UTC+8 all year.
-import type { NacBooked, NacFree, NacPlace, NacSlots } from './types';
+import type { NacBooked, NacFree, NacPlace, NacSlots, NacWatch } from './types';
 
 const SGT_MS = 8 * 3_600_000;
 const DAY_MS = 86_400_000;
@@ -105,6 +105,11 @@ export interface SlotRow {
   kind: 'open' | 'full' | 'unknown' | 'done';
   free: NacFree[];
   mine: NacBooked[];
+  /** Booked by someone else: what there is to watch for a cancellation. */
+  taken: NacBooked[];
+  /** The location's open hours, "HH:MM". */
+  open: string;
+  close: string;
 }
 
 export interface SlotDay {
@@ -153,7 +158,7 @@ export function slotView(s: Pick<NacSlots, 'locations'>, now: Date): SlotView {
   let newWindows = 0;
   for (let date = today; lastDate && date <= lastDate; date = addDaysYmd(date, 1)) {
     const rows = s.locations.map((l): SlotRow => {
-      const base = { key: l.key, short: l.short, name: l.name, url: l.url, free: [] as NacFree[], mine: [] as NacBooked[] };
+      const base = { key: l.key, short: l.short, name: l.name, url: l.url, open: l.open, close: l.close, free: [] as NacFree[], mine: [] as NacBooked[], taken: [] as NacBooked[] };
       if (!l.horizon_end || date > l.horizon_end) return { ...base, kind: 'unknown' };
       const day = l.days.find((d) => d.date === date);
       // Inside the horizon every day is listed, except today once its last block has ended.
@@ -161,10 +166,11 @@ export function slotView(s: Pick<NacSlots, 'locations'>, now: Date): SlotView {
       const cut = date === today ? nowMin : null;
       const free = ahead(day.free, cut);
       const mine = ahead(day.mine, cut);
-      if (!free.length && !mine.length && !ahead(day.taken, cut).length) return { ...base, kind: 'done' };
+      const taken = ahead(day.taken, cut);
+      if (!free.length && !mine.length && !taken.length) return { ...base, kind: 'done' };
       freeWindows += free.length;
       newWindows += free.filter((w) => w.new).length;
-      return { ...base, kind: free.length ? 'open' : 'full', free, mine };
+      return { ...base, kind: free.length ? 'open' : 'full', free, mine, taken };
     });
     // Late in the day, once every location's slots are over, today has nothing to say.
     if (date === today && rows.every((r) => r.kind === 'done' || r.kind === 'unknown')) continue;
@@ -289,3 +295,47 @@ export function monthsLabel(from: string, to: string): string {
 
 /** Free hours in a row, for a calendar cell: 5, 1.5. */
 export const freeHours = (free: { start: string; end: string }[]) => Math.round(free.reduce((n, w) => n + hoursOf(w), 0) * 10) / 10;
+
+// ---------- watched slots ----------
+
+/** Plenty for a month of evenings at a few places; each is checked against every check's result. */
+export const NAC_MAX_WATCHES = 30;
+/** How far ahead a slot can be watched: past when NAC opens booking, so a day opening is caught too. */
+export const NAC_WATCH_DAYS = 60;
+
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+const HHMM = /^([01]\d|2[0-4]):[0-5]\d$/;
+
+/** Saved watches, checked: real dates and hours, start before end, one of each, at most NAC_MAX_WATCHES. */
+export function cleanNacWatches(v: unknown): NacWatch[] {
+  if (!Array.isArray(v)) return [];
+  const out: NacWatch[] = [];
+  for (const w of v as Partial<NacWatch>[]) {
+    if (!w || typeof w !== 'object' || out.length >= NAC_MAX_WATCHES) continue;
+    const { id, place, date, start, end } = w;
+    if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{4,40}$/.test(id) || out.some((x) => x.id === id)) continue;
+    if (typeof place !== 'string' || !/^[a-z0-9-]{1,40}$/.test(place)) continue;
+    if (typeof date !== 'string' || !YMD.test(date) || addDaysYmd(date, 0) !== date) continue;
+    if (typeof start !== 'string' || typeof end !== 'string' || !HHMM.test(start) || !HHMM.test(end) || toMin(start) >= toMin(end) || toMin(end) > 24 * 60) continue;
+    const iso = (t: unknown) => (typeof t === 'string' && !Number.isNaN(Date.parse(t)) ? t : null);
+    const found = Array.isArray(w.found) ? w.found.filter((f) => f && HHMM.test(String(f.start)) && HHMM.test(String(f.end))).map((f) => ({ start: f.start, end: f.end })) : [];
+    out.push({ id, place, date, start, end, created: iso(w.created) ?? new Date(0).toISOString(), freed: iso(w.freed), found });
+  }
+  return out;
+}
+
+/**
+ * The windows of a watched slot that have just freed up: free windows on its day, at its place,
+ * that weren't free at the check before (`new`), cut to the hours watched. Empty when nothing has.
+ */
+export function watchHits(w: Pick<NacWatch, 'date' | 'start' | 'end'>, day: { free: NacFree[] } | undefined): { start: string; end: string }[] {
+  if (!day) return [];
+  const s = toMin(w.start);
+  const e = toMin(w.end);
+  return day.free
+    .filter((f) => f.new && toMin(f.start) < e && toMin(f.end) > s)
+    .map((f) => ({ start: hhmm(Math.max(s, toMin(f.start))), end: hhmm(Math.min(e, toMin(f.end))) }));
+}
+
+/** "2 PM – 6 PM", or "any time" when it's the place's whole day. */
+export const fmtWatch = (w: { start: string; end: string }, open?: string, close?: string) => (open && close && w.start <= open && w.end >= close ? 'any time' : fmtRange(w));

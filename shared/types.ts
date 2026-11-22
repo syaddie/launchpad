@@ -129,8 +129,8 @@ export interface Prefs {
 }
 
 /** What a phone alert is about; each has its own switch in Settings › Alerts. */
-export type AlertKind = 'health' | 'containers' | 'disks' | 'minecraft';
-export const ALERT_KINDS: AlertKind[] = ['health', 'containers', 'disks', 'minecraft'];
+export type AlertKind = 'health' | 'containers' | 'disks' | 'minecraft' | 'busking';
+export const ALERT_KINDS: AlertKind[] = ['health', 'containers', 'disks', 'minecraft', 'busking'];
 
 /** One alert sent to the phone, for Settings › Alerts. */
 export interface AlertRecord {
@@ -1474,6 +1474,8 @@ export interface Backup {
   minecraft?: McServer[];
   /** The busking locations Music › Busking slots checks, in order. */
   nacPlaces?: NacPlace[];
+  /** The busking slots being watched for a cancellation. */
+  nacWatches?: NacWatch[];
 }
 
 export type BackupPart = Exclude<keyof Backup, 'version' | 'exported'>;
@@ -1573,6 +1575,27 @@ export interface NacPlace {
   short: string;
 }
 
+/**
+ * A slot watched in Music › Busking slots: when any of it frees up (a cancellation, or the day
+ * opening for booking), the phone is told once, through Settings › Alerts (kind 'busking').
+ */
+export interface NacWatch {
+  id: string;
+  /** The location's key. */
+  place: string;
+  /** YYYY-MM-DD, Singapore. */
+  date: string;
+  /** The hours watched, "HH:MM"; a location's open hours for the whole day. */
+  start: string;
+  end: string;
+  /** ISO time it was set. */
+  created: string;
+  /** ISO time it freed up and the phone was told, or null while it's still being watched. */
+  freed: string | null;
+  /** What freed up, within the hours watched. */
+  found: { start: string; end: string }[];
+}
+
 /** POST /api/nac/lookup: what a location's NAC page says, before it's added. */
 export interface NacLookup {
   id: string;
@@ -1594,6 +1617,10 @@ export interface NacStatus extends NacSlots {
   watching: { key: string; name: string; short: string; nac: string; url: string }[];
   /** At most this many locations: each one adds two requests and tens of MB to every check. */
   max_places: number;
+  /** Slots watched for a cancellation, from today on, at locations on the list. */
+  watches: NacWatch[];
+  /** Whether a watched slot freeing up reaches the phone: alerts set up and on, no topic yet, or Busking alerts switched off. */
+  watch_alerts: 'ok' | 'no-topic' | 'off';
   /** Read from saved test pages (NAC_FIXTURES), not from NAC. */
   fixtures: boolean;
   /** A check is running now. */
