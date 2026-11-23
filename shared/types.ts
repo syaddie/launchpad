@@ -848,15 +848,6 @@ export interface ExerciseMuscles {
   secondary: Muscle[];
 }
 
-/** Claude's short note on the training, written after an import. */
-export interface TrainingNote {
-  headline: string;
-  points: string[];
-  writtenAt: string;
-  /** The start of the newest workout it was written from, so a newer import writes a new one. */
-  latest: string;
-}
-
 /** Workouts from Hevy, newest first, and where they came from (shared/training.ts). */
 export interface Training {
   workouts: Workout[];
@@ -1571,8 +1562,6 @@ export interface AppState {
   exerciseMuscles: Record<string, ExerciseMuscles>;
   /** Body weight in kg, keyed by YYYY-MM-DD. */
   weights: Record<string, number>;
-  /** null before the first note, or without an Anthropic API key. `error` is the last failure, shown in Training. */
-  trainingNote: { note: TrainingNote | null; error: string | null };
   learn: Learn;
   /** null before the first note, or without an Anthropic API key. */
   learnNote: { note: LearnNote | null; error: string | null };

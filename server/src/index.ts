@@ -612,14 +612,14 @@ app.put('/api/training', bodyLimit({ maxSize: 8 * 1024 * 1024, onError: (c) => c
   if (!body || typeof body !== 'object' || !Array.isArray(body.workouts)) return c.json({ error: 'Invalid workouts' }, 400);
   const training = cleanTraining(body);
   store.setTraining(training);
-  // Claude labels new exercises and writes a note in the background; the page asks for them with the route below.
+  // Claude labels new exercises in the background; the page waits for them with the route below.
   refreshTraining();
   return c.json(training);
 });
 
-/** Wait for new exercises to be labelled and the note to be written (again, with ?force=1), then send the whole state. */
+/** Wait for new exercises to be labelled, then send the whole state. */
 app.post('/api/training/refresh', async (c) => {
-  await refreshTraining(c.req.query('force') === '1');
+  await refreshTraining();
   return c.json(state());
 });
 

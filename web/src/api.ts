@@ -290,7 +290,7 @@ export const api = {
   addSmoke: (at?: string) => req<string[]>('POST', '/api/smokes', at ? { at } : {}),
   removeSmoke: (at?: string) => req<string[]>('DELETE', `/api/smokes${at ? `?at=${encodeURIComponent(at)}` : ''}`),
   putTraining: (v: Training) => req<Training>('PUT', '/api/training', v),
-  refreshTraining: (force: boolean) => req<AppState>('POST', `/api/training/refresh${force ? '?force=1' : ''}`, {}),
+  refreshTraining: () => req<AppState>('POST', '/api/training/refresh', {}),
   refreshLearn: (force: boolean) => req<AppState>('POST', `/api/learn/refresh${force ? '?force=1' : ''}`, {}),
   /** ⌘K's Ask Launchpad: what's typed → one checked action, not yet done. */
   ask: (text: string) => req<AskResult>('POST', '/api/ask', { text }),

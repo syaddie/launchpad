@@ -21,7 +21,7 @@ import { cleanNacPlaces, cleanNacWatches } from '../../shared/nac';
 import { cleanCravings } from '../../shared/trackers';
 import { cleanTraining } from '../../shared/training';
 import type {
-  BillSuggestion, BookmarkGroup, BookmarkOpens, CalEvent, LinkCheck, CalendarInfo, Countdown, Craving, DigestStore, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NacPlace, NacWatch, NewsLists, Note, NoteVersion, McServer, McWatchRecord, Package, Prefs, ReviewNote, Snippet, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, TrainingNote, Weather,
+  BillSuggestion, BookmarkGroup, BookmarkOpens, CalEvent, LinkCheck, CalendarInfo, Countdown, Craving, DigestStore, ExerciseMuscles, InboxDigest, InboxRange, Learn, LearnNote, Money, Mood, NacPlace, NacWatch, NewsLists, Note, NoteVersion, McServer, McWatchRecord, Package, Prefs, ReviewNote, Snippet, SourceKey, SpeedTest, SyncStatus, Task, TaskList, Training, Weather,
 } from '../../shared/types';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
@@ -233,8 +233,6 @@ export const store = {
   /** Claude's reading of each exercise name; kept across imports, since names don't change what they train. */
   exerciseMuscles: () => get<Record<string, ExerciseMuscles>>('exerciseMuscles', {}),
   setExerciseMuscles: (v: Record<string, ExerciseMuscles>) => set('exerciseMuscles', v),
-  trainingNote: () => get<{ note: TrainingNote | null; error: string | null }>('trainingNote', { note: null, error: null }),
-  setTrainingNote: (v: { note: TrainingNote | null; error: string | null }) => set('trainingNote', v),
 
   learn: (): Learn => cleanLearn(get<unknown>('learn', null)),
   setLearn: (v: Learn) => set('learn', v),
