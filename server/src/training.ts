@@ -1,15 +1,11 @@
-// Claude's two jobs for Training: reading what each exercise trains (once per
-// new exercise name, saved), and a short note on the training after an import.
-// Both need ANTHROPIC_API_KEY; without it the page uses the name rules in
-// shared/training.ts and shows no note.
+// Claude's job for Training: reading what each exercise trains (once per new
+// exercise name, saved). Needs ANTHROPIC_API_KEY; without it the page uses the
+// name rules in shared/training.ts.
 import { askJson, claudeEnabled } from './claude';
 import { config } from './config';
 import { store } from './store';
-import { DOW, MON, addDays, startOfDay } from '../../shared/dates';
-import {
-  MUSCLES, MUSCLE_NAMES, cleanMuscleMap, exerciseNames, fmtSet, liftTrends, minutes, musclesOf, setsPerMuscle, weekSummary, weeklyCounts, weightChange, weightSeries, workingSets,
-} from '../../shared/training';
-import type { ExerciseMuscles, Training, TrainingNote } from '../../shared/types';
+import { MUSCLES, cleanMuscleMap, exerciseNames } from '../../shared/training';
+import type { ExerciseMuscles, Training } from '../../shared/types';
 
 // ---------- muscles ----------
 
@@ -67,108 +63,22 @@ export async function labelExercises(training: Training): Promise<Record<string,
   return known;
 }
 
-// ---------- the note ----------
+// ---------- refresh ----------
 
-const NOTE_SYSTEM = `You write a short note about someone's strength training on their personal dashboard, from their workout log. They read it on a new browser tab, so it has to be quick to take in.
+let labelling: Promise<void> | null = null;
 
-Write:
-- headline: one or two sentences on how this week and the last few have gone, with real numbers from the log
-- points: two to four short points, each one specific thing worth knowing or trying next, such as a muscle group that's being skipped, a lift that's stalled or climbing, or how often they're training
-
-Only use what's in the log. Be plain and direct, like a training partner who has read the numbers; don't cheer, scold or pad. No emoji, no medical or diet advice. Weights are in kg. Est. 1RM is an estimated one-rep max from the best set (weight × (1 + reps ÷ 30)).`;
-
-const NOTE_SCHEMA = {
-  type: 'object',
-  properties: {
-    headline: { type: 'string' },
-    points: { type: 'array', items: { type: 'string' } },
-  },
-  required: ['headline', 'points'],
-  additionalProperties: false,
-};
-
-const day = (d: Date) => `${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}`;
-
-/** The log as Claude reads it: totals, sets per muscle, lift trends and the last four weeks of workouts. */
-export function noteInput(training: Training, muscles: Record<string, ExerciseMuscles>, setsPerWeek: number, now: Date, weights: Record<string, number> = {}): string {
-  const today = startOfDay(now);
-  const ws = training.workouts;
-  const week = weekSummary(ws, today);
-  const lines = [
-    `Today is ${day(today)} ${today.getFullYear()}. Weeks start on Monday.`,
-    `Their target: ${setsPerWeek} working sets a week per muscle.`,
-    `This week so far: ${week.sessions} sessions, ${week.minutes} min, ${week.sets} working sets, ${Math.round(week.volume)} kg lifted.`,
-    `Sessions a week, last 12 weeks, oldest first: ${weeklyCounts(ws, today, 12).map((w) => w.count).join(', ')}.`,
-    `Working sets per muscle in the last 4 weeks (secondary muscles count half): ${setsPerMuscle(ws, today, 28, muscles).map((m) => `${MUSCLE_NAMES[m.muscle]} ${m.sets}`).join(', ')}.`,
-    weightLine(weights),
-    '',
-    'Most-done exercises over 12 weeks, best per session oldest first:',
-    ...liftTrends(ws, today, { muscles }).map((l) => {
-      const unit = l.measure === 'e1rm' ? 'kg est. 1RM' : l.measure === 'reps' ? 'reps' : l.measure === 'km' ? 'km' : 'seconds';
-      return `- ${l.title}: ${l.points.map((p) => Math.round(p.value * 10) / 10).join(', ')} (${unit}); latest top set ${l.top ? fmtSet(l.top) : 'none'}${l.pr ? '; latest is a new best' : ''}`;
-    }),
-    '',
-    'Workouts in the last 4 weeks, newest first:',
-  ];
-  const from = addDays(today, -27).getTime();
-  for (const w of ws.filter((x) => Date.parse(x.start) >= from)) {
-    const start = new Date(w.start);
-    lines.push(`- ${day(start)}, ${minutes(w)} min, ${workingSets(w)} working sets: ${w.title}`);
-    for (const e of w.exercises) {
-      const m = musclesOf(e.title, muscles);
-      const sets = e.sets.filter((s) => s.type !== 'warmup').map(fmtSet).join(', ');
-      lines.push(`  · ${e.title} [${MUSCLE_NAMES[m.primary]}]: ${sets || 'no working sets'}${e.notes ? ` (note: ${e.notes})` : ''}`);
-    }
-  }
-  return lines.join('\n');
-}
-
-/** Body weight for the note: the latest 7-day average and how it moved, or nothing when none is logged. */
-function weightLine(weights: Record<string, number>): string {
-  const series = weightSeries(weights);
-  const last = series[series.length - 1];
-  if (!last) return 'Body weight: not logged.';
-  const changes = [30, 90].flatMap((d) => {
-    const c = weightChange(series, d);
-    return c === null || !c.full ? [] : [`${c.kg > 0 ? '+' : ''}${c.kg} kg over ${d} days`];
-  });
-  return `Body weight (7-day average): ${last.avg} kg as of ${last.date}${changes.length ? `, ${changes.join(', ')}` : ''}; ${series.length} entries logged.`;
-}
-
-let writing: Promise<void> | null = null;
-
-/**
- * Label any new exercises, then write a note when there isn't one for the newest workout yet (or always, with `force`).
- * Failures are kept for the page to show. Runs one at a time.
- */
-export function refreshTraining(force = false): Promise<void> {
-  writing ??= (async () => {
+/** Label any exercises Claude hasn't read yet, one run at a time. Failures are logged; the page falls back to name rules. */
+export function refreshTraining(): Promise<void> {
+  labelling ??= (async () => {
     const training = store.training();
-    const state = store.trainingNote();
-    if (!claudeEnabled() || !training.workouts.length) {
-      store.setTrainingNote({ note: null, error: null });
-      return;
-    }
+    if (!claudeEnabled() || !training.workouts.length) return;
     try {
-      const muscles = await labelExercises(training);
-      const latest = training.workouts[0].start;
-      if (!force && state.note?.latest === latest && !state.error) return;
-      const res = await askJson<{ headline: string; points: string[] }>({
-        model: config.trainingModel,
-        feature: 'training',
-        system: NOTE_SYSTEM,
-        user: noteInput(training, muscles, store.prefs().setsPerWeek, new Date(), store.weights()),
-        schema: NOTE_SCHEMA,
-        effort: 'low',
-        task: 'write a note on this training',
-      });
-      const note: TrainingNote = { headline: res.headline.trim(), points: res.points.map((p) => p.trim()).filter(Boolean).slice(0, 5), writtenAt: new Date().toISOString(), latest };
-      store.setTrainingNote({ note, error: null });
+      await labelExercises(training);
     } catch (e) {
-      store.setTrainingNote({ note: state.note, error: (e as Error).message });
+      console.error('Labelling exercises failed:', (e as Error).message);
     }
   })().finally(() => {
-    writing = null;
+    labelling = null;
   });
-  return writing;
+  return labelling;
 }

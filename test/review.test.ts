@@ -5,7 +5,7 @@ import { weekReview, type ReviewInput } from '../shared/review';
 import {
   MAX_JOURNAL, cigPrice, cleanCravings, cravingSummary, moodYear, parseCraving, savedUnderLimit, searchJournal, smokeCountMap, smokeDaysFrom, smokeSpend,
 } from '../shared/trackers';
-import { bodyweightOn, strengthRatios, trainingWeeks, weightAvgOn } from '../shared/training';
+import { bodyweightOn, trainingWeeks, weightAvgOn } from '../shared/training';
 import type { Craving, Money, Workout } from '../shared/types';
 import { cleanMood, cleanPrefs } from '../server/src/clean';
 import { recapWeek, reviewInput } from '../server/src/review';
@@ -184,16 +184,6 @@ describe('body weight against training', () => {
     expect(w[1].weight).toBe(73.25);
     // This week's is the average up to today.
     expect(w[2].weight).toBe(72.5);
-  });
-
-  it('divides each lift’s estimated 1RM by body weight that day, big lifts first', () => {
-    const r = strengthRatios(workouts, weights, now, { weeks: 12 });
-    expect(r.map((x) => x.title)).toEqual(['Squat (Barbell)', 'Bicep Curl (Dumbbell)']);
-    // 100 × (1 + 5/30) = 116.7 at 72.5 kg.
-    expect(r[0].points.at(-1)).toMatchObject({ e1rm: 116.7, kg: 72.5, ratio: 1.61 });
-    expect(r[0].change).toBeCloseTo(1.61 - 1.51, 5);
-    expect(strengthRatios(workouts, weights, now, { pinned: ['Bicep Curl (Dumbbell)'] })[0].title).toBe('Bicep Curl (Dumbbell)');
-    expect(strengthRatios(workouts, {}, now)).toEqual([]);
   });
 });
 

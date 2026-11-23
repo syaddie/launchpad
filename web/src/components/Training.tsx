@@ -3,11 +3,12 @@ import { DOW, MON, addDays, dayDiff, parseYmd, startOfDay, ymd } from '../../../
 import { fmtMoney, monthName } from '../../../shared/money';
 import {
   MUSCLE_NAMES, SECONDARY_SHARE, cleanKg, exerciseHistory, fmtKg, fmtMinutes, fmtSet, gymPerSession, liftTrends, minutes, musclesOf, prsByWorkout, setsPerMuscle,
-  strengthRatios, topSet, trainingWeeks, volumeKg, weekStart, weekStreak, weekSummary, weeklyCounts, weightChange, weightSeries, workingSets, workoutLabel, workoutsFromHevyCsv, type LiftMeasure, type TrainingWeek, type WeightPoint,
+  topSet, trainingWeeks, volumeKg, weekStart, weekStreak, weekSummary, weeklyCounts, weightChange, weightSeries, workingSets, workoutLabel, workoutsFromHevyCsv, type LiftMeasure, type TrainingWeek, type WeightPoint,
 } from '../../../shared/training';
-import type { AppState, ExerciseMuscles, Training, Workout } from '../../../shared/types';
+import type { AppState, ExerciseMuscles, Training, Workout, WorkoutSet } from '../../../shared/types';
 import { localGet, localSet } from '../api';
-import { ago, fmtDay, hm, niceMax } from '../util';
+import { fmtDay, hm, niceMax } from '../util';
+import { copyText, menuProps } from './ContextMenu';
 import { Glide, Readout } from './Motion';
 
 type Muscles = Record<string, ExerciseMuscles>;
@@ -15,17 +16,17 @@ type Muscles = Record<string, ExerciseMuscles>;
 interface Props {
   data: AppState;
   now: Date;
-  /** Claude is labelling exercises or writing the note. */
-  noteBusy: boolean;
   /** Replace every workout; the summary goes in a toast with Undo. */
   onImport: (t: Training, summary: string) => void;
-  onRefreshNote: () => void;
   onOpenExercise: (title: string) => void;
+  /** One session, with every exercise and set, in the drawer. */
+  onOpenWorkout: (id: string) => void;
   onOpenSettings: () => void;
   /** Log body weight for a day, or remove it with null. */
   onWeight: (date: string, kg: number | null) => void;
   /** Bumped by ⌘K › Log your weight to focus the weight box. */
   weightSignal: number;
+  notify: (msg: string) => void;
 }
 
 const kg = (n: number) => `${Math.round(n).toLocaleString('en-GB')} kg`;
@@ -34,7 +35,7 @@ const monthYear = (d: Date) => `${MON[d.getMonth()]} ${d.getFullYear()}`;
 const fmtSets = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 /** The Training view: workouts from Hevy's CSV export, by week, muscle and lift, beside the other logs. */
-export function TrainingView({ data, now, noteBusy, onImport, onRefreshNote, onOpenExercise, onOpenSettings, onWeight, weightSignal }: Props) {
+export function TrainingView({ data, now, onImport, onOpenExercise, onOpenWorkout, onOpenSettings, onWeight, weightSignal, notify }: Props) {
   const [error, setError] = useState('');
   const [bwWeeks, setBwWeeks] = useState(() => BW_RANGES.find((r) => String(r.weeks) === localGet('bwRange'))?.weeks ?? 12);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -92,7 +93,6 @@ export function TrainingView({ data, now, noteBusy, onImport, onRefreshNote, onO
 
       {ws.length ? (
         <>
-          {data.newsSummaries && <Note state={data.trainingNote} busy={noteBusy} now={now} onRefresh={onRefreshNote} />}
           <div className="you-row">
             <ThisWeek workouts={ws} today={today} muscles={muscles} gymMonthly={data.prefs.gymMonthly} onOpenSettings={onOpenSettings} />
             <MusclePanel workouts={ws} today={today} muscles={muscles} goal={data.prefs.setsPerWeek} onOpenSettings={onOpenSettings} />
@@ -103,9 +103,8 @@ export function TrainingView({ data, now, noteBusy, onImport, onRefreshNote, onO
           </div>
           <div className="you-row">
             <WeightAndTraining workouts={ws} weights={data.weights} today={today} weeks={bwWeeks} onWeeks={(n) => (setBwWeeks(n), localSet('bwRange', String(n)))} />
-            <StrengthForWeight workouts={ws} weights={data.weights} today={today} weeks={bwWeeks} pinned={data.prefs.pinnedLifts} muscles={muscles} onOpen={onOpenExercise} />
+            <Recent workouts={ws} muscles={muscles} onOpen={onOpenWorkout} notify={notify} />
           </div>
-          <Recent workouts={ws} muscles={muscles} onOpen={onOpenExercise} />
         </>
       ) : (
         <section className="panel you-panel">
@@ -128,40 +127,6 @@ export function TrainingView({ data, now, noteBusy, onImport, onRefreshNote, onO
         </div>
       )}
     </main>
-  );
-}
-
-// ---------- Claude's note ----------
-
-function Note({ state, busy, now, onRefresh }: { state: AppState['trainingNote']; busy: boolean; now: Date; onRefresh: () => void }) {
-  const { note, error } = state;
-  return (
-    <section className="panel you-panel tr-note" aria-label="Note on your training" aria-busy={busy}>
-      <div className="panel-head">
-        <span className="sec-label">Claude’s read on your training</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {note && <span className="meta">{busy ? 'Writing a new one…' : `Written ${ago(note.writtenAt, now)}`}</span>}
-          <button className="icon-btn" title="Write a new note" disabled={busy} onClick={onRefresh}>
-            <i className={'ph-duotone ph-arrows-clockwise' + (busy ? ' spin' : '')} />
-          </button>
-        </div>
-      </div>
-      {note ? (
-        <>
-          <p className="serif tr-note-head">{note.headline}</p>
-          {note.points.length > 0 && (
-            <ul className="tr-note-points">
-              {note.points.map((p) => (
-                <li key={p}>{p}</li>
-              ))}
-            </ul>
-          )}
-        </>
-      ) : busy || !error ? (
-        <p className="meta">{busy ? 'Reading your workouts and writing a note…' : 'A short note on your training appears here after an import.'}</p>
-      ) : null}
-      {error && !busy && <p className="meta" style={{ color: 'var(--wn)' }}>{error}</p>}
-    </section>
   );
 }
 
@@ -379,8 +344,11 @@ function Spark({ values, w = 96, h = 28, wide }: { values: number[]; w?: number;
   );
 }
 
+/** Lifts in the list; it scrolls past the first several. */
+const LIFTS_SHOWN = 40;
+
 function Lifts({ workouts, today, muscles, pinned, onOpen }: { workouts: Workout[]; today: Date; muscles: Muscles; pinned: string[]; onOpen: (title: string) => void }) {
-  const lifts = useMemo(() => liftTrends(workouts, today, { pinned, muscles }), [workouts, today, pinned, muscles]);
+  const lifts = useMemo(() => liftTrends(workouts, today, { pinned, muscles, n: LIFTS_SHOWN }), [workouts, today, pinned, muscles]);
   return (
     <section className="panel you-panel tr-lifts" aria-label="Your lifts">
       <div className="panel-head">
@@ -388,7 +356,7 @@ function Lifts({ workouts, today, muscles, pinned, onOpen }: { workouts: Workout
         <span className="meta">{pinned.length ? 'Pinned, then done most' : 'Done most'}, last 12 weeks</span>
       </div>
       {lifts.length ? (
-        <div className="tr-list">
+        <div className="tr-list tr-scroll tr-scroll-lifts" tabIndex={0} aria-label={`${lifts.length} lift${lifts.length === 1 ? '' : 's'}`}>
           {lifts.map((l) => {
             const first = l.points[0]?.value ?? 0;
             const last = l.points[l.points.length - 1]?.value ?? 0;
@@ -427,57 +395,151 @@ function Lifts({ workouts, today, muscles, pinned, onOpen }: { workouts: Workout
 
 // ---------- recent sessions ----------
 
-function Recent({ workouts, muscles, onOpen }: { workouts: Workout[]; muscles: Muscles; onOpen: (title: string) => void }) {
+const RECENT_SHOWN = 15;
+
+/** A session as plain text, for Copy: the day and totals, then each exercise's sets. */
+function workoutText(w: Workout, label: string): string {
+  const start = new Date(w.start);
+  const lines = [`${label} · ${fmtDay(start)} ${start.getFullYear()} ${hm(start)} · ${fmtMinutes(minutes(w))} · ${workingSets(w)} sets${volumeKg(w) > 0 ? ` · ${kg(volumeKg(w))}` : ''}`];
+  for (const e of w.exercises) {
+    lines.push('', e.title);
+    e.sets.forEach((x, i) => lines.push(`  ${i + 1}. ${fmtSet(x)}${x.type === 'normal' ? '' : ` (${SET_TYPE_NAMES[x.type]})`}${x.rpe ? ` @${x.rpe}` : ''}`));
+    if (e.notes) lines.push(`  ${e.notes}`);
+  }
+  return lines.join('\n');
+}
+
+const SET_TYPE_NAMES: Record<WorkoutSet['type'], string> = { normal: '', warmup: 'warm-up', dropset: 'drop set', failure: 'to failure' };
+
+function Recent({ workouts, muscles, onOpen, notify }: { workouts: Workout[]; muscles: Muscles; onOpen: (id: string) => void; notify: (msg: string) => void }) {
   const prs = useMemo(() => prsByWorkout(workouts, muscles), [workouts, muscles]);
+  const list = workouts.slice(0, RECENT_SHOWN);
   return (
     <section className="panel you-panel tr-recent" aria-label="Recent sessions">
       <div className="panel-head">
         <h2 className="panel-title">Recent sessions</h2>
-        <span className="meta">Top set of each exercise</span>
+        <span className="meta">Last {list.length} · click one for every set</span>
       </div>
-      <div className="tr-list">
-        {workouts.slice(0, 6).map((w) => {
+      <div className="tr-list tr-scroll tr-scroll-recent" tabIndex={0} aria-label={`${list.length} most recent sessions`}>
+        {list.map((w) => {
           const start = new Date(w.start);
           const pr = prs.get(w.id);
           const shown = w.exercises.slice(0, 4);
+          const label = workoutLabel(w, muscles);
           return (
-            <div key={w.id} className="tr-ses">
+            <button
+              key={w.id}
+              className="tr-ses"
+              title={`${label}: every exercise and set`}
+              onClick={() => onOpen(w.id)}
+              {...menuProps(
+                () => [
+                  { label: 'Open session', icon: 'ph-arrow-square-in', onSelect: () => onOpen(w.id) },
+                  { label: 'Copy session', icon: 'ph-copy', onSelect: () => copyText(workoutText(w, label), notify, 'Session copied') },
+                ],
+                `${label}, ${fmtDay(start)}`,
+              )}
+            >
               <span className="tr-sd tnum">
                 {fmtDay(start)}
                 <br />
                 {hm(start)}
               </span>
-              <div style={{ minWidth: 0 }}>
-                <div className="tr-st">
-                  {workoutLabel(w, muscles)}
+              <span className="tr-sb">
+                <span className="tr-st">
+                  {label}
                   {pr && <span className="chip chip-accent" title={`Best yet: ${pr.join(', ')}`}>{pr.length > 1 ? `${pr.length} PRs` : 'PR'}</span>}
-                </div>
-                <div className="tr-sx">
-                  {shown.map((e, i) => {
-                    const t = topSet(e.sets);
-                    return (
-                      <span key={i}>
-                        {i > 0 && ' · '}
-                        <button className="tr-exlink" onClick={() => onOpen(e.title)}>
-                          {e.title}
-                        </button>
-                        {t ? ' ' + fmtSet(t) : ''}
-                      </span>
-                    );
-                  })}
+                </span>
+                <span className="tr-sx">
+                  {shown
+                    .map((e) => {
+                      const t = topSet(e.sets);
+                      return e.title + (t ? ' ' + fmtSet(t) : '');
+                    })
+                    .join(' · ')}
                   {w.exercises.length > shown.length && ` · ${w.exercises.length - shown.length} more`}
-                </div>
-              </div>
+                </span>
+              </span>
               <span className="tr-sm tnum">
                 {fmtMinutes(minutes(w))} · {workingSets(w)} sets
                 <br />
                 {volumeKg(w) > 0 ? kg(volumeKg(w)) : ''}
               </span>
-            </div>
+            </button>
           );
         })}
       </div>
     </section>
+  );
+}
+
+/** One session in the drawer: its totals, then every exercise with every set. */
+export function WorkoutDrawer({ id, data, onOpenExercise, notify }: { id: string; data: AppState; onOpenExercise: (title: string) => void; notify: (msg: string) => void }) {
+  const ws = data.training.workouts;
+  const prs = useMemo(() => prsByWorkout(ws, data.exerciseMuscles), [ws, data.exerciseMuscles]);
+  const w = ws.find((x) => x.id === id);
+  if (!w) return <p className="meta drawer-section">This session isn’t in your workouts any more; importing again may have replaced it.</p>;
+  const start = new Date(w.start);
+  const end = new Date(w.end);
+  const pr = prs.get(w.id) ?? [];
+
+  return (
+    <>
+      <div className="drawer-section">
+        <div className="split">
+          <span className="meta">
+            {fmtDay(start)} {start.getFullYear()} · {hm(start)}
+            {end > start && `–${hm(end)}`}
+          </span>
+          <button className="btn btn-small btn-ghost" onClick={() => copyText(workoutText(w, workoutLabel(w, data.exerciseMuscles)), notify, 'Session copied')}>
+            <i className="ph-duotone ph-copy" />
+            Copy
+          </button>
+        </div>
+        <div className="tr-totals">
+          <div><b className="serif tnum">{fmtMinutes(minutes(w))}</b>training</div>
+          <div><b className="serif tnum">{w.exercises.length}</b>exercise{w.exercises.length === 1 ? '' : 's'}</div>
+          <div><b className="serif tnum">{workingSets(w)}</b>working sets</div>
+          {volumeKg(w) > 0 && <div><b className="serif tnum">{kg(volumeKg(w))}</b>lifted</div>}
+        </div>
+        {pr.length > 0 && (
+          <span className="meta">
+            <span className="chip chip-accent">{pr.length > 1 ? `${pr.length} PRs` : 'PR'}</span> Best yet: {pr.join(', ')}
+          </span>
+        )}
+      </div>
+      {w.exercises.map((e, i) => {
+        const m = musclesOf(e.title, data.exerciseMuscles);
+        let n = 0;
+        return (
+          <div key={i} className="drawer-section tr-wx">
+            <div className="tr-wx-head">
+              <button className="tr-exlink tr-wx-title" title={`${e.title}: every session`} onClick={() => onOpenExercise(e.title)}>
+                {e.title}
+              </button>
+              {pr.includes(e.title) && <span className="chip chip-accent">PR</span>}
+              <span className="meta tr-wx-musc">{MUSCLE_NAMES[m.primary]}</span>
+            </div>
+            <ol className="tr-wx-sets">
+              {e.sets.map((x, j) => {
+                const warm = x.type === 'warmup';
+                if (!warm) n++;
+                return (
+                  <li key={j} className={warm ? 'warm' : undefined}>
+                    <span className="tr-wx-n tnum">{warm ? 'W' : n}</span>
+                    <span className="tnum">{fmtSet(x)}</span>
+                    {x.rpe ? <span className="meta tnum">RPE {x.rpe}</span> : null}
+                    {x.type !== 'normal' && <span className="meta">{SET_TYPE_NAMES[x.type]}</span>}
+                  </li>
+                );
+              })}
+            </ol>
+            {e.notes && <p className="meta tr-wx-note">{e.notes}</p>}
+          </div>
+        );
+      })}
+      {!w.exercises.length && <p className="meta drawer-section">No exercises logged in this session.</p>}
+    </>
   );
 }
 
@@ -867,67 +929,6 @@ function WeightAndTraining({ workouts, weights, today, weeks, onWeeks }: {
           <span>{kgs.length ? 'One week with a weigh-in so far' : 'Log your weight in Body weight to see it here'}</span>
         )}
       </div>
-    </section>
-  );
-}
-
-/** Each main lift's estimated 1RM against body weight on the day, and how it's moving. */
-function StrengthForWeight({ workouts, weights, today, weeks, pinned, muscles, onOpen }: {
-  workouts: Workout[];
-  weights: Record<string, number>;
-  today: Date;
-  weeks: number;
-  pinned: string[];
-  muscles: Muscles;
-  onOpen: (title: string) => void;
-}) {
-  const rows = useMemo(() => strengthRatios(workouts, weights, today, { weeks, pinned, muscles }), [workouts, weights, today, weeks, pinned, muscles]);
-  const range = BW_RANGES.find((r) => r.weeks === weeks)?.name ?? `${weeks} weeks`;
-  return (
-    <section className="panel you-panel tr-ratio" aria-label="Strength for your weight">
-      <div className="panel-head">
-        <h2 className="panel-title">Strength for your weight</h2>
-        <span className="meta">Est. 1RM ÷ body weight, {range}</span>
-      </div>
-      {rows.length ? (
-        <div className="tr-list">
-          {rows.map((r) => {
-            const last = r.points[r.points.length - 1];
-            return (
-              <button key={r.title} className="tr-lift" title={`${r.title}: every session`} onClick={() => onOpen(r.title)}>
-                <div style={{ minWidth: 0 }}>
-                  <div className="tr-ln">
-                    {r.pinned && <i className="ph-duotone ph-push-pin" aria-label="Pinned" />}
-                    <span className="tr-ln-text">{r.title}</span>
-                  </div>
-                  <div className="meta tnum">
-                    {fmtKg(last.e1rm)} kg at {fmtKg(last.kg)} kg body weight
-                  </div>
-                </div>
-                {r.points.length > 1 ? <Spark values={r.points.map((p) => p.ratio)} /> : <span className="meta tr-spark-none">One session</span>}
-                <div className="tr-lv" title="Times your body weight">
-                  <span className="tnum">{last.ratio.toFixed(2)}×</span>
-                  {r.change !== null && (
-                    <span className={'tr-ld tnum' + (r.change > 0 ? ' up' : '')}>
-                      {r.change > 0 ? '+' : r.change < 0 ? '−' : '±'}
-                      {Math.abs(r.change).toFixed(2)}
-                    </span>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      ) : (
-        <p className="meta">
-          {Object.keys(weights).length
-            ? `No weighted lifts in the last ${range} with a weigh-in within two weeks of them.`
-            : 'Log your body weight to see each lift against it: estimated 1-rep max divided by what you weighed that week.'}
-        </p>
-      )}
-      <span className="meta" style={{ marginTop: 'auto' }}>
-        Pinned lifts first, then squats, presses and deadlifts. Body weight is the 7-day average on the day, or the nearest weigh-in within two weeks.
-      </span>
     </section>
   );
 }

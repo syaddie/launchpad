@@ -48,7 +48,6 @@ const EMPTY: AppState = {
   money: starterMoney(new Date()),
   training: EMPTY_TRAINING,
   exerciseMuscles: {},
-  trainingNote: { note: null, error: null },
   weights: {},
   learn: emptyLearn(),
   learnNote: { note: null, error: null },
@@ -59,7 +58,7 @@ const EMPTY: AppState = {
 /** A cached copy from an older version can be missing newer fields. */
 export function fromCache(c: AppState | null): AppState {
   if (!c) return EMPTY;
-  return { ...EMPTY, ...c, prefs: { ...DEFAULT_PREFS, ...c.prefs }, sync: { ...EMPTY.sync, ...c.sync }, inbox: c.inbox ?? EMPTY.inbox, digest: Array.isArray(c.digest?.days) ? c.digest : EMPTY.digest, money: Array.isArray(c.money?.entries) ? { ...c.money, subs: c.money.subs ?? [], goals: c.money.goals ?? [] } : EMPTY.money, training: Array.isArray(c.training?.workouts) ? c.training : EMPTY.training, exerciseMuscles: c.exerciseMuscles ?? {}, trainingNote: c.trainingNote ?? EMPTY.trainingNote, weights: c.weights ?? {}, learn: Array.isArray(c.learn?.courses) ? c.learn : EMPTY.learn, learnNote: c.learnNote ?? EMPTY.learnNote, smokeDays: c.smokeDays ?? EMPTY.smokeDays, cravings: c.cravings ?? [], reviewNotes: c.reviewNotes ?? EMPTY.reviewNotes, delivered: c.delivered ?? [] };
+  return { ...EMPTY, ...c, prefs: { ...DEFAULT_PREFS, ...c.prefs }, sync: { ...EMPTY.sync, ...c.sync }, inbox: c.inbox ?? EMPTY.inbox, digest: Array.isArray(c.digest?.days) ? c.digest : EMPTY.digest, money: Array.isArray(c.money?.entries) ? { ...c.money, subs: c.money.subs ?? [], goals: c.money.goals ?? [] } : EMPTY.money, training: Array.isArray(c.training?.workouts) ? c.training : EMPTY.training, exerciseMuscles: c.exerciseMuscles ?? {}, weights: c.weights ?? {}, learn: Array.isArray(c.learn?.courses) ? c.learn : EMPTY.learn, learnNote: c.learnNote ?? EMPTY.learnNote, smokeDays: c.smokeDays ?? EMPTY.smokeDays, cravings: c.cravings ?? [], reviewNotes: c.reviewNotes ?? EMPTY.reviewNotes, delivered: c.delivered ?? [] };
 }
 
 /**

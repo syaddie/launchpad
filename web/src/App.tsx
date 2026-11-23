@@ -2,7 +2,7 @@ import { Fragment, Suspense, useCallback, useEffect, useLayoutEffect, useRef, us
 import { STARTER_NOTES } from '../../shared/defaults';
 import { startOfDay, ymd } from '../../shared/dates';
 import { fmtStudy, timerMinutes } from '../../shared/learn';
-import { fmtKg } from '../../shared/training';
+import { fmtKg, workoutLabel } from '../../shared/training';
 import { fmtUsd } from '../../shared/claudeUsage';
 import { fmtMoney, sortEntries } from '../../shared/money';
 import { MOOD_WORDS, cravingsOn, nearestCountdown, smokesOn } from '../../shared/trackers';
@@ -68,6 +68,7 @@ const ReviewView = loadable(() => loadReview().then((m) => m.ReviewView));
 const Server = loadable(() => loadServer().then((m) => m.Server));
 const TrainingView = loadable(() => loadTraining().then((m) => m.TrainingView));
 const ExerciseDrawer = loadable(() => loadTraining().then((m) => m.ExerciseDrawer));
+const WorkoutDrawer = loadable(() => loadTraining().then((m) => m.WorkoutDrawer));
 const You = loadable(() => loadYou().then((m) => m.You));
 const MusicView = loadable(() => loadMusic().then((m) => m.MusicView));
 
@@ -77,11 +78,11 @@ const VIEW_CODE: Partial<Record<ViewKey, { preload: () => Promise<unknown>; read
 };
 
 function preloadViews() {
-  for (const v of [Digest, Inbox, LearnView, CourseDrawer, MoneyView, MusicView, ReviewView, Server, TrainingView, ExerciseDrawer, You]) v.preload().catch(() => {});
+  for (const v of [Digest, Inbox, LearnView, CourseDrawer, MoneyView, MusicView, ReviewView, Server, TrainingView, ExerciseDrawer, WorkoutDrawer, You]) v.preload().catch(() => {});
   loadTerminal().catch(() => {});
 }
 
-type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings'; tab?: SettingsTab } |{ type: 'exercise'; title: string } | { type: 'course'; id: string; item?: string } | null;
+type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings'; tab?: SettingsTab } | { type: 'exercise'; title: string } | { type: 'workout'; id: string } | { type: 'course'; id: string; item?: string } | null;
 
 /** How long a change of view waits for the new view's code before going ahead without it. */
 const CODE_WAIT_MS = 400;
@@ -114,7 +115,6 @@ export function App({ cached }: { cached: AppState | null }) {
   const [serverTab, setServerTab] = useState<{ tab: ServerTab; n: number } | null>(null);
   const [learnNoteBusy, setLearnNoteBusy] = useState(false);
   const [digestBusy, setDigestBusy] = useState(false);
-  const [noteBusy, setNoteBusy] = useState(false);
   const [reviewBusy, setReviewBusy] = useState(false);
   const [inboxBusy, setInboxBusy] = useState(false);
   const [search, setSearch] = useState('');
@@ -437,22 +437,20 @@ export function App({ cached }: { cached: AppState | null }) {
     showToast(summary, { label: 'Undo', run: () => setMoney(before) });
   };
 
-  /** Claude labels new exercises and writes the note; `force` writes a new note even when nothing changed. */
-  const refreshTrainingNote = (force: boolean) => {
+  /** Claude reads what any new exercises train, for Sets per muscle. */
+  const labelExercises = () => {
     if (!data.newsSummaries) return;
-    setNoteBusy(true);
     api
-      .refreshTraining(force)
+      .refreshTraining()
       .then(merge)
-      .catch((e) => showToast(`Couldn’t write the training note: ${e.message}`))
-      .finally(() => setNoteBusy(false));
+      .catch((e) => showToast(`Couldn’t read what your exercises train: ${e.message}`));
   };
 
   const setTraining = (training: Training) => {
     update((d) => ({ ...d, training }));
     api
       .putTraining(training)
-      .then(() => refreshTrainingNote(false))
+      .then(labelExercises)
       .catch(onSaveError);
   };
 
@@ -781,8 +779,12 @@ export function App({ cached }: { cached: AppState | null }) {
     ask: askHandlers,
   };
 
+  const workoutTitle = (id: string) => {
+    const w = data.training.workouts.find((x) => x.id === id);
+    return w ? workoutLabel(w, data.exerciseMuscles) : 'Session';
+  };
   const drawerTitle =
-    drawer?.type === 'settings' ? 'Settings' : drawer?.type === 'add' ? 'Add package' : drawer?.type === 'exercise' ? drawer.title : drawer?.type === 'course' ? data.learn.courses.find((c) => c.id === drawer.id)?.name || 'Course' : drawerPkg ? 'Package' : '';
+    drawer?.type === 'settings' ? 'Settings' : drawer?.type === 'add' ? 'Add package' : drawer?.type === 'exercise' ? drawer.title : drawer?.type === 'workout' ? workoutTitle(drawer.id) : drawer?.type === 'course' ? data.learn.courses.find((c) => c.id === drawer.id)?.name || 'Course' : drawerPkg ? 'Package' : '';
 
   // A right-click on anything without a menu of its own: what the panel or dialog it's in offers,
   // then the app-wide things. A long press on a plain link lands here too (a mouse keeps the browser's).
@@ -877,13 +879,13 @@ export function App({ cached }: { cached: AppState | null }) {
           <TrainingView
             data={data}
             now={now}
-            noteBusy={noteBusy}
             onImport={importTraining}
-            onRefreshNote={() => refreshTrainingNote(true)}
             onOpenExercise={(title) => setDrawer({ type: 'exercise', title })}
+            onOpenWorkout={(id) => setDrawer({ type: 'workout', id })}
             onOpenSettings={() => setDrawer({ type: 'settings' })}
             onWeight={setWeight}
             weightSignal={weightSignal}
+            notify={showToast}
           />
         ) : view === 'learn' ? (
           <LearnView
@@ -990,6 +992,9 @@ export function App({ cached }: { cached: AppState | null }) {
           {drawer.type === 'add' && <AddPackageDrawer onSubmit={addPackage} onCancel={() => setDrawer(null)} />}
           {drawer.type === 'exercise' && (
             <ExerciseDrawer key={drawer.title} title={drawer.title} data={data} pinned={data.prefs.pinnedLifts.includes(drawer.title)} onPin={() => togglePin(drawer.title)} />
+          )}
+          {drawer.type === 'workout' && (
+            <WorkoutDrawer key={drawer.id} id={drawer.id} data={data} onOpenExercise={(title) => setDrawer({ type: 'exercise', title })} notify={showToast} />
           )}
           {drawer.type === 'course' && (
             <CourseDrawer key={drawer.id} learn={data.learn} courseId={drawer.id} focusItem={drawer.item} now={now} onChange={setLearn} onClose={() => setDrawer(null)} notify={showToast} />
