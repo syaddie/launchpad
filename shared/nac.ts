@@ -181,7 +181,7 @@ export function slotView(s: Pick<NacSlots, 'locations'>, now: Date): SlotView {
 
 // ---------- the locations it checks ----------
 
-/** Each location adds two requests and tens of MB (its busker photos) to every check, so not too many. */
+/** Each location adds a request (and 12 s or so of NAC's time) to every check, so not too many. */
 export const NAC_MAX_PLACES = 8;
 export const NAC_NAME_MAX = 50;
 export const NAC_SHORT_MAX = 20;

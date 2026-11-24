@@ -19,7 +19,7 @@ matched by ID and not by name.
 |---|---|
 | `.` | The check at 12:20 on Fri 20 Nov 2026 (`meta.json`). Tampines to Mon 14 Dec, Pasir Ris to Fri 11 Dec, Paya Lebar to Mon 14 Dec, Changi Village to Sun 6 Dec. Tue 24 Nov is the spec's example day. Wed 2 Dec at Tampines has no bookings. |
 | `later/` | The check after, at 12:50: a booking at Paya Lebar on Tue 24 Nov cancelled (2 PM to 7 PM free and new), Tampines opened Tue 15 Dec, and a slot at Pasir Ris taken. Only the files that changed; the rest come from the folder above. |
-| `blocked/` | NAC's bot protection answering Tampines' load-more call with its own page. |
+| `blocked/` | NAC's bot protection answering Tampines' load-more call (and so its whole-list page, below) with its own page. |
 | `full/` | Every slot taken at every location, three days ahead. |
 | `quiet/` | Nobody has booked Changi Village at all. (A made-up page: NAC's real page for a location with no bookings hasn't been seen.) |
 | `none/` | No bookings at any location: what a change to NAC's markup looks like. |
@@ -27,6 +27,12 @@ matched by ID and not by name.
 Each location is `<key>.html` (its page, the first 12 cards) and `<key>-more.json` (what NAC
 answers for `skip=10&take=200`: the Slot Finder asks from two cards back, see `OVERLAP` in
 `server/src/nac.ts`).
+
+The Slot Finder asks each page for its whole list (`?skip=0&take=1000`, see `PAGE_TAKE`), and
+that page is put together from the two files as NAC would: the page's 12 cards, then the
+load-more answer's after them, photos left out. A page with fewer than 12 cards is its whole
+list. Tests that want NAC's page as it was before it took `take` (always its first 12, so the
+Slot Finder falls back to the load-more list) strip the query from the address.
 
 ## Running the app on these
 

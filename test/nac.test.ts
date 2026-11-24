@@ -100,6 +100,8 @@ function pageWith(cards: string[]): string {
   if (start < 0 || end < start) throw new Error('pasir-ris.html isn’t laid out as pageWith expects');
   return html.slice(0, start) + cards.join('') + html.slice(end);
 }
+/** NAC's page as it was before it took `skip` and `take`: always its first 12. */
+const ignoresTake = (inner: Fetcher): Fetcher => (url, kind) => inner(kind === 'page' ? url.replace(/\?.*$/, '') : url, kind);
 const onePlace = (html: string): Fetcher => async (_url, kind) => {
   if (kind === 'page') return html;
   throw new Error('no load-more expected');
@@ -292,17 +294,63 @@ describe('the Music-only page’s busker', () => {
 });
 
 describe('a check', () => {
-  it('asks for each page and its load-more list, one at a time', async () => {
-    const { result, urls, waits } = await check('.');
+  it('reads each location’s whole list from its page, one request each and one at a time', async () => {
+    const { result, urls, waits, logs } = await check('.');
     expect(result.ok).toBe(true);
+    expect(urls).toEqual(PLACES.map((p) => `https://eservices.nac.gov.sg/Busking/locations/${p.id}/events?skip=0&take=1000`));
+    // A pause before every request but the first.
+    expect(waits).toBe(urls.length - 1);
+    expect(logs).toEqual([]);
+  });
+
+  it('falls back to the load-more list when NAC’s page stops taking take, with the same result', async () => {
+    const light = (await check('.')).result;
+    const { result, urls, waits, logs } = await check('.', { fetcher: ignoresTake(fixtureFetcher(DIR, PLACES, NOW)) });
     expect(urls).toEqual(
       PLACES.flatMap((p) => [
-        `https://eservices.nac.gov.sg/Busking/locations/${p.id}/events`,
+        `https://eservices.nac.gov.sg/Busking/locations/${p.id}/events?skip=0&take=1000`,
         `https://eservices.nac.gov.sg/Busking/locations/${p.id}/events/more?skip=10&take=200`,
       ]),
     );
-    // A pause before every request but the first.
     expect(waits).toBe(urls.length - 1);
+    expect(result.locations).toEqual(light.locations);
+    expect(logs).toEqual(PLACES.map((p) => `${p.short}: NAC’s page didn’t show the whole list, so the rest came from its load-more list, with every busker’s photo (tens of MB)`));
+  });
+
+  it('checks load-more for a location with exactly 12 bookings, without calling it a fallback', async () => {
+    const twelve = Array.from({ length: 12 }, (_, i) => card({ date: 'Sat, 21 November', time: '10:00:AM-11:00:AM', booking: `id-${i}` }));
+    const asked: string[] = [];
+    const fetcher: Fetcher = async (url, kind) => {
+      asked.push(url.slice(url.indexOf('?')));
+      return kind === 'page' ? pageWith(twelve) : JSON.stringify(twelve.slice(10).join(''));
+    };
+    const { result, logs } = await check('.', { places: [PLACES[1]], fetcher });
+    expect(asked).toEqual(['?skip=0&take=1000', '?skip=10&take=200']);
+    expect(loc(result, 'pasir-ris').bookings).toBe(12);
+    expect(logs).toEqual([]);
+  });
+
+  it('reads on through the page past 1,000 bookings', async () => {
+    const all = Array.from({ length: 2100 }, (_, i) => card({ date: `${['Sat', 'Sun', 'Mon'][i % 3]}, ${21 + (i % 3)} November`, time: '10:00:AM-11:00:AM', booking: `id-${i}` }));
+    const asked: string[] = [];
+    const fetcher: Fetcher = async (url, kind) => {
+      if (kind !== 'page') throw new Error('no load-more expected');
+      asked.push(url.slice(url.indexOf('?')));
+      const q = new URL(url).searchParams;
+      const skip = Number(q.get('skip'));
+      return pageWith(all.slice(skip, skip + Number(q.get('take'))));
+    };
+    const { result, logs } = await check('.', { places: [PLACES[1]], fetcher });
+    expect(asked).toEqual(['?skip=0&take=1000', '?skip=998&take=1000', '?skip=1996&take=1000']);
+    expect(loc(result, 'pasir-ris').bookings).toBe(2100);
+    expect(logs).toEqual([]);
+  });
+
+  it('fails rather than miss bookings if the page stops taking skip partway through a long list', async () => {
+    const all = Array.from({ length: 1500 }, (_, i) => card({ date: 'Sat, 21 November', time: '10:00:AM-11:00:AM', booking: `id-${i}` }));
+    const fetcher: Fetcher = async (url) => pageWith(all.slice(0, Number(new URL(url).searchParams.get('take'))));
+    const { result } = await check('.', { places: [PLACES[1]], fetcher });
+    expect(result).toMatchObject({ ok: false, error: 'Pasir Ris: the list of bookings changed while it was being read, so it’ll try again' });
   });
 
   it('works out free, taken and yours, from now to each location’s last booking', async () => {
@@ -380,9 +428,9 @@ describe('a check', () => {
     const file = freshFile();
     const good = (await check('.', { file })).result;
     const { result, urls } = await check('blocked', { file, now: new Date('2026-11-20T12:45:00+08:00') });
-    expect(urls).toHaveLength(2);
+    expect(urls).toHaveLength(1);
     expect(result).toMatchObject({ ok: false, failures: 1, checked_at: '2026-11-20T12:45:00+08:00', last_good_at: '2026-11-20T12:20:00+08:00' });
-    expect(result.error).toBe('Tampines: NAC didn’t return JSON, so it may be blocking Launchpad');
+    expect(result.error).toBe('Tampines: NAC sent something other than its usual location page, so it may be blocking Launchpad, or the page has changed');
     expect(result.locations).toEqual(good.locations);
     // Waits an hour, not 10 minutes.
     expect(result.next_check).toBe('2026-11-20T13:45:00+08:00');
@@ -451,7 +499,7 @@ describe('a check', () => {
   });
 
   it('fails when the list shifts between load-more calls, rather than skip a booking unseen', async () => {
-    const inner = fixtureFetcher(DIR, PLACES, NOW);
+    const inner = ignoresTake(fixtureFetcher(DIR, PLACES, NOW));
     // As if two bookings near the top were cancelled between the page and the load-more call.
     const shifted: Fetcher = async (url, kind) => {
       const body = await inner(url, kind);
@@ -464,7 +512,7 @@ describe('a check', () => {
     expect(result).toMatchObject({ ok: false, error: 'Tampines: the list of bookings changed while it was being read, so it’ll try again' });
   });
 
-  it('pages through a long list until a call returns fewer than asked for', async () => {
+  it('pages through a long load-more list until a call returns fewer than asked for', async () => {
     const all = Array.from({ length: 450 }, (_, i) => card({ date: `${['Sat', 'Sun', 'Mon'][i % 3]}, ${21 + (i % 3)} November`, time: '10:00:AM-11:00:AM', booking: `id-${i}` }));
     const page = pageWith(all.slice(0, 12));
     const asked: string[] = [];

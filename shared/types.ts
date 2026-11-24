@@ -1768,7 +1768,7 @@ export interface NacLookup {
 export interface NacStatus extends NacSlots {
   /** The locations it checks, in order. `locations` only holds these, named as they are now. */
   watching: { key: string; name: string; short: string; nac: string; url: string }[];
-  /** At most this many locations: each one adds two requests and tens of MB to every check. */
+  /** At most this many locations: each one adds a request to every check. */
   max_places: number;
   /** Slots watched for a cancellation, from today on, at locations on the list. */
   watches: NacWatch[];

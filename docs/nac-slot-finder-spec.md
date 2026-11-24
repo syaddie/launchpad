@@ -55,6 +55,18 @@ Both endpoints are **public**: no login, no cookies.
    - JSON string of HTML cards, the same shape `fetch()` already handles.
    - `skip=11&take=200` returned all 73 remaining Tampines cards (to Mon 14 Dec, about
      3.5 weeks ahead) in one call. Keep paging until a page returns fewer than `take`.
+   - Each card carries its busker's photo inline as base64, about 0.3 MB a card, and NAC
+     doesn't compress the answer: about 77 MB a check for the four locations.
+
+**Update 2026-11-24:** the location page takes `skip` and `take` too
+(`{BASE_URL}/locations/{id}/events?skip=0&take=1000`), even though NAC's own site never asks
+it for more than 12. There the photos are links (`/Busking/booking/GetAppImage?id=…`), not
+inline: Tampines' whole list of 134 cards was 221 KB in one request (about 12 s, the same
+time NAC takes to build it for load-more), where load-more would have been about 38 MB. A
+check of the four locations both ways the same day read the same 498 bookings: 4 requests,
+0.83 MB and 49 s on the page, against 8 requests, 119 MB and 90 s through load-more. So
+each location is read with that one request, and load-more is only the fallback for when
+the page shows no more than its usual 12.
 
 ### Location card markup (differs from profile cards)
 
@@ -83,7 +95,8 @@ Do **not** capture the full name; the profile ID is all we need.
 
 All times are Singapore time (SGT, UTC+8).
 
-1. For each location, fetch all cards (page + load-more pages).
+1. For each location, fetch all cards (the page with `take=1000`; page + load-more pages if
+   the page only shows its usual 12).
 2. **Horizon:** from *now* to the latest booking date seen at that location. Days past it
    are **unknown**, not free (booking may just not be open yet).
 3. Split each day's open hours into 1-hour blocks (all bookings seen start and end on the hour).
@@ -142,7 +155,8 @@ No other buskers' names or profile IDs in stored or displayed data.
 ## 7. Schedule and politeness
 
 - Every **30 minutes**, like schedule-sync. Requests **one at a time**, ~2 s apart:
-  about 8 requests per run (4 pages + 4 load-more calls with `take=200`).
+  about 8 requests per run (4 pages + 4 load-more calls with `take=200`). Since 24 Nov 2026,
+  4 (one page each, `take=1000`), under 1 MB a run.
 - Keep schedule-sync's generic User-Agent style; no email in requests.
 - The site is behind **Incapsula** (bot protection). On a non-200 or non-JSON/HTML-shaped
   response: stop the run, keep last good data, show the warning, and **back off** (skip
