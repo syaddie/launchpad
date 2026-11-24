@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { ViewKey } from '../../../shared/types';
 import { useActiveTabInView } from '../hooks/useActiveTabInView';
 import { useGlide, Readout } from './Motion';
@@ -20,7 +21,7 @@ export const VIEWS: { key: ViewKey; name: string; icon: string; letter: string }
 
 /** The view switcher down the left edge (across the top on a phone). Hidden views stay reachable from ⌘K.
  * The designs restyle it: Console's F-key bar, Bento's dock, Horizon's row of tabs. */
-export function Rail({ view, hidden, badges, onView, onHide, onPalette, onSettings }: {
+export function Rail({ view, hidden, badges, onView, onHide, onPalette, onSettings, brand }: {
   view: ViewKey;
   hidden: string[];
   /** A count on a view's button, e.g. inbox items that need you. */
@@ -30,6 +31,8 @@ export function Rail({ view, hidden, badges, onView, onHide, onPalette, onSettin
   onHide?: (v: ViewKey) => void;
   onPalette: () => void;
   onSettings: () => void;
+  /** Mission's mark and name, at the start of its strip. */
+  brand?: ReactNode;
 }) {
   const views = VIEWS.filter((v) => v.key === 'home' || v.key === view || !hidden.includes(`view:${v.key}`));
   // On a phone the rail (Bento's dock, Console's F-key bar) scrolls sideways: keep the view you're on in sight.
@@ -39,6 +42,7 @@ export function Rail({ view, hidden, badges, onView, onHide, onPalette, onSettin
   return (
     <nav ref={ref} className="rail" aria-label="Views">
       <span className="glide" aria-hidden="true" />
+      {brand}
       {views.map((v) => (
         <button
           key={v.key}

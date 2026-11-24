@@ -710,6 +710,7 @@ const SETTINGS_TABS: { key: SettingsTab; name: string }[] = [
 ];
 
 export const DESIGNS: { key: DesignKey; name: string; blurb: string }[] = [
+  { key: 'mission', name: 'Mission', blurb: 'A launch site: a sky that follows the hour and the weather, your day climbing across it, a launch clock to what’s next, and glass panels on the ground. Follows Theme.' },
   { key: 'broadsheet', name: 'Broadsheet', blurb: 'Calm panels, serif headings and a rail on the left. Follows Theme and Accent.' },
   { key: 'console', name: 'Console', blurb: 'A terminal dashboard: monospace, boxed panes, F1–F9 for the views. Weather details are printed, not hovered. Always dark.' },
   { key: 'bento', name: 'Bento', blurb: 'Tiles that lead with one big number, a colour for each part of life, and a dock at the bottom. Follows Theme.' },

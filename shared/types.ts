@@ -63,9 +63,9 @@ export interface NoteVersion {
 export type ThemeMode = 'system' | 'light' | 'dark';
 export type AccentKey = 'sage' | 'slate' | 'terracotta';
 /** The whole-page design picked in Settings › Layout. Every design shows every view; only the arrangement and look change. */
-export type DesignKey = 'broadsheet' | 'console' | 'bento' | 'horizon' | 'vista' | 'focus' | 'poster';
+export type DesignKey = 'mission' | 'broadsheet' | 'console' | 'bento' | 'horizon' | 'vista' | 'focus' | 'poster';
 /** Every design, for checking a saved or sent one is still known. */
-export const DESIGN_KEYS: DesignKey[] = ['broadsheet', 'console', 'bento', 'horizon', 'vista', 'focus', 'poster'];
+export const DESIGN_KEYS: DesignKey[] = ['mission', 'broadsheet', 'console', 'bento', 'horizon', 'vista', 'focus', 'poster'];
 /**
  * A panel's place on the home grid (web/src/layout.ts). `hero` is the clock-and-next tile (Bento,
  * Focus); `wx` the weather and air panel Console and Bento print in full; `bm` the bookmarks row.

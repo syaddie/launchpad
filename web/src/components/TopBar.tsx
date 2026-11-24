@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { DOW, startOfDay } from '../../../shared/dates';
 import { fmtStudy, timerMinutes } from '../../../shared/learn';
 import { engineUrl, parseSearch } from '../../../shared/trackers';
@@ -23,6 +23,8 @@ interface Props {
   onLogSmoke: () => void;
   onOpenTraining: () => void;
   onOpenLearn: () => void;
+  /** Shown in place of the greeting and the summary line (Mission's launch clock on Home). */
+  lead?: ReactNode;
 }
 
 /** Days without training before the button turns orange. */
@@ -279,7 +281,7 @@ export function searchRows(q: string, bookmarks: Bookmark[], engines: SearchEngi
   ];
 }
 
-export function TopBar({ data, now, title, subline, search, onSearch, searchRef, smokesToday, onLogSmoke, onOpenTraining, onOpenLearn }: Props) {
+export function TopBar({ data, now, title, subline, search, onSearch, searchRef, smokesToday, onLogSmoke, onOpenTraining, onOpenLearn, lead }: Props) {
   const [focused, setFocused] = useState(false);
   const [sel, setSel] = useState(0);
   const [syncHover, setSyncHover] = useState(false);
@@ -346,7 +348,7 @@ export function TopBar({ data, now, title, subline, search, onSearch, searchRef,
               : s.key === 'speedtest'
                 ? !data.prefs.speedTestHours
                 : needsGoogle(s.key) && !data.prefs.sources[s.key as 'calendar'];
-      if (off) return { name: s.name, text: 'Off', warn: false };
+      if (off) return { name: s.name, text: 'Off', warn: false, off: true };
       if (h) return { name: s.name, text: h.text, warn: true, why: h.detail ?? st.lastError };
       if (failing(st)) return { name: s.name, text: `Couldn’t sync · last synced ${ago(st.lastSuccess, now)}`, warn: true, why: st.lastError };
       return { name: s.name, text: st.lastSuccess ? `${s.ok} ${ago(st.lastSuccess, now)}` : 'Waiting for first sync', warn: false };
@@ -362,9 +364,13 @@ export function TopBar({ data, now, title, subline, search, onSearch, searchRef,
   return (
     <header className="topbar">
       <div className="top-left">
-        {/* Home greets you; every other view says where you are. */}
-        <h1 className="serif greeting">{title ?? `${greeting}${data.prefs.name ? `, ${data.prefs.name}` : ''}`}</h1>
-        <div className="subline" title={subline}>{subline}</div>
+        {lead ?? (
+          <>
+            {/* Home greets you; every other view says where you are. */}
+            <h1 className="serif greeting">{title ?? `${greeting}${data.prefs.name ? `, ${data.prefs.name}` : ''}`}</h1>
+            <div className="subline" title={subline}>{subline}</div>
+          </>
+        )}
       </div>
       <div className="top-right">
         <Clock weather={data.prefs.weatherArea && !hidden.includes('top:weather') ? data.weather.now : null} showAir={!hidden.includes('top:air')} />
@@ -477,6 +483,12 @@ export function TopBar({ data, now, title, subline, search, onSearch, searchRef,
           )}
           <div className="sync" onMouseEnter={() => setSyncHover(true)} onMouseLeave={() => setSyncHover(false)}>
             <span className="sync-dot" style={{ background: dot }} />
+            {/* Mission's poll: a light for each source, in its state (mission.css; the other layouts show the one dot). */}
+            <span className="sync-lights" role="img" aria-label={anyFail ? 'A source needs a look' : 'Every source is fine'}>
+              {lines.map((l, i) => (
+                <i key={l.name} className={'ms-mark ms-mark--' + (l.warn ? ('why' in l && l.why ? 'scrub' : 'hold') : 'off' in l || l.text === 'Not connected' ? 'standby' : 'go')} style={{ '--i': i } as CSSProperties} />
+              ))}
+            </span>
             {syncHover && (
               <div className="popover sync-tip">
                 {lines.map((l) => (

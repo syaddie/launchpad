@@ -1,0 +1,485 @@
+/* MISSION, the default layout: the page is a launch site (docs/mission-layout.md). A sky that follows the hour and
+   the weather stands behind everything (components/mission/Scene.tsx draws it), the day climbs across it, a launch
+   clock counts to what's next (Hero.tsx), and the panels are glass on the ground. Loaded last, after motion.css, so its
+   own motion has the last word; everything is under [data-design='mission'] except the few pieces at the top that
+   other layouts must hide. Values come from the "Launchpad" design system (linked in the doc). */
+
+/* ---------- pieces only Mission shows ---------- */
+
+.sync-lights, .ms-brand { display: none; }
+
+/* ---------- Settings › Layout ---------- */
+
+.mini-mission { grid-template-columns: repeat(3, 1fr); grid-template-rows: 26px 1fr; background: linear-gradient(180deg, #0a1128, #16224a 46%, #070b16 48%); }
+.mini-mission i { border-radius: 4px; background: rgba(150, 180, 255, 0.16); box-shadow: inset 0 0 0 1px rgba(150, 180, 255, 0.2); }
+.mini-mission i:nth-child(1) { grid-column: 1 / -1; justify-self: center; align-self: center; width: 46%; height: 9px; border-radius: 2px; background: repeating-linear-gradient(90deg, #e8edf6 0 3px, transparent 3px 5px); box-shadow: 0 0 8px rgba(127, 178, 255, 0.6); }
+
+/* =====================================================================
+   TOKENS
+   ===================================================================== */
+
+:root[data-design='mission'][data-mode][data-accent] {
+  --bg: #f3f5f8;
+  /* Panels are glass: the sky shows through, blurred. Text on it is checked against the brightest and darkest sky. */
+  --sf: rgba(255, 255, 255, 0.74);
+  --rz: #ffffff;
+  --pop: rgba(255, 255, 255, 0.93);
+  --tx: #131822;
+  --t2: #464f5f;
+  --t3: #5b6474;
+  --ln: rgba(19, 24, 34, 0.11);
+  --hv: rgba(19, 24, 34, 0.06);
+  --scrim: rgba(19, 24, 34, 0.32);
+  /* Status: rose for what failed or is past the point, green for what's fine. Blue is yours to act on. */
+  --wn: #bf1f45;
+  --wnt: #fde6eb;
+  --ok: #0c7357;
+  --okt: #e0f3ec;
+  --ac: #0f5fd0;
+  --acd: #0b4fb0;
+  --act: #e1ecfc;
+  --on: #ffffff;
+  --sh: 0 18px 50px rgba(19, 24, 34, 0.2), 0 0 0 1px rgba(19, 24, 34, 0.06);
+  /* Glass: a lit edge, and a soft shadow on the ground under it. */
+  --psh: inset 0 0 0 1px rgba(255, 255, 255, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 10px 30px rgba(19, 24, 34, 0.08);
+  --f-ui: 'Atkinson Hyperlegible Next', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --f-display: 'Atkinson Hyperlegible Next', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --f-mono: 'Atkinson Hyperlegible Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  /* The launch clock's dot-matrix face. */
+  --ms-f-matrix: 'Doto', 'Atkinson Hyperlegible Mono', ui-monospace, Consolas, monospace;
+  --r-s: 6px;
+  --r: 10px;
+  --r-m: 12px;
+  --r-p: 18px;
+  /* Now: the colour of fire, and of whatever is happening this minute. Never a button, never a status. */
+  --ms-ignition: #d9500b;
+  --ms-ignition-ink: #a83c00;
+  --ms-ignition-soft: #fdeadc;
+  --ms-ignition-glow: rgba(217, 80, 11, 0.28);
+  --ms-flame-core: #ffe7c2;
+  --ms-hold: #8a6100;
+  --ms-glow-ac: 0 0 22px rgba(15, 95, 208, 0.3);
+  --ms-glow-now: 0 0 22px rgba(217, 80, 11, 0.4);
+  --ms-spot: rgba(15, 95, 208, 0.1);
+  --ms-matrix-glow: rgba(255, 255, 255, 0.85);
+  --ms-matrix-ghost: rgba(19, 24, 34, 0.07);
+  /* The sky and the site. */
+  --ms-sky-top: #bcd6f6;
+  --ms-sky-mid: #dbe8f8;
+  --ms-sky-low: #f1f4f9;
+  --ms-horizon-glow: rgba(255, 170, 110, 0.55);
+  --ms-sea: #c7d7ec;
+  --ms-ground: #dfe5ee;
+  --ms-land: #aebbd0;
+  --ms-orb: #fffaf0;
+  --ms-orb-glow: rgba(255, 236, 190, 0.75);
+  --ms-orb-cut: rgba(10, 17, 40, 0);
+  --ms-cloud: rgba(255, 255, 255, 0.85);
+  --ms-rain: rgba(70, 90, 130, 0.28);
+  --ms-flood: rgba(255, 255, 255, 0);
+  --ms-lamp: #ff4d5e;
+  --ms-smoke: rgba(255, 255, 255, 0.92);
+  --ms-star: rgba(232, 237, 246, 0);
+  --ms-trace: rgba(91, 100, 116, 0.34);
+  --ms-steel: #6f7a90;
+  --ms-hull: #ffffff;
+  --ms-hull-shade: #c5cfdf;
+  --ms-hull-line: #7b869a;
+  --ms-band: #3d8bff;
+  --ms-tile: #0b1120;
+  color-scheme: light;
+}
+:root[data-design='mission'][data-mode='dark'][data-accent] {
+  --bg: #090d18;
+  --sf: rgba(15, 21, 40, 0.72);
+  --rz: #1a2338;
+  --pop: rgba(17, 24, 39, 0.93);
+  --tx: #e8edf6;
+  --t2: #b2bccf;
+  --t3: #8c98b0;
+  --ln: rgba(150, 180, 255, 0.14);
+  --hv: rgba(232, 237, 246, 0.07);
+  --scrim: rgba(3, 5, 10, 0.6);
+  --wn: #ff7f9c;
+  --wnt: #43161f;
+  --ok: #4fcaa5;
+  --okt: #11332a;
+  --ac: #7fb2ff;
+  --acd: #a9cbff;
+  --act: #13294f;
+  --on: #090d18;
+  --sh: 0 18px 50px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(150, 180, 255, 0.16);
+  --psh: inset 0 0 0 1px rgba(150, 180, 255, 0.16), inset 0 1px 0 rgba(160, 190, 255, 0.1), 0 16px 40px rgba(0, 0, 0, 0.35);
+  --ms-ignition: #ff8b3d;
+  --ms-ignition-ink: #ffa666;
+  --ms-ignition-soft: #3d2010;
+  --ms-ignition-glow: rgba(255, 139, 61, 0.4);
+  --ms-hold: #efc14d;
+  --ms-glow-ac: 0 0 22px rgba(127, 178, 255, 0.36);
+  --ms-glow-now: 0 0 26px rgba(255, 139, 61, 0.55);
+  --ms-spot: rgba(127, 178, 255, 0.15);
+  --ms-matrix-glow: rgba(127, 178, 255, 0.45);
+  --ms-matrix-ghost: rgba(232, 237, 246, 0.07);
+  --ms-sky-top: #04060f;
+  --ms-sky-mid: #0a1128;
+  --ms-sky-low: #16224a;
+  --ms-horizon-glow: rgba(255, 139, 61, 0.3);
+  --ms-sea: #0c1634;
+  --ms-ground: #070b16;
+  --ms-land: #0e1730;
+  --ms-orb: #dfe6f5;
+  --ms-orb-glow: rgba(190, 205, 255, 0.16);
+  --ms-orb-cut: #0a1128;
+  --ms-cloud: rgba(150, 170, 220, 0.1);
+  --ms-rain: rgba(170, 190, 240, 0.18);
+  --ms-flood: rgba(200, 215, 255, 0.07);
+  --ms-smoke: rgba(205, 215, 240, 0.55);
+  --ms-star: rgba(232, 237, 246, 0.62);
+  --ms-trace: rgba(91, 100, 116, 0);
+  --ms-steel: #8a95ab;
+  --ms-hull: #eef1f6;
+  --ms-hull-shade: #a9b4c9;
+  --ms-hull-line: #4b566c;
+  color-scheme: dark;
+}
+
+/* How Mission moves: quick and exact, settling on a docking spring with a 2% overshoot. Glass can't be pictured by the
+   browser's view transitions, so a new view's panels come in by themselves (as Vista's do). Not when the device asks
+   for less motion: motion.css's own rule for that stands. */
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-design='mission'] {
+    --m-press: 90ms;
+    --m-hover: 160ms;
+    --m-state: 240ms;
+    --m-move: 320ms;
+    --m-view: 380ms;
+    --m-roll: 300ms;
+    --m-sweep: 900ms;
+    --m-stagger: 60ms;
+    --e-settle: linear(0, 0.064 4.2%, 0.206 8.3%, 0.374 12.5%, 0.537 16.7%, 0.679 20.8%, 0.792 25%, 0.877 29.2%, 0.937 33.3%, 0.977 37.5%, 1.001 41.7%, 1.014 45.8%, 1.019 50%, 1.02 54.2%, 1.018 58.3%, 1.015 62.5%, 1.011 66.7%, 1.008 70.8%, 1.004 79.2%, 1.001 87.5%, 1);
+  }
+}
+:root[data-design='mission'] {
+  --m-view-mode: enter;
+  /* Leaving the pad: almost still at first, then faster and faster. */
+  --ms-e-ascent: cubic-bezier(0.6, 0, 0.9, 0.35);
+}
+
+/* =====================================================================
+   THE SCENE
+   ===================================================================== */
+
+/* Behind everything, the height of the window; on a phone it scrolls away with the top of the page. */
+.ms-scene { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; background: var(--bg); container-type: size; }
+.ms-scene--page { position: absolute; inset: 0 0 auto 0; height: 420px; }
+.ms-scene > * { position: absolute; }
+.ms-sky { inset: 0 0 auto 0; height: var(--hz, 38vh); background: linear-gradient(180deg, var(--ms-sky-top), var(--ms-sky-mid) 52%, var(--ms-sky-low)); }
+.ms-stars { left: 0; top: 0; width: 100%; height: var(--hz, 38vh); }
+.ms-fx { inset: 0; width: 100%; height: 100%; }
+/* Warm light on the horizon under the sun or moon: --glow is 1 as it rises and sets, 0 when it's high. */
+.ms-glow { inset: 0 0 auto 0; height: var(--hz, 38vh); background: radial-gradient(58% 80% at var(--orb-x, 70%) 100%, var(--ms-horizon-glow), transparent 72%); opacity: var(--glow, 0); transition: opacity 1.2s var(--e-out); }
+.ms-orb { left: 0; top: 0; width: 34px; height: 34px; margin: -17px; border-radius: 50%; background: var(--ms-orb); box-shadow: 0 0 34px 10px var(--ms-orb-glow), 0 0 120px 46px var(--ms-orb-glow); transform: translate(calc(var(--orb-x, 70vw) + var(--px, 0) * -9px), calc(var(--orb-y, 12vh) + var(--py, 0) * -6px)); transition: transform 0.9s var(--e-out); }
+/* By night it's a crescent: a second disc in the sky's colour covers most of it. By day that disc is clear. */
+.ms-orb::after { content: ''; position: absolute; left: 24%; top: -14%; width: 100%; height: 100%; border-radius: 50%; background: var(--ms-orb-cut); }
+.ms-clouds { inset: 0 0 auto 0; height: var(--hz, 38vh); transform: translate(calc(var(--px, 0) * -14px), calc(var(--py, 0) * -4px)); transition: transform 0.9s var(--e-out); }
+.ms-clouds i { position: absolute; left: 0; height: 26px; border-radius: 999px; background: var(--ms-cloud); filter: blur(10px); animation: msCloud linear infinite; }
+.ms-clouds i:nth-child(1) { top: 20%; width: 240px; animation-duration: 190s; animation-delay: -40s; }
+.ms-clouds i:nth-child(2) { top: 36%; width: 150px; height: 18px; animation-duration: 240s; animation-delay: -150s; }
+.ms-clouds i:nth-child(3) { top: 10%; width: 320px; height: 22px; animation-duration: 300s; animation-delay: -210s; opacity: 0.8; }
+.ms-clouds i:nth-child(4) { top: 52%; width: 190px; height: 16px; animation-duration: 210s; animation-delay: -100s; opacity: 0.7; }
+@keyframes msCloud { from { transform: translateX(-340px); } to { transform: translateX(100cqw); } }
+/* The forecast's cloud and rain. */
+.ms-scene:is([data-wx='cloud'], [data-wx='rain']) .ms-clouds i { height: 44px; filter: blur(16px); }
+.ms-rain { inset: -60px 0 auto 0; height: calc(var(--hz, 38vh) + 60px); opacity: 0; background: repeating-linear-gradient(104deg, transparent 0 17px, var(--ms-rain) 17px 18px); mask-image: linear-gradient(180deg, #000 calc(100% - 60px), transparent calc(100% - 59px)); }
+.ms-scene[data-wx='rain'] .ms-rain { opacity: 1; animation: msRain 0.5s linear infinite; }
+@keyframes msRain { to { background-position: -15px 60px; } }
+.ms-twinkles { inset: 0 0 auto 0; height: var(--hz, 38vh); }
+.ms-twinkles i { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: var(--ms-star); box-shadow: 0 0 4px var(--ms-star); animation: msTwinkle 3.4s var(--e-io) var(--d, 0s) infinite; }
+@keyframes msTwinkle { 50% { opacity: 0.12; scale: 0.6; } }
+/* Now and then, a satellite by night (about every four minutes) and an airliner's contrail by day (about every five).
+   Each has a colour in one theme only, so each shows in its own sky. */
+.ms-sat, .ms-trace { left: 0; top: 0; opacity: 0; }
+.ms-sat { width: 2px; height: 2px; border-radius: 50%; background: var(--ms-star); box-shadow: 0 0 4px 1px var(--ms-star); animation: msSat 240s linear 50s infinite; }
+@keyframes msSat {
+  0% { opacity: 0; translate: -2vw calc(var(--hz, 38vh) * 0.7); }
+  1.5% { opacity: 0.35; }
+  4.5% { opacity: 0.9; }
+  7% { opacity: 0.8; }
+  9.5%, 100% { opacity: 0; translate: 74vw calc(var(--hz, 38vh) * 0.1); }
+}
+.ms-trace { width: 16vw; height: 2px; border-radius: 2px; background: linear-gradient(to right, transparent, var(--ms-trace)); transform-origin: right center; rotate: -9deg; animation: msTrace 300s linear 120s infinite; }
+@keyframes msTrace {
+  0% { opacity: 0; translate: -18vw calc(var(--hz, 38vh) * 0.6); }
+  1.5%, 9% { opacity: 1; }
+  11%, 100% { opacity: 0; translate: 104vw calc(var(--hz, 38vh) * 0.16); }
+}
+.ms-ground { left: 0; right: 0; top: var(--hz, 38vh); bottom: 0; background: linear-gradient(180deg, var(--ms-sea), var(--ms-ground) 18px, var(--bg) 220px); box-shadow: 0 -1px 0 color-mix(in srgb, var(--tx) 10%, transparent); }
+.ms-svg { inset: 0; width: 100%; height: 100%; overflow: visible; }
+/* A launch lights the horizon. */
+.ms-flash { inset: 0 0 auto 0; height: var(--hz, 38vh); background: radial-gradient(50% 90% at var(--pad-x, 10%) 100%, var(--ms-horizon-glow), transparent 70%); opacity: 0; transition: opacity 2.4s var(--e-out); }
+.ms-ignited .ms-flash { opacity: 1; transition-duration: 0.5s; }
+/* The Music-only page has no site: the sky stands still behind it. */
+.ms-scene--plain { --hz: 190px; }
+
+/* The site on the horizon. */
+.ms-site { transition: opacity var(--m-view) var(--e-out); }
+.ms-land { fill: var(--ms-land); }
+.ms-land-line { fill: none; stroke: var(--ms-land); stroke-width: 1.8; stroke-linecap: round; }
+.ms-land-thin { stroke-width: 1.2; }
+.ms-flood { fill: var(--ms-flood); }
+/* The masts' red lamps blink out of step, a third of the time lit. */
+.ms-lamp { fill: var(--ms-lamp); animation: msLamp 2.4s steps(1, end) var(--d, 0s) infinite; }
+@keyframes msLamp { 0% { opacity: 1; } 34%, 100% { opacity: 0.16; } }
+.ms-pad-vehicle .ms-flames { opacity: 0; }
+.ms-ignited .ms-pad-vehicle .ms-flames { opacity: 1; animation: msFlicker 0.24s linear infinite; }
+.ms-lift { transform-box: view-box; transform-origin: 0 -40px; }
+.ms-away .ms-lift { opacity: 0; }
+/* The next vehicle rolls out to the pad. */
+.ms-rollout .ms-lift { animation: msRollout 2400ms var(--e-out) both; }
+@keyframes msRollout { from { transform: translateX(170px); opacity: 0; } 30% { opacity: 1; } }
+
+/* The vehicle, wherever it's drawn. Its right half is in shadow; a blue band and a porthole. */
+.ms-hull { fill: var(--ms-hull); stroke: var(--ms-hull-line); stroke-width: 3; stroke-linejoin: round; }
+.ms-hull-shade { fill: var(--ms-hull-shade); }
+.ms-fin { fill: var(--ms-hull-shade); stroke: var(--ms-hull-line); stroke-width: 3; stroke-linejoin: round; }
+.ms-band { fill: var(--ms-band); }
+.ms-port { fill: var(--ms-tile); stroke: var(--ms-band); stroke-width: 5; }
+.ms-flame { fill: var(--ms-ignition); }
+.ms-flame-core { fill: var(--ms-flame-core); }
+.ms-railline { fill: none; stroke: var(--ms-hull-line); stroke-linecap: round; }
+/* The flame is alive: the plume and its core breathe out of step, so it never repeats the same shape twice running. */
+.ms-flames, .ms-flame-core { transform-box: fill-box; transform-origin: 50% 0; }
+@keyframes msFlicker { 0%, 100% { transform: none; } 22% { transform: scaleY(0.88) scaleX(0.95); } 48% { transform: scaleY(1.1); } 71% { transform: scaleY(0.93) scaleX(1.04); } }
+
+/* The day's ascent, drawn on the sky: flown is solid and lit, ahead is dotted. Words on the sky are never lighter than --t2. */
+.ms-fp-ahead { fill: none; stroke: var(--ms-steel); stroke-width: 2; stroke-dasharray: 2 8; stroke-linecap: round; }
+.ms-fp-flown { fill: none; stroke: var(--tx); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 5px var(--ms-matrix-glow)); }
+.ms-fp-tick { stroke: var(--ms-steel); stroke-width: 1.5; stroke-linecap: round; }
+.ms-fp-way { fill: var(--ms-sky-mid); stroke: var(--t2); stroke-width: 2; }
+.ms-fp-way--past { fill: var(--tx); stroke: var(--tx); }
+.ms-fp-name { font: 600 12px var(--f-ui); fill: var(--tx); text-anchor: middle; }
+.ms-fp-at { font: 500 11px var(--f-mono); fill: var(--t2); text-anchor: middle; }
+.ms-fp-side { text-anchor: start; }
+.ms-ring { fill: var(--ms-ignition-glow); transform-box: fill-box; transform-origin: center; animation: msBeacon 2.4s var(--e-out) infinite; }
+.ms-craft { filter: drop-shadow(0 0 7px var(--ms-ignition-glow)); }
+.ms-craft .ms-flames { animation: msFlicker 0.5s linear infinite; }
+
+/* =====================================================================
+   THE MARK
+   ===================================================================== */
+
+/* Always on its tile: the night pad in both themes, with the plume's light on the ground under it. */
+.ms-tile { display: grid; place-items: center; aspect-ratio: 1; overflow: hidden; border-radius: 24%; background: radial-gradient(70% 46% at 50% 96%, rgba(255, 139, 61, 0.4), transparent 72%), var(--ms-tile, #0b1120); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 4px 12px rgba(11, 17, 32, 0.3); }
+.ms-logo { display: block; width: 86%; height: 86%; --ms-hull: #ffffff; --ms-hull-shade: #c5cfdf; --ms-hull-line: #4b566c; --ms-ignition: #ff8b3d; }
+.ms-logo .ms-flames { animation: msFlicker 1.9s var(--e-io) infinite; }
+.ms-logo .ms-flame-core { animation: msFlicker 1.3s var(--e-io) -0.4s infinite reverse; }
+/* Liftoff: out of the top of the tile, slowly then faster, and the next one rolls up from below. */
+.ms-logo--liftoff :is(.ms-vehicle, .ms-flames) { animation: msLiftoff 1400ms both; }
+@keyframes msLiftoff {
+  0% { transform: none; animation-timing-function: var(--ms-e-ascent); }
+  52% { transform: translateY(-280px); opacity: 1; }
+  53% { transform: translateY(-280px); opacity: 0; }
+  54% { transform: translateY(80px); opacity: 0; animation-timing-function: var(--e-settle); }
+  100% { transform: none; opacity: 1; }
+}
+
+/* =====================================================================
+   THE FRAME: the strip on a desk, the dock on a phone
+   ===================================================================== */
+
+[data-design='mission'] .lp-shell { position: relative; z-index: 1; }
+
+/* The strip: the views as words on one bar of glass floating at the top of the sky. */
+.lp-root[data-design='mission']:not([data-layout='narrow']) .lp-shell { flex-direction: column; }
+.lp-root[data-design='mission']:not([data-layout='narrow']) .rail {
+  position: relative; isolation: isolate; flex: none; width: auto; height: 52px; margin: 16px 24px 0; padding: 0 10px 0 8px; flex-direction: row; align-items: center; gap: 2px;
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none; border-radius: 26px; background: var(--sf); box-shadow: var(--psh); backdrop-filter: blur(18px) saturate(1.4);
+}
+[data-layout='wide'][data-design='mission'] .lp-shell { max-width: none; }
+[data-layout='wide'][data-design='mission'] .rail { margin: 28px 64px 0; }
+.lp-root[data-design='mission']:not([data-layout='narrow']) .ms-brand { display: inline-flex; align-items: center; gap: 8px; flex: none; height: 36px; margin-right: 10px; padding: 0 8px 0 0; border: 0; border-radius: 18px; background: none; color: var(--tx); font: 700 16px/20px var(--f-ui); letter-spacing: -0.01em; cursor: pointer; transition: scale var(--m-move) var(--e-settle); }
+.ms-brand:active { scale: 0.96; transition-duration: var(--m-press); }
+.ms-brand .ms-tile { width: 36px; border-radius: 50%; }
+.lp-root[data-design='mission']:not([data-layout='narrow']) .rail-btn { flex: none; width: auto; height: 36px; flex-direction: row; gap: 6px; padding: 0 14px; border-radius: 18px; color: var(--t2); }
+.lp-root[data-design='mission']:not([data-layout='narrow']) .rail-btn i { display: none; }
+.lp-root[data-design='mission']:not([data-layout='narrow']) .rail-btn span { font-size: 14px; font-weight: 600; }
+.lp-root[data-design='mission'] .rail-btn.on { color: var(--tx); }
+.lp-root[data-design='mission'] .rail-badge { position: static; order: 3; background: var(--tx); color: var(--bg); }
+/* The palette and Settings are icons at the far end. */
+.lp-root[data-design='mission']:not([data-layout='narrow']) .rail-sep { width: 1px; height: 22px; margin: 0 6px 0 auto; }
+.lp-root[data-design='mission']:not([data-layout='narrow']) :is(.rail-palette, .rail-settings) { width: 36px; padding: 0; justify-content: center; }
+.lp-root[data-design='mission']:not([data-layout='narrow']) :is(.rail-palette, .rail-settings) i { display: block; font-size: 18px; }
+.lp-root[data-design='mission']:not([data-layout='narrow']) :is(.rail-palette, .rail-settings) span { display: none; }
+/* The selector: one lit plate that glides to the view picked and settles like a switch into a detent. */
+.lp-root[data-design='mission'] .rail > .glide { border-radius: 18px; background: var(--act); box-shadow: inset 0 0 0 1px var(--ac), var(--ms-glow-ac); }
+
+/* The pointer throws a little light on the glass under it (Scene.tsx sets --mx and --my). */
+[data-design='mission'] :is(.rail, .lp-inner > main .panel:not(.panel .panel))::before { content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; opacity: 0; background: radial-gradient(240px circle at var(--mx, 50%) var(--my, 0%), var(--ms-spot), transparent 70%); transition: opacity var(--m-state) var(--e-out); }
+@media (hover: hover) { [data-design='mission'] :is(.rail, .lp-inner > main .panel:not(.panel .panel)):hover::before { opacity: 1; } }
+
+/* The dock: on a phone the views float over the foot of the page. It scrolls sideways when they don't all fit. */
+.lp-root.lp-root[data-layout='narrow'][data-design='mission'] .rail.rail {
+  position: fixed; top: auto; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 30; isolation: isolate; height: 60px; padding: 5px; gap: 0;
+  border-radius: 30px; background: var(--pop); box-shadow: var(--sh); backdrop-filter: blur(18px);
+}
+[data-layout='narrow'][data-design='mission'] .rail-btn { width: 58px; height: 50px; border-radius: 25px; }
+[data-layout='narrow'][data-design='mission'] .rail-btn span { font: 500 10px/12px var(--f-mono); letter-spacing: 0.04em; text-transform: uppercase; }
+[data-layout='narrow'][data-design='mission'] .rail-badge { position: absolute; top: 3px; right: 8px; }
+[data-layout='narrow'][data-design='mission'] .rail > .glide { border-radius: 25px; }
+[data-layout='narrow'][data-design='mission'] .rail-sep { display: none; }
+
+/* =====================================================================
+   THE PAGE
+   ===================================================================== */
+
+.lp-root[data-design='mission']:not([data-layout='narrow']) .lp-shell > .lp-inner { flex: 1; min-height: 0; width: 100%; padding: 14px 36px 26px; gap: 16px; }
+[data-layout='wide'][data-design='mission'] .lp-shell > .lp-inner { padding: 24px 76px 48px; max-width: 2200px; margin: 0 auto; }
+[data-layout='narrow'][data-design='mission'] .lp-shell > .lp-inner { padding: 14px 16px calc(96px + env(safe-area-inset-bottom, 0px)); gap: 16px; }
+[data-design='mission'] .lp-grid { gap: 16px; }
+
+/* The top bar. On other views it's the view's name on a short sky, with the tools beside it. */
+[data-design='mission'] .greeting { font-size: 28px; font-weight: 700; line-height: 34px; letter-spacing: -0.01em; }
+[data-design='mission'] .subline { color: var(--t2); }
+.lp-root[data-design='mission']:not([data-layout='narrow']) .topbar { align-items: center; }
+.lp-root[data-design='mission']:not([data-layout='narrow']) .top-right { align-items: center; }
+[data-design='mission'] .clock { font: 800 28px/1 var(--ms-f-matrix); letter-spacing: 0.02em; text-shadow: 0 0 14px var(--ms-matrix-glow); }
+[data-design='mission'] .clock-date { font: 500 12px/16px var(--f-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--t2); }
+[data-design='mission'] .clock-row { align-items: center; }
+/* The tools are glass pills. What you type into is solid, so the sky is never behind your words. */
+[data-design='mission'] :is(.cig-btn, .weather) { height: 36px; padding: 0 12px; border-radius: 18px; background: var(--sf); box-shadow: var(--psh); backdrop-filter: blur(18px) saturate(1.4); color: var(--tx); }
+[data-design='mission'] .cig-btn.on { background: var(--ms-ignition-soft); color: var(--ms-ignition-ink); }
+[data-design='mission'] .cig-btn.warn { background: var(--wnt); color: var(--wn); }
+[data-design='mission'] .search input { height: 36px; padding-left: 36px; border-radius: 18px; border-color: var(--ln); background: var(--rz); }
+[data-design='mission'] .search .ph-magnifying-glass { left: 13px; top: 10px; }
+[data-design='mission'] .search .slash { right: 14px; top: 9px; }
+
+/* The poll: a light for each source of data, in its state, in place of the one dot. A shape as well as a colour. */
+[data-design='mission'] .sync { width: auto; padding: 0 4px 0 6px; }
+[data-design='mission'] .sync-dot { display: none; }
+[data-design='mission'] .sync-lights { display: inline-flex; align-items: center; gap: 5px; }
+.ms-mark { flex: none; display: block; width: 10px; height: 10px; border: 2px solid currentColor; border-radius: 50%; }
+.ms-mark--go { color: var(--ok); background: currentColor; }
+.ms-mark--hold { color: var(--ms-hold); background: linear-gradient(90deg, currentColor 50%, transparent 50%); }
+.ms-mark--scrub { color: var(--wn); background: currentColor; border-radius: 2px; rotate: 45deg; scale: 0.82; }
+.ms-mark--standby { color: var(--t3); border-style: dashed; }
+
+/* ---------- Home on a desk: the launch clock in the sky, the tools at its right, the ascent above them ---------- */
+
+.lp-root[data-design='mission'][data-view='home']:not([data-layout='narrow']) .topbar { align-items: flex-start; gap: 24px; margin-top: clamp(64px, 10.5vh, 104px); padding-bottom: clamp(4px, 2vh, 22px); }
+/* Clear of the pad on the horizon at the left, and of the ascent's bend above it. */
+.lp-root[data-design='mission'][data-view='home']:not([data-layout='narrow']) .top-left { margin-left: max(300px, 29vw); gap: 6px; }
+.lp-root[data-design='mission'][data-view='home']:not([data-layout='narrow']) .top-right { flex-direction: column; align-items: flex-end; gap: 12px; }
+.lp-root[data-design='mission'][data-view='home']:not([data-layout='narrow']) .top-tools { flex-wrap: wrap; justify-content: flex-end; max-width: 420px; }
+
+.ms-hero { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+.ms-hero-label { display: flex; align-items: center; gap: 8px; font: 500 12px/16px var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--t2); }
+/* The launch clock: a dot-matrix face, its unlit dots (data-ghost) faint behind the lit ones. */
+.ms-matrix { position: relative; isolation: isolate; display: inline-block; font: 800 clamp(40px, min(8.6vh, 6vw), 84px)/1 var(--ms-f-matrix); letter-spacing: 0.02em; color: var(--tx); text-shadow: 0 0 22px var(--ms-matrix-glow); white-space: nowrap; }
+.ms-matrix::before { content: attr(data-ghost); position: absolute; left: 0; top: 0; z-index: -1; color: var(--ms-matrix-ghost); text-shadow: none; }
+.ms-cell { display: inline-block; white-space: pre; animation: msRelight 260ms steps(3, end); }
+@keyframes msRelight { from { opacity: 0.12; } }
+/* Inside ten minutes it takes the colour of now. Nothing flashes. */
+.ms-hero--soon .ms-matrix { color: var(--ms-ignition-ink); text-shadow: 0 0 24px var(--ms-ignition-glow); }
+.ms-hero--soon .ms-hero-label { color: var(--ms-ignition-ink); }
+.ms-hero-what { font: 600 20px/26px var(--f-ui); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-hero-sub { max-width: 100%; font-size: 13px; color: var(--t2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-live { padding: 1px 8px; border-radius: 6px; background: var(--ms-ignition-soft); color: var(--ms-ignition-ink); font: 600 12px/16px var(--f-ui); letter-spacing: 0.02em; text-transform: none; }
+/* The beacon: a ring breathing out from whatever is happening now. */
+.ms-beacon { position: relative; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--ms-ignition); box-shadow: var(--ms-glow-now); }
+.ms-beacon::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: var(--ms-ignition-glow); animation: msBeacon 2.4s var(--e-out) infinite; }
+@keyframes msBeacon { 0% { transform: scale(1); opacity: 0.9; } 70%, 100% { transform: scale(3.2); opacity: 0; } }
+/* A short window: the summary goes, so the panels keep their room. */
+@media (max-height: 780px) {
+  .lp-root[data-design='mission'][data-view='home']:not([data-layout='narrow']) .ms-hero-sub { display: none; }
+  .lp-root[data-design='mission'][data-view='home']:not([data-layout='narrow']) .topbar { margin-top: 60px; padding-bottom: 0; }
+}
+
+/* ---------- Home on a phone: the clock row, the ascent, the launch clock beside the pad, then the tools on the ground ---------- */
+
+.lp-root[data-layout='narrow'][data-design='mission'][data-view='home'] .topbar { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 0; }
+.lp-root[data-layout='narrow'][data-design='mission'][data-view='home'] .top-right { display: contents; }
+.lp-root[data-layout='narrow'][data-design='mission'][data-view='home'] .clock-row { order: 1; }
+.lp-root[data-layout='narrow'][data-design='mission'][data-view='home'] .top-left { order: 2; margin: 74px 0 0 112px; min-height: 132px; }
+.lp-root[data-layout='narrow'][data-design='mission'][data-view='home'] .top-tools { order: 3; margin-top: 34px; }
+[data-layout='narrow'][data-design='mission'] .clock { font-size: 22px; }
+[data-layout='narrow'][data-design='mission'] .ms-matrix { font-size: clamp(26px, 9.4vw, 40px); }
+[data-layout='narrow'][data-design='mission'] .ms-hero-what { font-size: 18px; line-height: 24px; white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+[data-layout='narrow'][data-design='mission'] .greeting { font-size: 24px; line-height: 30px; }
+
+/* =====================================================================
+   GLASS
+   ===================================================================== */
+
+/* A panel is glass over the sky: the sky blurred behind it, a lit edge, a placard for its name. */
+[data-design='mission'] .panel { position: relative; isolation: isolate; backdrop-filter: blur(18px) saturate(1.4); }
+[data-design='mission'] .panel .panel { backdrop-filter: none; }
+[data-design='mission'] .panel-title { font: 500 12px/16px var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--t3); }
+[data-design='mission'] .panel-head { align-items: center; }
+[data-design='mission'] .photo-panel { border-radius: var(--r-p); }
+/* What floats lets nothing through, so words behind it never show through its own. */
+[data-design='mission'] :is(.popover, .drawer) { background: var(--pop); backdrop-filter: blur(24px) saturate(1.4); }
+[data-design='mission'] .focus-view { background: color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter: blur(30px); }
+[data-design='mission'] .scrim { backdrop-filter: none; }
+[data-design='mission'] .drawer-title { font-weight: 700; letter-spacing: -0.01em; }
+[data-design='mission'] .toast { border-radius: 23px; background: var(--tx); color: var(--bg); backdrop-filter: none; }
+[data-design='mission'] .toast .btn-link { color: var(--bg) !important; }
+
+/* Controls. One primary action is blue with a highlight along its top, and lights under the pointer. */
+[data-design='mission'] :is(.btn, .join, .edit-toggle) { border-radius: var(--r); }
+[data-design='mission'] .btn-primary { background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.16), transparent); }
+@media (hover: hover) { [data-design='mission'] .btn-primary:hover:not(:disabled) { box-shadow: var(--ms-glow-ac); } }
+[data-design='mission'] .tab { border-radius: 12px; padding: 2px 10px; }
+[data-design='mission'] .chip { border-radius: 6px; }
+[data-design='mission'] .kbd { border-bottom-width: 2px; background: color-mix(in srgb, var(--tx) 6%, transparent); }
+/* The event that's on, or next: lit like the selector. */
+[data-design='mission'] .event.focus { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ac) 40%, transparent); }
+/* A ticked box sends out one ring of light as its tick lands. */
+[data-design='mission'] .check.on { animation: msTickFlare 700ms var(--e-out); }
+@keyframes msTickFlare { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ac) 45%, transparent); } 100% { box-shadow: 0 0 0 12px transparent; } }
+/* A bookmark lifts toward the pointer. */
+@media (hover: hover) { [data-design='mission'] .tile:hover:not(:active) { translate: 0 -2px; } }
+/* A parcel out for delivery is happening now. */
+[data-design='mission'] .pkg-seg.moving { box-shadow: var(--ms-glow-now); }
+
+/* =====================================================================
+   OPENING, AND A NEW VIEW
+   ===================================================================== */
+
+/* As the app opens: the strip comes down, the sources report in turn, the clock lights, and each panel rises out of
+   the ground, blurred to sharp. The ascent plots itself to now and its vehicle arrives on it. Once. */
+:root[data-design='mission'].lp-opening :is(.lp-grid, .lp-inner > main:not(.lp-grid)) > * { animation: msRiseUp calc(var(--m-view) * 1.6) var(--e-out) both; animation-delay: calc(260ms + var(--m-stagger) * var(--i, 0)); }
+@keyframes msRiseUp { from { opacity: 0; translate: 0 calc(var(--m-rise) * 2.5); filter: blur(6px); } }
+:root[data-design='mission'].lp-opening .rail { animation: msStripIn calc(var(--m-move) * 1.4) var(--e-settle) both; }
+@keyframes msStripIn { from { opacity: 0; translate: 0 -14px; } }
+:root[data-design='mission'][data-layout='narrow'].lp-opening .rail { animation-name: msDockIn; animation-delay: 240ms; }
+@keyframes msDockIn { from { opacity: 0; translate: 0 24px; } }
+:root[data-design='mission'].lp-opening .sync-lights > i { animation: msReport 420ms var(--e-settle) both; animation-delay: calc(500ms + var(--i, 0) * 120ms); }
+@keyframes msReport { from { scale: 0.4; opacity: 0.2; filter: grayscale(1); } }
+:root[data-design='mission'].lp-opening .ms-fp-flown { stroke-dasharray: 1; animation: msDrawOn 900ms var(--e-io) 200ms both; }
+@keyframes msDrawOn { from { stroke-dasharray: 0 1; } }
+:root[data-design='mission'].lp-opening .ms-way { animation: lpFadeIn var(--m-state) var(--e-out) var(--at, 0ms) both; }
+:root[data-design='mission'].lp-opening .ms-craft { transform-box: fill-box; transform-origin: center; animation: msArrive 620ms var(--e-settle) 900ms both; }
+@keyframes msArrive { 0% { scale: 0; opacity: 0; } 40% { opacity: 1; } }
+/* A new view's panels rise the same way (viewTransition.ts marks the page while they do). */
+:root[data-design='mission'][data-entering] .lp-inner > main :is(.panel, .photo-panel):not(.panel .panel) { animation: msRiseUp var(--m-view) var(--e-out) both; }
+
+/* =====================================================================
+   LESS MOTION
+   Nothing breathes, burns, drifts, blinks, falls or crosses the sky, and nothing launches (Scene.tsx checks too).
+   The sky still shows the hour and the weather's cloud, standing still.
+   ===================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .ms-clouds i, .ms-twinkles i, .ms-lamp, .ms-flames, .ms-flame-core, .ms-ring, .ms-beacon::after, .ms-cell, .ms-logo--liftoff :is(.ms-vehicle, .ms-flames), .ms-rollout .ms-lift { animation: none !important; }
+  .ms-sat, .ms-trace, .ms-fx, .ms-ring { display: none; }
+  .ms-scene[data-wx='rain'] .ms-rain { animation: none; }
+  .ms-orb, .ms-clouds { transition: none; transform: translate(var(--orb-x, 70vw), var(--orb-y, 12vh)); }
+  .ms-clouds { transform: none; }
+  @keyframes msRiseUp { from { opacity: 0; } }
+  @keyframes msStripIn { from { opacity: 0; } }
+  @keyframes msDockIn { from { opacity: 0; } }
+  @keyframes msReport { from { opacity: 0.2; } }
+  @keyframes msDrawOn { from { opacity: 0; } }
+  @keyframes msArrive { from { opacity: 0; } }
+  @keyframes msTickFlare { from { opacity: 1; } }
+}
