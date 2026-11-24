@@ -7,6 +7,7 @@ import '@phosphor-icons/web/duotone/style.css';
 import './styles.css';
 import './designs.css';
 import './motion.css';
+import './mission.css';
 import type { GuestMusic } from '../../shared/types';
 import { api, cachedGuest, cacheGuest } from './api';
 import { ContextMenuHost, copyText, menuProps, placeOf } from './components/ContextMenu';
@@ -110,6 +111,8 @@ function GuestApp() {
   return (
     <div ref={rootRef} className="lp-root lp-guest" data-layout={layout} data-design={design} data-view="music" {...backgroundMenu}>
       {design === 'vista' && <div className="wallpaper plain" aria-hidden="true" />}
+      {/* Mission's sky, standing still: this page has no launch site of its own. */}
+      {design === 'mission' && <div className="ms-scene ms-scene--plain" aria-hidden="true"><div className="ms-sky" /><div className="ms-ground" /></div>}
       <div className="lp-inner">
         <header className="topbar">
           <div className="top-left">

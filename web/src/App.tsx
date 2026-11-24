@@ -15,6 +15,9 @@ import { AddPackageDrawer, DESIGNS, Drawer, PANEL_ROWS, PackageDrawer, SettingsD
 import { FocusHome, type FocusTabInfo } from './components/FocusHome';
 import { HeroPanel } from './components/Hero';
 import { HorizonHome } from './components/Horizon';
+import { MissionHero } from './components/mission/Hero';
+import { Mark } from './components/mission/Mark';
+import { MissionScene } from './components/mission/Scene';
 import { FocusView, Notes } from './components/Notes';
 import { Packages } from './components/Packages';
 import { Palette } from './components/Palette';
@@ -35,6 +38,7 @@ import { useFlash, useToast } from './hooks/useToast';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Presence } from './components/Motion';
 import { focusOrder, focusTab, gridLayout, type Area, type FocusTab } from './layout';
+import { finishesTheDay, skyWeather } from './mission';
 import { loadable } from './loadable';
 import { viewStep } from './motion';
 import { endOpening, viewTransition } from './viewTransition';
@@ -121,6 +125,8 @@ export function App({ cached }: { cached: AppState | null }) {
   const [drawer, setDrawer] = useState<DrawerState>(null);
   const [focus, setFocus] = useState(false);
   const [editBookmarks, setEditBookmarks] = useState(false);
+  // Mission: each time this goes up, the rocket on the horizon lifts off (components/mission/Scene.tsx).
+  const [launches, setLaunches] = useState(0);
   const [activeNote, setActiveNote] = useState(() => localGet('activeNote') || '');
   const [localDesign, setLocalDesignState] = useState<DesignKey | ''>(() => (DESIGNS.some((d) => d.key === localGet('design')) ? (localGet('design') as DesignKey) : ''));
   const setLocalDesign = (d: DesignKey | '') => {
@@ -168,7 +174,7 @@ export function App({ cached }: { cached: AppState | null }) {
 
   // ---------- theme & layout ----------
 
-  const design: DesignKey = localDesign || data.prefs.design || 'broadsheet';
+  const design: DesignKey = localDesign || data.prefs.design || 'mission';
   // Console is always dark; the others follow Theme.
   const dark = design === 'console' || data.prefs.theme === 'dark' || (data.prefs.theme === 'system' && systemDark);
   useLayoutEffect(() => {
@@ -275,6 +281,11 @@ export function App({ cached }: { cached: AppState | null }) {
   };
 
   const completeTask = (t: Task, keepalive?: boolean) => {
+    // Mission: the last of the day's tasks sets off the launch.
+    if (design === 'mission' && finishesTheDay(data.tasks, t, ymd(new Date()))) {
+      setLaunches((n) => n + 1);
+      showToast('All of today’s tasks done');
+    }
     update((d) => ({ ...d, tasks: d.tasks.filter((x) => x.id !== t.id) }));
     send({ kind: 'completeTask', listId: t.listId, id: t.id }, keepalive).catch((e) => {
       showToast(`Couldn’t complete task: ${e.message}`);
@@ -829,6 +840,17 @@ export function App({ cached }: { cached: AppState | null }) {
   return (
     <div ref={rootRef} className="lp-root" data-layout={layout} data-design={design} data-view={view} {...backgroundMenu}>
       {design === 'vista' && <Wallpaper photos={photoCount > 0 ? data.photos : []} index={photoSlots.shown[0]} onNext={() => photoSlots.step(0, 1)} />}
+      {design === 'mission' && (
+        <MissionScene
+          now={now}
+          dark={dark}
+          narrow={layout === 'narrow'}
+          home={view === 'home'}
+          events={data.google.connected && data.prefs.sources.calendar ? todayAgenda(data, now).todays.map((e) => ({ id: e.id, at: e.s, name: e.title })) : []}
+          wx={skyWeather(weatherOn ? data.weather.now?.forecast : null)}
+          launch={launches}
+        />
+      )}
       <div className="lp-shell">
       <Rail
         view={view}
@@ -840,9 +862,31 @@ export function App({ cached }: { cached: AppState | null }) {
           setPrefs({ ...before, hidden: [...before.hidden.filter((h) => h !== `view:${v}`), `view:${v}`] });
           showToast(`Hid ${VIEWS.find((x) => x.key === v)?.name} from the rail. ⌘K still opens it.`, { label: 'Undo', run: () => setPrefs(before) });
         }}
-        onPalette={() => setPalette(true)} onSettings={() => setDrawer({ type: 'settings' })} />
+        onPalette={() => setPalette(true)} onSettings={() => setDrawer({ type: 'settings' })}
+        brand={
+          design === 'mission' ? (
+            // The mark goes Home, and launches when it's already there.
+            <button
+              className="ms-brand"
+              title={view === 'home' ? 'Launch' : 'Home'}
+              aria-label={view === 'home' ? 'Launchpad. Launch the rocket.' : 'Launchpad. Go Home.'}
+              onClick={() => (view === 'home' ? setLaunches((n) => n + 1) : setView('home'))}
+              {...menuProps(
+                () => [
+                  view !== 'home' && { label: 'Go Home', icon: 'ph-house', onSelect: () => setView('home') },
+                  { label: 'Launch the rocket', icon: 'ph-rocket-launch', onSelect: () => (setView('home'), window.setTimeout(() => setLaunches((n) => n + 1), view === 'home' ? 0 : 700)) },
+                ],
+                'Launchpad',
+              )}
+            >
+              <Mark small liftoff={launches} />
+              <span>Launchpad</span>
+            </button>
+          ) : undefined
+        }
+      />
       <div className="lp-inner">
-        <TopBar data={data} now={now} title={view === 'home' ? undefined : VIEWS.find((v) => v.key === view)?.name} subline={subline} search={search} onSearch={setSearch} searchRef={searchRef} smokesToday={smokesToday} onLogSmoke={logSmoke} onOpenTraining={() => setView('training')} onOpenLearn={() => setView('learn')} />
+        <TopBar data={data} now={now} title={view === 'home' ? undefined : VIEWS.find((v) => v.key === view)?.name} subline={subline} search={search} onSearch={setSearch} searchRef={searchRef} smokesToday={smokesToday} onLogSmoke={logSmoke} onOpenTraining={() => setView('training')} onOpenLearn={() => setView('learn')} lead={design === 'mission' && view === 'home' ? <MissionHero data={data} now={now} extras={extras.join(' · ')} /> : undefined} />
         {serverIssue && <ServerBanner issue={serverIssue} waiting={waiting} onRetry={() => refresh()} />}
         <ErrorBoundary resetKey={view}>
         <Suspense fallback={<main className="view-loading" aria-busy="true" />}>

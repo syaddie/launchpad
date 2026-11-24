@@ -58,12 +58,19 @@ const POSTER: Columns = [
   { w: '1fr', items: ['notes', 'photo'] },
 ];
 
-const COLUMNS: Partial<Record<DesignKey, Columns>> = { console: CONSOLE, bento: BENTO, vista: VISTA, poster: POSTER };
+/** Mission: three columns of glass on the ground under the sky. The agenda leads; a photo, when there is one, sits under the notes. */
+const MISSION: Columns = [
+  { w: '1.1fr', items: ['today', 'photo2'] },
+  { w: '1fr', items: ['tasks', 'pkgs'] },
+  { w: '1fr', items: ['notes', 'photo'] },
+];
+
+const COLUMNS: Partial<Record<DesignKey, Columns>> = { mission: MISSION, console: CONSOLE, bento: BENTO, vista: VISTA, poster: POSTER };
 
 export const NARROW_ORDER: Area[] = ['hero', 'today', 'tasks', 'photo', 'pkgs', 'wx', 'notes', 'photo2', 'bm'];
 
 /** The designs whose home is this grid of columns. */
-export const GRID_DESIGNS: DesignKey[] = ['broadsheet', 'console', 'bento', 'vista', 'poster'];
+export const GRID_DESIGNS: DesignKey[] = ['mission', 'broadsheet', 'console', 'bento', 'vista', 'poster'];
 
 /** Most panels one column stacks: the grid has two rows over the bookmarks. */
 export const COLUMN_MAX = 2;
