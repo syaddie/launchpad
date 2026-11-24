@@ -3,8 +3,9 @@
 // Locations), for Music › Busking slots. Booking itself stays on the NAC portal.
 //
 // Every 10 minutes, on :05, :15, :25, :35, :45 and :55 (streamlit-portfolio's schedule-sync takes :00 and :30),
-// it reads each location's public page and then its "load more" list, one request at a time
-// about 2 s apart; works out which 1-hour blocks are yours, taken or free; joins free blocks
+// it reads each location's whole list of bookings from its public page (asked for up to
+// PAGE_TAKE cards at once; if NAC stops allowing that, the page's first 12 and then its
+// "load more" list, photos and all), one request at a time about 2 s apart; works out which 1-hour blocks are yours, taken or free; joins free blocks
 // into windows; flags the windows that weren't free at the check before; and keeps the result
 // in DATA_DIR/nac/snapshot.json, the only thing it stores. A check that fails, or that NAC
 // blocks, stops there, keeps the last good data with the reason, and waits longer before the
@@ -32,7 +33,14 @@ import type { NacBooked, NacDay, NacFree, NacLocation, NacLookup, NacSlots, NacS
 const BASE_URL = 'https://eservices.nac.gov.sg/Busking';
 /** schedule-sync's style: generic, nothing personal in it. */
 const USER_AGENT = 'Mozilla/5.0 (launchpad slot finder)';
-/** Load-more pages: 200 got all of a location's list in one call when the spec was written. */
+/**
+ * Cards asked of a location's page in one go. NAC's own site never asks the page for more than its
+ * 12 (its Load more button uses the load-more list), but the page takes `skip` and `take` too and
+ * links each busker's photo rather than carrying it: a whole list of 134 cards was 221 KB on
+ * 24 Nov 2026, where the load-more list would have been about 38 MB.
+ */
+export const PAGE_TAKE = 1000;
+/** Load-more pages, only read when the page stops taking `take`: 200 got all of a location's list in one call when the spec was written. */
 export const TAKE = 200;
 /**
  * Each load-more starts this many cards back from what's been read, and its first card must be
@@ -40,7 +48,7 @@ export const TAKE = 200;
  * the card after it would be skipped unseen and its slot shown as free.
  */
 export const OVERLAP = 2;
-/** A safety stop, as in sync.py: 2,000 cards. */
+/** A safety stop, as in sync.py: 2,000 cards on the load-more list (10,000 on the page). */
 const MAX_PAGES = 10;
 /** Between one request and the next. */
 const GAP_MS = 2000;
@@ -56,7 +64,7 @@ const BACKOFF = [5, 8, 14, 26];
 export const MIN_GAP = 5 * 60_000;
 /** The longest a planned check can be off (the last back-off step); a next_check further away isn't one this set. */
 const MAX_WAIT = (BACKOFF[BACKOFF.length - 1] + 1) * SLOT_MS;
-/** The load-more answers carry every busker's photo inline (about 0.3 MB a card), so a big list is tens of MB. Past this, something's wrong. */
+/** The load-more answers carry every busker's photo inline (about 0.3 MB a card), so a big list there is tens of MB. Past this, something's wrong. */
 const MAX_BYTES = 250_000_000;
 /** Statuses with a known meaning. Passed is "in the past"; anything else counts as taken (spec §4). */
 const KNOWN = new Set(['published', 'confirmed', 'passed']);
@@ -224,6 +232,8 @@ export function fetchFragment(body: string): string {
 export type Fetcher = (url: string, kind: 'page' | 'more') => Promise<string>;
 
 export const pageUrl = (p: NacPlace) => `${BASE_URL}/locations/${p.id}/events`;
+/** The same page, asked for `take` cards from `skip`. */
+export const listUrl = (p: NacPlace, skip: number, take: number) => `${pageUrl(p)}?skip=${skip}&take=${take}`;
 export const moreUrl = (p: NacPlace, skip: number, take: number) => `${BASE_URL}/locations/${p.id}/events/more?skip=${skip}&take=${take}`;
 
 /** The live site: anything but a straight 200 stops the check (a redirect too: it'd be a challenge or an error page). */
@@ -232,7 +242,9 @@ export const liveFetch: Fetcher = async (url, kind) => {
     kind === 'page' ? { 'User-Agent': USER_AGENT, Accept: 'text/html' } : { 'User-Agent': USER_AGENT, Accept: 'application/json, text/html', 'X-Requested-With': 'XMLHttpRequest' };
   let res: Response;
   try {
-    res = await fetch(url, { headers, redirect: 'manual', signal: AbortSignal.timeout(kind === 'page' ? 30_000 : 180_000) });
+    // A whole list takes NAC a while to put together (12 s for 134 cards), on the page as on the load-more list.
+    const long = kind === 'more' || /[?&]take=/.test(url);
+    res = await fetch(url, { headers, redirect: 'manual', signal: AbortSignal.timeout(long ? 180_000 : 30_000) });
   } catch (e) {
     throw new NacError(`couldn’t reach NAC (${reason(e)})`);
   }
@@ -259,38 +271,59 @@ function reason(e: unknown): string {
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-/** What one location's page and load-more list held. */
+/** What one location's list held. */
 export interface NacRead {
   place: NacPlace;
   page: NacPage;
   cards: NacCard[];
+  /** The page didn't show the whole list, so the rest came from the load-more list, photos and all. */
+  fellBack: boolean;
 }
 
 const cardKey = (c: NacCard) => c.id || `${c.status}|${c.date}|${c.start}|${c.end}`;
 
-/** A location's page, then its load-more list until a call returns fewer than `TAKE` (sync.py's fetch_cards). */
+/**
+ * A location's whole list. Its page is asked for up to `PAGE_TAKE` cards, which comes without
+ * the photos. Fewer than that is the whole list; exactly that many, and it reads on through the
+ * page with `skip`. If the page shows no more than its usual 12 (NAC no longer taking `take`, or
+ * a location with exactly 12 bookings), the rest comes from the load-more list as before, until a
+ * call returns fewer than `TAKE` (sync.py's fetch_cards).
+ */
 export async function readPlace(place: NacPlace, fetcher: Fetcher, wait: () => Promise<void>, today: string, mineId: string, guestId = ''): Promise<NacRead> {
-  const page = parsePage(await fetcher(pageUrl(place), 'page'), today, mineId, guestId);
+  const parse = (html: string) => parsePage(html, today, mineId, guestId);
+  const page = parse(await fetcher(listUrl(place, 0, PAGE_TAKE), 'page'));
   const cards = [...page.cards];
   const seen = new Set(cards.map(cardKey));
-  // A page showing fewer cards than it can hold has shown them all.
-  if (page.pageSize === null || page.cards.length >= page.pageSize) {
+  const shown = page.cards.length;
+  // More than its usual page size: the page took `take`.
+  const tookTake = page.pageSize !== null && shown > page.pageSize;
+  // Fewer than it was asked for, or than it can hold, is all there is.
+  const whole = tookTake ? shown < PAGE_TAKE : page.pageSize !== null && shown < page.pageSize;
+  let fellBack = false;
+  if (!whole) {
+    const step = tookTake ? PAGE_TAKE : TAKE;
     let skip = Math.max(0, cards.length - OVERLAP);
     for (let n = 0; ; n++) {
-      if (n === MAX_PAGES) throw new NacError(`more than ${MAX_PAGES * TAKE} bookings in the list, more than it reads`);
+      if (n === MAX_PAGES) throw new NacError(`more than ${MAX_PAGES * step} bookings in the list, more than it reads`);
       await wait();
-      const got = parseCards(fetchFragment(await fetcher(moreUrl(place, skip, TAKE), 'more')), today, mineId, guestId);
-      if (skip > 0 && got.length && !seen.has(cardKey(got[0]))) throw new NacError('the list of bookings changed while it was being read, so it’ll try again');
+      const got = tookTake
+        ? parse(await fetcher(listUrl(place, skip, PAGE_TAKE), 'page')).cards
+        : parseCards(fetchFragment(await fetcher(moreUrl(place, skip, TAKE), 'more')), today, mineId, guestId);
+      // On the page, one of the last cards read exactly: a page back at the top (NAC no longer taking `skip`) would otherwise pass.
+      const overlaps = tookTake ? got.length && cards.slice(-OVERLAP).some((c) => cardKey(c) === cardKey(got[0])) : got.length && seen.has(cardKey(got[0]));
+      if (skip > 0 && got.length && !overlaps) throw new NacError('the list of bookings changed while it was being read, so it’ll try again');
       for (const c of got) {
         if (seen.has(cardKey(c))) continue;
         seen.add(cardKey(c));
         cards.push(c);
+        // Load-more found bookings the page should have shown.
+        if (!tookTake) fellBack = true;
       }
-      if (got.length < TAKE) break;
+      if (got.length < step) break;
       skip += got.length - OVERLAP;
     }
   }
-  return { place, page, cards };
+  return { place, page, cards, fellBack };
 }
 
 /** Every location, one request at a time. The first failure stops the check. */
@@ -517,6 +550,7 @@ export async function runCheck(opts: CheckOptions = {}): Promise<NacSlots> {
   let next: NacSlots;
   try {
     const reads = await readAll(places, fetcher, wait, sgtYmd(started), mineId, guestId);
+    for (const r of reads) if (r.fellBack) log(`${r.place.short}: NAC’s page didn’t show the whole list, so the rest came from its load-more list, with every busker’s photo (tens of MB)`);
     const unknown = unknownStatuses(reads);
     for (const s of unknown) log(`NAC used the status “${s}”, which isn’t one we know; those bookings count as taken`);
     const at = sgtIso(started);
@@ -872,6 +906,11 @@ const DATE_TEXT = new RegExp(`\\b(${DOW3.join('|')}), (\\d{1,2}) (${MONTH_NAMES.
  * and <id>-more.json, for one that isn't in `places`); a file
  * a folder doesn't have is read from the folder above (a later round only holds what changed),
  * and one neither has answers 404. Dates move so the folder's day (meta.json "today") is today.
+ *
+ * The page asked for with `skip` and `take` is put together as NAC does it: the page's own cards,
+ * then the load-more answer's (saved from skip=10, so its first two are the page's last two),
+ * with no photos inline, and `skip`/`take` of those shown. A load-more answer that isn't a list
+ * (blocked/) answers that page too, as NAC's bot check would.
  */
 export function fixtureFetcher(dir: string, places: NacPlace[], now: Date): Fetcher {
   const find = (name: string) => [path.join(dir, name), path.join(dir, '..', name)].find((f) => fs.existsSync(f));
@@ -889,8 +928,37 @@ export function fixtureFetcher(dir: string, places: NacPlace[], now: Date): Fetc
     // By any key that location has on the list or in config, or by its id.
     const id = /\/locations\/([0-9a-f-]{36})\//i.exec(url)?.[1].toLowerCase() ?? '';
     const names = [...places.filter((p) => p.id === id).map((p) => p.key), id].filter(Boolean);
-    const file = names.map((n) => find(`${n}${kind === 'page' ? '.html' : '-more.json'}`)).find(Boolean);
+    const fileOf = (k: 'page' | 'more') => names.map((n) => find(`${n}${k === 'page' ? '.html' : '-more.json'}`)).find(Boolean);
+    const file = fileOf(kind);
     if (!file) throw new NacError('NAC answered 404, so it may be blocking Launchpad, or it’s down');
-    return move(fs.readFileSync(file, 'utf8'));
+    const body = fs.readFileSync(file, 'utf8');
+    const q = new URL(url).searchParams;
+    if (kind !== 'page' || q.get('take') === null) return move(body);
+    const start = body.indexOf('<div class="col-md-6');
+    const end = body.search(/<\/div>\s*<div class="text-center/);
+    if (start < 0 || end < start) return move(body);
+    const own = splitCards(body.slice(start, end));
+    const size = Number(/id="take"[^>]*value="(\d+)"/i.exec(body)?.[1] ?? 0);
+    // A page with room to spare has shown them all (and a load-more answer there is the folder above's).
+    const more = own.length >= size ? fileOf('more') : undefined;
+    let rest: string[] = [];
+    if (more) {
+      const answer = fs.readFileSync(more, 'utf8');
+      let list: unknown;
+      try {
+        list = JSON.parse(answer);
+      } catch {
+        return move(answer);
+      }
+      if (typeof list !== 'string') return move(answer);
+      // Saved from skip=10: the cards it has that the page has too.
+      rest = splitCards(fetchFragment(answer)).slice(Math.max(0, own.length - 10));
+    }
+    const all = [...own, ...rest];
+    const skip = Number(q.get('skip') ?? 0);
+    return move(body.slice(0, start) + all.slice(skip, skip + Number(q.get('take'))).join('') + body.slice(end));
   };
 }
+
+/** A run of cards in NAC's markup, one string each. */
+const splitCards = (html: string) => html.split(/(?=[ \t]*<div class="col-md-6)/).filter((c) => c.includes('dash-bx-menus'));

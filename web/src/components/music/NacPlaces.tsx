@@ -91,7 +91,7 @@ export function NacPlaces({ s, codes, now, onSaved, onClose }: { s: NacStatus; c
       <div className="nac-places-head">
         <h3 className="nac-places-title">Locations</h3>
         <span className="meta">
-          {places.length} of {most}. Each one adds a couple of requests and tens of MB to every check.
+          {places.length} of {most}. Each one adds a request to every check.
         </span>
         <button type="button" className="btn btn-secondary btn-small" onClick={onClose}>
           Done
