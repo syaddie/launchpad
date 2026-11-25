@@ -3,7 +3,7 @@ import type { ExplainResult, ExplainStatus, McBackups, McCrashes, McMeters, McPl
 import type { TorrentFile, TorrentOptions, TorrentSpeed, VideoFormat } from '../../shared/types';
 import type { StatementAsk, StatementContext } from '../../shared/types';
 import type { ArchiveCard } from '../../shared/digest';
-import type { AppState, Backup, BackupSnapshot, CalEvent, Countdown, Craving, DigestCard, DigestFeedback, DirListing, DisksReport, LinkCheck, LogLine, Mood, NewsLists, NoteVersion, Package, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
+import type { AppState, Backup, BackupSnapshot, CalEvent, Countdown, Craving, DigestCard, DigestFeedback, DirListing, DisksReport, LogLine, Mood, NewsLists, NoteVersion, Photo, Prefs, SavedDoc, SavedStory, ServerStats, ShellInfo, Snippet, SourceKey, Task, Training } from '../../shared/types';
 import type { AlertsInfo, GuestMusic, NacLookup, NacStatus } from '../../shared/types';
 import type { AskResult } from '../../shared/ask';
 import type { ShellAskResult, ShellAskStatus } from '../../shared/shellAsk';
@@ -237,23 +237,15 @@ export const api = {
   putDoc: <K extends SavedDoc>(key: K, v: AppState[K], base?: string, keepalive?: boolean) =>
     req<{ ok: true; version: string }>('PUT', `/api/${key}`, v, keepalive, base === undefined ? undefined : { 'X-Base-Version': base }),
   putPrefs: (v: Prefs) => req<Prefs>('PUT', '/api/prefs', v),
-  /** A task, or with `parent` a subtask; `notes` go in the task's details. */
-  addTask: (listId: string, title: string, due: string | null, opts: { notes?: string; parent?: string } = {}) => req<Task>('POST', '/api/tasks', { listId, title, due, ...opts }),
+  /** Tasks were retired (2026-11-25); this is only for a tick queued in the outbox before that. */
   completeTask: (t: Task, keepalive?: boolean) =>
     req('POST', `/api/tasks/${encodeURIComponent(t.listId)}/${encodeURIComponent(t.id)}/complete`, {}, keepalive),
-  patchTask: (t: Task, patch: { title?: string; due?: string | null }) => req<Task>('PATCH', `/api/tasks/${encodeURIComponent(t.listId)}/${encodeURIComponent(t.id)}`, patch),
-  moveTask: (t: Task, toList: string) => req<Task>('POST', `/api/tasks/${encodeURIComponent(t.listId)}/${encodeURIComponent(t.id)}/move`, { toList }),
-  deleteTask: (t: Task, keepalive?: boolean) => req('DELETE', `/api/tasks/${encodeURIComponent(t.listId)}/${encodeURIComponent(t.id)}`, undefined, keepalive),
   /** All day: YYYY-MM-DD dates, the end the day after. Timed: ISO date-times. */
   addEvent: (e: { calendarId: string; title: string; allDay: boolean; start: string; end: string }) => req<CalEvent>('POST', '/api/calendar/events', e),
   modifyInbox: (ids: string[], action: 'archive' | 'unarchive' | 'read' | 'unread') => req('POST', '/api/inbox/modify', { ids, action }),
   /** Done with a bill suggestion (kept or dismissed). */
   dropBill: (id: string) => req('DELETE', `/api/bills/${encodeURIComponent(id)}`),
   statementContext: (ask: StatementAsk) => req<StatementContext>('POST', '/api/money/statement', ask, false, undefined, 150_000),
-  addPackage: (number: string, label: string, carrier: string) => req<Package>('POST', '/api/packages', { number, label, carrier }),
-  patchPackage: (id: string, patch: Partial<Pick<Package, 'label' | 'isNew' | 'archived'>>) =>
-    req<Package>('PATCH', `/api/packages/${encodeURIComponent(id)}`, patch),
-  refreshPackage: (id: string) => req<Package | null>('POST', `/api/packages/${encodeURIComponent(id)}/refresh`, {}),
   sync: (source: SourceKey, ifOlderThanSec = 0) =>
     req<AppState>('POST', `/api/sync/${source}${ifOlderThanSec ? `?ifOlderThan=${ifOlderThanSec}` : ''}`, {}),
   disconnectGoogle: () => req<AppState>('POST', '/api/auth/google/disconnect', {}),
@@ -263,8 +255,6 @@ export const api = {
   noteHistory: (id: string) => req<NoteVersion[]>('GET', `/api/notes/${encodeURIComponent(id)}/history`),
   /** Keep the notepad's saved text among its versions now, before an older one replaces it. */
   keepNoteVersion: (id: string) => req<NoteVersion[]>('POST', `/api/notes/${encodeURIComponent(id)}/history`, {}),
-  /** Start checking every bookmark for ones that no longer open; the result comes through the change stream. */
-  checkLinks: () => req<LinkCheck>('POST', '/api/bookmarks/check', {}),
   /** Star a lesson in the daily digest, say it was too basic or too deep ('' clears that), or answer its quick check. */
   markLesson: (id: string, patch: { starred?: boolean; feedback?: DigestFeedback; checked?: number }) => req<Partial<AppState>>('PATCH', `/api/digest/cards/${encodeURIComponent(id)}`, patch),
   /** A follow-up question on a lesson; Claude answers in a few seconds. The lesson comes back with it. */
@@ -299,8 +289,6 @@ export const api = {
   putMood: (date: string, mood: Mood | { level: 0 }) => req<Record<string, Mood>>('PUT', `/api/moods/${date}`, mood),
   putCraving: (c: Craving) => req<Craving[]>('PUT', `/api/cravings/${encodeURIComponent(c.id)}`, c),
   deleteCraving: (id: string) => req<Craving[]>('DELETE', `/api/cravings/${encodeURIComponent(id)}`),
-  /** Google Tasks ticked off in the week starting `week` (a Monday); null without Google. */
-  reviewTasks: (week: string) => req<{ done: number | null }>('GET', `/api/review/tasks?week=${week}`),
   refreshReview: (week: string) => req<AppState>('POST', `/api/review/refresh?week=${week}`, {}),
   server: (iface?: string) => req<ServerStats>('GET', `/api/server${iface ? `?iface=${encodeURIComponent(iface)}` : ''}`),
   /** Music › Busking slots: the last check of NAC's free slots (the server checks on its own schedule). */
@@ -399,11 +387,6 @@ export const api = {
   /** Send a test alert now; refused with why it didn't go. */
   testAlert: () => req<AlertsInfo>('POST', '/api/alerts/test', {}),
 };
-
-/** Count an open of a bookmark (a tile, a search result, ⌘K, 1–9), for ranking results. Nothing waits on it. */
-export function bookmarkOpened(id: string): void {
-  req('POST', `/api/bookmarks/${encodeURIComponent(id)}/opened`, {}, true).catch(() => {});
-}
 
 /** Everything you've entered, as JSON. */
 export const BACKUP_URL = '/api/backup';

@@ -14,7 +14,7 @@ const startedAt = Date.now();
 const NAMES: Record<SourceKey, string> = {
   calendar: 'Calendar',
   tasks: 'Tasks',
-  gmail: 'Gmail packages',
+  gmail: 'Gmail',
   carriers: 'Carriers',
   digest: 'Daily digest',
   inbox: 'Inbox',

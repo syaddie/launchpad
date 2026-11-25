@@ -1,12 +1,11 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { DOW, MON, addDays, startOfDay, ymd } from '../../../shared/dates';
 import { fmtStudy } from '../../../shared/learn';
 import { fmtMoney } from '../../../shared/money';
 import { weekReview } from '../../../shared/review';
-import { MOOD_WORDS, STRENGTH_WORDS, smokeCountMap, triggerName } from '../../../shared/trackers';
+import { MOOD_WORDS, smokeCountMap } from '../../../shared/trackers';
 import { fmtKg, fmtMinutes, weekStart } from '../../../shared/training';
 import type { AppState, ViewKey } from '../../../shared/types';
-import { api } from '../api';
 import { ago } from '../util';
 import { VIEWS } from './Rail';
 import { Readout } from './Motion';
@@ -41,22 +40,6 @@ export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
   const week = ymd(mon);
   const sun = addDays(mon, 6);
 
-  // Tasks ticked off come from Google Tasks, so they're asked for each week.
-  const [tasks, setTasks] = useState<Record<string, number | null | 'error'>>({});
-  const googleTasks = data.google.connected && data.prefs.sources.tasks;
-  useEffect(() => {
-    if (!googleTasks) return;
-    let live = true;
-    api
-      .reviewTasks(week)
-      .then((r) => live && setTasks((t) => ({ ...t, [week]: r.done })))
-      .catch(() => live && setTasks((t) => ({ ...t, [week]: 'error' })));
-    return () => {
-      live = false;
-    };
-  }, [week, googleTasks, data.tasks.length]);
-  const taskCount = tasks[week];
-
   const counts = useMemo(() => smokeCountMap(data.smokes, data.smokeDays), [data.smokes, data.smokeDays]);
   const r = useMemo(
     () =>
@@ -65,19 +48,16 @@ export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
           workouts: data.training.workouts,
           weights: data.weights,
           smokes: counts,
-          cravings: data.cravings,
           moods: data.moods,
           learn: data.learn,
           money: data.money,
           prefs: data.prefs,
-          delivered: data.delivered,
-          tasksDone: typeof taskCount === 'number' ? taskCount : null,
         },
         mon,
         now,
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data, counts, week, taskCount, today.getTime()],
+    [data, counts, week, today.getTime()],
   );
 
   const note = data.reviewNotes.notes[week] ?? null;
@@ -165,16 +145,6 @@ export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
           <span className="meta tnum">Week before: {c.prevCount}</span>
         </Tile>
 
-        <Tile title="Cravings" icon="ph-hand-palm" view="you" onView={onView}>
-          <Big n={r.cravings.resisted} unit="resisted" />
-          <span className="rv-line">
-            {r.cravings.resisted
-              ? [r.cravings.strong && `${r.cravings.strong} ${STRENGTH_WORDS[2].toLowerCase()}`, r.cravings.topTrigger && `most often ${triggerName(r.cravings.topTrigger).toLowerCase()}`].filter(Boolean).join(' · ') || 'No triggers noted'
-              : 'None logged. Shift C logs one'}
-          </span>
-          <span className="meta tnum">Against {plural(c.count, 'cigarette')} smoked</span>
-        </Tile>
-
         <Tile title="Mood" icon="ph-smiley" view="you" onView={onView}>
           {r.mood.avg !== null ? <Big n={r.mood.avg.toFixed(1)} unit={`of 5, ${MOOD_WORDS[Math.round(r.mood.avg) - 1].toLowerCase()} on average`} /> : <Big n="–" unit="not rated" />}
           <div className="rv-week" aria-hidden="true">
@@ -231,21 +201,6 @@ export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
           )}
         </Tile>
 
-        <Tile title="Tasks" icon="ph-check-square" view="home" onView={onView}>
-          {typeof taskCount === 'number' ? (
-            <Big n={taskCount} unit={taskCount === 1 ? 'task done' : 'tasks done'} />
-          ) : (
-            <Big n="–" unit="tasks done" />
-          )}
-          <span className="rv-line">
-            {!googleTasks ? 'Connect Google Tasks in Settings to count them' : taskCount === 'error' ? 'Couldn’t reach Google Tasks' : taskCount === undefined ? 'Asking Google Tasks…' : taskCount === null ? 'Google Tasks didn’t answer' : 'Ticked off in Google Tasks'}
-          </span>
-        </Tile>
-
-        <Tile title="Packages" icon="ph-package" view="home" onView={onView}>
-          <Big n={r.packages.length} unit="delivered" />
-          {r.packages.length > 0 && <span className="rv-line">{r.packages.slice(0, 4).join(', ')}{r.packages.length > 4 ? ` and ${r.packages.length - 4} more` : ''}</span>}
-        </Tile>
       </div>
     </main>
   );

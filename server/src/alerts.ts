@@ -58,7 +58,8 @@ function merge(...checks: Check[]): Check {
 
 // ---------- health warnings ----------
 
-const SYNCS: SourceKey[] = ['calendar', 'tasks', 'gmail', 'carriers', 'digest', 'inbox', 'weather', 'speedtest'];
+// Not Google Tasks or the carriers: they were retired with their panels (sync.ts, enabled).
+const SYNCS: SourceKey[] = ['calendar', 'gmail', 'digest', 'inbox', 'weather', 'speedtest'];
 
 /**
  * What health.ts warns about, as problems. Only Launchpad's own wording goes in the message, not
@@ -71,7 +72,10 @@ export function healthCheck(warnings: HealthWarning[], off: (key: HealthWarning[
     c.problems.push({ key: `health:${w.key}`, kind: 'health', title: `${w.name}: ${w.text}`, body: 'Launchpad’s Server view has the details.', clear: `${w.name}: back to normal` });
   }
   for (const k of [...SYNCS, 'drive'] as const) if (off(k)) c.cleared[`health:${k}`] = null;
-  // The news sync became the digest's: a warning still open for it goes without a word.
+  // Retired syncs (Google Tasks, the carriers) and the news sync that became the digest's: a warning
+  // still open for one goes without a word.
+  c.cleared['health:tasks'] = null;
+  c.cleared['health:carriers'] = null;
   c.cleared['health:news'] = null;
   return c;
 }

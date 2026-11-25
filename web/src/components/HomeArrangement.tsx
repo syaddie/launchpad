@@ -10,15 +10,12 @@ import { closeMenu, menuProps, openMenu, type MenuItem } from './ContextMenu';
 
 type Key = DesignKey | 'narrow';
 
-/** The Settings › Panels switch that hides each one; the clock tile and weather have none of their own. */
+/** The Settings › Panels switch that hides each one; the clock tile has none of its own. */
 const HIDE_KEY: Partial<Record<Area, string>> = {
   today: 'panel:today',
-  tasks: 'panel:tasks',
   notes: 'panel:notes',
-  pkgs: 'panel:packages',
   photo: 'panel:photos',
   photo2: 'panel:photos',
-  bm: 'panel:bookmarks',
 };
 
 /** When a panel only shows some of the time. */
@@ -168,6 +165,17 @@ export function HomeArrangement({ prefs, onPrefs, design, designName }: { prefs:
     </span>
   );
 
+  if (design === 'mission') {
+    return (
+      <div className="drawer-section">
+        <div className="drawer-label">Panels on Home</div>
+        <p className="meta" style={{ margin: 0 }}>
+          Mission makes your photos the ground under the sky, with Today on the left and the Notepad on the right, so there’s nothing to put in order. On a phone the photos come first, under the sky, then Today and the Notepad. Settings › Panels switches each one off; the other layouts can be arranged here.
+        </p>
+      </div>
+    );
+  }
+
   if (design === 'focus') {
     const tabs = focusOrder(saved);
     return (
@@ -208,7 +216,7 @@ export function HomeArrangement({ prefs, onPrefs, design, designName }: { prefs:
     setDragging(null);
   };
 
-  const phoneAreas = new Set<Area>([...designAreas(design), 'bm']);
+  const phoneAreas = new Set<Area>(designAreas(design));
   const phoneAll = narrowOrder(saved);
 
   return (
@@ -216,7 +224,7 @@ export function HomeArrangement({ prefs, onPrefs, design, designName }: { prefs:
       <div className="drawer-section">
         <div className="drawer-label">Panels on Home · {designName}</div>
         <p className="meta" style={{ margin: 0 }}>
-          Columns left to right, each with one or two panels stacked. Bookmarks run along the bottom. Drag a panel, use the arrows, or ⋯ to move it to another column.
+          Columns left to right, each with one or two panels stacked. Drag a panel, use the arrows, or ⋯ to move it to another column.
         </p>
         <div className="arrange-map" aria-hidden="true">
           {cols.map((c, k) => (
@@ -271,7 +279,7 @@ export function HomeArrangement({ prefs, onPrefs, design, designName }: { prefs:
       <div className="drawer-section">
         <div className="drawer-label">On a phone</div>
         <p className="meta" style={{ margin: 0 }}>
-          One column, top to bottom. Every layout but Focus uses this order on a narrow screen.
+          One column, top to bottom. Vista and Poster use this order on a narrow screen.
         </p>
         {orderList('narrow', phoneAll.filter((a) => phoneAreas.has(a)), phoneAll, 'Phone order')}
         {resetButton('narrow', !!saved.narrow)}

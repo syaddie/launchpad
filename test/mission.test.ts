@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { Task } from '../shared/types';
-import { along, ascentCurve, clearOf, clockText, countdown, dayFraction, finishesTheDay, hoursOf, orbPlace, pathTable, seeded, skyWeather } from '../web/src/mission';
+import { along, ascentCurve, clearOf, clockText, countdown, dayFraction, hoursOf, orbPlace, pathTable, seeded, skyWeather } from '../web/src/mission';
 
 const at = (h: number, m = 0, s = 0) => new Date(2026, 10, 25, h, m, s);
-const task = (id: string, due: string | null): Task => ({ id, listId: 'l', title: id, due });
 
 describe('the day along the ascent', () => {
   it('runs from 06:00 on the pad to midnight in orbit', () => {
@@ -112,33 +110,6 @@ describe('the sky’s weather', () => {
   it('is clear with no forecast', () => {
     expect(skyWeather(null)).toBe('clear');
     expect(skyWeather(undefined)).toBe('clear');
-  });
-});
-
-describe('finishing the day', () => {
-  const today = '2026-11-25';
-  it('is ticking the last task due today', () => {
-    const a = task('a', today);
-    expect(finishesTheDay([a, task('later', '2026-11-27'), task('someday', null)], a, today)).toBe(true);
-  });
-  it('isn’t while another is due today or overdue', () => {
-    const a = task('a', today);
-    expect(finishesTheDay([a, task('b', today)], a, today)).toBe(false);
-    expect(finishesTheDay([a, task('old', '2026-11-20')], a, today)).toBe(false);
-  });
-  it('counts an overdue task as today’s', () => {
-    const old = task('old', '2026-11-20');
-    expect(finishesTheDay([old, task('later', '2026-11-27')], old, today)).toBe(true);
-  });
-  it('isn’t a task due later, or an undated one with others left', () => {
-    const later = task('later', '2026-11-27');
-    expect(finishesTheDay([later], later, today)).toBe(false);
-    const someday = task('someday', null);
-    expect(finishesTheDay([someday, task('other', null)], someday, today)).toBe(false);
-  });
-  it('is the very last task of all, dated or not', () => {
-    const someday = task('someday', null);
-    expect(finishesTheDay([someday], someday, today)).toBe(true);
   });
 });
 

@@ -668,9 +668,7 @@ function SpeedPanel({ speed, plan, every, now, lastError, onTest, onOpenSettings
 
 const SYNCS: { key: SourceKey; name: string }[] = [
   { key: 'calendar', name: 'Calendar' },
-  { key: 'tasks', name: 'Tasks' },
-  { key: 'gmail', name: 'Gmail packages' },
-  { key: 'carriers', name: 'Carriers' },
+  { key: 'gmail', name: 'Gmail' },
   { key: 'digest', name: 'Daily digest' },
   { key: 'inbox', name: 'Inbox' },
   { key: 'weather', name: 'Weather and air' },

@@ -1,10 +1,10 @@
 // Grid areas for the home view, built from the panels that are switched on.
-// Desktop and wide layouts are columns of one or two stacked panels over the
-// bookmarks row; a column with one panel spans both rows.
+// Desktop and wide layouts are columns of one or two stacked panels; a column with
+// one panel spans both rows.
 // Each design (Settings › Layout) arranges the columns its own way, and the owner can put
 // them in another order there (prefs.homeLayouts); what's saved is fitted to the design here,
-// so a bad or old arrangement still gives a whole home. Focus's home isn't this grid at all
-// (see components/FocusHome.tsx); it only orders its tabs.
+// so a bad or old arrangement still gives a whole home. Mission's and Focus's homes aren't this
+// grid at all (components/mission/MissionHome.tsx, FocusHome.tsx); Focus only orders its tabs.
 
 import { DEFAULT_DESIGN, HOME_AREAS, type DesignKey, type HomeArea, type HomeLayouts } from '../../shared/types';
 
@@ -13,59 +13,46 @@ export type Area = HomeArea;
 
 type Columns = { w: string; items: Area[] }[];
 
-/** Vista: one row of tall glass panels under the clock. The photos are the wallpaper, so they get no panels. */
+/** Vista: two tall glass panels under the clock. The photos are the wallpaper, so they get no panels. */
 const VISTA: Columns = [
-  { w: '1.1fr', items: ['today'] },
-  { w: '1fr', items: ['tasks'] },
+  { w: '1.25fr', items: ['today'] },
   { w: '1fr', items: ['notes'] },
-  { w: '1fr', items: ['pkgs'] },
 ];
 
-/** Poster: the agenda as a wide lead column, then tasks over packages, then notes over a photo. */
+/** Poster: the agenda as a wide lead column over a photo, then notes over the other photo. */
 const POSTER: Columns = [
   { w: '1.35fr', items: ['today', 'photo2'] },
-  { w: '1fr', items: ['tasks', 'pkgs'] },
   { w: '1fr', items: ['notes', 'photo'] },
 ];
 
-/** Mission: three columns of glass on the ground under the sky. The agenda leads; a photo, when there is one, sits under the notes. */
-const MISSION: Columns = [
-  { w: '1.1fr', items: ['today', 'photo2'] },
-  { w: '1fr', items: ['tasks', 'pkgs'] },
-  { w: '1fr', items: ['notes', 'photo'] },
-];
+const COLUMNS: Partial<Record<DesignKey, Columns>> = { vista: VISTA, poster: POSTER };
 
-const COLUMNS: Partial<Record<DesignKey, Columns>> = { mission: MISSION, vista: VISTA, poster: POSTER };
-
-export const NARROW_ORDER: Area[] = ['hero', 'today', 'tasks', 'photo', 'pkgs', 'notes', 'photo2', 'bm'];
+export const NARROW_ORDER: Area[] = ['hero', 'today', 'photo', 'notes', 'photo2'];
 
 /** The designs whose home is this grid of columns. */
-export const GRID_DESIGNS: DesignKey[] = ['mission', 'vista', 'poster'];
+export const GRID_DESIGNS: DesignKey[] = ['vista', 'poster'];
 
-/** Most panels one column stacks: the grid has two rows over the bookmarks. */
+/** Most panels one column stacks: the grid has two rows. */
 export const COLUMN_MAX = 2;
 
 /** Most columns an arrangement can have. */
 export const COLUMNS_MAX = 6;
 
 /** The panels Focus keeps behind tabs, in tab order. */
-export const FOCUS_TABS = ['today', 'tasks', 'notes', 'pkgs'] as const;
+export const FOCUS_TABS = ['today', 'notes'] as const;
 export type FocusTab = (typeof FOCUS_TABS)[number];
 
 /** Names for Settings › Layout. */
 export const AREA_NAMES: Record<Area, string> = {
   today: 'Today',
-  tasks: 'Tasks',
   notes: 'Notepad',
-  pkgs: 'Packages',
   photo: 'Photo',
   photo2: 'Second photo',
-  bm: 'Bookmarks',
   hero: 'Clock and what’s next',
 };
 
-/** A design's own columns. Focus has none (its home is tabs), so it gets the default's. */
-const builtIn = (design: DesignKey): Columns => COLUMNS[design] ?? MISSION;
+/** A design's own columns. Mission's and Focus's homes aren't this grid (MissionHome, FocusHome); they get Poster's. */
+const builtIn = (design: DesignKey): Columns => COLUMNS[design] ?? POSTER;
 
 /** Each once, known ones only, in the order given. */
 function known<T extends string>(list: unknown, allowed: readonly T[], seen = new Set<T>()): T[] {
@@ -145,7 +132,7 @@ function widthOf(design: DesignKey, top: Area) {
 
 /**
  * The grid's areas, columns and rows, and `order`: the panels as they read (down each column, left
- * to right, then the bookmarks), which the page puts them in so Tab and screen readers go that way too.
+ * to right), which the page puts them in so Tab and screen readers go that way too.
  */
 export function gridLayout(layout: Layout, shown: Set<Area>, design: DesignKey = DEFAULT_DESIGN, saved?: HomeLayouts): { areas: string; columns: string; rows: string; order: Area[] } {
   const q = (row: string[]) => `'${row.join(' ')}'`;
@@ -161,14 +148,12 @@ export function gridLayout(layout: Layout, shown: Set<Area>, design: DesignKey =
     rows.push(cols.map((c) => c.items[0]));
     rows.push(cols.map((c) => c.items[1] ?? c.items[0]));
   }
-  const bm = shown.has('bm');
-  if (bm) rows.push(cols.length ? cols.map(() => 'bm') : ['bm']);
   const even = layout === 'wide' && cols.every((c) => c.items.length === 1);
   const top = even ? 'minmax(0, 1fr) minmax(0, 1fr)' : 'minmax(0, 1.2fr) minmax(0, 0.8fr)';
   return {
     areas: rows.map(q).join(' '),
     columns: cols.length ? cols.map((c) => `minmax(0, ${c.w})`).join(' ') : 'minmax(0, 1fr)',
-    rows: [cols.length ? top : '', bm ? 'auto' : ''].filter(Boolean).join(' '),
-    order: [...cols.flatMap((c) => c.items), ...(bm ? (['bm'] as const) : [])],
+    rows: cols.length ? top : '',
+    order: cols.flatMap((c) => c.items),
   };
 }

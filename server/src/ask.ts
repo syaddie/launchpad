@@ -13,15 +13,14 @@ export const MAX_ASK = 300;
 export function askContext(now = new Date()): AskContext {
   const money = store.money();
   const accounts = money.accounts.filter((a) => !a.archived);
-  const prefs = store.prefs();
-  const tasksOn = !!store.google() && prefs.sources.tasks;
   return {
     today: ymd(now),
     accounts: accounts.map((a) => ({ id: a.id, name: a.name })),
     mainAccount: accounts.length ? mainAccount(money.accounts) : '',
-    taskLists: tasksOn ? store.tasks().lists.map((l) => ({ id: l.id, title: l.title })) : [],
+    // Tasks and Bookmarks were retired (2026-11-25): with no lists or groups, their tools aren't offered.
+    taskLists: [],
     courses: store.learn().courses.filter((c) => !c.archived).map((c) => ({ id: c.id, code: c.code, name: c.name })),
-    bookmarkGroups: store.bookmarks().map((g) => ({ id: g.id, name: g.name })),
+    bookmarkGroups: [],
   };
 }
 

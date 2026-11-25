@@ -1,31 +1,29 @@
 import { Fragment, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { STARTER_NOTES } from '../../shared/defaults';
-import { startOfDay, ymd } from '../../shared/dates';
+import { ymd } from '../../shared/dates';
 import { fmtStudy, timerMinutes } from '../../shared/learn';
 import { fmtKg, workoutLabel } from '../../shared/training';
 import { fmtUsd } from '../../shared/claudeUsage';
 import { fmtMoney, sortEntries } from '../../shared/money';
-import { MOOD_WORDS, cravingsOn, nearestCountdown, smokesOn } from '../../shared/trackers';
-import { knownDesign, type AppState, type Backup, type BookmarkGroup, type Craving, type CravingTrigger, type DesignKey, type Countdown, Learn, Money, Mood, Note, Package, Photo, Prefs, Task, Training, ViewKey } from '../../shared/types';
+import { MOOD_WORDS, nearestCountdown, smokesOn } from '../../shared/trackers';
+import { knownDesign, type AppState, type Backup, type DesignKey, type Countdown, Learn, Money, Mood, Note, Photo, Prefs, Training, ViewKey } from '../../shared/types';
 import { api, localGet, localSet, type RestoreResult } from './api';
 import { AddEvent } from './components/AddEvent';
-import { Bookmarks } from './components/Bookmarks';
 import { closeMenu, ContextMenuHost, copyText, menuProps, placeOf } from './components/ContextMenu';
-import { AddPackageDrawer, DESIGNS, Drawer, PANEL_ROWS, PackageDrawer, SettingsDrawer, type SettingsTab } from './components/Drawers';
+import { DESIGNS, Drawer, PANEL_ROWS, SettingsDrawer, type SettingsTab } from './components/Drawers';
 import { FocusHome, type FocusTabInfo } from './components/FocusHome';
 import { HeroPanel } from './components/Hero';
 import { MissionHero } from './components/mission/Hero';
+import { MissionHome } from './components/mission/MissionHome';
 import { Mark } from './components/mission/Mark';
 import { MissionScene } from './components/mission/Scene';
 import { FocusView, Notes } from './components/Notes';
-import { Packages } from './components/Packages';
 import { Palette } from './components/Palette';
 import { PhotoPanel, shrinkImage, usePhotoSlots, Wallpaper } from './components/Photos';
 import { Rail, VIEWS } from './components/Rail';
 import type { ServerTab } from './components/Server';
 import { ServerBanner } from './components/ServerBanner';
 import { Shortcuts } from './components/Shortcuts';
-import { Tasks } from './components/Tasks';
 import { Today, todayAgenda } from './components/Today';
 import { TopBar } from './components/TopBar';
 import { useAppData } from './hooks/useAppData';
@@ -37,14 +35,13 @@ import { useFlash, useToast } from './hooks/useToast';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Presence } from './components/Motion';
 import { focusOrder, focusTab, gridLayout, type Area, type FocusTab } from './layout';
-import { finishesTheDay, skyWeather } from './mission';
+import { skyWeather } from './mission';
 import { loadable } from './loadable';
 import { viewStep } from './motion';
 import { endOpening, viewTransition } from './viewTransition';
 import { send } from './outbox';
 import { paletteAsk, paletteItems, paletteSearches, type AskHandlers, type PaletteContext } from './paletteItems';
-import type { PendingCall } from './pending';
-import { dayDiff, hm, inboxBadge, inMinutes, newId, parseYmd, statusText } from './util';
+import { hm, inboxBadge, inMinutes } from './util';
 
 // The views off the home page load the first time they're opened, so a new tab downloads
 // and starts only what home needs. They're fetched in the background once the page is up
@@ -85,7 +82,7 @@ function preloadViews() {
   loadTerminal().catch(() => {});
 }
 
-type DrawerState = { type: 'pkg'; id: string } | { type: 'add' } | { type: 'settings'; tab?: SettingsTab } | { type: 'exercise'; title: string } | { type: 'workout'; id: string } | { type: 'course'; id: string; item?: string } | null;
+type DrawerState = { type: 'settings'; tab?: SettingsTab } | { type: 'exercise'; title: string } | { type: 'workout'; id: string } | { type: 'course'; id: string; item?: string } | null;
 
 /** How long a change of view waits for the new view's code before going ahead without it. */
 const CODE_WAIT_MS = 400;
@@ -123,7 +120,6 @@ export function App({ cached }: { cached: AppState | null }) {
   const [search, setSearch] = useState('');
   const [drawer, setDrawer] = useState<DrawerState>(null);
   const [focus, setFocus] = useState(false);
-  const [editBookmarks, setEditBookmarks] = useState(false);
   // Mission: each time this goes up, the rocket on the horizon lifts off (components/mission/Scene.tsx).
   const [launches, setLaunches] = useState(0);
   const [activeNote, setActiveNote] = useState(() => localGet('activeNote') || '');
@@ -203,11 +199,6 @@ export function App({ cached }: { cached: AppState | null }) {
     location.href = '/api/auth/google';
   };
 
-  const setBookmarks = (bookmarks: BookmarkGroup[]) => {
-    update((d) => ({ ...d, bookmarks }));
-    savers.bookmarks.schedule(bookmarks);
-  };
-
   const setNotes = (notes: Note[]) => {
     setSaved(false);
     update((d) => ({ ...d, notes }));
@@ -267,54 +258,6 @@ export function App({ cached }: { cached: AppState | null }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, data.newsSummaries, digestToday]);
 
-  const addTask = (listId: string, title: string, due: string | null, opts: { parent?: string } = {}) => {
-    const tmp: Task = { id: 'tmp-' + Date.now(), listId, title, due, ...(opts.parent ? { parent: opts.parent, position: '~' } : {}) };
-    update((d) => ({ ...d, tasks: [tmp, ...d.tasks] }));
-    api
-      .addTask(listId, title, due, opts)
-      .then((t) => update((d) => ({ ...d, tasks: d.tasks.map((x) => (x.id === tmp.id ? t : x)) })))
-      .catch((e) => {
-        update((d) => ({ ...d, tasks: d.tasks.filter((x) => x.id !== tmp.id) }));
-        showToast(`Couldn’t add task: ${e.message}`);
-      });
-  };
-
-  const completeTask = (t: Task, keepalive?: boolean) => {
-    // Mission: the last of the day's tasks sets off the launch.
-    if (design === 'mission' && finishesTheDay(data.tasks, t, ymd(new Date()))) {
-      setLaunches((n) => n + 1);
-      showToast('All of today’s tasks done');
-    }
-    update((d) => ({ ...d, tasks: d.tasks.filter((x) => x.id !== t.id) }));
-    send({ kind: 'completeTask', listId: t.listId, id: t.id }, keepalive).catch((e) => {
-      showToast(`Couldn’t complete task: ${e.message}`);
-      refresh();
-    });
-  };
-
-  const patchPackage = (id: string, patch: Partial<Package>) => {
-    update((d) => ({ ...d, packages: d.packages.map((p) => (p.id === id ? { ...p, ...patch } : p)) }));
-  };
-
-  const labelTimer = useRef(0);
-  const renamePackage = (id: string, label: string) => {
-    patchPackage(id, { label });
-    clearTimeout(labelTimer.current);
-    labelTimer.current = window.setTimeout(() => api.patchPackage(id, { label }).catch(onSaveError), 400);
-  };
-
-  const archivePackage = (id: string) => {
-    update((d) => ({ ...d, packages: d.packages.filter((p) => p.id !== id) }));
-    setDrawer(null);
-    api.patchPackage(id, { archived: true, isNew: false }).catch(onSaveError);
-  };
-
-  const addPackage = async (number: string, label: string, carrier: string) => {
-    const pkg = await api.addPackage(number, label, carrier);
-    update((d) => ({ ...d, packages: [pkg, ...d.packages.filter((p) => p.id !== pkg.id)] }));
-    setDrawer(null);
-  };
-
   const addPhotos = async (files: File[]): Promise<string> => {
     let added = 0;
     for (const f of files) {
@@ -366,37 +309,6 @@ export function App({ cached }: { cached: AppState | null }) {
     smokeCall(() => send({ kind: 'addSmoke', at }));
     const limit = data.prefs.cigaretteLimit;
     showToast(`Logged · ${count} today${limit ? ` of ${limit}` : ''}`, { label: 'Undo', run: () => undoSmoke(at) });
-  };
-
-  const cravingSaver = useRef(Promise.resolve());
-  /** Server calls for cravings run in order, and the server's list replaces the optimistic one (none when queued). */
-  const cravingCall = (p: PendingCall) => {
-    cravingSaver.current = cravingSaver.current
-      .then(() => send<Craving[]>(p))
-      .then((cravings) => cravings && update((d) => ({ ...d, cravings })))
-      .catch((e) => {
-        showToast(`Couldn’t save: ${e.message}`);
-        refresh();
-      });
-  };
-
-  /** Add a craving or change one. */
-  const saveCraving = (c: Craving) => {
-    update((d) => ({ ...d, cravings: [...d.cravings.filter((x) => x.id !== c.id), c].sort((a, b) => Date.parse(a.at) - Date.parse(b.at)) }));
-    cravingCall({ kind: 'craving', value: c });
-  };
-
-  const removeCraving = (id: string) => {
-    update((d) => ({ ...d, cravings: d.cravings.filter((x) => x.id !== id) }));
-    cravingCall({ kind: 'removeCraving', id });
-  };
-
-  /** A craving that wasn't acted on, logged now; its strength, trigger and note can be changed in You. */
-  const logCraving = (strength: 1 | 2 | 3 = 2, trigger: CravingTrigger | '' = '') => {
-    const c: Craving = { id: newId('cr'), at: new Date().toISOString(), strength, trigger, note: '' };
-    const count = cravingsOn([...data.cravings, c], new Date()).length;
-    saveCraving(c);
-    showToast(`Craving logged · ${count} resisted today`, { label: 'Undo', run: () => removeCraving(c.id) });
   };
 
   /** Log body weight for a day (null removes it); `undo` offers to put back what was there. */
@@ -590,7 +502,7 @@ export function App({ cached }: { cached: AppState | null }) {
     view, setView, palette, setPalette, shortcuts, setShortcuts,
     drawer: !!drawer, closeDrawer: () => setDrawer(null),
     focus, closeFocus: () => setFocus(false),
-    search, searchRef, editBookmarks, bookmarks: data.bookmarks, logSmoke, logCraving: () => logCraving(),
+    searchRef, logSmoke,
   });
 
   // ---------- derived ----------
@@ -607,27 +519,19 @@ export function App({ cached }: { cached: AppState | null }) {
   }
   // The tail of the summary line, which Focus's clock tile shows under the next event.
   const extras: string[] = [];
-  const overdue = data.google.connected && data.prefs.sources.tasks ? data.tasks.filter((t) => t.due && dayDiff(now, parseYmd(t.due)) < 0).length : 0;
-  if (overdue) extras.push(`${overdue} overdue task${overdue > 1 ? 's' : ''}`);
-  const outPk = data.packages.filter((p) => p.stage === 2 && !p.exception).length;
-  if (outPk) extras.push(`${outPk} package${outPk > 1 ? 's' : ''} out for delivery`);
   const soon = data.prefs.hidden.includes('top:countdown') ? '' : nearestCountdown(data.countdowns, now);
   if (soon) extras.push(soon);
   subline = [subline, ...extras].filter(Boolean).join(' · ');
 
   const notes = data.notes.length ? data.notes : STARTER_NOTES;
   const activeId = notes.some((n) => n.id === activeNote) ? activeNote : notes[0].id;
-  const drawerPkg = drawer?.type === 'pkg' ? data.packages.find((p) => p.id === drawer.id) : undefined;
   const hidden = new Set(data.prefs.hidden);
   const photoCount = hidden.has('panel:photos') ? 0 : Math.min(data.photos.length, 2);
   const shown = new Set<Area>(
     (
       [
         ['today', 'panel:today'],
-        ['tasks', 'panel:tasks'],
         ['notes', 'panel:notes'],
-        ['pkgs', 'panel:packages'],
-        ['bm', 'panel:bookmarks'],
       ] as const
     )
       .filter(([, k]) => !hidden.has(k))
@@ -648,35 +552,14 @@ export function App({ cached }: { cached: AppState | null }) {
   const activeTab = focusTab(homeTab, shown, tabOrder);
   let focusTabs: FocusTabInfo[] = [];
   if (design === 'focus') {
-    const today = ymd(now);
     const calOn = data.google.connected && data.prefs.sources.calendar;
-    const tasksOn = data.google.connected && data.prefs.sources.tasks;
     const left = calOn ? todayAgenda(data, now).todays.filter((e) => e.e > now).length : 0;
-    const dueToday = tasksOn ? data.tasks.filter((t) => t.due === today).length : 0;
-    const onTheWay = data.packages.filter((p) => p.stage < 3);
     if (shown.has('today')) focusTabs.push({ key: 'today', name: 'Today', icon: 'ph-calendar-blank', count: left });
-    if (shown.has('tasks')) focusTabs.push({ key: 'tasks', name: 'Tasks', icon: 'ph-check-square', count: overdue + dueToday, warn: overdue > 0 });
     if (shown.has('notes')) focusTabs.push({ key: 'notes', name: 'Notepad', icon: 'ph-notebook' });
-    if (shown.has('pkgs')) focusTabs.push({ key: 'pkgs', name: 'Packages', icon: 'ph-package', count: onTheWay.length, warn: onTheWay.some((p) => p.exception) });
     // In the order set in Settings › Layout.
     focusTabs = tabOrder.flatMap((k) => focusTabs.filter((t) => t.key === k));
   }
 
-  const keepPackage = (id: string) => {
-    patchPackage(id, { isNew: false });
-    api.patchPackage(id, { isNew: false }).catch(onSaveError);
-  };
-  /** Ask the carrier now rather than waiting for the next round. */
-  const refreshPackage = (id: string) => {
-    showToast('Checking for updates…');
-    api
-      .refreshPackage(id)
-      .then((pkg) => {
-        if (pkg) update((d) => ({ ...d, packages: d.packages.map((p) => (p.id === id ? pkg : p)) }));
-        showToast(pkg ? statusText(pkg, startOfDay(new Date())) : 'That package is no longer tracked.');
-      })
-      .catch((e) => showToast(`Couldn’t check: ${e.message}`));
-  };
   const notesPanel = (
     <Notes notes={notes} activeId={activeId} onActive={pickNote} onChange={setNotes} saved={saved} onOpenFocus={() => setFocus(true)} onEditing={onNoteEditing} notify={showToast} />
   );
@@ -692,10 +575,6 @@ export function App({ cached }: { cached: AppState | null }) {
       addEvent={<AddEvent data={data} now={now} focusSignal={addEventSignal} onAdd={google.addEvent} onConnect={connect} />}
     />
   );
-  const tasksPanel = <Tasks data={data} now={now} onConnect={connect} onAdd={addTask} onComplete={completeTask} onUpdate={google.updateTask} onMove={google.moveTask} onDelete={google.deleteTask} />;
-  const packagesPanel = (
-    <Packages packages={data.packages} now={now} onOpen={(id) => setDrawer({ type: 'pkg', id })} onAdd={() => setDrawer({ type: 'add' })} onKeep={keepPackage} onDismiss={archivePackage} onRefresh={refreshPackage} notify={showToast} />
-  );
   const heroPanel = <HeroPanel data={data} now={now} extras={extras.join(' · ')} />;
   const noPanels = (
     <div className="panel" style={{ gridColumn: '1 / -1' }}>
@@ -707,8 +586,6 @@ export function App({ cached }: { cached: AppState | null }) {
       </div>
     </div>
   );
-  const checkLinks = () => api.checkLinks().then((linkCheck) => update((d) => ({ ...d, linkCheck }))).catch((e) => showToast(`Couldn’t start the link check: ${e.message}`));
-  const bookmarksPanel = <Bookmarks groups={data.bookmarks} onChange={setBookmarks} search={search} edit={editBookmarks} setEdit={setEditBookmarks} linkCheck={data.linkCheck} onCheckLinks={checkLinks} notify={showToast} />;
   /** A photo panel; its menu also manages and hides them. */
   const photoPanel = (area: 'photo' | 'photo2') => {
     const slot = area === 'photo' ? 0 : 1;
@@ -727,13 +604,10 @@ export function App({ cached }: { cached: AppState | null }) {
   const homePanel = (a: Area): ReactNode => {
     switch (a) {
       case 'today': return todayPanel;
-      case 'tasks': return tasksPanel;
       case 'notes': return notesPanel;
-      case 'pkgs': return packagesPanel;
       case 'photo': return photoPanel('photo');
       case 'photo2': return photoPanel('photo2');
       case 'hero': return heroPanel;
-      case 'bm': return bookmarksPanel;
     }
   };
 
@@ -741,10 +615,6 @@ export function App({ cached }: { cached: AppState | null }) {
 
   /** Ask Launchpad's actions, through the same saves the views use, each with an undo where there's one to give. */
   const askHandlers: AskHandlers = {
-    addTask: (listId, title, due) => {
-      addTask(listId, title, due);
-      showToast(`Added “${title}” to Tasks`);
-    },
     addMoney: (entry) => {
       const before = data.money;
       setMoney({ ...before, entries: sortEntries([...before.entries, entry]) });
@@ -755,11 +625,6 @@ export function App({ cached }: { cached: AppState | null }) {
       setCountdowns([...before, cd]);
       showToast(`Added a countdown to ${cd.title}`, { label: 'Undo', run: () => setCountdowns(before) });
     },
-    addBookmark: (groupId, name, url) => {
-      const before = data.bookmarks;
-      setBookmarks(before.map((g) => (g.id === groupId ? { ...g, items: [...g.items, { id: newId('b'), name, url }] } : g)));
-      showToast(`Added ${name} to bookmarks`, { label: 'Undo', run: () => setBookmarks(before) });
-    },
     setMood: (date, mood) => {
       const before = data.moods[date] ?? null;
       setMood(date, mood);
@@ -769,12 +634,11 @@ export function App({ cached }: { cached: AppState | null }) {
   };
 
   const paletteCtx: PaletteContext = {
-    data, now, view, dark, design, localDesign, smokesToday, inboxCount, courseName, setView, setPrefs, setLocalDesign, logSmoke, logCraving,
+    data, now, view, dark, design, localDesign, smokesToday, inboxCount, courseName, setView, setPrefs, setLocalDesign, logSmoke,
     openWeight: () => (setView('training'), setWeightSignal((n) => n + 1)),
     addCountdown: () => (setView('you'), setAddCountdown((n) => n + 1)),
     addWork: () => (setView('learn'), setAddWorkSignal((n) => n + 1)),
     startStudy, stopStudy, logStudy, setWeight, runSpeedTest, openServerTab,
-    addPackage: () => setDrawer({ type: 'add' }),
     addEvent: google.addEvent,
     // The field is in the Today panel.
     openAddEvent: shown.has('today') ? () => (setView('home'), setHomeTab('today'), setAddEventSignal((n) => n + 1)) : undefined,
@@ -792,7 +656,7 @@ export function App({ cached }: { cached: AppState | null }) {
     return w ? workoutLabel(w, data.exerciseMuscles) : 'Session';
   };
   const drawerTitle =
-    drawer?.type === 'settings' ? 'Settings' : drawer?.type === 'add' ? 'Add package' : drawer?.type === 'exercise' ? drawer.title : drawer?.type === 'workout' ? workoutTitle(drawer.id) : drawer?.type === 'course' ? data.learn.courses.find((c) => c.id === drawer.id)?.name || 'Course' : drawerPkg ? 'Package' : '';
+    drawer?.type === 'settings' ? 'Settings' : drawer?.type === 'exercise' ? drawer.title : drawer?.type === 'workout' ? workoutTitle(drawer.id) : drawer?.type === 'course' ? data.learn.courses.find((c) => c.id === drawer.id)?.name || 'Course' : '';
 
   // A right-click on anything without a menu of its own: what the panel or dialog it's in offers,
   // then the app-wide things. A long press on a plain link lands here too (a mouse keeps the browser's).
@@ -824,8 +688,6 @@ export function App({ cached }: { cached: AppState | null }) {
         'sep',
         !palette && { label: 'Command palette', icon: 'ph-command', onSelect: () => setPalette(true) },
         !shortcuts && { label: 'Keyboard shortcuts', icon: 'ph-keyboard', onSelect: () => setShortcuts(true) },
-        // The Bookmarks panel's own Edit is already in its part of the menu.
-        view === 'home' && shown.has('bm') && !editBookmarks && place?.hide !== 'panel:bookmarks' && { label: 'Edit bookmarks', icon: 'ph-pencil-simple', onSelect: () => setEditBookmarks(true) },
         'sep',
         drawer?.type !== 'settings' && { label: 'Settings', icon: 'ph-gear-six', onSelect: () => setDrawer({ type: 'settings' }) },
       ];
@@ -897,7 +759,7 @@ export function App({ cached }: { cached: AppState | null }) {
             onRefresh={refreshInbox}
             onConnect={connect}
             onOpenSettings={() => setDrawer({ type: 'settings' })}
-            actions={{ onAction: google.inboxAction, onTask: google.emailToTask, onKeepBill: google.keepBill, onDismissBill: google.dismissBill }}
+            actions={{ onAction: google.inboxAction, onKeepBill: google.keepBill, onDismissBill: google.dismissBill }}
             notify={showToast}
           />
         ) : view === 'you' ? (
@@ -909,9 +771,6 @@ export function App({ cached }: { cached: AppState | null }) {
             onLogSmoke={logSmoke}
             onUndoSmoke={undoSmoke}
             onMood={setMood}
-            onLogCraving={() => logCraving()}
-            onCraving={saveCraving}
-            onRemoveCraving={removeCraving}
             onOpenSettings={() => setDrawer({ type: 'settings' })}
           />
         ) : view === 'review' ? (
@@ -948,15 +807,25 @@ export function App({ cached }: { cached: AppState | null }) {
         ) : view === 'server' ? (
           <Server data={data} now={now} openTab={serverTab} onOpenSettings={() => setDrawer({ type: 'settings' })} onPinFolders={(pinnedFolders) => setPrefs({ ...data.prefs, pinnedFolders })} onAutoUnpack={(autoUnpack) => setPrefs({ ...data.prefs, autoUnpack })} split={layout !== 'narrow'} />
         ) : (
-          design === 'focus' ? (
+          design === 'mission' ? (
+            <MissionHome
+              photos={data.photos}
+              photosOff={hidden.has('panel:photos')}
+              start={photoSlots.shown[0]}
+              today={shown.has('today') && todayPanel}
+              notes={shown.has('notes') && notesPanel}
+              onManagePhotos={() => setDrawer({ type: 'settings', tab: 'photos' })}
+              onHidePhotos={() => hidePanel('panel:photos', 'Photos')}
+              empty={noPanels}
+            />
+          ) : design === 'focus' ? (
             <FocusHome
               tabs={focusTabs}
               active={activeTab}
               onTab={setHomeTab}
               hero={heroPanel}
               photo={shown.has('photo') && photoPanel('photo')}
-              panel={activeTab === 'today' ? todayPanel : activeTab === 'tasks' ? tasksPanel : activeTab === 'notes' ? notesPanel : packagesPanel}
-              bookmarks={shown.has('bm') && bookmarksPanel}
+              panel={activeTab === 'notes' ? notesPanel : todayPanel}
               empty={noPanels}
             />
           ) : (
@@ -998,7 +867,6 @@ export function App({ cached }: { cached: AppState | null }) {
               onLocalDesign={setLocalDesign}
             />
           )}
-          {drawer.type === 'add' && <AddPackageDrawer onSubmit={addPackage} onCancel={() => setDrawer(null)} />}
           {drawer.type === 'exercise' && (
             <ExerciseDrawer key={drawer.title} title={drawer.title} data={data} pinned={data.prefs.pinnedLifts.includes(drawer.title)} onPin={() => togglePin(drawer.title)} />
           )}
@@ -1008,7 +876,6 @@ export function App({ cached }: { cached: AppState | null }) {
           {drawer.type === 'course' && (
             <CourseDrawer key={drawer.id} learn={data.learn} courseId={drawer.id} focusItem={drawer.item} now={now} onChange={setLearn} onClose={() => setDrawer(null)} notify={showToast} />
           )}
-          {drawerPkg && <PackageDrawer key={drawerPkg.id} pkg={drawerPkg} now={now} onRename={(l) => renamePackage(drawerPkg.id, l)} onArchive={() => archivePackage(drawerPkg.id)} />}
           </Suspense>
         </Drawer>
       )}

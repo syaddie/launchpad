@@ -1,6 +1,5 @@
 import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react';
-import type { BookmarkGroup, ViewKey } from '../../../shared/types';
-import { bookmarkOpened } from '../api';
+import type { ViewKey } from '../../../shared/types';
 import { VIEWS } from '../components/Rail';
 
 export interface ShortcutState {
@@ -16,15 +15,11 @@ export interface ShortcutState {
   closeDrawer: () => void;
   focus: boolean;
   closeFocus: () => void;
-  search: string;
   searchRef: RefObject<HTMLInputElement | null>;
-  editBookmarks: boolean;
-  bookmarks: BookmarkGroup[];
   logSmoke: () => void;
-  logCraving: () => void;
 }
 
-/** Every key on the `?` page: ⌘K, Esc, G then a letter, /, ?, N, C, Shift C, M and 1–9. */
+/** Every key on the `?` page: ⌘K, Esc, G then a letter, /, ?, D, C and M. */
 export function useShortcuts(state: ShortcutState) {
   const s = useRef(state);
   s.current = state;
@@ -80,22 +75,13 @@ export function useShortcuts(state: ShortcutState) {
         setView(view === 'digest' ? 'home' : 'digest');
         return;
       }
-      if (key === 'c') {
-        if (e.shiftKey) s.current.logCraving();
-        else s.current.logSmoke();
+      if (key === 'c' && !e.shiftKey) {
+        s.current.logSmoke();
         return;
       }
       if (key === 'm' && !e.shiftKey) {
         setView('you');
         return;
-      }
-      if (/^[1-9]$/.test(e.key) && !s.current.search && !s.current.editBookmarks && view === 'home') {
-        const daily = s.current.bookmarks.find((g) => g.name === 'Daily');
-        const b = daily?.items[Number(e.key) - 1];
-        if (b) {
-          bookmarkOpened(b.id);
-          window.open(b.url, '_blank', 'noopener');
-        }
       }
     };
     window.addEventListener('keydown', onKey);

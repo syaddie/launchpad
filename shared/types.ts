@@ -73,9 +73,12 @@ export const DEFAULT_DESIGN: DesignKey = 'mission';
  * Broadsheet, Console, Bento and Horizon were retired on 2026-11-25 (git tag designs-before-retiring).
  */
 export const knownDesign = (d: unknown): DesignKey => (DESIGN_KEYS.includes(d as DesignKey) ? (d as DesignKey) : DEFAULT_DESIGN);
-/** A panel's place on the home grid (web/src/layout.ts). `hero` is Focus's clock-and-next tile; `bm` the bookmarks row. */
-export type HomeArea = 'today' | 'tasks' | 'notes' | 'pkgs' | 'photo' | 'photo2' | 'bm' | 'hero';
-export const HOME_AREAS: HomeArea[] = ['today', 'tasks', 'notes', 'pkgs', 'photo', 'photo2', 'bm', 'hero'];
+/**
+ * A panel's place on the home grid (web/src/layout.ts). `hero` is Focus's clock-and-next tile.
+ * Tasks, Packages and Bookmarks were retired on 2026-11-25; an arrangement saved with them just skips them.
+ */
+export type HomeArea = 'today' | 'notes' | 'photo' | 'photo2' | 'hero';
+export const HOME_AREAS: HomeArea[] = ['today', 'notes', 'photo', 'photo2', 'hero'];
 /**
  * Home arrangements set by hand in Settings › Layout: for each design, its columns of panels left to
  * right; `narrow` is the phone's one column (shared by every design); Focus's one list is its tab order.

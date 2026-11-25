@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { bookmarkKey, bumpOpen, cleanOpens, frecency, importFolders, newInFolder, parseBookmarkHtml, rankBookmarks } from '../shared/bookmarks';
-import { DEFAULT_ENGINES } from '../shared/defaults';
 import type { BookmarkGroup } from '../shared/types';
 import { iconLinks, isSignIn, judge, sniffIcon } from '../server/src/bookmarks';
-import { searchRows } from '../web/src/components/TopBar';
 
 const DAY = 86_400_000;
 const t0 = Date.parse('2026-11-01T00:00:00Z');
@@ -27,12 +25,6 @@ describe('ranking by opens', () => {
     // A long time ago counts for little, but more than never.
     expect(rankBookmarks(list, { b: bumpOpen(undefined, t0 - 200 * DAY) }, '', t0).map((b) => b.id)).toEqual(['b', 'a', 'c']);
     expect(rankBookmarks(list, {}, 'gi', t0).map((b) => b.id)).toEqual(['b', 'a', 'c']);
-  });
-
-  it('ranks the search box’s bookmark results the same way', () => {
-    const bms = [{ id: '1', name: 'Grafana', url: 'https://grafana.example' }, { id: '2', name: 'Google Drive', url: 'https://drive.google.com' }];
-    expect(searchRows('g', bms, DEFAULT_ENGINES).slice(0, 2).map((r) => r.key)).toEqual(['b:1', 'b:2']);
-    expect(searchRows('g', bms, DEFAULT_ENGINES, { '2': bumpOpen(undefined) }).slice(0, 2).map((r) => r.key)).toEqual(['b:2', 'b:1']);
   });
 
   it('keeps counts only for bookmarks that are still there', () => {

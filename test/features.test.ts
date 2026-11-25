@@ -78,102 +78,90 @@ describe('search fallbacks', () => {
     expect(engineUrl(DEFAULT_ENGINES[0], 'a&b c')).toBe('https://www.google.com/search?q=a%26b%20c');
     expect(engineUrl({ prefix: 'x', name: 'X', url: 'https://x.test/?q=' }, 'hi')).toBe('https://x.test/?q=hi');
   });
-  it('lists bookmarks first, then every engine; a prefix goes straight to its engine', () => {
-    const bms = [{ id: '1', name: 'GitHub', url: 'https://github.com' }];
-    expect(searchRows('git', bms, DEFAULT_ENGINES).map((r) => r.key)).toEqual(['b:1', ...DEFAULT_ENGINES.map((e) => 'e:' + e.prefix)]);
-    expect(searchRows('gh launchpad', bms, DEFAULT_ENGINES).map((r) => r.url)).toEqual(['https://github.com/search?q=launchpad']);
-    expect(searchRows('  ', bms, DEFAULT_ENGINES)).toEqual([]);
+  it('lists every engine; a prefix goes straight to its engine', () => {
+    expect(searchRows('git', DEFAULT_ENGINES).map((r) => r.key)).toEqual(DEFAULT_ENGINES.map((e) => 'e:' + e.prefix));
+    expect(searchRows('gh launchpad', DEFAULT_ENGINES).map((r) => r.url)).toEqual(['https://github.com/search?q=launchpad']);
+    expect(searchRows('  ', DEFAULT_ENGINES)).toEqual([]);
   });
 });
 
 describe('home grid', () => {
-  const all: Area[] = ['today', 'tasks', 'notes', 'pkgs', 'bm'];
-  it('starts on Mission: the agenda leads, tasks over packages, then notes', () => {
-    expect(gridLayout('desktop', new Set(all))).toEqual({
-      areas: "'today tasks notes' 'today pkgs notes' 'bm bm bm'",
-      columns: 'minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr)',
-      rows: 'minmax(0, 1.2fr) minmax(0, 0.8fr) auto',
-      order: ['today', 'tasks', 'pkgs', 'notes', 'bm'],
+  const all: Area[] = ['today', 'notes'];
+  it('arranges Poster: the agenda as a wide lead over a photo, then the notes over the other', () => {
+    expect(gridLayout('desktop', new Set<Area>([...all, 'photo', 'photo2']), 'poster')).toEqual({
+      areas: "'today notes' 'photo2 photo'",
+      columns: 'minmax(0, 1.35fr) minmax(0, 1fr)',
+      rows: 'minmax(0, 1.2fr) minmax(0, 0.8fr)',
+      order: ['today', 'photo2', 'notes', 'photo'],
     });
-    expect(gridLayout('desktop', new Set<Area>([...all, 'photo', 'photo2'])).areas).toBe("'today tasks notes' 'photo2 pkgs photo' 'bm bm bm'");
+    // No photos: each panel fills its column.
+    expect(gridLayout('desktop', new Set(all), 'poster').areas).toBe("'today notes' 'today notes'");
   });
   it('lets the other panel fill a column and drops empty columns', () => {
-    expect(gridLayout('desktop', new Set<Area>(['today', 'tasks', 'pkgs', 'bm'])).areas).toBe("'today tasks' 'today pkgs' 'bm bm'");
-    const g = gridLayout('desktop', new Set<Area>(['today', 'tasks', 'notes']));
-    expect(g).toEqual({ areas: "'today tasks notes' 'today tasks notes'", columns: 'minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr)', rows: 'minmax(0, 1.2fr) minmax(0, 0.8fr)', order: ['today', 'tasks', 'notes'] });
-    expect(gridLayout('wide', new Set<Area>(['bm']))).toEqual({ areas: "'bm'", columns: 'minmax(0, 1fr)', rows: 'auto', order: ['bm'] });
+    expect(gridLayout('desktop', new Set<Area>(['today']), 'poster')).toEqual({ areas: "'today' 'today'", columns: 'minmax(0, 1.35fr)', rows: 'minmax(0, 1.2fr) minmax(0, 0.8fr)', order: ['today'] });
+    expect(gridLayout('wide', new Set<Area>(), 'poster')).toEqual({ areas: '', columns: 'minmax(0, 1fr)', rows: '', order: [] });
   });
   it('stacks shown panels on a phone in the usual order', () => {
-    expect(gridLayout('narrow', new Set<Area>(['bm', 'notes', 'today', 'photo'])).areas).toBe("'today' 'photo' 'notes' 'bm'");
-    expect(gridLayout('narrow', new Set<Area>(['bm', 'today', 'hero']), 'focus').areas).toBe("'hero' 'today' 'bm'");
+    expect(gridLayout('narrow', new Set<Area>(['notes', 'today', 'photo']), 'vista').areas).toBe("'today' 'photo' 'notes'");
+    expect(gridLayout('narrow', new Set<Area>(['today', 'hero']), 'focus').areas).toBe("'hero' 'today'");
   });
-  it('arranges Poster: a wide lead column, tasks over packages, notes over a photo', () => {
-    expect(gridLayout('desktop', new Set<Area>([...all, 'photo', 'photo2']), 'poster')).toEqual({
-      areas: "'today tasks notes' 'photo2 pkgs photo' 'bm bm bm'",
-      columns: 'minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1fr)',
-      rows: 'minmax(0, 1.2fr) minmax(0, 0.8fr) auto',
-      order: ['today', 'photo2', 'tasks', 'pkgs', 'notes', 'photo', 'bm'],
-    });
-  });
-  it('gives a wide screen of single panels even rows (Vista)', () => {
+  it('gives Vista two tall panels, in even rows on a wide screen', () => {
     const g = gridLayout('wide', new Set(all), 'vista');
-    expect(g.areas).toBe("'today tasks notes pkgs' 'today tasks notes pkgs' 'bm bm bm bm'");
-    expect(g.rows).toBe('minmax(0, 1fr) minmax(0, 1fr) auto');
+    expect(g).toEqual({ areas: "'today notes' 'today notes'", columns: 'minmax(0, 1.25fr) minmax(0, 1fr)', rows: 'minmax(0, 1fr) minmax(0, 1fr)', order: ['today', 'notes'] });
   });
 });
 
 describe('home arranged by hand', () => {
-  const vista = new Set<Area>(['today', 'tasks', 'notes', 'pkgs', 'bm']);
+  const two = new Set<Area>(['today', 'notes']);
   it('uses a saved arrangement, each column as wide as its top panel’s built-in one', () => {
-    const g = gridLayout('desktop', vista, 'vista', { vista: [['tasks', 'notes'], ['today'], ['pkgs']] });
-    expect(g.areas).toBe("'tasks today pkgs' 'notes today pkgs' 'bm bm bm'");
-    expect(g.columns).toBe('minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1fr)');
-    expect(g.order).toEqual(['tasks', 'notes', 'today', 'pkgs', 'bm']);
+    const g = gridLayout('desktop', two, 'vista', { vista: [['notes'], ['today']] });
+    expect(g.areas).toBe("'notes today' 'notes today'");
+    expect(g.columns).toBe('minmax(0, 1fr) minmax(0, 1.25fr)');
+    expect(g.order).toEqual(['notes', 'today']);
     // Only that design's: another design's arrangement doesn't touch it.
-    expect(gridLayout('desktop', vista, 'mission', { vista: [['pkgs']] }).areas).toBe("'today tasks notes' 'today pkgs notes' 'bm bm bm'");
+    expect(gridLayout('desktop', two, 'poster', { vista: [['notes']] }).areas).toBe("'today notes' 'today notes'");
   });
   it('falls back to the built-in layout when nothing usable is saved', () => {
-    const built = gridLayout('desktop', vista, 'vista');
-    for (const saved of [{}, { vista: [] }, { vista: [[]] }, { vista: [['bogus', 'photo']] }, { vista: 'no' }, { vista: [null, 3] }]) {
-      expect(gridLayout('desktop', vista, 'vista', saved as never)).toEqual(built);
+    const built = gridLayout('desktop', two, 'vista');
+    for (const saved of [{}, { vista: [] }, { vista: [[]] }, { vista: [['bogus', 'photo']] }, { vista: 'no' }, { vista: [null, 3] }, { vista: [['tasks'], ['pkgs', 'bm']] }]) {
+      expect(gridLayout('desktop', two, 'vista', saved as never)).toEqual(built);
     }
   });
   it('drops unknown and repeated names and puts left-out panels back in their own column', () => {
-    // Tasks' own column is the second, which has room; Notes' (the third) doesn't exist, and the last is full.
-    expect(arrangeColumns('vista', [['pkgs', 'nope', 'pkgs'], ['today']])).toEqual([['pkgs'], ['today', 'tasks'], ['notes']]);
-    expect(arrangeColumns('mission', [['tasks']])).toEqual([['tasks', 'today'], ['photo2', 'pkgs'], ['notes', 'photo']]);
+    expect(arrangeColumns('poster', [['photo', 'nope', 'photo'], ['today']])).toEqual([['photo', 'photo2'], ['today', 'notes']]);
+    expect(arrangeColumns('poster', [['notes']])).toEqual([['notes', 'today'], ['photo2', 'photo']]);
+    // An arrangement from before Tasks, Packages and Bookmarks were retired keeps what's left of it.
+    expect(arrangeColumns('poster', [['tasks', 'notes'], ['pkgs', 'today'], ['bm']])).toEqual([['notes', 'photo2'], ['today', 'photo']]);
   });
-  it('splits a column of more than two and keeps to six columns', () => {
-    expect(arrangeColumns('vista', [['today', 'tasks', 'notes', 'pkgs']])).toEqual([['today', 'tasks'], ['notes', 'pkgs']]);
-    const one = arrangeColumns('mission', [['notes'], ['today'], ['photo2'], ['tasks'], ['pkgs'], ['photo']])!;
-    expect(one).toHaveLength(6);
-    expect(one.flat()).toEqual(['notes', 'today', 'photo2', 'tasks', 'pkgs', 'photo']);
-    expect(one.every((c) => c.length <= 2)).toBe(true);
+  it('splits a column of more than two', () => {
+    expect(arrangeColumns('poster', [['today', 'notes', 'photo', 'photo2']])).toEqual([['today', 'notes'], ['photo', 'photo2']]);
+    const one = arrangeColumns('poster', [['notes'], ['today'], ['photo2'], ['photo']])!;
+    expect(one).toEqual([['notes'], ['today'], ['photo2'], ['photo']]);
   });
   it('drops a column whose panels are all hidden, and copes with every panel hidden', () => {
-    const saved = { vista: [['today'], ['tasks', 'notes'], ['pkgs']] as Area[][] };
-    expect(gridLayout('desktop', new Set<Area>(['today', 'pkgs', 'bm']), 'vista', saved).areas).toBe("'today pkgs' 'today pkgs' 'bm bm'");
-    expect(gridLayout('desktop', new Set<Area>(['bm']), 'vista', saved)).toEqual({ areas: "'bm'", columns: 'minmax(0, 1fr)', rows: 'auto', order: ['bm'] });
-    expect(gridLayout('desktop', new Set<Area>(), 'vista', saved)).toEqual({ areas: '', columns: 'minmax(0, 1fr)', rows: '', order: [] });
+    const saved = { poster: [['today'], ['notes', 'photo']] as Area[][] };
+    expect(gridLayout('desktop', new Set<Area>(['today']), 'poster', saved).areas).toBe("'today' 'today'");
+    expect(gridLayout('desktop', new Set<Area>(['today', 'photo2']), 'poster', saved).areas).toBe("'today' 'photo2'");
+    expect(gridLayout('desktop', new Set<Area>(), 'poster', saved)).toEqual({ areas: '', columns: 'minmax(0, 1fr)', rows: '', order: [] });
   });
   it('orders the phone column and Focus’s tabs as saved, the rest after', () => {
-    expect(gridLayout('narrow', vista, 'vista', { narrow: [['notes', 'bm', 'today']] }).order).toEqual(['notes', 'bm', 'today', 'tasks', 'pkgs']);
-    expect(narrowOrder({ narrow: [['bogus', 'pkgs', 'pkgs']] as never })).toEqual(['pkgs', 'hero', 'today', 'tasks', 'photo', 'notes', 'photo2', 'bm']);
-    // The weather panel went with Console and Bento: a phone order saved with it just skips it.
-    expect(narrowOrder({ narrow: [['wx', 'notes']] as never })).toEqual(['notes', 'hero', 'today', 'tasks', 'photo', 'pkgs', 'photo2', 'bm']);
-    const order = focusOrder({ focus: [['notes', 'today']] });
-    expect(order).toEqual(['notes', 'today', 'tasks', 'pkgs']);
-    expect(focusTab(null, vista, order)).toBe('notes');
-    expect(focusTab(null, new Set<Area>(['today', 'pkgs']), order)).toBe('today');
+    expect(gridLayout('narrow', two, 'vista', { narrow: [['notes', 'today']] }).order).toEqual(['notes', 'today']);
+    expect(narrowOrder({ narrow: [['bogus', 'notes', 'notes']] as never })).toEqual(['notes', 'hero', 'today', 'photo', 'photo2']);
+    // Retired panels in an old phone order just drop out.
+    expect(narrowOrder({ narrow: [['wx', 'pkgs', 'photo', 'bm']] as never })).toEqual(['photo', 'hero', 'today', 'notes', 'photo2']);
+    const order = focusOrder({ focus: [['notes', 'today', 'pkgs']] as never });
+    expect(order).toEqual(['notes', 'today']);
+    expect(focusTab(null, two, order)).toBe('notes');
+    expect(focusTab('tasks', new Set<Area>(['today']), order)).toBe('today');
   });
   it('is cleaned on the server like any other setting', () => {
     const prev = { ...DEFAULT_PREFS, homeLayouts: { vista: [['today']] as Area[][] } };
     // Missing: what was there stays. Bad shapes and names go; a panel only once per design.
     expect(cleanPrefs({ name: 'Me' }, prev).homeLayouts).toEqual(prev.homeLayouts);
     expect(cleanPrefs({ homeLayouts: 'no' as never }, prev).homeLayouts).toEqual(prev.homeLayouts);
-    expect(cleanPrefs({ homeLayouts: { vista: [['tasks', 'x', 'tasks'], 'no', [], ['today']], evil: [['today']], bento: [] } as never }, prev).homeLayouts).toEqual({ vista: [['tasks'], ['today']] });
-    // A retired design's arrangement, and the weather panel only Console and Bento had, go.
-    expect(cleanPrefs({ homeLayouts: { broadsheet: [['tasks']], narrow: [['wx', 'today']] } as never }, prev).homeLayouts).toEqual({ narrow: [['today']] });
+    expect(cleanPrefs({ homeLayouts: { vista: [['notes', 'x', 'notes'], 'no', [], ['today']], evil: [['today']], bento: [] } as never }, prev).homeLayouts).toEqual({ vista: [['notes'], ['today']] });
+    // A retired design's arrangement, and retired panels (the weather panel, Tasks, Packages, Bookmarks), go.
+    expect(cleanPrefs({ homeLayouts: { broadsheet: [['notes']], narrow: [['wx', 'today'], ['tasks', 'bm']] } as never }, prev).homeLayouts).toEqual({ narrow: [['today']] });
     // An empty object is a reset of every design.
     expect(cleanPrefs({ homeLayouts: {} }, prev).homeLayouts).toEqual({});
     // Older saved prefs have none.

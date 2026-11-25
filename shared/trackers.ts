@@ -175,6 +175,8 @@ export function savedUnderLimit(counts: Map<string, number>, today: Date, limit:
 }
 
 // ---------- cravings ----------
+// The Cravings panel was retired on 2026-11-25. What was logged stays stored, so it's still
+// checked on its way in from a backup.
 
 export const CRAVING_TRIGGERS: { key: CravingTrigger; name: string }[] = [
   { key: 'stress', name: 'Stress' },
@@ -186,11 +188,6 @@ export const CRAVING_TRIGGERS: { key: CravingTrigger; name: string }[] = [
   { key: 'waking', name: 'Waking up' },
   { key: 'other', name: 'Other' },
 ];
-
-export const triggerName = (t: CravingTrigger | '') => CRAVING_TRIGGERS.find((x) => x.key === t)?.name ?? '';
-
-/** 1 Mild · 2 Medium · 3 Strong. */
-export const STRENGTH_WORDS = ['Mild', 'Medium', 'Strong'];
 
 export const MAX_CRAVINGS = 10_000;
 
@@ -215,55 +212,6 @@ export function cleanCravings(v: unknown, now = Date.now()): Craving[] {
     if (c) byId.set(c.id, c);
   }
   return [...byId.values()].sort((a, b) => Date.parse(a.at) - Date.parse(b.at)).slice(-MAX_CRAVINGS);
-}
-
-/** ⌘K: "craving", "craving 3", "craving stress", "urge 1 coffee" → its strength and trigger. */
-export function parseCraving(q: string): { strength: 1 | 2 | 3; trigger: CravingTrigger | '' } | null {
-  const m = q.trim().toLowerCase().match(/^(?:log\s+)?(?:a\s+)?(?:craving|crave|urge)(?:\s+([123]))?(?:\s+(.+))?$/);
-  if (!m) return null;
-  const word = (m[2] ?? '').trim();
-  const trigger = word ? CRAVING_TRIGGERS.find((t) => t.key === word || t.name.toLowerCase().startsWith(word) || t.name.toLowerCase().split(' ').includes(word)) : undefined;
-  if (word && !trigger) return null;
-  return { strength: m[1] ? (Number(m[1]) as 1 | 2 | 3) : 2, trigger: trigger?.key ?? '' };
-}
-
-/** Cravings on the local day of `day`. */
-export function cravingsOn(cravings: Craving[], day: Date): Craving[] {
-  const d = ymd(day);
-  return cravings.filter((c) => ymd(new Date(c.at)) === d);
-}
-
-export interface CravingSummary {
-  resisted: number;
-  smoked: number;
-  /** Oldest first, one row per day. */
-  byDay: { date: string; resisted: number; smoked: number }[];
-  /** Most first; cravings with no trigger aren't counted. */
-  triggers: { trigger: CravingTrigger; count: number }[];
-}
-
-/** Cravings resisted against cigarettes smoked over the last `days` days, today included, and what set them off. */
-export function cravingSummary(cravings: Craving[], counts: Map<string, number>, today: Date, days: number): CravingSummary {
-  const first = addDays(startOfDay(today), -(days - 1));
-  const byDay = Array.from({ length: days }, (_, i) => {
-    const date = ymd(addDays(first, i));
-    return { date, resisted: 0, smoked: counts.get(date) ?? 0 };
-  });
-  const index = new Map(byDay.map((d, i) => [d.date, i]));
-  const triggers = new Map<CravingTrigger, number>();
-  for (const c of cravings) {
-    const i = index.get(ymd(new Date(c.at)));
-    if (i === undefined) continue;
-    byDay[i].resisted++;
-    if (c.trigger) triggers.set(c.trigger, (triggers.get(c.trigger) ?? 0) + 1);
-  }
-  const order = (t: CravingTrigger) => CRAVING_TRIGGERS.findIndex((x) => x.key === t);
-  return {
-    resisted: byDay.reduce((a, d) => a + d.resisted, 0),
-    smoked: byDay.reduce((a, d) => a + d.smoked, 0),
-    byDay,
-    triggers: [...triggers].map(([trigger, count]) => ({ trigger, count })).sort((a, b) => b.count - a.count || order(a.trigger) - order(b.trigger)),
-  };
 }
 
 // ---------- mood and journal ----------

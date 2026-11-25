@@ -2,7 +2,7 @@
 
 Launchpad's default layout (design key `mission`): the page is a launch site. Its sky follows the hour and the
 weather, the pad stands on the horizon, the day climbs across the sky as an ascent with a launch clock counting to the
-next event, the console is glass, and the rocket launches when the last of the day's tasks is ticked.
+next event, your photos are the ground under it, and the panels stand on them as glass.
 
 The design system it is built from (tokens, components with live previews, the motion and the logo) is the
 "Launchpad" Design System artifact: https://claude.ai/artifact/HXDyaPH2PE2aeL2QkjqEsN
@@ -16,7 +16,7 @@ The design system it is built from (tokens, components with live previews, the m
 | The launch clock and what it counts to | `web/src/components/mission/Hero.tsx` |
 | The mark, drawn inline | `web/src/components/mission/Mark.tsx` |
 | The maths with no page in it (the path, the sun's place, the countdown's text, "all done") | `web/src/mission.ts`, tested in `test/mission.test.ts` |
-| Home's columns | `MISSION` in `web/src/layout.ts` |
+| Home: the photos as the ground, Today and the Notepad on it | `web/src/components/mission/MissionHome.tsx`, `web/src/mission-home.css` |
 
 The other layouts are untouched. What Mission adds to shared components is small and inert elsewhere: the rail takes
 an optional `brand`, the top bar an optional `lead` (the hero in place of the greeting) and a row of source lights
@@ -31,13 +31,16 @@ that only Mission shows.
 - The launch clock (T- to the next event, T+ during one, the time of day when nothing is left).
 - Glass panels with the pointer's light on them; the strip with its gliding selector; the phone's dock.
 - A light per source of data, reporting in turn as the app opens.
-- The launch: on the last of the day's tasks, and on the mark when already on Home.
+- The launch: on the mark when already on Home (it used to go off on the last of the day's tasks too, until Tasks
+  was retired on 25 Nov 2026).
+- Home's ground: your photos from the horizon to the bottom of the window, edge to edge, crossfading with a slow
+  settle every 18 s; a line fills while one stays, pointing at it holds it (a recording light goes still), and the
+  open ground between Today and the Notepad has its frame number and arrows. On a phone it's a band under the sky.
+  The glass over the photos is thicker, and the edges dusk a little (more at night), so words stay easy to read.
 - Reduced motion: the sky still shows the hour; nothing moves and nothing launches.
 
 ## Not built yet (in the design system, not in the app)
 
-- **A parcel's flight** (Trajectory): the four-stage arc at the end of a parcel's row. Packages still show their four
-  segments.
 - **Telemetry**: the stepping strip chart for live readings on Server.
 - **The three empty-state drawings** (pad clear, vehicle away, launch scrubbed).
 - **A panel's one big figure in the matrix face**, and the beacon and burn on a panel with something running in it.

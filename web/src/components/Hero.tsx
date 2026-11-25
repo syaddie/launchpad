@@ -5,7 +5,7 @@ import { todayAgenda } from './Today';
 import { Readout } from './Motion';
 
 /** Focus's clock tile: the clock, then what's happening now or next with its Join button. */
-export function HeroPanel({ data, now, extras }: { data: AppState; now: Date; /** The rest of the top bar's summary line: overdue tasks, packages, the nearest countdown. */ extras: string }) {
+export function HeroPanel({ data, now, extras }: { data: AppState; now: Date; /** The rest of the top bar's summary line: the nearest countdown. */ extras: string }) {
   const [tick, setTick] = useState(() => new Date());
   useEffect(() => {
     const iv = setInterval(() => setTick(new Date()), 1000);

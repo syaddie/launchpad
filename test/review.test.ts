@@ -3,7 +3,7 @@ import { DEFAULT_PREFS } from '../shared/defaults';
 import { emptyLearn } from '../shared/learn';
 import { weekReview, type ReviewInput } from '../shared/review';
 import {
-  MAX_JOURNAL, cigPrice, cleanCravings, cravingSummary, moodYear, parseCraving, savedUnderLimit, searchJournal, smokeCountMap, smokeDaysFrom, smokeSpend,
+  MAX_JOURNAL, cigPrice, cleanCravings, moodYear, savedUnderLimit, searchJournal, smokeCountMap, smokeDaysFrom, smokeSpend,
 } from '../shared/trackers';
 import { bodyweightOn, trainingWeeks, weightAvgOn } from '../shared/training';
 import type { Craving, Money, Workout } from '../shared/types';
@@ -77,27 +77,6 @@ describe('cravings', () => {
       { id: 'a', at: at(11, 9), strength: 2, trigger: '', note: '' },
       { id: 'b', at: at(12, 10), strength: 1, trigger: 'stress', note: '' },
     ]);
-  });
-
-  it('reads “craving 3 stress” in ⌘K', () => {
-    expect(parseCraving('craving')).toEqual({ strength: 2, trigger: '' });
-    expect(parseCraving('craving 3 stress')).toEqual({ strength: 3, trigger: 'stress' });
-    expect(parseCraving('urge 1 coffee')).toEqual({ strength: 1, trigger: 'coffee' });
-    expect(parseCraving('log a craving after meals')).toEqual({ strength: 2, trigger: 'meal' });
-    expect(parseCraving('Craving meals')).toEqual({ strength: 2, trigger: 'meal' });
-    expect(parseCraving('craving waking')).toEqual({ strength: 2, trigger: 'waking' });
-    expect(parseCraving('craving pizza')).toBeNull();
-    expect(parseCraving('cravings are hard')).toBeNull();
-  });
-
-  it('sets them against cigarettes smoked, with the common triggers', () => {
-    const list = [craving({ trigger: 'coffee' }), craving({ trigger: 'coffee', at: at(11, 9) }), craving({ trigger: 'stress', at: at(10, 9) }), craving({ at: at(10, 10) }), craving({ at: at(1, 9) })];
-    const s = cravingSummary(list, smokeCountMap([at(12, 7), at(11, 8)]), now, 7);
-    expect(s.resisted).toBe(4);
-    expect(s.smoked).toBe(2);
-    expect(s.byDay).toHaveLength(7);
-    expect(s.byDay[6]).toEqual({ date: '2026-11-12', resisted: 1, smoked: 1 });
-    expect(s.triggers).toEqual([{ trigger: 'coffee', count: 2 }, { trigger: 'stress', count: 1 }]);
   });
 
   it('queues offline like a cigarette, one entry per craving', () => {
@@ -222,13 +201,10 @@ describe('the week in review', () => {
     workouts: [workout(at(11, 7), [{ title: 'Squat (Barbell)', sets: [[100, 5]] }]), workout(at(4, 7), [{ title: 'Squat (Barbell)', sets: [[95, 5]] }])],
     weights: { '2026-11-06': 73, '2026-11-08': 73.4, '2026-11-11': 72.6 },
     smokes: smokeCountMap([at(9, 8), at(10, 8), at(10, 9), at(10, 10), at(10, 11), at(12, 7), at(3, 8)]),
-    cravings: [craving({ strength: 3, trigger: 'coffee' }), craving({ at: at(10, 12), trigger: 'coffee' }), craving({ at: at(10, 13), trigger: 'stress' }), craving({ at: at(2, 9) })],
     moods: { '2026-11-09': { level: 4, note: 'ok' }, '2026-11-10': { level: 2, note: '' }, '2026-11-11': { level: 0, note: 'just words' }, '2026-11-02': { level: 1, note: '' } },
     learn,
     money,
     prefs: { cigaretteLimit: 3, packPrice: 15, packSize: 20 },
-    delivered: [{ label: 'Shoes', at: at(10, 15) }, { label: 'Old', at: at(1, 15) }],
-    tasksDone: 7,
   };
 
   it('reads every module’s week', () => {
@@ -238,7 +214,6 @@ describe('the week in review', () => {
     // 7-day average up to today (73, 73.4, 72.6) against the one up to last Sunday (73, 73.4).
     expect(r.weight).toEqual({ avg: 73, change: -0.2 });
     expect(r.cigarettes).toEqual({ count: 6, perDay: 1.5, limit: 3, daysOver: 1, cost: 4.5, prevCount: 1 });
-    expect(r.cravings).toEqual({ resisted: 3, strong: 1, topTrigger: 'coffee' });
     expect(r.mood).toEqual({ avg: 3, logged: 2, written: 2 });
     expect(r.study.minutes).toBe(120);
     expect(r.study.courses).toEqual([
@@ -248,17 +223,18 @@ describe('the week in review', () => {
     expect(r.study).toMatchObject({ met: 1, late: ['Quiz 2'], ahead: 1 });
     // A move to a pot counts as money out of the day-to-day accounts; the planned rent isn't done yet.
     expect(r.money).toEqual({ in: 500, out: 140.5, closing: 1350, forecast: 1290 });
-    expect(r.tasks).toBe(7);
-    expect(r.packages).toEqual(['Shoes']);
+    // Retired with their panels (2026-11-25): cravings, tasks and packages aren't in the week any more.
+    expect(r).not.toHaveProperty('cravings');
+    expect(r).not.toHaveProperty('tasks');
+    expect(r).not.toHaveProperty('packages');
   });
 
   it('steps back to a finished week, and leaves out what isn’t tracked', () => {
-    const r = weekReview({ ...input, money: { ...money, entries: [] }, tasksDone: null, prefs: { cigaretteLimit: 0, packPrice: 0, packSize: 20 } }, new Date(2026, 10, 4), now);
+    const r = weekReview({ ...input, money: { ...money, entries: [] }, prefs: { cigaretteLimit: 0, packPrice: 0, packSize: 20 } }, new Date(2026, 10, 4), now);
     expect(r).toMatchObject({ start: '2026-11-02', daysIn: 7 });
     expect(r.cigarettes).toMatchObject({ count: 1, cost: null, daysOver: 0, limit: 0 });
     expect(r.mood).toEqual({ avg: 1, logged: 1, written: 0 });
     expect(r.money).toBeNull();
-    expect(r.tasks).toBeNull();
     expect(r.study.minutes).toBe(60);
   });
 
@@ -269,6 +245,7 @@ describe('the week in review', () => {
     expect(text).toMatch(/journal written on 2 days/);
     expect(text).toMatch(/not handed in: Quiz 2/);
     expect(text).not.toMatch(/just words/);
+    expect(text).not.toMatch(/Cravings|Tasks|Packages/);
   });
 
   it('writes the recap for this week from Sunday 6 pm, else for the week before', () => {

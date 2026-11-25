@@ -2,11 +2,9 @@ import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNo
 import { DOW, startOfDay } from '../../../shared/dates';
 import { fmtStudy, timerMinutes } from '../../../shared/learn';
 import { engineUrl, parseSearch } from '../../../shared/trackers';
-import { rankBookmarks } from '../../../shared/bookmarks';
-import type { AppState, Bookmark, BookmarkOpens, SearchEngine, SourceKey, Weather } from '../../../shared/types';
-import { bookmarkOpened } from '../api';
+import type { AppState, SearchEngine, SourceKey, Weather } from '../../../shared/types';
 import { fmtMinutes, lastTrained, minutes, workoutLabel } from '../../../shared/training';
-import { ago, favicon, fmtDay, hm, host, psiBand, uvBand, weatherIcon, weatherLabel } from '../util';
+import { ago, fmtDay, hm, psiBand, uvBand, weatherIcon, weatherLabel } from '../util';
 import { Readout } from './Motion';
 
 interface Props {
@@ -30,10 +28,6 @@ interface Props {
 /** Days without training before the button turns orange. */
 const TRAINING_NUDGE_DAYS = 4;
 const trainedWhen = (days: number) => (days === 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`);
-
-export function matchBookmark(b: Bookmark, q: string): boolean {
-  return !q || b.name.toLowerCase().includes(q) || b.url.toLowerCase().includes(q);
-}
 
 function Clock({ weather, showAir }: { weather: Weather | null; showAir: boolean }) {
   const [now, setNow] = useState(() => new Date());
@@ -240,19 +234,14 @@ function failing(s: { lastSuccess: string | null; lastError: string | null }) {
   return !!s.lastError;
 }
 
-type Row = { key: string; url: string; bookmark?: Bookmark; engine?: SearchEngine; term?: string };
+type Row = { key: string; url: string; engine: SearchEngine; term: string };
 
-/** Search rows: a prefixed search goes straight to its engine; otherwise bookmarks (the most opened first), then every engine. */
-export function searchRows(q: string, bookmarks: Bookmark[], engines: SearchEngine[], opens?: BookmarkOpens): Row[] {
+/** Search rows: a prefixed search goes straight to its engine; otherwise every engine, the first one leading. */
+export function searchRows(q: string, engines: SearchEngine[]): Row[] {
   const { engine, term } = parseSearch(q, engines);
   if (!term) return [];
   if (engine) return [{ key: 'e:' + engine.prefix, url: engineUrl(engine, term), engine, term }];
-  const lq = term.toLowerCase();
-  const hits = rankBookmarks(bookmarks.filter((b) => matchBookmark(b, lq)), opens, lq).slice(0, 6);
-  return [
-    ...hits.map((b) => ({ key: 'b:' + b.id, url: b.url, bookmark: b })),
-    ...engines.map((e) => ({ key: 'e:' + e.prefix, url: engineUrl(e, term), engine: e, term })),
-  ];
+  return engines.map((e) => ({ key: 'e:' + e.prefix, url: engineUrl(e, term), engine: e, term }));
 }
 
 export function TopBar({ data, now, title, subline, search, onSearch, searchRef, smokesToday, onLogSmoke, onOpenTraining, onOpenLearn, lead }: Props) {
@@ -267,9 +256,8 @@ export function TopBar({ data, now, title, subline, search, onSearch, searchRef,
   const hidden = data.prefs.hidden;
   const trained = lastTrained(data.training.workouts, startOfDay(now));
   const engines = data.prefs.searchEngines;
-  const rows = searchRows(search, data.bookmarks.flatMap((g) => g.items), engines, data.bookmarkOpens);
-  const prefixed = rows.length === 1 && !!rows[0].engine && parseSearch(search, engines).engine !== null;
-  const firstEngine = rows.findIndex((r) => r.engine);
+  const rows = searchRows(search, engines);
+  const prefixed = rows.length === 1 && parseSearch(search, engines).engine !== null;
   const cur = Math.min(sel, Math.max(0, rows.length - 1));
 
   const open = (url: string) => {
@@ -288,7 +276,6 @@ export function TopBar({ data, now, title, subline, search, onSearch, searchRef,
       onSearch('');
       e.currentTarget.blur();
     } else if (e.key === 'Enter' && rows[cur]) {
-      if (rows[cur].bookmark) bookmarkOpened(rows[cur].bookmark!.id);
       open(rows[cur].url);
     }
   };
@@ -296,15 +283,13 @@ export function TopBar({ data, now, title, subline, search, onSearch, searchRef,
   // Sync dot: quiet when fresh, warning when any source fails, faint when not connected.
   const sources: { key: SourceKey; name: string; ok: string }[] = [
     { key: 'calendar', name: 'Calendar', ok: 'Synced' },
-    { key: 'tasks', name: 'Tasks', ok: 'Synced' },
-    { key: 'gmail', name: 'Gmail packages', ok: 'Checked' },
-    { key: 'carriers', name: 'Carriers', ok: 'Updated' },
+    { key: 'gmail', name: 'Gmail', ok: 'Checked' },
     { key: 'digest', name: 'Daily digest', ok: 'Checked' },
     { key: 'inbox', name: 'Inbox', ok: 'Updated' },
     { key: 'weather', name: 'Weather', ok: 'Updated' },
     { key: 'speedtest', name: 'Speed test', ok: 'Ran' },
   ];
-  const needsGoogle = (k: SourceKey) => k === 'calendar' || k === 'tasks' || k === 'gmail' || k === 'inbox';
+  const needsGoogle = (k: SourceKey) => k === 'calendar' || k === 'gmail' || k === 'inbox';
   const connected = data.google.connected;
   const health = data.health ?? [];
   const lines = sources
@@ -366,37 +351,14 @@ export function TopBar({ data, now, title, subline, search, onSearch, searchRef,
               onBlur={() => {
                 blurT.current = window.setTimeout(() => setFocused(false), 120);
               }}
-              placeholder="Search or jump to…"
-              aria-label="Search bookmarks or the web"
+              placeholder="Search the web…"
+              aria-label="Search the web"
             />
             <span className="slash mono">/</span>
             {rows.length > 0 && focused && (
               <div className="popover search-drop" role="listbox" aria-label="Search results">
                 {rows.map((r, i) => (
                   <div key={r.key}>
-                    {i === firstEngine && !prefixed && (
-                      <div className="search-note">{firstEngine === 0 ? 'No bookmarks match. Search with:' : 'Or search with:'}</div>
-                    )}
-                    {r.bookmark ? (
-                      <a
-                        href={r.url}
-                        target="_blank"
-                        rel="noopener"
-                        role="option"
-                        aria-selected={i === cur}
-                        className={'search-row' + (i === cur ? ' sel' : '')}
-                        onMouseDown={() => {
-                          bookmarkOpened(r.bookmark!.id);
-                          onSearch('');
-                        }}
-                      >
-                        <Fav b={r.bookmark} small />
-                        <span style={{ color: 'var(--tx)' }}>{r.bookmark.name}</span>
-                        <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--t3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 120 }}>
-                          {host(r.url)}
-                        </span>
-                      </a>
-                    ) : (
                       <div
                         role="option"
                         aria-selected={i === cur}
@@ -404,21 +366,20 @@ export function TopBar({ data, now, title, subline, search, onSearch, searchRef,
                         style={{ color: 'var(--t2)', cursor: 'pointer' }}
                         onMouseDown={() => open(r.url)}
                       >
-                        <span className="fav sm">{r.engine!.name[0]}</span>
+                        <span className="fav sm">{r.engine.name[0]}</span>
                         <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {prefixed || i === firstEngine ? (
+                          {prefixed || i === 0 ? (
                             <>
-                              Search {r.engine!.name} for <b style={{ fontWeight: 600, color: 'var(--tx)' }}>{r.term}</b>
+                              Search {r.engine.name} for <b style={{ fontWeight: 600, color: 'var(--tx)' }}>{r.term}</b>
                             </>
                           ) : (
-                            r.engine!.name
+                            r.engine.name
                           )}
                         </span>
                         <span className="kbd" style={{ marginLeft: 'auto' }}>
-                          {i === cur ? '↵' : r.engine!.prefix}
+                          {i === cur ? '↵' : r.engine.prefix}
                         </span>
                       </div>
-                    )}
                   </div>
                 ))}
                 {!prefixed && <div className="search-foot">Start with a prefix and a space, like “{engines[1]?.prefix ?? 'g'} …”</div>}
@@ -481,16 +442,5 @@ export function TopBar({ data, now, title, subline, search, onSearch, searchRef,
         </div>
       </div>
     </header>
-  );
-}
-
-export function Fav({ b, small }: { b: Bookmark; small?: boolean }) {
-  const src = favicon(b);
-  const [ok, setOk] = useState(true);
-  return (
-    <span className={'fav' + (small ? ' sm' : '')}>
-      {(b.name || '?')[0]}
-      {src && ok && <img src={src} alt="" onError={() => setOk(false)} />}
-    </span>
   );
 }

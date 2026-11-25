@@ -106,9 +106,9 @@
    should answer like a button, a row or a card takes .lp-press, .lp-press-row or .lp-press-card.
    ===================================================================== */
 
-:is(.btn, .icon-btn, .cig-btn, .rail-btn, .tab, .fx-tab, .join, .edit-toggle, .weather, .photo-btn, .photo-x, .tile-x, .segmented button, .seg button,
-  .acct-chip, .crv-chip, .dg-pill, .mood-btn, .topic-chip button, .note-filter button, .ln-tab, .ln-swatch, .term-tab, .term-tab-close, .pkg-new button,
-  .mc-chip, .check, .ent-check, .switch, .crumb, .owed-toggle, .sub-flag, .wallpaper-next, .lp-press) {
+:is(.btn, .icon-btn, .cig-btn, .rail-btn, .tab, .fx-tab, .join, .weather, .photo-btn, .photo-x, .segmented button, .seg button, .acct-chip, .dg-pill,
+  .mood-btn, .topic-chip button, .note-filter button, .ln-tab, .ln-swatch, .term-tab, .term-tab-close, .pkg-new button, .mc-chip, .check, .ent-check,
+  .switch, .crumb, .owed-toggle, .sub-flag, .wallpaper-next, .lp-press) {
   transition:
     background-color var(--m-hover) var(--e-out),
     border-color var(--m-hover) var(--e-out),
@@ -119,27 +119,28 @@
     translate var(--m-move) var(--e-settle),
     scale var(--m-move) var(--e-settle);
 }
-:is(.btn, .icon-btn, .cig-btn, .rail-btn, .tab, .fx-tab, .join, .edit-toggle, .weather, .photo-btn, .photo-x, .tile-x, .segmented button, .seg button,
-  .acct-chip, .crv-chip, .dg-pill, .mood-btn, .topic-chip button, .note-filter button, .ln-tab, .ln-swatch, .term-tab, .term-tab-close, .pkg-new button,
-  .mc-chip, .check, .ent-check, .switch, .crumb, .owed-toggle, .sub-flag, .wallpaper-next, .lp-press):active:not(:disabled):not(.disabled):not([aria-disabled='true']) {
+:is(.btn, .icon-btn, .cig-btn, .rail-btn, .tab, .fx-tab, .join, .weather, .photo-btn, .photo-x, .segmented button, .seg button, .acct-chip, .dg-pill,
+  .mood-btn, .topic-chip button, .note-filter button, .ln-tab, .ln-swatch, .term-tab, .term-tab-close, .pkg-new button, .mc-chip, .check, .ent-check,
+  .switch, .crumb, .owed-toggle, .sub-flag, .wallpaper-next, .lp-press):active:not(:disabled):not(.disabled):not([aria-disabled='true']) {
   translate: 0 var(--m-press-y);
   scale: var(--m-press-s);
   transition-duration: var(--m-press);
   transition-timing-function: var(--e-out);
 }
 /* Rows and list items tint a step further while pressed; they don't move (they're as wide as their panel). */
-:is(.event-row, .task, .pkg, .delivered-row, .headline, .headline-row, .search-row, .palette-row, .menu button, .note-hit, .note-version, .import-row,
-  .dg-row, .file-row, .mc-row, .mc-crash-row, .mc-sheet-row, .ent, .ln-due-row, .ln-arow, .ln-topic-btn, .tr-lift, .crv-sum, .pix-hit, .dl-item,
-  .mc-player, .mc-backup, .bill-row, .sync-row, .container-row, .lp-press-row) {
+:is(.event-row, .headline, .headline-row, .search-row, .palette-row, .menu button, .note-hit, .note-version, .dg-row, .file-row, .mc-row,
+  .mc-crash-row, .mc-sheet-row, .ent, .ln-due-row, .ln-arow, .ln-topic-btn, .tr-lift, .pix-hit, .dl-item, .mc-player, .mc-backup, .bill-row, .sync-row,
+  .container-row, .lp-press-row) {
   transition: background-color var(--m-hover) var(--e-out), box-shadow var(--m-hover) var(--e-out), color var(--m-hover) var(--e-out), opacity var(--m-state) var(--e-out);
 }
-:is(.event-row, .pkg, .delivered-row, .headline, .search-row, .palette-row, .menu button, .note-hit, .note-version, .import-row, .dg-row, .mc-row,
-  .mc-crash-row, .mc-sheet-row, .ln-arow, .ln-topic-btn, .tr-lift, .crv-sum, .pix-hit, .lp-press-row):active:not(:disabled) {
+:is(.event-row, .headline, .search-row, .palette-row, .menu button, .note-hit, .note-version, .dg-row, .mc-row, .mc-crash-row, .mc-sheet-row, .ln-arow,
+  .ln-topic-btn, .tr-lift, .pix-hit, .lp-press-row):active:not(:disabled) {
   background-color: var(--hv-press);
   transition-duration: var(--m-press);
 }
 /* Cards and tiles give a little under a press. */
-:is(.tile, .cd-card, .ln-card, .acct-card, .acct-add, .cal-day, .design-pick, .acct-kind, .dg-option, .m-stat.warn, button.mood-cell, button.pix-cell, .lp-press-card) {
+:is(.cd-card, .ln-card, .acct-card, .acct-add, .cal-day, .design-pick, .acct-kind, .dg-option, .m-stat.warn, button.mood-cell, button.pix-cell,
+  .lp-press-card) {
   transition:
     background-color var(--m-hover) var(--e-out),
     border-color var(--m-hover) var(--e-out),
@@ -150,7 +151,7 @@
     translate var(--m-move) var(--e-settle),
     scale var(--m-move) var(--e-settle);
 }
-:is(.tile, .cd-card, .ln-card, .acct-card, .acct-add, .cal-day, .design-pick, .acct-kind, .dg-option, .lp-press-card):active:not(:disabled) {
+:is(.cd-card, .ln-card, .acct-card, .acct-add, .cal-day, .design-pick, .acct-kind, .dg-option, .lp-press-card):active:not(:disabled) {
   scale: calc(1 - (1 - var(--m-press-s)) * 0.5);
   transition-duration: var(--m-press);
   transition-timing-function: var(--e-out);
@@ -165,8 +166,8 @@
 .dg-option.wrong { animation: lpWrong 380ms var(--e-io) both; }
 @keyframes lpRight { 40% { scale: 1.03; } }
 @keyframes lpWrong { 20% { translate: -4px 0; } 40% { translate: 3px 0; } 60% { translate: -2px 0; } 80% { translate: 1px 0; } }
-/* A choice picked from a set (a mood, a craving's trigger or strength) settles into place. */
-:is(.mood-btn, .crv-chip, .acct-chip, .acct-kind, .design-pick).on { animation: lpChosen var(--m-move) var(--e-settle); }
+/* A choice picked from a set (a mood, an account's kind) settles into place. */
+:is(.mood-btn, .acct-chip, .acct-kind, .design-pick).on { animation: lpChosen var(--m-move) var(--e-settle); }
 @keyframes lpChosen { from { scale: 0.92; } }
 /* The study timer in the top bar breathes while it runs. */
 .cig-btn.on > .ph-timer { animation: lpBreathe 2.4s var(--e-io) infinite; }
@@ -174,14 +175,14 @@
 
 /* Poster: a button stands up off the page when pointed at, its hard shadow showing, and slams down into it when pressed. */
 @media (hover: hover) {
-  :root[data-design='poster'] :is(.btn-primary, .btn-secondary, .cig-btn, .join, .edit-toggle.on, .review-yes):hover:not(:disabled):not(.disabled):not(:active) {
+  :root[data-design='poster'] :is(.btn-primary, .btn-secondary, .cig-btn, .join, .review-yes):hover:not(:disabled):not(.disabled):not(:active) {
     translate: -2px -2px;
     box-shadow: 2px 2px 0 var(--tx);
   }
   :root[data-design='poster'] .cig-btn:hover:not(:active) { box-shadow: inset 0 0 0 2px var(--tx), 2px 2px 0 var(--tx); }
   :root[data-design='poster'] .cig-btn.warn:hover:not(:active) { box-shadow: inset 0 0 0 2px var(--wn), 2px 2px 0 var(--wn); }
 }
-:root[data-design='poster'] :is(.btn-primary, .btn-secondary, .cig-btn, .join, .edit-toggle.on, .review-yes):active:not(:disabled):not(.disabled) {
+:root[data-design='poster'] :is(.btn-primary, .btn-secondary, .cig-btn, .join, .review-yes):active:not(:disabled):not(.disabled) {
   translate: 1px 1px;
   transition-duration: 40ms;
 }
@@ -351,7 +352,7 @@
   transition: width var(--m-sweep) var(--e-out), left var(--m-sweep) var(--e-out);
 }
 :is(.acct-share, .disk-bar) { animation: lpSweepX var(--m-sweep) var(--e-out) both; }
-/* Columns that rise: cigarettes and cravings by day, training and study by week, study by day, Claude by day, money
+/* Columns that rise: cigarettes by day, training and study by week, study by day, Claude by day, money
    in and out. One after another where the browser can count them (sibling-index), all at once where it can't. */
 :is(.cig-bar, .tr-wbar, .ln-weeks > span:not(.ln-goal), .cu-bar, .io-bar) {
   animation: lpSweepY var(--m-sweep) var(--e-out) both;

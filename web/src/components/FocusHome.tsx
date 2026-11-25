@@ -6,18 +6,18 @@ export interface FocusTabInfo {
   key: FocusTab;
   name: string;
   icon: string;
-  /** What's waiting behind the tab: events left today, open tasks, packages on the way. */
+  /** What's waiting behind the tab: events left today. */
   count?: number;
-  /** The count needs attention (something overdue, a failed delivery). */
+  /** The count needs attention. */
   warn?: boolean;
 }
 
 /**
  * Focus's home: the clock and what's next down the left, and one panel at a time on the
- * right, picked from a row of tabs that each say how much is waiting. Bookmarks stay
- * underneath. On a phone it's one column: the clock, the tabs and their panel, the rest.
+ * right, picked from a row of tabs that each say how much is waiting. On a phone it's one
+ * column: the clock, the tabs and their panel, the rest.
  */
-export function FocusHome({ tabs, active, onTab, hero, photo, panel, bookmarks, empty }: {
+export function FocusHome({ tabs, active, onTab, hero, photo, panel, empty }: {
   tabs: FocusTabInfo[];
   active: FocusTab | null;
   onTab: (t: FocusTab) => void;
@@ -25,7 +25,6 @@ export function FocusHome({ tabs, active, onTab, hero, photo, panel, bookmarks, 
   photo: ReactNode;
   /** The active tab's panel. */
   panel: ReactNode;
-  bookmarks: ReactNode;
   /** Shown when every tab's panel is switched off. */
   empty: ReactNode;
 }) {
@@ -74,7 +73,6 @@ export function FocusHome({ tabs, active, onTab, hero, photo, panel, bookmarks, 
         <div className="fx-panel" id="fx-panel" role={active ? 'tabpanel' : undefined} aria-labelledby={active ? `fx-tab-${active}` : undefined}>
           {active ? panel : empty}
         </div>
-        {bookmarks}
       </div>
     </main>
   );
