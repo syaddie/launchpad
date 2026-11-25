@@ -9,10 +9,9 @@ import { copyText, menuProps, type MenuItem } from './ContextMenu';
 
 export { gmailUrl };
 
-/** What can be done from the view: archive and mark read (with Undo), make a task, keep or dismiss a bill. */
+/** What can be done from the view: archive and mark read (with Undo), keep or dismiss a bill. */
 export interface InboxActions {
   onAction: (emails: InboxEmail[], action: InboxAction) => void;
-  onTask: (source: { item: InboxItem; emails: InboxEmail[] } | { email: InboxEmail }) => void;
   onKeepBill: (b: BillSuggestion) => void;
   onDismissBill: (b: BillSuggestion) => void;
 }
@@ -240,7 +239,7 @@ type Acts = InboxActions & { canModify: boolean };
 
 /** Right-click on an email or a digest item: what its buttons do, plus opening it in Gmail. */
 /** `copy`: what the item says, to copy whole (on a phone its text can't be selected). */
-function mailMenu(mails: InboxEmail[], account: string | undefined, acts: Acts | undefined, task: () => void, copy: { label: string; text: string; notify?: (msg: string) => void }): MenuItem[] {
+function mailMenu(mails: InboxEmail[], account: string | undefined, acts: Acts | undefined, copy: { label: string; text: string; notify?: (msg: string) => void }): MenuItem[] {
   const n = mails.length > 1 ? ` all ${mails.length}` : '';
   const newest = mails.reduce<InboxEmail | undefined>((a, m) => (!a || m.at > a.at ? m : a), undefined);
   return [
@@ -248,7 +247,6 @@ function mailMenu(mails: InboxEmail[], account: string | undefined, acts: Acts |
     'sep',
     acts?.canModify && mails.length > 0 && { label: `Archive${n}`, icon: 'ph-archive', onSelect: () => acts.onAction(mails, 'archive') },
     acts?.canModify && mails.some((m) => m.unread) && { label: `Mark${n} read`, icon: 'ph-envelope-open', onSelect: () => acts.onAction(mails, 'read') },
-    acts && mails.length > 0 && { label: 'Make a task', icon: 'ph-check-square', onSelect: task },
     'sep',
     copy.text && { label: copy.label, icon: 'ph-copy', onSelect: () => copyText(copy.text, copy.notify) },
   ];
@@ -261,7 +259,7 @@ function Item({ it, byId, account, acts, notify }: { it: InboxItem; byId: Map<st
   const anyUnread = mails.some((m) => m.unread);
   const n = mails.length > 1 ? ` all ${mails.length}` : '';
   return (
-    <article className="story" {...menuProps(() => mailMenu(mails, account, acts, () => acts?.onTask({ item: it, emails: mails }), { label: 'Copy summary', text: [it.headline, it.summary].filter(Boolean).join('\n'), notify }), it.headline)}>
+    <article className="story" {...menuProps(() => mailMenu(mails, account, acts, { label: 'Copy summary', text: [it.headline, it.summary].filter(Boolean).join('\n'), notify }), it.headline)}>
       <div className="story-headline">
         {it.headline}
         {it.due && <span className="chip chip-warn inbox-due">{it.due}</span>}
@@ -277,7 +275,7 @@ function Item({ it, byId, account, acts, notify }: { it: InboxItem; byId: Map<st
           ))}
         </div>
       )}
-      {acts && mails.length > 0 && (
+      {acts?.canModify && mails.length > 0 && (
         <div className="inbox-acts">
           {acts.canModify && (
             <button onClick={() => acts.onAction(mails, 'archive')} title={`Archive${n} in Gmail`}>
@@ -291,10 +289,6 @@ function Item({ it, byId, account, acts, notify }: { it: InboxItem; byId: Map<st
               Mark read
             </button>
           )}
-          <button onClick={() => acts.onTask({ item: it, emails: mails })} title={it.due ? `A task due ${it.due}, linking to the email` : 'A task linking to the email'}>
-            <i className="ph-duotone ph-check-square" aria-hidden="true" />
-            Make a task
-          </button>
         </div>
       )}
     </article>
@@ -303,7 +297,7 @@ function Item({ it, byId, account, acts, notify }: { it: InboxItem; byId: Map<st
 
 function EmailRow({ e, now, account, acts, notify }: { e: InboxEmail; now: Date; account?: string; acts?: Acts; notify?: (msg: string) => void }) {
   return (
-    <div className="email-wrap" {...menuProps(() => mailMenu([e], account, acts, () => acts?.onTask({ email: e }), { label: 'Copy subject and preview', text: [e.subject, e.snippet].filter(Boolean).join('\n'), notify }), e.subject)}>
+    <div className="email-wrap" {...menuProps(() => mailMenu([e], account, acts, { label: 'Copy subject and preview', text: [e.subject, e.snippet].filter(Boolean).join('\n'), notify }), e.subject)}>
       <a className={'headline email-row' + (e.unread ? ' unread' : '')} href={gmailUrl(account, e.threadId)} target="_blank" rel="noopener">
         <span className="split">
           <span className="email-from">
@@ -317,7 +311,7 @@ function EmailRow({ e, now, account, acts, notify }: { e: InboxEmail; now: Date;
         <span className="headline-title">{e.subject}</span>
         {e.snippet && <span className="headline-meta email-snippet">{e.snippet}</span>}
       </a>
-      {acts && (
+      {acts?.canModify && (
         <div className="inbox-acts">
           {acts.canModify && (
             <button className="icon-only" onClick={() => acts.onAction([e], 'archive')} title="Archive" aria-label="Archive">
@@ -329,9 +323,6 @@ function EmailRow({ e, now, account, acts, notify }: { e: InboxEmail; now: Date;
               <i className="ph-duotone ph-envelope-open" />
             </button>
           )}
-          <button className="icon-only" onClick={() => acts.onTask({ email: e })} title="Make a task" aria-label="Make a task">
-            <i className="ph-duotone ph-check-square" />
-          </button>
         </div>
       )}
     </div>

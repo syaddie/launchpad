@@ -28,7 +28,7 @@ export function ServerBanner({ issue, waiting, onRetry }: { issue: ServerIssue; 
       <div>
         <strong>{issue.kind === 'down' ? `The Launchpad server isn’t answering (${issue.status})` : 'Can’t reach the Launchpad server'} since {hm(issue.since)}.</strong>{' '}
         This page shows what it last loaded.{' '}
-        {waitingLine(waiting)} Notepad, bookmarks, Money, Learn, settings, the trackers and ticked-off tasks are kept in this browser and saved in order once it answers; other changes may not save.{' '}
+        {waitingLine(waiting)} Notepad, Money, Learn, settings and the trackers are kept in this browser and saved in order once it answers; other changes may not save.{' '}
         {issue.kind === 'unreachable' && 'Check your own internet connection first. '}
         On the server, check the containers are running with <code>docker compose ps</code>, and look for errors with{' '}
         <code>docker compose logs launchpad</code>

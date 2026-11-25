@@ -55,7 +55,7 @@ export const DEFAULT_PREFS: Prefs = {
 
 /** Everything Settings › Panels can switch off. */
 export const HIDEABLE = {
-  panel: ['today', 'briefing', 'tasks', 'notes', 'packages', 'photos', 'bookmarks'],
+  panel: ['today', 'briefing', 'notes', 'photos'],
   top: ['weather', 'air', 'cig', 'training', 'countdown'],
   view: ['digest', 'inbox', 'you', 'training', 'learn', 'money', 'server', 'review', 'music'],
 } as const;

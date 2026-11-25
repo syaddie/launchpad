@@ -5,6 +5,7 @@ import './styles.css';
 import './designs.css';
 import './motion.css';
 import './mission.css';
+import './mission-home.css';
 import { loadCachedState } from './api';
 import { App } from './App';
 import { loadOutbox } from './outbox';

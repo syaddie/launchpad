@@ -23,16 +23,8 @@ export function KeyFigures({ data, now }: { data: AppState; now: Date }) {
     const left = data.events.filter((e) => !e.allDay && !skip.has(e.calendarId) && new Date(e.start) < tomorrow && new Date(e.end) > now).length;
     figures.push({ label: 'Events left', value: String(left) });
   }
-  if (google && data.prefs.sources.tasks && !hidden.includes('panel:tasks')) {
-    const due = data.tasks.filter((t) => t.due && t.due <= todayKey);
-    figures.push({ label: 'Tasks due', value: String(due.length), warn: due.some((t) => t.due! < todayKey) });
-  }
   if (google && data.prefs.sources.gmail && on('inbox')) {
     figures.push({ label: 'Unread', value: String(data.inbox.emails.filter((e) => e.unread).length) });
-  }
-  if (!hidden.includes('panel:packages')) {
-    const arriving = data.packages.filter((p) => !p.archived && (p.stage === 2 || (p.exception && p.stage < 3))).length;
-    figures.push({ label: 'Arriving', value: String(arriving) });
   }
   if (on('money') && data.money.entries.length) {
     figures.push({ label: 'Balance', value: fmtMoney(balanceOn(data.money, todayKey, true)) });
@@ -43,7 +35,7 @@ export function KeyFigures({ data, now }: { data: AppState; now: Date }) {
     <div className="key-figures" aria-label="Today’s key figures">
       {figures.map((f) => (
         <div key={f.label} className="key-figure">
-          {/* A figure rolls to its new value when it changes, a task ticked off, mail read. */}
+          {/* A figure rolls to its new value when it changes: an event over, mail read. */}
           <span className={'tnum key-figure-value' + (f.warn ? ' warn' : '')}>
             <Readout text={f.value} id={`key-${f.label}`} />
           </span>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addFinds, fromClaude, readBill, withoutDueDate, type BillMail, type FoundBill } from '../server/src/bills';
-import { billEntry, billLine, emailTask, liveEmails } from '../web/src/inboxActions';
+import { billEntry, billLine, liveEmails } from '../web/src/inboxActions';
 import { starterMoney } from '../shared/money';
 import type { BillSuggestion, InboxEmail, InboxItem } from '../shared/types';
 
@@ -89,14 +89,6 @@ describe('bill suggestions', () => {
 describe('inbox actions', () => {
   const email = (p: Partial<InboxEmail>): InboxEmail => ({ id: 'a', threadId: 'ta', from: 'IRAS', fromEmail: 'x@iras.gov.sg', subject: 'Tax bill', snippet: '', at: '', unread: true, category: 'primary', ...p });
   const item: InboxItem = { kind: 'action', headline: 'Pay your property tax', summary: 'IRAS says $480 is due.', due: 'by Fri 13 Nov', emails: ['a', 'b'] };
-  it('makes a task from a digest item: its deadline and links to the emails', () => {
-    const t = emailTask({ item, emails: [email({}), email({ id: 'b', threadId: 'tb' })] }, 'me@gmail.com', now);
-    expect(t.title).toBe('Pay your property tax');
-    expect(t.due).toBe('2026-11-13');
-    expect(t.notes).toContain('https://mail.google.com/mail/u/me%40gmail.com/#all/ta');
-    expect(t.notes).toContain('#all/tb');
-    expect(emailTask({ email: email({}) }, undefined, now)).toEqual({ title: 'Tax bill', due: null, notes: 'From IRAS\nhttps://mail.google.com/mail/u/0/#all/ta' });
-  });
   it('leaves archived emails out of an item', () => {
     const byId = new Map([email({}), email({ id: 'b', archived: true })].map((e) => [e.id, e]));
     expect(liveEmails(item, byId).map((e) => e.id)).toEqual(['a']);

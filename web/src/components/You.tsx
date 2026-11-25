@@ -2,13 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { DOW, MON, addDays, dayDiff, parseYmd, startOfDay, ymd } from '../../../shared/dates';
 import { fmtMoney } from '../../../shared/money';
 import {
-  CRAVING_TRIGGERS, MAX_JOURNAL, MOOD_WORDS, STRENGTH_WORDS, cigPrice, countdownNext, countdownPhrase, countdownProgress, cravingSummary, cravingsOn, dailyCounts, fmtDuration,
-  longestGapMs, moodMonth, moodYear, savedUnderLimit, searchJournal, smokeCountMap, smokeSpend, smokesOn, sortCountdowns, triggerName,
+  MAX_JOURNAL, MOOD_WORDS, cigPrice, countdownNext, countdownPhrase, countdownProgress, dailyCounts, fmtDuration,
+  longestGapMs, moodMonth, moodYear, savedUnderLimit, searchJournal, smokeCountMap, smokeSpend, smokesOn, sortCountdowns,
 } from '../../../shared/trackers';
-import type { AppState, Countdown, Craving, Mood, Prefs } from '../../../shared/types';
+import type { AppState, Countdown, Mood, Prefs } from '../../../shared/types';
 import { fmtDay, hm, newId } from '../util';
 import { NoteLines, toggleLine } from './Notes';
-import { Glide, Readout } from './Motion';
+import { Readout } from './Motion';
 
 interface Props {
   data: AppState;
@@ -19,15 +19,11 @@ interface Props {
   onLogSmoke: () => void;
   onUndoSmoke: (at: string) => void;
   onMood: (date: string, mood: Mood | null) => void;
-  onLogCraving: () => void;
-  /** Add a craving or change one. */
-  onCraving: (c: Craving) => void;
-  onRemoveCraving: (id: string) => void;
   onOpenSettings: () => void;
 }
 
-/** The "You" view: countdowns, the cigarette log and what it costs, cravings, a daily mood and journal, and the year in pixels. */
-export function You({ data, now, addSignal, onCountdowns, onLogSmoke, onUndoSmoke, onMood, onLogCraving, onCraving, onRemoveCraving, onOpenSettings }: Props) {
+/** The "You" view: countdowns, the cigarette log and what it costs, a daily mood and journal, and the year in pixels. */
+export function You({ data, now, addSignal, onCountdowns, onLogSmoke, onUndoSmoke, onMood, onOpenSettings }: Props) {
   const counts = useMemo(() => smokeCountMap(data.smokes, data.smokeDays), [data.smokes, data.smokeDays]);
   // The day open in the mood panel: today unless an earlier one was picked in its calendar or the year.
   const [picked, setPicked] = useState<string | null>(null);
@@ -38,13 +34,13 @@ export function You({ data, now, addSignal, onCountdowns, onLogSmoke, onUndoSmok
   };
   return (
     <main className="you">
-      <Countdowns list={data.countdowns} now={now} addSignal={addSignal} onChange={onCountdowns} />
+      {/* What's logged every day first, side by side; then what's coming up beside the year so far. */}
       <div className="you-row">
         <Cigarettes smokes={data.smokes} counts={counts} prefs={data.prefs} now={now} onLog={onLogSmoke} onUndo={onUndoSmoke} onOpenSettings={onOpenSettings} />
         <MoodPanel ref={moodRef} moods={data.moods} now={now} picked={picked} onPick={setPicked} onMood={onMood} />
       </div>
       <div className="you-row">
-        <Cravings cravings={data.cravings} counts={counts} now={now} onLog={onLogCraving} onSave={onCraving} onRemove={onRemoveCraving} />
+        <Countdowns list={data.countdowns} now={now} addSignal={addSignal} onChange={onCountdowns} />
         <YearPixels moods={data.moods} now={now} selected={picked ?? ymd(now)} onOpen={openDay} />
       </div>
     </main>
@@ -76,7 +72,7 @@ function Countdowns({ list, now, addSignal, onChange }: { list: Countdown[]; now
   };
 
   return (
-    <section className="panel you-panel" aria-label="Countdowns">
+    <section className="panel you-panel cds" aria-label="Countdowns">
       <div className="panel-head">
         <h2 className="panel-title">Countdowns</h2>
         <button className="btn btn-ghost btn-small" onClick={() => setDraft(blank())}>
@@ -370,199 +366,6 @@ function CigCost({ counts, prefs, today, onOpenSettings }: { counts: Map<string,
         {fmtMoney(prefs.packPrice)} for {prefs.packSize}, so {fmtMoney(price)} each.
         {limit > 0 && year.days > 0 && ` Staying under ${limit} a day saved ${fmtMoney(month.saved)} this month and ${fmtMoney(year.saved)} over the last year, against smoking the limit every day.`}
       </span>
-    </div>
-  );
-}
-
-// ---------- cravings ----------
-
-/** Cravings not acted on: log one, set how strong and what set it off, and see them against cigarettes smoked. */
-function Cravings({ cravings, counts, now, onLog, onSave, onRemove }: {
-  cravings: Craving[];
-  counts: Map<string, number>;
-  now: Date;
-  onLog: () => void;
-  onSave: (c: Craving) => void;
-  onRemove: (id: string) => void;
-}) {
-  const today = startOfDay(now);
-  const two = useMemo(() => cravingSummary(cravings, counts, today, 14), [cravings, counts, today.getTime()]);
-  const month = useMemo(() => cravingSummary(cravings, counts, today, 30), [cravings, counts, today.getTime()]);
-  const todays = cravingsOn(cravings, now).length;
-  const smoked = counts.get(ymd(now)) ?? 0;
-  const [open, setOpen] = useState<string | null>(null);
-  // One that was just logged opens for its details.
-  const newest = cravings[cravings.length - 1];
-  const seen = useRef(newest?.id);
-  useEffect(() => {
-    if (newest && newest.id !== seen.current && Date.now() - Date.parse(newest.at) < 60_000) setOpen(newest.id);
-    seen.current = newest?.id;
-  }, [newest]);
-  const recent = cravings.slice(-5).reverse();
-  const top = Math.max(3, ...two.byDay.map((d) => Math.max(d.resisted, d.smoked))) * 1.15;
-  const maxTrigger = Math.max(1, ...month.triggers.map((t) => t.count));
-
-  return (
-    <section className="panel you-panel crv" aria-label="Cravings">
-      <div className="panel-head">
-        <h2 className="panel-title">Cravings</h2>
-        <span className="meta">Ones you didn’t act on</span>
-      </div>
-
-      <div className="cig-top">
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-          <span className="serif tnum cig-count">
-            <Readout text={String(todays)} id="cravings-today" />
-          </span>
-          <span style={{ fontSize: 13, color: 'var(--t2)' }}>
-            resisted today{smoked ? `, ${smoked} smoked` : ''}
-          </span>
-        </div>
-        <span style={{ flex: 1 }} />
-        <button className="btn btn-secondary cig-log" onClick={onLog}>
-          <i className="ph-duotone ph-hand-palm" />
-          Log a craving
-          <span className="kbd">⇧C</span>
-        </button>
-      </div>
-
-      {recent.length > 0 ? (
-        <div className="crv-list">
-          {recent.map((c) => (
-            <CravingRow key={c.id} c={c} today={today} open={open === c.id} onToggle={() => setOpen(open === c.id ? null : c.id)} onSave={onSave} onRemove={(id) => (onRemove(id), setOpen(null))} />
-          ))}
-        </div>
-      ) : (
-        <p className="meta" style={{ margin: 0 }}>
-          When you want one and don’t have it, log it here or press Shift C anywhere. Note how strong it was and what set it off, and the common triggers show up below.
-        </p>
-      )}
-
-      <div className="cig-chart-wrap" style={{ minHeight: 130 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
-          <span className="sec-label">Last 14 days</span>
-          <span className="legend">
-            <span className="legend-swatch" style={{ background: 'var(--ac)' }} />
-            Resisted
-            <span className="legend-swatch" style={{ background: 'var(--t3)', opacity: 0.55, marginLeft: 6 }} />
-            Smoked
-          </span>
-        </div>
-        <div className="cig-chart" role="img" aria-label={`Resisted and smoked per day: ${two.byDay.map((d) => `${d.resisted}/${d.smoked}`).join(', ')}`}>
-          {two.byDay.map((d) => (
-            <div key={d.date} className="cig-col crv-col" title={`${fmtDay(parseYmd(d.date))} · ${d.resisted} resisted, ${d.smoked} smoked`}>
-              <span className="crv-pair">
-                <span className="cig-bar" style={{ height: `${(d.resisted / top) * 100}%`, background: 'var(--ac)' }} />
-                <span className="cig-bar" style={{ height: `${(d.smoked / top) * 100}%`, background: 'var(--t3)', opacity: 0.55 }} />
-              </span>
-            </div>
-          ))}
-        </div>
-        <div className="cig-days">
-          {two.byDay.map((d, i) => (
-            <span key={d.date} style={i === two.byDay.length - 1 ? { color: 'var(--tx)', fontWeight: 600 } : undefined}>
-              {DAY_LETTERS[parseYmd(d.date).getDay()]}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {month.triggers.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span className="sec-label">What sets them off, last 30 days</span>
-          <div className="tr-bars">
-            {month.triggers.slice(0, 5).map((t) => (
-              <div key={t.trigger} className="tr-bar">
-                <span className="tr-bl">{triggerName(t.trigger)}</span>
-                <span className="tr-track">
-                  <span className="tr-fill" style={{ width: `${(t.count / maxTrigger) * 100}%` }} />
-                </span>
-                <span className="tr-bn tnum">{t.count}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="you-foot" style={{ marginTop: 'auto' }}>
-        <span>
-          Last 30 days <b>{month.resisted}</b> resisted · <b>{month.smoked}</b> smoked
-        </span>
-        {month.resisted + month.smoked > 0 && (
-          <span>
-            Resisted <b>{Math.round((month.resisted / (month.resisted + month.smoked)) * 100)}%</b> of the urges logged
-          </span>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function CravingRow({ c, today, open, onToggle, onSave, onRemove }: {
-  c: Craving;
-  today: Date;
-  open: boolean;
-  onToggle: () => void;
-  onSave: (c: Craving) => void;
-  onRemove: (id: string) => void;
-}) {
-  const [note, setNote] = useState(c.note);
-  useEffect(() => setNote(c.note), [c.note]);
-  const at = new Date(c.at);
-  const saveNote = () => note.trim() !== c.note && onSave({ ...c, note: note.trim() });
-  return (
-    <div className={'crv-row' + (open ? ' open' : '')}>
-      <button className="crv-sum" aria-expanded={open} onClick={onToggle}>
-        <span className="tnum crv-time">{dayDiff(at, today) === 0 ? hm(at) : `${fmtDay(at)}, ${hm(at)}`}</span>
-        <span className="crv-str" aria-hidden="true">
-          {[1, 2, 3].map((i) => (
-            <span key={i} className={i <= c.strength ? 'on' : ''} />
-          ))}
-        </span>
-        <span className="crv-what">
-          {STRENGTH_WORDS[c.strength - 1]}
-          {c.trigger && ` · ${triggerName(c.trigger)}`}
-          {c.note && <span className="crv-note"> · {c.note}</span>}
-        </span>
-        <i className={'ph-duotone ' + (open ? 'ph-caret-up' : 'ph-caret-down')} aria-hidden="true" />
-      </button>
-      {open && (
-        <div className="crv-edit" onKeyDown={(e) => e.key === 'Escape' && (e.stopPropagation(), onToggle())}>
-          <div className="segmented" role="group" aria-label="How strong">
-            <Glide on={c.strength} />
-            {STRENGTH_WORDS.map((w, i) => (
-              <button key={w} className={c.strength === i + 1 ? 'on' : ''} aria-pressed={c.strength === i + 1} onClick={() => onSave({ ...c, strength: (i + 1) as 1 | 2 | 3 })}>
-                {w}
-              </button>
-            ))}
-          </div>
-          <div className="crv-triggers" role="group" aria-label="What set it off">
-            {CRAVING_TRIGGERS.map((t) => (
-              <button key={t.key} className={'crv-chip' + (c.trigger === t.key ? ' on' : '')} aria-pressed={c.trigger === t.key} onClick={() => onSave({ ...c, trigger: c.trigger === t.key ? '' : t.key })}>
-                {t.name}
-              </button>
-            ))}
-          </div>
-          <input
-            className="input sm"
-            aria-label="Note"
-            placeholder="A note, if you like: where you were, what helped"
-            value={note}
-            maxLength={500}
-            onChange={(e) => setNote(e.target.value)}
-            onBlur={saveNote}
-            onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-          />
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button className="btn btn-ghost btn-small" onClick={onToggle}>
-              Done
-            </button>
-            <button className="btn btn-ghost btn-small" style={{ marginLeft: 'auto', color: 'var(--wn)' }} onClick={() => onRemove(c.id)}>
-              Delete
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

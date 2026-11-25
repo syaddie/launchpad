@@ -1,16 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CARRIERS, detectCarrier, trackUrl } from '../../../shared/carriers';
-import { startOfDay } from '../../../shared/dates';
 import { DEFAULT_ENGINES } from '../../../shared/defaults';
 import { fmtUsd } from '../../../shared/claudeUsage';
-import type { AccentKey, AppState, Backup, BackupSnapshot, DesignKey, DriveStatus, GoogleSource, Package, Photo, Prefs, SearchEngine, ThemeMode } from '../../../shared/types';
+import type { AccentKey, AppState, Backup, BackupSnapshot, DesignKey, DriveStatus, GoogleSource, Photo, Prefs, SearchEngine, ThemeMode } from '../../../shared/types';
 import { knownDesign } from '../../../shared/types';
 import { api, BACKUP_URL, DB_BACKUP_URL, snapshotUrl, ZIP_BACKUP_URL } from '../api';
 import { PhotoSettings } from './Photos';
 import { AlertSettings } from './AlertSettings';
 import { HomeArrangement } from './HomeArrangement';
-import { STEP_LABELS, ago, chipOf, fmtStamp, hm, segColor, statusText } from '../util';
+import { ago, fmtStamp, hm } from '../util';
 import { Glide } from './Motion';
 
 /**
@@ -43,185 +41,6 @@ export function Drawer({ title, onClose, children, wide, foot }: {
     document.body,
   );
 }
-
-// ---------- package detail ----------
-
-export function PackageDrawer({ pkg, now, onRename, onArchive }: {
-  pkg: Package;
-  now: Date;
-  onRename: (label: string) => void;
-  onArchive: () => void;
-}) {
-  const [copied, setCopied] = useState(false);
-  const [label, setLabel] = useState(pkg.label);
-  const chip = chipOf(pkg);
-  const today = startOfDay(now);
-
-  const copy = () => {
-    navigator.clipboard?.writeText(pkg.number).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1400);
-  };
-
-  const dotFor = (i: number) => (i === 0 ? (pkg.exception ? 'var(--wn)' : pkg.stage === 2 ? 'var(--ac)' : 'var(--t2)') : 'var(--ln)');
-
-  return (
-    <>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
-        <label className="field">
-          Label
-          <input
-            className="input"
-            style={{ fontSize: 15, fontWeight: 500 }}
-            value={label}
-            onChange={(e) => {
-              setLabel(e.target.value);
-              onRename(e.target.value);
-            }}
-          />
-        </label>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--t2)', flexWrap: 'wrap' }}>
-          <span>{pkg.carrier}</span>
-          <span className="mono" style={{ fontSize: 12, color: 'var(--t3)' }}>
-            {pkg.number}
-          </span>
-          <button className="btn-link" style={{ textDecoration: 'none', color: 'var(--t3)', display: 'grid', placeItems: 'center' }} title="Copy tracking number" onClick={copy}>
-            <i className={'ph-duotone ' + (copied ? 'ph-check' : 'ph-copy')} />
-          </button>
-          <span className={'chip ' + chip.cls} style={{ marginLeft: 'auto' }}>
-            {chip.text}
-          </span>
-        </div>
-        <div className="steps">
-          {STEP_LABELS.map((l, i) => (
-            <div key={l} className="step">
-              <span style={{ height: 3, borderRadius: 2, background: segColor(pkg, i) }} />
-              <span
-                style={{
-                  color: i === pkg.stage ? (pkg.exception ? 'var(--wn)' : 'var(--tx)') : i < pkg.stage ? 'var(--t2)' : 'var(--t3)',
-                  fontWeight: i === pkg.stage ? 600 : 400,
-                }}
-              >
-                {pkg.exception && i === pkg.stage ? 'Failed attempt' : l}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <div className="drawer-label" style={{ paddingBottom: 10 }}>
-          Tracking history
-        </div>
-        {pkg.timeline.length ? (
-          pkg.timeline.map((t, i, a) => (
-            <div key={i} className="timeline-item">
-              <div className="timeline-rail">
-                <span className="timeline-dot" style={{ background: dotFor(i) }} />
-                <span className="timeline-line" style={{ background: i < a.length - 1 ? 'var(--ln)' : 'transparent' }} />
-              </div>
-              <div style={{ paddingBottom: 15 }}>
-                <div style={{ fontSize: 14, lineHeight: '20px', color: i === 0 ? 'var(--tx)' : 'var(--t2)', fontWeight: i === 0 ? 500 : 400 }}>{t.event}</div>
-                <div className="tnum" style={{ fontSize: 12, color: 'var(--t3)' }}>
-                  {fmtStamp(new Date(t.at))}
-                  {t.location ? ` · ${t.location}` : ''}
-                </div>
-              </div>
-            </div>
-          ))
-        ) : (
-          <div style={{ fontSize: 13, color: 'var(--t3)' }}>{statusText(pkg, today)}</div>
-        )}
-        {pkg.lastChecked && (
-          <div style={{ fontSize: 12, color: 'var(--t3)', paddingTop: 5 }}>Checked {ago(pkg.lastChecked, now)}</div>
-        )}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <a className="btn btn-primary" href={trackUrl(pkg.carrier, pkg.number)} target="_blank" rel="noopener">
-          Track on {pkg.carrier}
-          <i className="ph-duotone ph-arrow-up-right" />
-        </a>
-        <button className="btn btn-secondary" style={{ color: 'var(--t2)', fontWeight: 400 }} onClick={onArchive}>
-          <i className="ph-duotone ph-archive" />
-          Archive
-        </button>
-        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--t3)' }}>{pkg.source === 'gmail' ? 'Detected from Gmail' : 'Added manually'}</span>
-      </div>
-    </>
-  );
-}
-
-// ---------- add package ----------
-
-export function AddPackageDrawer({ onSubmit, onCancel }: {
-  onSubmit: (number: string, label: string, carrier: string) => Promise<void>;
-  onCancel: () => void;
-}) {
-  const [num, setNum] = useState('');
-  const [label, setLabel] = useState('');
-  const [carrier, setCarrier] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const det = detectCarrier(num);
-  const final = carrier || det;
-  const ready = !!num.trim() && !!final && !busy;
-
-  const submit = async () => {
-    if (!ready) return;
-    setBusy(true);
-    setError('');
-    try {
-      await onSubmit(num.trim(), label.trim(), final);
-    } catch (e) {
-      setError((e as Error).message);
-      setBusy(false);
-    }
-  };
-  const onKey = (e: React.KeyboardEvent) => e.key === 'Enter' && submit();
-
-  const line = !num.trim()
-    ? 'Carrier is detected from the number format.'
-    : carrier
-      ? `Using ${carrier} (manual override).`
-      : det
-        ? `Looks like a ${det} number.`
-        : 'Couldn’t recognise this format. Pick a carrier.';
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
-      <label className="field">
-        Tracking number
-        <input className="input mono" style={{ fontSize: 13 }} value={num} autoFocus placeholder="Paste a tracking number" onChange={(e) => setNum(e.target.value)} onKeyDown={onKey} />
-      </label>
-      <label className="field">
-        Label (optional)
-        <input className="input" value={label} placeholder="e.g. New keyboard" onChange={(e) => setLabel(e.target.value)} onKeyDown={onKey} />
-      </label>
-      <label className="field">
-        Carrier
-        <select className="input" style={{ padding: '0 8px' }} value={carrier} onChange={(e) => setCarrier(e.target.value)}>
-          <option value="">{det ? `Auto-detected: ${det}` : 'Auto-detect'}</option>
-          {CARRIERS.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-      </label>
-      <div style={{ fontSize: 12, color: num.trim() && !final ? 'var(--wn)' : 'var(--t3)' }}>{line}</div>
-      {error && <div style={{ fontSize: 12, color: 'var(--wn)' }}>{error}</div>}
-      <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-        <button className="btn btn-ghost" onClick={onCancel}>
-          Cancel
-        </button>
-        <button className="btn btn-primary" disabled={!ready} onClick={submit}>
-          {busy ? 'Tracking…' : 'Track package'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ---------- settings ----------
 
 const ACCENTS: { key: AccentKey; name: string; light: string; dark: string }[] = [
   { key: 'sage', name: 'Sage', light: '#5a7a5c', dark: '#9cb99a' },
@@ -261,8 +80,7 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
 
   const sourceRows: { key: GoogleSource; name: string; icon: string }[] = [
     { key: 'calendar', name: 'Google Calendar', icon: 'ph-calendar-blank' },
-    { key: 'tasks', name: 'Google Tasks', icon: 'ph-check-square' },
-    { key: 'gmail', name: 'Gmail (packages and inbox)', icon: 'ph-envelope-simple' },
+    { key: 'gmail', name: 'Gmail (bills and inbox)', icon: 'ph-envelope-simple' },
   ];
 
   /** The server's full backup; when it can't be reached, what this page has (cigarettes from the last 60 days only). */
@@ -527,16 +345,6 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
       </div>
 
       <div className="drawer-section">
-        <div className="drawer-label">Package tracking</div>
-        <div style={{ fontSize: 13, color: 'var(--t2)' }}>
-          {data.tracking.allCarriers
-            ? 'Live status for SingPost, plus other carriers through 17TRACK.'
-            : 'Live status for SingPost. Add a 17TRACK API key on the server to track other carriers too.'}
-          {data.sync.carriers.lastSuccess && <span style={{ color: 'var(--t3)' }}> Updated {ago(data.sync.carriers.lastSuccess, now)}.</span>}
-        </div>
-      </div>
-
-      <div className="drawer-section">
         <div className="drawer-label">Backup</div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button className="btn btn-secondary" style={{ padding: '7px 12px', gap: 5, fontWeight: 400 }} onClick={exportJson}>
@@ -711,9 +519,9 @@ const SETTINGS_TABS: { key: SettingsTab; name: string }[] = [
 ];
 
 export const DESIGNS: { key: DesignKey; name: string; blurb: string }[] = [
-  { key: 'mission', name: 'Mission', blurb: 'A launch site: a sky that follows the hour and the weather, your day climbing across it, a launch clock to what’s next, and glass panels on the ground. Follows Theme.' },
+  { key: 'mission', name: 'Mission', blurb: 'A launch site: a sky that follows the hour and the weather, your day climbing across it, a launch clock to what’s next, and your photos as the ground under it, with glass panels standing on them. Follows Theme.' },
   { key: 'vista', name: 'Vista', blurb: 'Your photos as the backdrop, frosted-glass panels, and a big clock and search in the middle. Follows Theme and Accent.' },
-  { key: 'focus', name: 'Focus', blurb: 'The clock and what’s next on the left; Today, Tasks, Notepad and Packages one at a time behind tabs, with room to breathe. Follows Theme and Accent.' },
+  { key: 'focus', name: 'Focus', blurb: 'The clock and what’s next on the left; Today and the Notepad one at a time behind tabs, with room to breathe. Follows Theme and Accent.' },
   { key: 'poster', name: 'Poster', blurb: 'Big type, hard rules and one red: a Swiss poster. Numbered panels and a solid nav bar. Follows Theme.' },
 ];
 
@@ -786,12 +594,9 @@ export const PANEL_ROWS: { section: string; hint?: string; rows: { key: string; 
     section: 'Home panels',
     rows: [
       { key: 'panel:today', name: 'Today' },
-      { key: 'panel:briefing', name: 'Key figures', meta: 'Events left, tasks due, unread, packages and balance, at the top of Today' },
-      { key: 'panel:tasks', name: 'Tasks' },
+      { key: 'panel:briefing', name: 'Key figures', meta: 'Events left, unread and balance, at the top of Today' },
       { key: 'panel:notes', name: 'Notepad' },
-      { key: 'panel:packages', name: 'Packages' },
       { key: 'panel:photos', name: 'Photos' },
-      { key: 'panel:bookmarks', name: 'Bookmarks' },
     ],
   },
   {
@@ -810,7 +615,7 @@ export const PANEL_ROWS: { section: string; hint?: string; rows: { key: string; 
     rows: [
       { key: 'view:digest', name: 'Digest', meta: 'A short lesson a day on each subject you pick, by Claude' },
       { key: 'view:inbox', name: 'Inbox', meta: 'Claude’s digest of your Gmail' },
-      { key: 'view:you', name: 'You', meta: 'Countdowns, cigarettes and cravings, mood and journal' },
+      { key: 'view:you', name: 'You', meta: 'Countdowns, cigarettes, mood and journal' },
       { key: 'view:training', name: 'Training', meta: 'Workouts from your Hevy export' },
       { key: 'view:learn', name: 'Learn', meta: 'Courses, what’s due, grades and study time' },
       { key: 'view:money', name: 'Money', meta: 'Money in and out, month by month, a wishlist and what you’re owed' },

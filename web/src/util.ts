@@ -1,5 +1,5 @@
 import { DOW, MON, dayDiff, pad2, parseYmd } from '../../shared/dates';
-import type { AppState, Bookmark, Package, ViewKey } from '../../shared/types';
+import type { AppState, ViewKey } from '../../shared/types';
 
 export const hm = (d: Date) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 
@@ -44,42 +44,6 @@ export function host(url: string): string {
   } catch {
     return url;
   }
-}
-
-/** The bookmark's icon, kept by the Launchpad server, so nothing is fetched from another site as tiles paint. */
-export function favicon(b: Bookmark): string {
-  return /^https?:\/\//i.test(b.url) ? `/api/favicon?host=${encodeURIComponent(host(b.url).toLowerCase())}` : '';
-}
-
-export const STEP_LABELS = ['Info received', 'In transit', 'Out for delivery', 'Delivered'];
-
-export function chipOf(p: Package): { text: string; cls: string } {
-  if (p.exception) return { text: 'Exception', cls: 'chip-warn' };
-  return [
-    { text: 'Info received', cls: 'chip-neutral' },
-    { text: 'In transit', cls: 'chip-neutral' },
-    { text: 'Out for delivery', cls: 'chip-accent' },
-    { text: 'Delivered', cls: 'chip-muted' },
-  ][p.stage];
-}
-
-export function segColor(p: Package, i: number): string {
-  if (i > p.stage) return 'var(--ln)';
-  if (p.exception && i === p.stage) return 'var(--wn)';
-  if (p.stage === 2 && !p.exception) return 'var(--ac)';
-  return 'var(--t3)';
-}
-
-/** Status line under the package label. */
-export function statusText(p: Package, today: Date): string {
-  if (p.stage === 3 && p.deliveredAt) {
-    const d = new Date(p.deliveredAt);
-    const o = dayDiff(d, today);
-    const day = o === 0 ? 'today' : o === 1 ? 'yesterday' : fmtDay(d);
-    return `Delivered ${day} ${hm(d)}`;
-  }
-  if (p.trackingError && !p.timeline.length) return p.trackingError;
-  return p.statusText;
 }
 
 export function newId(prefix: string): string {

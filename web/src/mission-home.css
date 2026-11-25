@@ -1,0 +1,69 @@
+/* Mission's home (components/mission/MissionHome.tsx): your photos are the land under the sky, edge to
+   edge, and Today and the Notepad stand on it as glass. The open ground between them is the photo's. */
+
+[data-design='mission'] .msh { position: relative; flex: 1; min-height: 0; display: flex; gap: 16px; }
+
+/* ---------- the land: from the horizon to the bottom of the window, the whole width ---------- */
+
+[data-design='mission'] .msh-land {
+  position: absolute; top: -14px; bottom: -26px; left: calc(50% - 50vw); right: calc(50% - 50vw); z-index: 0; overflow: hidden; pointer-events: none;
+  /* It rises out of the horizon rather than starting at a line. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 110px); mask-image: linear-gradient(to bottom, transparent, #000 110px);
+}
+[data-layout='wide'][data-design='mission'] .msh-land { bottom: -48px; }
+[data-design='mission'] .msh-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; scale: 1.07; transition: opacity 1.6s var(--e-out), scale 22s linear; }
+[data-design='mission'] .msh-img.on { opacity: 1; scale: 1; }
+/* Dusk at the edges, so the glass reads against any photo; deeper at night. */
+[data-design='mission'] .msh-land::after { content: ''; position: absolute; inset: 0; background: radial-gradient(120% 95% at 50% 35%, transparent 45%, rgba(5, 8, 16, 0.32)); }
+:root[data-design='mission'][data-mode='dark'] .msh-land::after { background: radial-gradient(120% 95% at 50% 35%, rgba(5, 8, 16, 0.12) 30%, rgba(5, 8, 16, 0.55)); }
+
+/* ---------- the glass standing on it ---------- */
+
+[data-design='mission'] .msh-card { position: relative; z-index: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+[data-design='mission'] .msh-card > .panel { flex: 1; min-height: 0; }
+[data-design='mission'] .msh-card--today { flex: 0 0 clamp(320px, 31%, 560px); }
+[data-design='mission'] .msh-card--notes { flex: 0 0 clamp(290px, 27%, 500px); }
+/* Only one of them: it takes a little more, and the photo still has most of the ground. */
+[data-design='mission'] .msh--notoday .msh-card--notes, [data-design='mission'] .msh--nonotes .msh-card--today { flex-basis: clamp(320px, 36%, 620px); }
+/* Photos switched off: Today and the Notepad share the ground. */
+[data-design='mission'] .msh--photosoff .msh-card { flex: 1 1 0; }
+[data-design='mission'] .msh--photosoff .msh-card--today { flex-grow: 1.25; }
+/* The glass over the land is thicker, so the words stay easy to read over a busy photo. */
+[data-design='mission'] .msh:not(.msh--nophoto) .msh-card > .panel { background: color-mix(in srgb, var(--pop) 86%, transparent); }
+
+/* ---------- the photo's own ground: its frame, its arrows, the line that fills while it stays ---------- */
+
+[data-design='mission'] .msh-window { position: relative; z-index: 1; flex: 1; min-width: 0; border-radius: var(--r-p); }
+[data-design='mission'] .msh-caption { position: absolute; left: 14px; bottom: 22px; display: inline-flex; align-items: center; gap: 8px; color: #fff; font-size: 11px; letter-spacing: 0.16em; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7); }
+[data-design='mission'] .msh-caption b { font-weight: 400; opacity: 0.7; }
+/* A recording light while the photos move on by themselves; still while one is held. */
+[data-design='mission'] .msh-rec { width: 7px; height: 7px; border-radius: 50%; background: var(--ms-ignition); box-shadow: 0 0 8px var(--ms-ignition); animation: mshRec 2.4s steps(1, end) infinite; }
+[data-design='mission'] .msh-rec.held { background: #fff; box-shadow: none; animation: none; }
+@keyframes mshRec { 50% { opacity: 0.25; } }
+[data-design='mission'] .msh-ctl { position: absolute; right: 12px; bottom: 14px; display: flex; gap: 8px; }
+[data-design='mission'] .msh-dwell { position: absolute; left: 14px; bottom: 8px; height: 3px; width: 0; max-width: calc(100% - 28px); border-radius: 2px; background: var(--ms-ignition); box-shadow: 0 0 10px var(--ms-ignition); animation: mshDwell linear forwards; }
+@keyframes mshDwell { to { width: calc(100% - 28px); } }
+/* With nothing to look at, the ground invites some. */
+[data-design='mission'] .msh--nophoto .msh-window { display: flex; align-items: center; justify-content: center; }
+[data-design='mission'] .msh-add { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; max-width: 320px; padding: 24px; border-radius: var(--r-p); border: 1.5px dashed var(--ln); background: color-mix(in srgb, var(--sf) 60%, transparent); color: var(--t2); text-align: center; backdrop-filter: blur(12px); }
+[data-design='mission'] .msh-add i { font-size: 34px; color: var(--t3); }
+[data-design='mission'] .msh-add p { margin: 0; }
+
+/* ---------- phones: the photo as a band of ground off both edges right under the sky, then Today and the Notepad ---------- */
+
+[data-layout='narrow'][data-design='mission'] .msh { flex-direction: column; flex: none; }
+[data-layout='narrow'][data-design='mission'] .msh-card { flex: none; }
+[data-layout='narrow'][data-design='mission'] .msh-card--today { order: 3; }
+[data-layout='narrow'][data-design='mission'] .msh-land {
+  position: relative; order: 1; top: auto; bottom: auto; left: auto; right: auto; flex: none; height: min(100vw, 480px); margin: -6px -16px 0;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 34px, #000 calc(100% - 34px), transparent); mask-image: linear-gradient(to bottom, transparent, #000 34px, #000 calc(100% - 34px), transparent);
+}
+/* The photo's controls sit over that band. */
+[data-layout='narrow'][data-design='mission'] .msh-window { order: 2; flex: none; height: min(100vw, 480px); margin-top: calc(-16px - min(100vw, 480px)); }
+[data-layout='narrow'][data-design='mission'] .msh--nophoto .msh-window { height: auto; margin-top: 0; }
+[data-layout='narrow'][data-design='mission'] .msh-card--notes { order: 4; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-design='mission'] .msh-img { scale: 1; transition: opacity 0.3s ease-out; }
+  [data-design='mission'] .msh-rec { animation: none; }
+}

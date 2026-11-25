@@ -1,19 +1,17 @@
-// What ⌘K offers: actions, views, panels to show or hide, bookmarks, and for what's typed,
-// quick logs ("weight 72.4", "study 45 cs210", "craving stress") and web searches.
-import { rankBookmarks } from '../../shared/bookmarks';
+// What ⌘K offers: actions, views, panels to show or hide, and for what's typed, quick logs
+// ("weight 72.4", "study 45 cs210") and web searches.
 import { askable, type AskAction } from '../../shared/ask';
 import { parseEvent, ymd, type EventDraft } from '../../shared/dates';
 import { fmtStudy, parseStudy, timerMinutes } from '../../shared/learn';
 import { fmtKg, parseWeight } from '../../shared/training';
-import { STRENGTH_WORDS, cravingsOn, engineUrl, fmtDuration, moodWord, parseCraving, parseSearch, triggerName } from '../../shared/trackers';
-import type { AppState, Countdown, CravingTrigger, DesignKey, Mood, MoneyEntry, Prefs, ViewKey } from '../../shared/types';
+import { engineUrl, fmtDuration, moodWord, parseSearch } from '../../shared/trackers';
+import type { AppState, Countdown, DesignKey, Mood, MoneyEntry, Prefs, ViewKey } from '../../shared/types';
 import { api } from './api';
 import { canAddEvents, defaultCalendar, describeDraft } from './components/AddEvent';
 import { DESIGNS, PANEL_ROWS } from './components/Drawers';
 import type { PaletteAsk, PaletteItem } from './components/Palette';
 import { VIEWS } from './components/Rail';
 import type { ServerTab } from './components/Server';
-import { bookmarkOpened } from './api';
 import { host, newId } from './util';
 
 export interface PaletteContext {
@@ -30,7 +28,6 @@ export interface PaletteContext {
   setPrefs: (p: Prefs) => void;
   setLocalDesign: (d: DesignKey | '') => void;
   logSmoke: () => void;
-  logCraving: (strength?: 1 | 2 | 3, trigger?: CravingTrigger | '') => void;
   openWeight: () => void;
   addCountdown: () => void;
   addWork: () => void;
@@ -40,7 +37,6 @@ export interface PaletteContext {
   setWeight: (date: string, kg: number | null, undo?: boolean) => void;
   runSpeedTest: () => void;
   openServerTab: (tab: ServerTab) => void;
-  addPackage: () => void;
   addEvent: (calendarId: string, d: EventDraft) => Promise<boolean>;
   /** Put the cursor in Today's add-an-event field; missing when that panel isn't on screen. */
   openAddEvent?: () => void;
@@ -57,10 +53,8 @@ export interface PaletteContext {
 }
 
 export interface AskHandlers {
-  addTask: (listId: string, title: string, due: string | null) => void;
   addMoney: (entry: MoneyEntry) => void;
   addCountdown: (c: Countdown) => void;
-  addBookmark: (groupId: string, name: string, url: string) => void;
   setMood: (date: string, mood: Mood) => void;
   notify: (msg: string) => void;
 }
@@ -75,11 +69,6 @@ export function paletteItems(c: PaletteContext): PaletteItem[] {
       id: 'a:smoke', group: 'Actions', label: 'Log a cigarette', icon: 'ph-cigarette', keys: ['C'], words: 'smoke',
       sub: `${smokesToday} today${data.smokes.length ? ` · last one ${fmtDuration(now.getTime() - Date.parse(data.smokes[data.smokes.length - 1]))} ago` : ''}`,
       run: c.logSmoke,
-    },
-    {
-      id: 'a:craving', group: 'Actions', label: 'Log a craving you didn’t act on', icon: 'ph-hand-palm', keys: ['Shift', 'C'], words: 'urge resist smoke cigarette',
-      sub: `${cravingsOn(data.cravings, now).length} resisted today · or type “craving 3 stress”`,
-      run: () => c.logCraving(),
     },
     {
       id: 'a:weight', group: 'Actions', label: 'Log your weight', icon: 'ph-scales', words: 'body weight kg scale',
@@ -109,7 +98,6 @@ export function paletteItems(c: PaletteContext): PaletteItem[] {
     { id: 'a:files', group: 'Actions', label: 'Browse the server’s files', icon: 'ph-folder-simple', words: 'file explorer sftp upload download folders', run: () => c.openServerTab('files') },
     { id: 'a:minecraft', group: 'Actions', label: 'Open the Minecraft console', icon: 'ph-cube', words: 'minecraft server console rcon players tmux screen game', run: () => c.openServerTab('minecraft') },
     { id: 'a:downloads', group: 'Actions', label: 'Download to the server', icon: 'ph-download-simple', words: 'download link url wget curl torrent magnet qbittorrent instagram ig insta reel post profile photos videos instaloader', run: () => c.openServerTab('downloads') },
-    { id: 'a:package', group: 'Actions', label: 'Add a package', icon: 'ph-package', words: 'tracking', run: c.addPackage },
     ...(c.openAddEvent && eventsOn(data)
       ? [{ id: 'a:event', group: 'Actions', label: 'Add a calendar event', icon: 'ph-calendar-plus', words: 'google calendar meeting appointment schedule', sub: 'Or type “event”, then what and when', run: c.openAddEvent }]
       : []),
@@ -151,21 +139,6 @@ export function paletteItems(c: PaletteContext): PaletteItem[] {
         run: () => c.toggleHidden(r.key),
       })),
     ),
-    // The most opened first, so they lead once something's typed.
-    ...rankBookmarks(data.bookmarks.flatMap((g) => g.items.map((b, i) => ({ ...b, g, i }))), data.bookmarkOpens).map(({ g, i, ...b }) => ({
-        id: 'b:' + b.id,
-        group: 'Bookmarks',
-        label: b.name,
-        sub: `${g.name} · ${host(b.url)}`,
-        icon: (b.name || '?')[0].toUpperCase(),
-        keys: g.name === 'Daily' && i < 9 ? [String(i + 1)] : undefined,
-        words: b.url,
-        onlyWhenTyping: true,
-        run: () => {
-          bookmarkOpened(b.id);
-          window.open(b.url, '_blank', 'noopener');
-        },
-      })),
   ];
 }
 
@@ -197,14 +170,6 @@ export function paletteSearches(c: PaletteContext, q: string): PaletteItem[] {
     sub: data.weights[ymd(now)] ? `Replaces ${fmtKg(data.weights[ymd(now)])} kg` : 'Body weight, in Training',
     run: () => c.setWeight(ymd(now), kg, true),
   }];
-  const craving = parseCraving(q);
-  if (craving) {
-    log.push({
-      id: 'a:craving-now', group: 'Actions', label: `Log a ${STRENGTH_WORDS[craving.strength - 1].toLowerCase()} craving${craving.trigger ? `: ${triggerName(craving.trigger).toLowerCase()}` : ''}`, icon: 'ph-hand-palm', first: true,
-      sub: 'One you didn’t act on, in You',
-      run: () => c.logCraving(craving.strength, craving.trigger),
-    });
-  }
   const study = parseStudy(q, data.learn.courses);
   if (study) {
     log.push({
@@ -246,9 +211,10 @@ export function runAskAction(c: PaletteContext, a: AskAction): void {
     case 'money':
       if (!data.money.accounts.some((x) => x.id === a.account)) return gone('account');
       return c.ask.addMoney({ id: newId('e'), date: a.date, kind: a.kind, amount: a.amount, note: a.note, category: a.category, planned: a.date > ymd(new Date()), account: a.account, to: '' });
+    // Tasks and Bookmarks were retired (2026-11-25); the server no longer offers either.
     case 'task':
-      if (!data.taskLists.some((l) => l.id === a.listId)) return gone('task list');
-      return c.ask.addTask(a.listId, a.title, a.due);
+    case 'bookmark':
+      return c.ask.notify('Couldn’t do that: Tasks and Bookmarks are no longer part of Launchpad.');
     case 'weight':
       return c.setWeight(a.date, a.kg, true);
     case 'smoke':
@@ -258,9 +224,6 @@ export function runAskAction(c: PaletteContext, a: AskAction): void {
       return c.logStudy(a.minutes, a.courseId);
     case 'countdown':
       return c.ask.addCountdown({ id: newId('c'), title: a.title, date: a.date, yearly: a.yearly, createdAt: new Date().toISOString() });
-    case 'bookmark':
-      if (!data.bookmarks.some((g) => g.id === a.groupId)) return gone('bookmark group');
-      return c.ask.addBookmark(a.groupId, a.name, a.url);
     case 'mood': {
       // The note is the day's journal entry: what was typed goes at its end rather than replacing it.
       const entry = data.moods[a.date]?.note?.trimEnd() ?? '';

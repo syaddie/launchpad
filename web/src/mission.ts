@@ -1,7 +1,6 @@
 // The Mission layout's maths, with no page in it (tested in test/mission.test.ts). The scene that draws with it is
 // components/mission/Scene.tsx; the look is mission.css; docs/mission-layout.md says what the layout is.
 
-import type { Task } from '../../shared/types';
 
 export type Pt = { x: number; y: number };
 export type Curve = [Pt, Pt, Pt, Pt];
@@ -121,18 +120,6 @@ export function skyWeather(forecast: string | null | undefined): SkyWeather {
   if (/rain|shower|thunder|drizzle/.test(f)) return 'rain';
   if (/cloud|overcast|haz|mist|fog/.test(f)) return 'cloud';
   return 'clear';
-}
-
-/**
- * Whether ticking `done` finishes the day: it was due today or earlier (or nothing has a date at all), and no other
- * task is. Subtasks count like any other. `tasks` is the list before `done` leaves it; `today` is YYYY-MM-DD.
- */
-export function finishesTheDay(tasks: Task[], done: Task, today: string): boolean {
-  const dueNow = (t: Task) => !!t.due && t.due <= today;
-  const others = tasks.filter((t) => t.id !== done.id);
-  if (dueNow(done)) return !others.some(dueNow);
-  // An undated task finishes the day only when it was the last task of any kind.
-  return !done.due && others.length === 0;
 }
 
 /** The same numbers every time for a seed, so the stars are where they were. */

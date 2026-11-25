@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { googleConfigured } from './config';
 import { claudeEnabled } from './claude';
 import { addFinds, CLAUDE_BATCH, readBill, readBillsWithClaude, withoutDueDate, type BillMail, type FoundBill } from './bills';
-import { fetchBillMail, fetchCalendar, fetchInbox, fetchTasks, GoogleError, scanGmail } from './google';
+import { fetchBillMail, fetchCalendar, fetchInbox, fetchTasks, GoogleError } from './google';
 import { inRange, summariseInbox } from './inbox';
 import { runDigest } from './digest';
 import { asServer, store, updatePackages } from './store';
@@ -49,7 +49,9 @@ export function sourceOn(key: SourceKey): boolean {
 export const intervalOf = (key: SourceKey): number => (key === 'speedtest' ? store.prefs().speedTestHours * 60 * MIN : EVERY[key]);
 
 function enabled(key: SourceKey, force: boolean): boolean {
-  if (key === 'carriers') return true;
+  // Retired on 2026-11-25 with the Tasks and Packages panels: Google Tasks and the carriers aren't
+  // asked any more. What was fetched before stays stored (and in backups) untouched.
+  if (key === 'tasks' || key === 'carriers') return false;
   if (key === 'speedtest') {
     const hours = store.prefs().speedTestHours;
     const last = store.sync().speedtest.lastAttempt;
@@ -72,25 +74,9 @@ async function runTasks() {
   store.setTasks(await fetchTasks());
 }
 
+/** Gmail is read for bills (the Inbox view). It used to be scanned for tracking numbers too, until Packages was retired. */
 async function runGmail() {
-  await runPackages();
   await runBills();
-}
-
-async function runPackages() {
-  const finds = await scanGmail();
-  if (!finds.length) return;
-  const added: Package[] = [];
-  updatePackages((pkgs) => {
-    const known = new Set(pkgs.map((p) => p.number));
-    for (const f of finds) {
-      if (known.has(f.number)) continue;
-      known.add(f.number);
-      added.push(newPackage({ number: f.number, carrier: f.carrier, label: f.label, source: 'gmail' }));
-    }
-    return [...added, ...pkgs];
-  });
-  for (const p of added) await refreshPackage(p.id).catch(() => {});
 }
 
 /**

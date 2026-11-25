@@ -339,8 +339,8 @@ describe('health warnings', () => {
 
   it('go quietly when the sync was switched off rather than fixed', () => {
     const c = alerts.healthCheck([], (k) => k === 'digest' || k === 'drive');
-    // The old news sync's warning goes too: it became the digest's.
-    expect(c.cleared).toEqual({ 'health:digest': null, 'health:drive': null, 'health:news': null });
+    // The old news sync's warning goes too (it became the digest's), and the retired Tasks and carriers syncs'.
+    expect(c.cleared).toEqual({ 'health:digest': null, 'health:drive': null, 'health:news': null, 'health:tasks': null, 'health:carriers': null });
   });
 });
 

@@ -8,12 +8,11 @@ export const SHORTCUT_GROUPS: { title: string; rows: Row[] }[] = [
   {
     title: 'Anywhere',
     rows: [
-      { keys: [['⌘', 'K'], ['Ctrl', 'K']], what: 'Command palette: views, actions, bookmarks, “weight 72.4”, “study 45 …”, “craving stress”' },
-      { keys: [['/']], what: 'Search bookmarks and the web' },
+      { keys: [['⌘', 'K'], ['Ctrl', 'K']], what: 'Command palette: views, actions, “weight 72.4”, “study 45 …”' },
+      { keys: [['/']], what: 'Search the web' },
       { keys: [['?']], what: 'This list' },
       { keys: [['Esc']], what: 'Close what’s open, then back to Home' },
       { keys: [['C']], what: 'Log a cigarette (with undo)' },
-      { keys: [['Shift', 'C']], what: 'Log a craving you didn’t act on (with undo)' },
       { keys: [['M']], what: 'You: today’s mood' },
       { keys: [['D']], what: 'Today’s digest, and back' },
     ],
@@ -23,10 +22,6 @@ export const SHORTCUT_GROUPS: { title: string; rows: Row[] }[] = [
     rows: [
       ...VIEWS.map((v) => ({ keys: [['G', v.letter]], what: v.name })),
     ],
-  },
-  {
-    title: 'Home',
-    rows: [{ keys: [['1'], ['9']], what: 'Open the first nine Daily bookmarks' }],
   },
   {
     title: 'Search and the palette',

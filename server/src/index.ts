@@ -18,7 +18,7 @@ import { dbSnapshot, describeRestored, exportBackup, readBackupUpload, restoreBa
 import { listSnapshots, removeSnapshot, snapshotBackup, snapshotFile, startSnapshots, takeSnapshot } from './snapshots';
 import { cleanCountdowns, cleanMood, cleanPrefs, cleanSnippet, isStr, isYmd, MAX_SNIPPETS, validBookmarks, validNotes } from './clean';
 import { answerRecall, askCard, DigestError, markCard, swapCard } from './digest';
-import { checkLinks, favicon, startLinkChecks } from './bookmarks';
+import { checkLinks, favicon } from './bookmarks';
 import { keepVersion, MAX_NOTE_IMAGE, readNoteImage, recordVersions, writeNoteImage } from './notes';
 import { bumpOpen, cleanOpens } from '../../shared/bookmarks';
 import { sameUrl } from '../../shared/news';
@@ -60,7 +60,7 @@ import { cleanMoney } from '../../shared/money';
 import { cleanAsk, MAX_SPAN_DAYS, statementContext } from './statement';
 import { MAX_KG, MIN_KG, cleanKg, cleanTraining } from '../../shared/training';
 import { refreshLearnNote } from './learn';
-import { refreshReviewNote, startReviewNotes, tasksDoneIn } from './review';
+import { refreshReviewNote, startReviewNotes } from './review';
 import { cleanCraving } from '../../shared/trackers';
 import { refreshTraining } from './training';
 import { ask, MAX_ASK } from './ask';
@@ -643,13 +643,6 @@ app.post('/api/learn/refresh', async (c) => {
 });
 
 // ---------- review ----------
-
-/** Google Tasks ticked off in the week starting ?week=YYYY-MM-DD (a Monday); null when Google isn't connected. */
-app.get('/api/review/tasks', async (c) => {
-  const week = c.req.query('week');
-  if (!isYmd(week)) return c.json({ error: 'Expected a YYYY-MM-DD week' }, 400);
-  return c.json({ done: await tasksDoneIn(week) });
-});
 
 /** Write Claude's recap of the week starting ?week=YYYY-MM-DD again, then send the whole state. */
 app.post('/api/review/refresh', async (c) => {
@@ -1453,7 +1446,6 @@ startSampler();
 startCleanup();
 startTorrentWatch();
 startSnapshots(copyDailyToDrive);
-startLinkChecks();
 startAlerts();
 startMcAlerts();
 startUnpacking();

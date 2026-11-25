@@ -4,22 +4,17 @@ import { addDays, startOfDay, ymd } from './dates';
 import { balanceOn } from './money';
 import { weekStart, weekSummary, weightAvgOn } from './training';
 import { cigPrice, smokesBetween } from './trackers';
-import type { Craving, CravingTrigger, Learn, Money, Mood, Prefs, Workout } from './types';
+import type { Learn, Money, Mood, Prefs, Workout } from './types';
 
 export interface ReviewInput {
   workouts: Workout[];
   weights: Record<string, number>;
   /** Cigarettes a day, by YYYY-MM-DD (smokeCountMap in trackers.ts). */
   smokes: Map<string, number>;
-  cravings: Craving[];
   moods: Record<string, Mood>;
   learn: Learn;
   money: Money;
   prefs: Pick<Prefs, 'cigaretteLimit' | 'packPrice' | 'packSize'>;
-  /** Packages delivered, with when. */
-  delivered: { label: string; at: string }[];
-  /** Google Tasks ticked off in the week; null when it isn't known (Google not connected, or no answer yet). */
-  tasksDone: number | null;
 }
 
 export interface WeekReview {
@@ -32,7 +27,6 @@ export interface WeekReview {
   /** The 7-day average at the end of the week (or today), and how it moved since the end of the week before. */
   weight: { avg: number | null; change: number | null };
   cigarettes: { count: number; perDay: number; limit: number; daysOver: number; cost: number | null; prevCount: number };
-  cravings: { resisted: number; strong: number; topTrigger: CravingTrigger | null };
   /** Average of the days rated, and the days with a journal entry. */
   mood: { avg: number | null; logged: number; written: number };
   study: {
@@ -47,8 +41,6 @@ export interface WeekReview {
   };
   /** Money in and out of the day-to-day accounts, the balance at the end of the week from what's done, and the forecast for it. Null before money is tracked. */
   money: { in: number; out: number; closing: number; forecast: number } | null;
-  tasks: number | null;
-  packages: string[];
 }
 
 const cents = (n: number) => Math.round(n * 100) / 100;
@@ -98,11 +90,6 @@ export function weekReview(input: ReviewInput, day: Date, now: Date): WeekReview
   for (let i = 0; i < daysIn; i++) if (limit > 0 && (input.smokes.get(ymd(addDays(mon, i))) ?? 0) > limit) daysOver++;
   const price = cigPrice(input.prefs);
 
-  const cravings = input.cravings.filter((c) => inWeek(c.at));
-  const triggers = new Map<CravingTrigger, number>();
-  for (const c of cravings) if (c.trigger) triggers.set(c.trigger, (triggers.get(c.trigger) ?? 0) + 1);
-  const topTrigger = [...triggers].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-
   const moods = Object.entries(input.moods).filter(([d]) => d >= start && d <= end);
   const levels = moods.filter(([, m]) => m.level >= 1).map(([, m]) => m.level);
 
@@ -129,7 +116,6 @@ export function weekReview(input: ReviewInput, day: Date, now: Date): WeekReview
       cost: price > 0 ? cents(count * price) : null,
       prevCount: smokesBetween(input.smokes, ymd(addDays(mon, -7)), ymd(addDays(mon, -1))),
     },
-    cravings: { resisted: cravings.length, strong: cravings.filter((c) => c.strength === 3).length, topTrigger },
     mood: { avg: levels.length ? Math.round((levels.reduce((a, b) => a + b, 0) / levels.length) * 10) / 10 : null, logged: levels.length, written: moods.filter(([, m]) => (m.note ?? '').trim()).length },
     study: {
       minutes: Math.round([...byCourse.values()].reduce((a, b) => a + b, 0)),
@@ -141,7 +127,5 @@ export function weekReview(input: ReviewInput, day: Date, now: Date): WeekReview
       ahead: due.filter((a) => a.due > upTo && a.status !== 'done').length,
     },
     money: tracked ? { ...flowed, closing: balanceOn(input.money, upTo, true), forecast: balanceOn(input.money, end) } : null,
-    tasks: input.tasksDone,
-    packages: input.delivered.filter((p) => inWeek(p.at)).map((p) => p.label),
   };
 }
