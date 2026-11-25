@@ -3,45 +3,15 @@
 // bookmarks row; a column with one panel spans both rows.
 // Each design (Settings › Layout) arranges the columns its own way, and the owner can put
 // them in another order there (prefs.homeLayouts); what's saved is fitted to the design here,
-// so a bad or old arrangement still gives a whole home. Horizon's and Focus's homes aren't
-// this grid at all (see components/Horizon.tsx and FocusHome.tsx); Focus only orders its tabs.
+// so a bad or old arrangement still gives a whole home. Focus's home isn't this grid at all
+// (see components/FocusHome.tsx); it only orders its tabs.
 
-import { HOME_AREAS, type DesignKey, type HomeArea, type HomeLayouts } from '../../shared/types';
+import { DEFAULT_DESIGN, HOME_AREAS, type DesignKey, type HomeArea, type HomeLayouts } from '../../shared/types';
 
 export type Layout = 'narrow' | 'desktop' | 'wide';
 export type Area = HomeArea;
 
 type Columns = { w: string; items: Area[] }[];
-
-const BROADSHEET: Record<Exclude<Layout, 'narrow'>, Columns> = {
-  desktop: [
-    { w: '1fr', items: ['today', 'photo2'] },
-    { w: '1.08fr', items: ['tasks', 'notes'] },
-    { w: '1fr', items: ['photo', 'pkgs'] },
-  ],
-  wide: [
-    { w: '1fr', items: ['today', 'photo2'] },
-    { w: '1fr', items: ['tasks'] },
-    { w: '1fr', items: ['notes'] },
-    { w: '1fr', items: ['photo', 'pkgs'] },
-  ],
-};
-
-/** Console: a long agenda on the left, tasks over notes, packages over the weather, and a slim column of photos. */
-const CONSOLE: Columns = [
-  { w: '0.95fr', items: ['today'] },
-  { w: '1fr', items: ['tasks', 'notes'] },
-  { w: '1.15fr', items: ['pkgs', 'wx'] },
-  { w: '0.42fr', items: ['photo', 'photo2'] },
-];
-
-/** Bento: the clock-and-next tile first, then tiles that lead with a number. */
-const BENTO: Columns = [
-  { w: '1fr', items: ['hero', 'wx'] },
-  { w: '1fr', items: ['today', 'photo2'] },
-  { w: '1fr', items: ['tasks', 'notes'] },
-  { w: '1fr', items: ['pkgs', 'photo'] },
-];
 
 /** Vista: one row of tall glass panels under the clock. The photos are the wallpaper, so they get no panels. */
 const VISTA: Columns = [
@@ -65,12 +35,12 @@ const MISSION: Columns = [
   { w: '1fr', items: ['notes', 'photo'] },
 ];
 
-const COLUMNS: Partial<Record<DesignKey, Columns>> = { mission: MISSION, console: CONSOLE, bento: BENTO, vista: VISTA, poster: POSTER };
+const COLUMNS: Partial<Record<DesignKey, Columns>> = { mission: MISSION, vista: VISTA, poster: POSTER };
 
-export const NARROW_ORDER: Area[] = ['hero', 'today', 'tasks', 'photo', 'pkgs', 'wx', 'notes', 'photo2', 'bm'];
+export const NARROW_ORDER: Area[] = ['hero', 'today', 'tasks', 'photo', 'pkgs', 'notes', 'photo2', 'bm'];
 
 /** The designs whose home is this grid of columns. */
-export const GRID_DESIGNS: DesignKey[] = ['mission', 'broadsheet', 'console', 'bento', 'vista', 'poster'];
+export const GRID_DESIGNS: DesignKey[] = ['mission', 'vista', 'poster'];
 
 /** Most panels one column stacks: the grid has two rows over the bookmarks. */
 export const COLUMN_MAX = 2;
@@ -92,10 +62,10 @@ export const AREA_NAMES: Record<Area, string> = {
   photo2: 'Second photo',
   bm: 'Bookmarks',
   hero: 'Clock and what’s next',
-  wx: 'Weather and air',
 };
 
-const builtIn = (design: DesignKey, layout: Layout): Columns => COLUMNS[design] ?? BROADSHEET[layout === 'wide' ? 'wide' : 'desktop'];
+/** A design's own columns. Focus has none (its home is tabs), so it gets the default's. */
+const builtIn = (design: DesignKey): Columns => COLUMNS[design] ?? MISSION;
 
 /** Each once, known ones only, in the order given. */
 function known<T extends string>(list: unknown, allowed: readonly T[], seen = new Set<T>()): T[] {
@@ -106,13 +76,13 @@ function known<T extends string>(list: unknown, allowed: readonly T[], seen = ne
 /** The panels a design puts in its columns (the bookmarks row is apart), in its built-in order. */
 export function designAreas(design: DesignKey): Area[] {
   const out = new Set<Area>();
-  for (const l of ['desktop', 'wide'] as const) for (const c of builtIn(design, l)) c.items.forEach((a) => out.add(a));
+  for (const c of builtIn(design)) c.items.forEach((a) => out.add(a));
   return [...out];
 }
 
 /** The design's own columns, as Settings › Layout starts from and "Reset to default" goes back to. */
 export function defaultColumns(design: DesignKey): Area[][] {
-  return builtIn(design, 'desktop').map((c) => [...c.items]);
+  return builtIn(design).map((c) => [...c.items]);
 }
 
 /**
@@ -138,7 +108,7 @@ export function arrangeColumns(design: DesignKey, saved: unknown): Area[][] | nu
     else cols.push([a]);
   }
   // Too many columns: the extra ones' panels join the first columns with room. There always is
-  // some, as six columns of two hold more than any design has (Bento's eight).
+  // some, as six columns of two hold twelve, more than any design has.
   while (cols.length > COLUMNS_MAX) {
     for (const a of cols.pop()!) cols.find((c) => c.length < COLUMN_MAX)?.push(a);
   }
@@ -169,22 +139,22 @@ export function focusTab(want: string | null, shown: Set<Area>, order: readonly 
 }
 
 /** A column is as wide as the built-in column its top panel came from, so a wide lead stays wide wherever it goes. */
-function widthOf(design: DesignKey, layout: Layout, top: Area) {
-  return builtIn(design, layout).find((c) => c.items.includes(top))?.w ?? '1fr';
+function widthOf(design: DesignKey, top: Area) {
+  return builtIn(design).find((c) => c.items.includes(top))?.w ?? '1fr';
 }
 
 /**
  * The grid's areas, columns and rows, and `order`: the panels as they read (down each column, left
  * to right, then the bookmarks), which the page puts them in so Tab and screen readers go that way too.
  */
-export function gridLayout(layout: Layout, shown: Set<Area>, design: DesignKey = 'broadsheet', saved?: HomeLayouts): { areas: string; columns: string; rows: string; order: Area[] } {
+export function gridLayout(layout: Layout, shown: Set<Area>, design: DesignKey = DEFAULT_DESIGN, saved?: HomeLayouts): { areas: string; columns: string; rows: string; order: Area[] } {
   const q = (row: string[]) => `'${row.join(' ')}'`;
   if (layout === 'narrow') {
     const order = narrowOrder(saved).filter((a) => shown.has(a));
     return { areas: order.map((a) => q([a])).join(' '), columns: 'minmax(0, 1fr)', rows: 'auto', order };
   }
   const mine = arrangeColumns(design, saved?.[design]);
-  const base: Columns = mine ? mine.map((items) => ({ w: widthOf(design, layout, items[0]), items })) : builtIn(design, layout);
+  const base: Columns = mine ? mine.map((items) => ({ w: widthOf(design, items[0]), items })) : builtIn(design);
   const cols = base.map((c) => ({ ...c, items: c.items.filter((a) => shown.has(a)) })).filter((c) => c.items.length);
   const rows: string[][] = [];
   if (cols.length) {
@@ -193,7 +163,7 @@ export function gridLayout(layout: Layout, shown: Set<Area>, design: DesignKey =
   }
   const bm = shown.has('bm');
   if (bm) rows.push(cols.length ? cols.map(() => 'bm') : ['bm']);
-  const even = design === 'bento' || (layout === 'wide' && cols.every((c) => c.items.length === 1));
+  const even = layout === 'wide' && cols.every((c) => c.items.length === 1);
   const top = even ? 'minmax(0, 1fr) minmax(0, 1fr)' : 'minmax(0, 1.2fr) minmax(0, 0.8fr)';
   return {
     areas: rows.map(q).join(' '),

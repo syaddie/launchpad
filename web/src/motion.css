@@ -1,8 +1,8 @@
 /* How things move (docs/motion.md). Loaded after designs.css, so it has the last word on transitions
    and animations. Every duration, ease and distance is a token below, and each design gives them its
-   own character: Broadsheet settles like paper, Console prints like a terminal, Bento springs, Horizon
-   glides along its timeline, Vista drifts like light on glass, Focus is quick and exact, Poster slams
-   like a press. Asking the system for less motion takes all travel out and keeps quick fades. */
+   own character: the base settles like paper (Mission builds its own on it, in mission.css), Vista
+   drifts like light on glass, Focus is quick and exact, Poster slams like a press. Asking the system
+   for less motion takes all travel out and keeps quick fades. */
 
 /* =====================================================================
    TOKENS
@@ -37,42 +37,6 @@
   --hv-press: color-mix(in srgb, var(--tx) 10%, transparent);
 }
 
-/* Console prints: nothing glides or bounces, things appear in a couple of steps, like a terminal redrawing. */
-:root[data-design='console'] {
-  --m-press: 0ms;
-  --m-hover: 0ms;
-  --m-state: 120ms;
-  --m-move: 0ms;
-  --m-exit: 90ms;
-  --m-view: 220ms;
-  --m-roll: 160ms;
-  --m-sweep: 480ms;
-  --m-stagger: 70ms;
-  --e-out: steps(4, end);
-  --e-in: steps(2, end);
-  --e-settle: steps(1, end);
-  --m-rise: 0px;
-  --m-travel: 0px;
-  --m-press-y: 0px;
-  --m-press-s: 1;
-}
-/* Bento springs: things arrive with a visible bounce, and a press squishes. */
-:root[data-design='bento'] {
-  --m-move: 520ms;
-  --m-view: 420ms;
-  --m-stagger: 60ms;
-  --e-settle: linear(0, 0.0353, 0.1259, 0.2508, 0.3923, 0.5365, 0.673, 0.7946, 0.8973, 0.9792, 1.0404, 1.0824, 1.1076, 1.1187, 1.1189, 1.111, 1.0978, 1.0816, 1.0643, 1.0473, 1.0318, 1.0182, 1.0071, 0.9986, 0.9924, 0.9884, 0.9862, 0.9856, 0.9861, 0.9874, 0.9892, 0.9912, 0.9933, 0.9953, 0.997, 0.9985, 0.9997, 1.0006, 1.0012, 1.0015, 1.0017, 1.0017, 1.0016, 1.0014, 1);
-  --m-press-y: 0px;
-  --m-press-s: 0.94;
-}
-/* Horizon glides along its timeline: smooth, unhurried, sideways. */
-:root[data-design='horizon'] {
-  --m-move: 380ms;
-  --m-view: 400ms;
-  --e-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --e-settle: cubic-bezier(0.22, 1, 0.36, 1);
-  --m-travel: 36px;
-}
 /* Vista drifts: long, soft arrivals, like light moving over glass. */
 :root[data-design='vista'] {
   --m-view-mode: enter;
@@ -175,7 +139,7 @@
   transition-duration: var(--m-press);
 }
 /* Cards and tiles give a little under a press. */
-:is(.tile, .cd-card, .ln-card, .acct-card, .acct-add, .hz-card.hz-click, .cal-day, .design-pick, .acct-kind, .dg-option, .m-stat.warn, button.mood-cell, button.pix-cell, .lp-press-card) {
+:is(.tile, .cd-card, .ln-card, .acct-card, .acct-add, .cal-day, .design-pick, .acct-kind, .dg-option, .m-stat.warn, button.mood-cell, button.pix-cell, .lp-press-card) {
   transition:
     background-color var(--m-hover) var(--e-out),
     border-color var(--m-hover) var(--e-out),
@@ -186,7 +150,7 @@
     translate var(--m-move) var(--e-settle),
     scale var(--m-move) var(--e-settle);
 }
-:is(.tile, .cd-card, .ln-card, .acct-card, .acct-add, .hz-card.hz-click, .cal-day, .design-pick, .acct-kind, .dg-option, .lp-press-card):active:not(:disabled) {
+:is(.tile, .cd-card, .ln-card, .acct-card, .acct-add, .cal-day, .design-pick, .acct-kind, .dg-option, .lp-press-card):active:not(:disabled) {
   scale: calc(1 - (1 - var(--m-press-s)) * 0.5);
   transition-duration: var(--m-press);
   transition-timing-function: var(--e-out);
@@ -208,16 +172,6 @@
 .cig-btn.on > .ph-timer { animation: lpBreathe 2.4s var(--e-io) infinite; }
 @keyframes lpBreathe { 50% { opacity: 0.45; } }
 
-/* Console: a press is reverse video, for as long as it's held. */
-:root[data-design='console'] :is(.btn, .icon-btn, .cig-btn, .tab, .join, .edit-toggle, .segmented button, .seg button, .acct-chip, .crv-chip, .dg-pill, .mc-chip, .crumb):active:not(:disabled) {
-  background-color: var(--ac);
-  color: var(--on);
-}
-/* Bento: tiles and cards lift toward a pointer, and spring back. */
-@media (hover: hover) {
-  :root[data-design='bento'] :is(.tile, .cd-card, .ln-card, .acct-card, .acct-add, .design-pick):hover:not(:active) { translate: 0 -2px; }
-  :root[data-design='bento'] .lp-grid > [aria-label='Packages'] .pkg:hover:not(:active) { translate: 0 -2px; }
-}
 /* Poster: a button stands up off the page when pointed at, its hard shadow showing, and slams down into it when pressed. */
 @media (hover: hover) {
   :root[data-design='poster'] :is(.btn-primary, .btn-secondary, .cig-btn, .join, .edit-toggle.on, .review-yes):hover:not(:disabled):not(.disabled):not(:active) {
@@ -267,14 +221,6 @@
 .rail { position: relative; }
 .rail > .glide { border-radius: var(--r-m); background: var(--act); }
 .rail[data-glide] > .rail-btn.on, .rail[data-glide] > .rail-btn.on:hover { background: transparent; }
-/* Broadsheet's marker on the rail's edge goes with it. */
-.lp-root[data-design='broadsheet']:not([data-layout='narrow']) .rail[data-glide] > .rail-btn.on::before { display: none; }
-.lp-root[data-design='broadsheet']:not([data-layout='narrow']) .rail > .glide::before { content: ''; position: absolute; left: -10px; top: 15px; bottom: 15px; width: 3px; border-radius: 0 3px 3px 0; background: var(--ac); }
-@media (max-height: 720px) { .lp-root[data-design='broadsheet']:not([data-layout='narrow']) .rail > .glide::before { top: 10px; bottom: 10px; } }
-/* Console's F-keys don't glide: the lit key just changes, as on a terminal. */
-.lp-root[data-design='console'] .rail > .glide { display: none; }
-.lp-root[data-design='bento'] .rail > .glide { border-radius: 21px; background: #fff; }
-.lp-root[data-design='horizon'] .rail > .glide { border-radius: 15px; background: var(--tx); }
 .lp-root[data-design='vista']:not([data-layout='narrow']) .rail > .glide { border-radius: 50%; background: var(--tx); }
 .lp-root[data-design='poster'] .rail > .glide { border-radius: 0; background: var(--ac); }
 @media (min-width: 1041px) {
@@ -294,14 +240,9 @@
 .seg[data-glide] > button.on { background: transparent; box-shadow: none; }
 .fx-tabs > .glide { border-radius: 9px; background: var(--rz); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14), 0 0 0 1px var(--ln); }
 .fx-tabs[data-glide] > .fx-tab.on { background: transparent; box-shadow: none; }
-.lp-root[data-design='console'] :is(.tabs, .note-tabs) > .glide { border-radius: 0; background: var(--ac); }
-.lp-root[data-design='bento'] :is(.tabs, .note-tabs) > .glide { border-radius: 11px; background: var(--tx); }
-.lp-root[data-design='bento'] :is(.segmented, .seg) > .glide { border-radius: 14px; }
-.lp-root[data-design='horizon'] :is(.tabs, .note-tabs) > .glide { border-radius: 12px; background: var(--tx); }
 .lp-root[data-design='vista'] :is(.tabs, .note-tabs) > .glide { border-radius: 999px; }
 .lp-root[data-design='focus'] :is(.tabs, .note-tabs) > .glide { background: var(--tx); }
 .lp-root[data-design='poster'] :is(.tabs, .note-tabs) > .glide { border-radius: 0; background: var(--tx); }
-.lp-root[data-design='console'] :is(.segmented, .seg) > .glide { border-radius: 0; }
 
 /* =====================================================================
    FIGURES ROLL (Readout, components/Motion.tsx)
@@ -321,12 +262,10 @@
 @keyframes lpRollOut { to { translate: 0 calc(var(--m-roll-d) * -1); opacity: 0; } }
 @keyframes lpRollInDown { from { translate: 0 calc(var(--m-roll-d) * -1); opacity: 0; } }
 @keyframes lpRollOutDown { to { translate: 0 var(--m-roll-d); opacity: 0; } }
-/* Poster stamps the new digit down; Console just reprints it. */
+/* Poster stamps the new digit down. */
 :root[data-design='poster'] .digit.rolling > .digit-in { animation-name: lpStampIn; }
 :root[data-design='poster'] .digit.rolling > .digit-out { animation: none; opacity: 0; }
 @keyframes lpStampIn { from { scale: 1.35; opacity: 0; } }
-:root[data-design='console'] .digit.rolling > .digit-in { animation-name: lpFadeIn; }
-:root[data-design='console'] .digit.rolling > .digit-out { animation: none; opacity: 0; }
 
 /* =====================================================================
    THINGS THAT OPEN AND CLOSE
@@ -435,9 +374,6 @@
 
 html[data-step] .lp-inner > main { view-transition-name: lp-view; }
 html[data-step] .greeting { view-transition-name: lp-title; }
-/* Console's subline runs on from its title, so the two change together. */
-html[data-step][data-design='console'] .greeting { view-transition-name: none; }
-html[data-step][data-design='console'] .top-left { view-transition-name: lp-title; }
 html[data-step] .rail { view-transition-name: lp-rail; }
 /* Vista's glass blurs the photo behind it, which a part captured on its own, or anything inside a fading container,
    can't see. So Vista doesn't use the browser's transition (--m-view-mode: enter; viewTransition.ts): the old view goes
@@ -464,7 +400,7 @@ html[data-step='prev']::view-transition-new(lp-view) { animation-name: lpViewInB
 @keyframes lpViewIn { from { opacity: 0; translate: 0 var(--m-travel); } }
 @keyframes lpViewOutBack { to { opacity: 0; translate: 0 calc(var(--m-travel) * 0.4); } }
 @keyframes lpViewInBack { from { opacity: 0; translate: 0 calc(var(--m-travel) * -1); } }
-/* Where the rail runs across the page (a phone's, Console's, Bento's dock, Horizon's tabs), views go sideways. */
+/* Where the rail runs across the page (a phone's, Mission's strip and dock), views go sideways. */
 html[data-axis='x']::view-transition-old(lp-view) { animation-name: lpViewOutX; }
 html[data-axis='x']::view-transition-new(lp-view) { animation-name: lpViewInX; }
 html[data-axis='x'][data-step='prev']::view-transition-old(lp-view) { animation-name: lpViewOutXBack; }
@@ -475,7 +411,7 @@ html[data-axis='x'][data-step='prev']::view-transition-new(lp-view) { animation-
 @keyframes lpViewInXBack { from { opacity: 0; translate: calc(var(--m-travel) * -1) 0; } }
 
 /* The rest of the top bar changes in place, quickly: where it's the same in both views nothing shows, and where a
-   design lays it out differently on Home (Bento's and Focus's clock is in a tile there), the two meet only briefly. */
+   design lays it out differently on Home (Focus's clock is in a tile there), the two meet only briefly. */
 html[data-step] .topbar { view-transition-name: lp-top; }
 ::view-transition-group(lp-top) { animation: none; }
 ::view-transition-old(lp-top), ::view-transition-new(lp-top) { inline-size: auto; block-size: auto; animation-duration: calc(var(--m-view) * 0.35); animation-timing-function: var(--e-out); }
@@ -488,16 +424,6 @@ html[data-step] .topbar { view-transition-name: lp-top; }
 @keyframes lpTitleOut { to { opacity: 0; translate: 0 -0.3em; } }
 @keyframes lpTitleIn { from { opacity: 0; translate: 0 0.3em; } }
 
-/* Console redraws: the old view is gone at once, the new one scans down the screen, its title typed. */
-html[data-design='console']::view-transition-old(lp-view), html[data-design='console']::view-transition-old(lp-title) { animation: none; opacity: 0; }
-html[data-design='console']::view-transition-new(lp-view) { animation: lpScan var(--m-view) steps(9, end) both; }
-html[data-design='console']::view-transition-new(lp-title) { animation: lpType var(--m-view) steps(12, end) both; }
-@keyframes lpScan { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0 0 0 0); } }
-@keyframes lpType { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
-/* Bento's new view springs in. */
-html[data-design='bento']::view-transition-new(lp-view) { animation-timing-function: var(--e-settle); }
-html[data-design='bento']::view-transition-old(lp-view) { animation-name: lpShrinkAway; }
-@keyframes lpShrinkAway { to { opacity: 0; scale: 0.98; } }
 /* Poster prints: the old sheet is pulled, the new one rolls down off the press (up, going back). */
 html[data-design='poster']::view-transition-old(lp-view) { animation: none; opacity: 0; }
 html[data-design='poster']::view-transition-new(lp-view) { animation: lpPressDown var(--m-view) var(--e-out) both; }
@@ -522,39 +448,24 @@ html[data-design='poster']::view-transition-old(lp-title) { animation: none; opa
 .lp-opening .lp-inner > :is(.topbar, .server-banner) { animation: lpOpenTop calc(var(--m-view) * 1.2) var(--e-out) both; }
 @keyframes lpOpenTop { from { opacity: 0; translate: 0 calc(var(--m-rise) * -0.75); } }
 /* What comes in, in turn: the view's panels, or its rows of panels. */
-.lp-opening :is(.lp-grid, .hz-cols, .fx-side, .fx-work, .lp-inner > main:not(.lp-grid):not(.hz-home):not(.fx-home)) > * {
+.lp-opening :is(.lp-grid, .fx-side, .fx-work, .lp-inner > main:not(.lp-grid):not(.fx-home)) > * {
   animation: lpOpen calc(var(--m-view) * 1.6) var(--e-settle) both;
   animation-delay: calc(80ms + var(--m-stagger) * (var(--i, 0) + var(--i0, 0)));
 }
-.lp-opening .hz-home > .hz-ribbon-wrap { animation: lpOpen calc(var(--m-view) * 1.6) var(--e-settle) both; }
-.lp-opening :is(.lp-grid, .hz-cols, .fx-side, .fx-work, .lp-inner > main) > :nth-child(2) { --i: 1; }
-.lp-opening :is(.lp-grid, .hz-cols, .fx-side, .fx-work, .lp-inner > main) > :nth-child(3) { --i: 2; }
-.lp-opening :is(.lp-grid, .hz-cols, .fx-side, .fx-work, .lp-inner > main) > :nth-child(4) { --i: 3; }
-.lp-opening :is(.lp-grid, .hz-cols, .fx-side, .fx-work, .lp-inner > main) > :nth-child(5) { --i: 4; }
-.lp-opening :is(.lp-grid, .hz-cols, .fx-side, .fx-work, .lp-inner > main) > :nth-child(6) { --i: 5; }
-.lp-opening :is(.lp-grid, .hz-cols, .fx-side, .fx-work, .lp-inner > main) > :nth-child(7) { --i: 6; }
-.lp-opening :is(.lp-grid, .hz-cols, .fx-side, .fx-work, .lp-inner > main) > :nth-child(8) { --i: 7; }
-.lp-opening :is(.lp-grid, .hz-cols, .fx-side, .fx-work, .lp-inner > main) > :nth-child(n + 9) { --i: 8; }
+.lp-opening :is(.lp-grid, .fx-side, .fx-work, .lp-inner > main) > :nth-child(2) { --i: 1; }
+.lp-opening :is(.lp-grid, .fx-side, .fx-work, .lp-inner > main) > :nth-child(3) { --i: 2; }
+.lp-opening :is(.lp-grid, .fx-side, .fx-work, .lp-inner > main) > :nth-child(4) { --i: 3; }
+.lp-opening :is(.lp-grid, .fx-side, .fx-work, .lp-inner > main) > :nth-child(5) { --i: 4; }
+.lp-opening :is(.lp-grid, .fx-side, .fx-work, .lp-inner > main) > :nth-child(6) { --i: 5; }
+.lp-opening :is(.lp-grid, .fx-side, .fx-work, .lp-inner > main) > :nth-child(7) { --i: 6; }
+.lp-opening :is(.lp-grid, .fx-side, .fx-work, .lp-inner > main) > :nth-child(8) { --i: 7; }
+.lp-opening :is(.lp-grid, .fx-side, .fx-work, .lp-inner > main) > :nth-child(n + 9) { --i: 8; }
 /* Focus's work column comes in after the clock tile beside it. */
 .lp-opening .fx-work > * { --i0: 2; }
 
-/* Broadsheet: each sheet is laid down on the desk, its shadow tightening as it lands. */
+/* Each sheet is laid down on the desk, its shadow tightening as it lands. */
 @keyframes lpOpen { from { opacity: 0; translate: 0 calc(var(--m-rise) * -0.75); scale: 1.012; box-shadow: var(--psh), 0 16px 36px rgba(31, 29, 27, 0.12); } }
-/* Console boots: each pane prints from the top down, a few lines at a time. */
-:root[data-design='console'].lp-opening .lp-inner > .topbar { animation: lpType var(--m-view) steps(10, end) both; }
-:root[data-design='console'].lp-opening :is(.lp-grid, .lp-inner > main:not(.lp-grid)) > * { animation: lpScan calc(var(--m-view) * 1.4) steps(7, end) both; animation-delay: calc(120ms + var(--m-stagger) * var(--i, 0)); }
-:root[data-design='console'].lp-opening .rail { animation: lpFadeIn 160ms steps(2, end) both; }
-/* Bento's tiles pop up, springing. */
-:root[data-design='bento'].lp-opening :is(.lp-grid, .lp-inner > main:not(.lp-grid)) > * { animation-name: lpPop; }
-@keyframes lpPop { from { opacity: 0; scale: 0.88; } }
-:root[data-design='bento'].lp-opening .rail { animation: lpDockUp calc(var(--m-move) * 1.2) var(--e-settle) both; animation-delay: 200ms; }
-@keyframes lpDockUp { from { opacity: 0; translate: 0 24px; } }
-/* Horizon draws the day along its ribbon, left to right, and the columns come up under it. */
-:root[data-design='horizon'].lp-opening .hz-ribbon { animation: lpDrawAcross 1100ms var(--e-io) both; animation-delay: 120ms; }
-:root[data-design='horizon'].lp-opening .hz-home > .hz-ribbon-wrap { animation: none; }
-:root[data-design='horizon'].lp-opening :is(.hz-cols, .lp-grid, .lp-inner > main:not(.hz-home)) > * { animation-name: lpComeUp; animation-delay: calc(320ms + var(--m-stagger) * var(--i, 0)); }
 @keyframes lpDrawAcross { from { clip-path: inset(-20px 100% -30px 0); } to { clip-path: inset(-20px 0 -30px 0); } }
-@keyframes lpComeUp { from { opacity: 0; translate: 0 calc(var(--m-rise) * 1.5); } }
 /* Vista: the photo settles into place, and the glass condenses over it. */
 /* (The same fade and drift as later, ALIVE ON ITS OWN, with the settle on top, so neither restarts when the opening ends.) */
 :root[data-design='vista'].lp-opening .wallpaper img { animation: lpFadeIn 0.6s var(--e-out) both, lpDrift 140s steps(140, end) infinite alternate, lpPhotoSettle 1800ms var(--e-out) both; }
@@ -581,23 +492,6 @@ html[data-design='poster']::view-transition-old(lp-title) { animation: none; opa
    less at a time), so the glass over it is redrawn once a second rather than every frame. */
 :root[data-design='vista'] .wallpaper img { animation: lpFadeIn 0.6s var(--e-out) both, lpDrift 140s steps(140, end) infinite alternate; }
 @keyframes lpDrift { from { scale: 1.02; translate: -0.5% -0.3%; } to { scale: 1.075; translate: 0.6% 0.4%; } }
-/* Console: the command line waits with a blinking block, like a prompt. */
-:root[data-design='console'] .search input { text-indent: 12px; }
-:root[data-design='console'] .search::after {
-  content: '';
-  position: absolute;
-  left: 34px;
-  top: 8px;
-  width: 7px;
-  height: 14px;
-  background: var(--ac);
-  pointer-events: none;
-  animation: lpBlink 1.1s steps(1, end) infinite;
-}
-:root[data-design='console'] .search:is(:focus-within, :has(input:not(:placeholder-shown)))::after { display: none; }
-@keyframes lpBlink { 50% { opacity: 0; } }
-/* Horizon: the now-line slides to each new minute rather than jumping there. */
-.hz-now { transition: left 1.2s var(--e-io); }
 /* Focus's home: a tab's panel comes in as it's picked. */
 .fx-panel > .panel { animation: lpRiseIn var(--m-move) var(--e-out) both; }
 
@@ -609,8 +503,6 @@ html[data-design='poster']::view-transition-old(lp-title) { animation: none; opa
 
 @media (prefers-reduced-motion: reduce) {
   .lp-opening * { animation-delay: 0s !important; }
-  @keyframes lpScan { from { opacity: 0; } }
-  @keyframes lpType { from { opacity: 0; } }
   @keyframes lpPressDown { from { opacity: 0; } }
   @keyframes lpPressUp { from { opacity: 0; } }
   @keyframes lpWipeIn { from { opacity: 0; } }
@@ -618,7 +510,6 @@ html[data-design='poster']::view-transition-old(lp-title) { animation: none; opa
   @keyframes lpSheetIn { from { opacity: 0; } }
   @keyframes lpSheetOut { to { opacity: 0; } }
   @keyframes lpStampIn { from { opacity: 0; } }
-  @keyframes lpPop { from { opacity: 0; } }
   @keyframes lpCondense { from { opacity: 0; } }
   @keyframes lpPhotoSettle { from { opacity: 0; } }
   @keyframes lpClockFocus { from { opacity: 0; } }
@@ -626,7 +517,6 @@ html[data-design='poster']::view-transition-old(lp-title) { animation: none; opa
   @keyframes lpOpen { from { opacity: 0; } }
   @keyframes lpLockOn { from { outline-color: transparent; } }
   @keyframes lpLockOnInside { from { outline-color: transparent; } }
-  @keyframes lpShrinkAway { to { opacity: 0; } }
   @keyframes lpPopIn { from { opacity: 0; } }
   @keyframes lpPopOut { to { opacity: 0; } }
   @keyframes lpPaletteIn { from { opacity: 0; } }
@@ -636,8 +526,6 @@ html[data-design='poster']::view-transition-old(lp-title) { animation: none; opa
   @keyframes lpRiseIn { from { opacity: 0; } }
   @keyframes lpDrawerIn { from { opacity: 0; } }
   @keyframes lpDrawerOut { to { opacity: 0; } }
-  @keyframes lpComeUp { from { opacity: 0; } }
-  @keyframes lpDockUp { from { opacity: 0; } }
   @keyframes lpOpenTop { from { opacity: 0; } }
   @keyframes lpTitleIn { from { opacity: 0; } }
   @keyframes lpTitleOut { to { opacity: 0; } }
@@ -650,6 +538,4 @@ html[data-design='poster']::view-transition-old(lp-title) { animation: none; opa
   .cig-btn.on > .ph-timer { animation: none; }
   /* Nothing moves by itself. */
   :root[data-design='vista'] .wallpaper img, :root[data-design='vista'].lp-opening .wallpaper img { animation: lpFadeIn 0.3s ease-out both; }
-  :root[data-design='console'] .search::after { animation: none; }
-  .hz-now { transition: none; }
 }

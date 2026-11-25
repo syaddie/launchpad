@@ -1,5 +1,5 @@
 import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react';
-import type { BookmarkGroup, DesignKey, ViewKey } from '../../../shared/types';
+import type { BookmarkGroup, ViewKey } from '../../../shared/types';
 import { bookmarkOpened } from '../api';
 import { VIEWS } from '../components/Rail';
 
@@ -7,7 +7,6 @@ export interface ShortcutState {
   view: ViewKey;
   /** Changes the view, with its motion (App). */
   setView: (v: ViewKey) => void;
-  design: DesignKey;
   palette: boolean;
   setPalette: Dispatch<SetStateAction<boolean>>;
   shortcuts: boolean;
@@ -15,7 +14,6 @@ export interface ShortcutState {
   /** A drawer is open. */
   drawer: boolean;
   closeDrawer: () => void;
-  openSettings: () => void;
   focus: boolean;
   closeFocus: () => void;
   search: string;
@@ -26,7 +24,7 @@ export interface ShortcutState {
   logCraving: () => void;
 }
 
-/** Every key on the `?` page: ⌘K, Esc, G then a letter, /, ?, N, C, Shift C, M, 1–9 and Console's F-keys (one per view, then Settings). */
+/** Every key on the `?` page: ⌘K, Esc, G then a letter, /, ?, N, C, Shift C, M and 1–9. */
 export function useShortcuts(state: ShortcutState) {
   const s = useRef(state);
   s.current = state;
@@ -48,20 +46,6 @@ export function useShortcuts(state: ShortcutState) {
         else if (drawer) s.current.closeDrawer();
         else if (focus) s.current.closeFocus();
         else if (view !== 'home') setView('home');
-        return;
-      }
-      // Console: F1 onwards open the views in rail order, and the key after the last view Settings
-      // (F11 with ten). Only those: F12 and the rest stay the browser's.
-      const fkey = /^F(\d{1,2})$/.exec(e.key);
-      const n = fkey ? Number(fkey[1]) : 0;
-      if (s.current.design === 'console' && n >= 1 && n <= VIEWS.length + 1 && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
-        e.preventDefault();
-        if (n === VIEWS.length + 1) s.current.openSettings();
-        else if (VIEWS[n - 1]) {
-          setPalette(false);
-          s.current.closeDrawer();
-          setView(VIEWS[n - 1].key);
-        }
         return;
       }
       const t = e.target as HTMLElement;

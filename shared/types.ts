@@ -63,15 +63,19 @@ export interface NoteVersion {
 export type ThemeMode = 'system' | 'light' | 'dark';
 export type AccentKey = 'sage' | 'slate' | 'terracotta';
 /** The whole-page design picked in Settings › Layout. Every design shows every view; only the arrangement and look change. */
-export type DesignKey = 'mission' | 'broadsheet' | 'console' | 'bento' | 'horizon' | 'vista' | 'focus' | 'poster';
+export type DesignKey = 'mission' | 'vista' | 'focus' | 'poster';
 /** Every design, for checking a saved or sent one is still known. */
-export const DESIGN_KEYS: DesignKey[] = ['mission', 'broadsheet', 'console', 'bento', 'horizon', 'vista', 'focus', 'poster'];
+export const DESIGN_KEYS: DesignKey[] = ['mission', 'vista', 'focus', 'poster'];
+/** What a new install starts on, and what a setting, backup or browser still naming a design that's gone shows. */
+export const DEFAULT_DESIGN: DesignKey = 'mission';
 /**
- * A panel's place on the home grid (web/src/layout.ts). `hero` is the clock-and-next tile (Bento,
- * Focus); `wx` the weather and air panel Console and Bento print in full; `bm` the bookmarks row.
+ * The design to show for one that was saved or sent: itself if it's still known, else the default.
+ * Broadsheet, Console, Bento and Horizon were retired on 2026-11-25 (git tag designs-before-retiring).
  */
-export type HomeArea = 'today' | 'tasks' | 'notes' | 'pkgs' | 'photo' | 'photo2' | 'bm' | 'hero' | 'wx';
-export const HOME_AREAS: HomeArea[] = ['today', 'tasks', 'notes', 'pkgs', 'photo', 'photo2', 'bm', 'hero', 'wx'];
+export const knownDesign = (d: unknown): DesignKey => (DESIGN_KEYS.includes(d as DesignKey) ? (d as DesignKey) : DEFAULT_DESIGN);
+/** A panel's place on the home grid (web/src/layout.ts). `hero` is Focus's clock-and-next tile; `bm` the bookmarks row. */
+export type HomeArea = 'today' | 'tasks' | 'notes' | 'pkgs' | 'photo' | 'photo2' | 'bm' | 'hero';
+export const HOME_AREAS: HomeArea[] = ['today', 'tasks', 'notes', 'pkgs', 'photo', 'photo2', 'bm', 'hero'];
 /**
  * Home arrangements set by hand in Settings › Layout: for each design, its columns of panels left to
  * right; `narrow` is the phone's one column (shared by every design); Focus's one list is its tab order.

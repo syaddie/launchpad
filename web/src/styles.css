@@ -1,5 +1,5 @@
-/* Design tokens and shared components. The values here are the default layout's
-   (Broadsheet); each other layout in designs.css swaps them. */
+/* Design tokens and shared components. Each layout in designs.css (and mission.css) swaps the
+   tokens, typefaces included. */
 
 :root,
 :root[data-mode='light'] {
@@ -26,7 +26,7 @@
 /* Typefaces, corners and spacing; each design in designs.css swaps these. */
 :root {
   --f-ui: 'Geist', system-ui, sans-serif;
-  --f-display: 'Source Serif 4', Georgia, serif;
+  --f-display: 'Geist', system-ui, sans-serif;
   --f-mono: 'Geist Mono', ui-monospace, monospace;
   /* Corners: small controls, rows and inputs, cards inside panels, panels themselves. */
   --r-s: 6px;
@@ -195,11 +195,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .rail-btn.on { background: var(--act); color: var(--acd); }
 .rail-btn.on span { font-weight: 600; }
 .rail-sep { flex: none; width: 32px; height: 1px; margin: auto 0 8px; background: var(--ln); }
-/* A short window: icons only, so every view and Settings still fit. */
-@media (max-height: 720px) {
-  .lp-root[data-design='broadsheet']:not([data-layout='narrow']) .rail-btn { height: 40px; }
-  .lp-root[data-design='broadsheet']:not([data-layout='narrow']) .rail-btn span { display: none; }
-}
 [data-layout='narrow'] .lp-shell { flex-direction: column; height: auto; }
 [data-layout='narrow'] .lp-shell > .lp-inner { padding-left: 15px; margin: 0; }
 [data-layout='narrow'] .rail { width: auto; flex-direction: row; padding: 8px 10px; overflow-x: auto; overflow-y: hidden; }
@@ -231,8 +226,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 [data-layout='narrow'] .greeting { font-size: 24px; }
 .subline { font-size: 13px; color: var(--t2); min-height: 19px; }
 /* A window too narrow for it all: the weather goes down to its icon and temperature, then the date goes. */
-@media (max-width: 1320px) { .lp-root:not([data-layout='narrow']):not([data-design='console']) .weather-text { display: none; } }
-@media (max-width: 1120px) { .lp-root:not([data-layout='narrow']):not([data-design='console']) .clock-date { display: none; } }
+@media (max-width: 1320px) { .lp-root:not([data-layout='narrow'])[data-design] .weather-text { display: none; } }
+@media (max-width: 1120px) { .lp-root:not([data-layout='narrow'])[data-design] .clock-date { display: none; } }
 @media (max-width: 980px) { .lp-root:not([data-layout='narrow']) .search input { width: 170px; } }
 .clock { font-size: 46px; line-height: 0.9; font-variant-numeric: tabular-nums lining-nums; letter-spacing: -0.02em; }
 [data-layout='wide'] .clock { font-size: 60px; }
@@ -2326,7 +2321,6 @@ button.m-stat { cursor: default; }
 .key-figure-value { font-size: 17px; font-weight: 600; line-height: 1.2; color: var(--tx); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .key-figure-value.warn { color: var(--wn); }
 .key-figure-label { font-size: 11.5px; color: var(--t3); }
-.hz-col > .key-figures { margin: 0; }
 
 /* ---------- Ask Launchpad (⌘K) ---------- */
 .palette-row.ask:not(.sel) .palette-icon { color: var(--acd); }
@@ -2616,10 +2610,6 @@ button.m-stat { cursor: default; }
   .dl-item.torrent > .dl-confirm, .dl-item.torrent > .tor-detail { grid-column: 1 / -1; }
 }
 .tor-files-count { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Console's capitals are wider: its status chips need more room than 96px. */
-@container (min-width: 541px) {
-  [data-design='console'] .dl-item.torrent { grid-template-columns: 128px minmax(0, 1fr) auto; }
-}
 
 /* ---------- music › busking slots (components/music/SlotFinder.tsx) ---------- */
 

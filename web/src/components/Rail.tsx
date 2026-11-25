@@ -15,12 +15,12 @@ export const VIEWS: { key: ViewKey; name: string; icon: string; letter: string }
   { key: 'money', name: 'Money', icon: 'ph-wallet', letter: 'M' },
   { key: 'server', name: 'Server', icon: 'ph-hard-drives', letter: 'S' },
   { key: 'review', name: 'Review', icon: 'ph-calendar-check', letter: 'R' },
-  // Last, so Console's F-keys for the others stay where they were.
+  // Last, so the others keep their places.
   { key: 'music', name: 'Music', icon: 'ph-music-notes', letter: 'U' },
 ];
 
 /** The view switcher down the left edge (across the top on a phone). Hidden views stay reachable from ⌘K.
- * The designs restyle it: Console's F-key bar, Bento's dock, Horizon's row of tabs. */
+ * The designs restyle it: Mission's floating strip and dock, Vista's floating rail, Focus's sidebar, Poster's bar. */
 export function Rail({ view, hidden, badges, onView, onHide, onPalette, onSettings, brand }: {
   view: ViewKey;
   hidden: string[];
@@ -35,7 +35,7 @@ export function Rail({ view, hidden, badges, onView, onHide, onPalette, onSettin
   brand?: ReactNode;
 }) {
   const views = VIEWS.filter((v) => v.key === 'home' || v.key === view || !hidden.includes(`view:${v.key}`));
-  // On a phone the rail (Bento's dock, Console's F-key bar) scrolls sideways: keep the view you're on in sight.
+  // On a phone the rail scrolls sideways: keep the view you're on in sight.
   const ref = useActiveTabInView<HTMLElement>(view, '.rail-btn.on', true);
   // The view you're on is lit by one highlight that glides from button to button (motion.css).
   useGlide(ref, `${view}:${views.length}`, '.rail-btn.on');
@@ -62,8 +62,6 @@ export function Rail({ view, hidden, badges, onView, onHide, onPalette, onSettin
           )}
         >
           <i className={'ph-duotone ' + v.icon} aria-hidden="true" />
-          <kbd className="rail-fkey" aria-hidden="true">F{VIEWS.indexOf(v) + 1}</kbd>
-          <span className="rail-dot" aria-hidden="true" />
           {!!badges[v.key] && (
             <b className="rail-badge" aria-label={`${badges[v.key]} need you`}>
               <Readout text={String(badges[v.key])} id={`badge-${v.key}`} />
@@ -79,7 +77,6 @@ export function Rail({ view, hidden, badges, onView, onHide, onPalette, onSettin
       </button>
       <button className="rail-btn rail-settings" title="Settings" onClick={onSettings}>
         <i className="ph-duotone ph-gear-six" aria-hidden="true" />
-        <kbd className="rail-fkey" aria-hidden="true">F{VIEWS.length + 1}</kbd>
         <span>Settings</span>
       </button>
     </nav>

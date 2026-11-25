@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Presence, Readout, useGlide } from './Motion';
+import { Presence, useGlide } from './Motion';
 import { addDays, dayDiff, parseDue, parseDueWord, parseYmd, startOfDay, ymd } from '../../../shared/dates';
 import type { AppState, Task } from '../../../shared/types';
 import { fmtDay, shortDay } from '../util';
@@ -210,16 +210,6 @@ export function Tasks({ data, now, onConnect, onAdd, onComplete, onUpdate, onMov
       </div>
       {connected && on ? (
         <>
-          {/* Bento leads each tile with one number; the other designs hide this. */}
-          <div className="big-count" aria-hidden="true">
-            <b>
-              <Readout text={String(vis.length)} id="tasks-open" />
-            </b>
-            <span>
-              open
-              {groups[0]?.label === 'Overdue' && <em>{groups[0].items.length} overdue</em>}
-            </span>
-          </div>
           <div className="task-add">
             <i className="ph-duotone ph-plus" style={{ fontSize: 16, color: 'var(--t3)', width: 16 }} />
             <input

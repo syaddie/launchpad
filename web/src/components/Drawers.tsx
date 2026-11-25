@@ -5,6 +5,7 @@ import { startOfDay } from '../../../shared/dates';
 import { DEFAULT_ENGINES } from '../../../shared/defaults';
 import { fmtUsd } from '../../../shared/claudeUsage';
 import type { AccentKey, AppState, Backup, BackupSnapshot, DesignKey, DriveStatus, GoogleSource, Package, Photo, Prefs, SearchEngine, ThemeMode } from '../../../shared/types';
+import { knownDesign } from '../../../shared/types';
 import { api, BACKUP_URL, DB_BACKUP_URL, snapshotUrl, ZIP_BACKUP_URL } from '../api';
 import { PhotoSettings } from './Photos';
 import { AlertSettings } from './AlertSettings';
@@ -711,17 +712,13 @@ const SETTINGS_TABS: { key: SettingsTab; name: string }[] = [
 
 export const DESIGNS: { key: DesignKey; name: string; blurb: string }[] = [
   { key: 'mission', name: 'Mission', blurb: 'A launch site: a sky that follows the hour and the weather, your day climbing across it, a launch clock to what’s next, and glass panels on the ground. Follows Theme.' },
-  { key: 'broadsheet', name: 'Broadsheet', blurb: 'Calm panels, serif headings and a rail on the left. Follows Theme and Accent.' },
-  { key: 'console', name: 'Console', blurb: 'A terminal dashboard: monospace, boxed panes, F1–F9 for the views. Weather details are printed, not hovered. Always dark.' },
-  { key: 'bento', name: 'Bento', blurb: 'Tiles that lead with one big number, a colour for each part of life, and a dock at the bottom. Follows Theme.' },
-  { key: 'horizon', name: 'Horizon', blurb: 'Today’s hours across the top, then Now, Later today, This week and Anytime. Follows Theme.' },
   { key: 'vista', name: 'Vista', blurb: 'Your photos as the backdrop, frosted-glass panels, and a big clock and search in the middle. Follows Theme and Accent.' },
   { key: 'focus', name: 'Focus', blurb: 'The clock and what’s next on the left; Today, Tasks, Notepad and Packages one at a time behind tabs, with room to breathe. Follows Theme and Accent.' },
   { key: 'poster', name: 'Poster', blurb: 'Big type, hard rules and one red: a Swiss poster. Numbered panels and a solid nav bar. Follows Theme.' },
 ];
 
 function LayoutSettings({ prefs, onPrefs, local, onLocal }: { prefs: Prefs; onPrefs: (p: Prefs) => void; local: DesignKey | ''; onLocal: (d: DesignKey | '') => void }) {
-  const current = local || prefs.design;
+  const current = local || knownDesign(prefs.design);
   return (
     <>
       <div className="drawer-section">
@@ -762,14 +759,14 @@ function LayoutSettings({ prefs, onPrefs, local, onLocal }: { prefs: Prefs; onPr
           value={local}
           onChange={(e) => onLocal(e.target.value as DesignKey | '')}
         >
-          <option value="">Same as everywhere ({DESIGNS.find((d) => d.key === prefs.design)?.name})</option>
+          <option value="">Same as everywhere ({DESIGNS.find((d) => d.key === knownDesign(prefs.design))?.name})</option>
           {DESIGNS.map((d) => (
             <option key={d.key} value={d.key}>
               {d.name}, on this browser only
             </option>
           ))}
         </select>
-        <span className="meta">Say a work laptop wants Horizon while home stays on Console. Picking above changes {local ? 'this browser only' : 'every device'}.</span>
+        <span className="meta">Say a work laptop wants Focus while home stays on Mission. Picking above changes {local ? 'this browser only' : 'every device'}.</span>
       </div>
       <HomeArrangement prefs={prefs} onPrefs={onPrefs} design={current} designName={DESIGNS.find((d) => d.key === current)?.name ?? ''} />
     </>

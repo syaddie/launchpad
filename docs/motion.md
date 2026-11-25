@@ -16,7 +16,7 @@ part's block in `designs.css`.
 Every duration, ease and distance is a custom property on `:root`; a design changes them, and less motion changes
 them again. Use them, never a bare `0.2s` or `ease`.
 
-| Token | Broadsheet | Use |
+| Token | Default | Use |
 |---|---|---|
 | `--m-press` | 80ms | A press going down |
 | `--m-hover` | 150ms | Hover tints fading in and out |
@@ -39,20 +39,19 @@ them again. Use them, never a bare `0.2s` or `ease`.
 | `--hv-press` | 10% ink | A pressed row, a step past its hover tint |
 
 The springs are `linear()` curves sampled from a damped spring that settles (to within 0.1%) in the duration it's
-given: 2% overshoot for Broadsheet (damping 0.78), 7% for Vista (0.65), 12% for Bento (0.56).
+given: 2% overshoot by default (damping 0.78), 7% for Vista (0.65).
 
 ## Each design's character
 
-- **Broadsheet** settles like paper: gentle decelerations, a 2% spring. Opening, each panel is laid down on the desk,
-  its shadow tightening as it lands. The rail's highlight and its edge marker glide to the view you picked.
-- **Console** prints, like a terminal: nothing glides or bounces, durations are short, things appear in steps. A press
-  is reverse video while held. A new view scans down the screen and its title types itself; opening, each pane prints
-  top-down in turn. The F-key that's lit just changes. The command line waits with a blinking block.
-- **Bento** springs (12% overshoot): tiles pop in, the dock's white pill springs from view to view, a press squishes,
-  and tiles and cards lift toward the pointer.
-- **Horizon** glides along its timeline: views slide sideways (its tabs run across the top), the black tab pill glides,
-  and opening, the day draws itself along the ribbon, left to right, before the columns come up under it. The
-  now-line slides to each new minute.
+Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov 2026 (git tag
+`designs-before-retiring`).
+
+
+- **The default** settles like paper: gentle decelerations, a 2% spring. Opening, each panel is laid down on the desk,
+  its shadow tightening as it lands. The rail's highlight glides to the view you picked.
+- **Mission** starts from the default and adds its own (in `mission.css`): the strip and the dock come in, the sources
+  report in, the day's ascent draws on, and ticking off the last task launches the rocket. See
+  [`mission-layout.md`](mission-layout.md).
 - **Vista** drifts like light on glass: long, soft arrivals and a 7% spring. Its photo drifts so slowly you only notice
   it has moved. Its views don't use the browser's transitions (`--m-view-mode: enter`): the glass blurs the photo
   behind it, which a part pictured on its own, or anything inside a fading container, can't see. So the new view's
@@ -86,7 +85,7 @@ given: 2% overshoot for Broadsheet (damping 0.78), 7% for Vista (0.65), 12% for 
   it has left with a line along its foot, and stays while pointed at.
 - **Views move the way you went along the rail** (`viewTransition.ts`): toward a view further along it is `next`, back
   toward Home is `prev`, along the rail's own direction (down where it runs down the side, sideways where it runs
-  across: a phone's, Console's, Bento's dock, Horizon's tabs). The old view clears first, then the new one arrives,
+  across: a phone's, Mission's strip and dock). The old view clears first, then the new one arrives,
   so two layouts are never seen over each other; the title changes in place; the rail and the rest of the frame stay
   put, the highlight gliding. Each design does this its own way (above). Back and Forward move the same way, unless
   the browser animated the change itself (a phone's back swipe). A view whose code isn't in yet is waited for, up to
@@ -112,7 +111,7 @@ given: 2% overshoot for Broadsheet (damping 0.78), 7% for Vista (0.65), 12% for 
 
 Little moves by itself, and each thing that does is slow or stepped, so a page left open all day costs next to
 nothing: the clock's minutes, Vista's photo drifting (it steps once a second, so the glass over it is redrawn once a
-second rather than every frame), Console's blinking prompt, Horizon's now-line sliding to each minute. Busy states
+second rather than every frame), Mission's sky. Busy states
 (a spinner, a skeleton line) move only while something is being waited for.
 
 ## Less motion

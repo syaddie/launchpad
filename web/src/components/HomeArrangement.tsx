@@ -25,7 +25,6 @@ const HIDE_KEY: Partial<Record<Area, string>> = {
 const NOTE: Partial<Record<Area, string>> = {
   photo: 'Shows once there’s a photo',
   photo2: 'Shows once there are two photos',
-  wx: 'Shows when a weather area is set',
 };
 
 export function HomeArrangement({ prefs, onPrefs, design, designName }: { prefs: Prefs; onPrefs: (p: Prefs) => void; design: DesignKey; designName: string }) {
@@ -169,17 +168,6 @@ export function HomeArrangement({ prefs, onPrefs, design, designName }: { prefs:
     </span>
   );
 
-  if (design === 'horizon') {
-    return (
-      <div className="drawer-section">
-        <div className="drawer-label">Panels on Home</div>
-        <p className="meta" style={{ margin: 0 }}>
-          Horizon lays Home out by the time of day (Now, Later today, This week), so there’s nothing to put in order. The other layouts can be arranged here.
-        </p>
-      </div>
-    );
-  }
-
   if (design === 'focus') {
     const tabs = focusOrder(saved);
     return (
@@ -283,7 +271,7 @@ export function HomeArrangement({ prefs, onPrefs, design, designName }: { prefs:
       <div className="drawer-section">
         <div className="drawer-label">On a phone</div>
         <p className="meta" style={{ margin: 0 }}>
-          One column, top to bottom. Every layout but Focus and Horizon uses this order on a narrow screen.
+          One column, top to bottom. Every layout but Focus uses this order on a narrow screen.
         </p>
         {orderList('narrow', phoneAll.filter((a) => phoneAreas.has(a)), phoneAll, 'Phone order')}
         {resetButton('narrow', !!saved.narrow)}

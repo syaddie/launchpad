@@ -39,7 +39,7 @@ export function todayAgenda(data: AppState, now: Date) {
   return { timed, todays, cur, next, hidden };
 }
 
-/** Right-click on an event, here and in Horizon: its call and Google Calendar. */
+/** Right-click on an event: its call and Google Calendar. */
 export function calEventMenu(e: CalEvent, notify?: (msg: string) => void): MenuItem[] {
   return [
     { label: 'Join call', icon: 'ph-video-camera', href: e.conferenceUrl || undefined, newTab: true, disabled: !e.conferenceUrl },
