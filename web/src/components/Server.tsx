@@ -40,7 +40,7 @@ export function Server({ data, now, openTab, onOpenSettings, onPinFolders, onAut
   onPinFolders: (pins: string[]) => void;
   /** Save Downloads' "Unpack archives when they finish", in prefs. */
   onAutoUnpack: (on: boolean) => void;
-  /** Terminal and Files open side by side (Console, Bento and Horizon on a wide enough screen). */
+  /** Terminal and Files open side by side (on a wide enough screen). */
   split?: boolean;
   now: Date;
   /** A tab to switch to from ⌘K; `n` changes each time. */

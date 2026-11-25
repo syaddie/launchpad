@@ -6,7 +6,7 @@ import { fmtKg, workoutLabel } from '../../shared/training';
 import { fmtUsd } from '../../shared/claudeUsage';
 import { fmtMoney, sortEntries } from '../../shared/money';
 import { MOOD_WORDS, cravingsOn, nearestCountdown, smokesOn } from '../../shared/trackers';
-import type { AppState, Backup, BookmarkGroup, Craving, CravingTrigger, DesignKey, Countdown, Learn, Money, Mood, Note, Package, Photo, Prefs, Task, Training, ViewKey } from '../../shared/types';
+import { knownDesign, type AppState, type Backup, type BookmarkGroup, type Craving, type CravingTrigger, type DesignKey, type Countdown, Learn, Money, Mood, Note, Package, Photo, Prefs, Task, Training, ViewKey } from '../../shared/types';
 import { api, localGet, localSet, type RestoreResult } from './api';
 import { AddEvent } from './components/AddEvent';
 import { Bookmarks } from './components/Bookmarks';
@@ -14,7 +14,6 @@ import { closeMenu, ContextMenuHost, copyText, menuProps, placeOf } from './comp
 import { AddPackageDrawer, DESIGNS, Drawer, PANEL_ROWS, PackageDrawer, SettingsDrawer, type SettingsTab } from './components/Drawers';
 import { FocusHome, type FocusTabInfo } from './components/FocusHome';
 import { HeroPanel } from './components/Hero';
-import { HorizonHome } from './components/Horizon';
 import { MissionHero } from './components/mission/Hero';
 import { Mark } from './components/mission/Mark';
 import { MissionScene } from './components/mission/Scene';
@@ -28,7 +27,7 @@ import { ServerBanner } from './components/ServerBanner';
 import { Shortcuts } from './components/Shortcuts';
 import { Tasks } from './components/Tasks';
 import { Today, todayAgenda } from './components/Today';
-import { TopBar, WeatherPanel } from './components/TopBar';
+import { TopBar } from './components/TopBar';
 import { useAppData } from './hooks/useAppData';
 import { useGoogleActions } from './hooks/useGoogleActions';
 import { useHashView, useLayout, useMinuteNow, useSystemDark } from './hooks/useDevice';
@@ -174,9 +173,9 @@ export function App({ cached }: { cached: AppState | null }) {
 
   // ---------- theme & layout ----------
 
-  const design: DesignKey = localDesign || data.prefs.design || 'mission';
-  // Console is always dark; the others follow Theme.
-  const dark = design === 'console' || data.prefs.theme === 'dark' || (data.prefs.theme === 'system' && systemDark);
+  // A design that's since been retired (saved before 2026-11-25) shows the default.
+  const design: DesignKey = localDesign || knownDesign(data.prefs.design);
+  const dark = data.prefs.theme === 'dark' || (data.prefs.theme === 'system' && systemDark);
   useLayoutEffect(() => {
     document.documentElement.dataset.mode = dark ? 'dark' : 'light';
     document.documentElement.dataset.accent = data.prefs.accent;
@@ -588,8 +587,8 @@ export function App({ cached }: { cached: AppState | null }) {
 
   useSidewaysWheel();
   useShortcuts({
-    view, setView, design, palette, setPalette, shortcuts, setShortcuts,
-    drawer: !!drawer, closeDrawer: () => setDrawer(null), openSettings: () => setDrawer({ type: 'settings' }),
+    view, setView, palette, setPalette, shortcuts, setShortcuts,
+    drawer: !!drawer, closeDrawer: () => setDrawer(null),
     focus, closeFocus: () => setFocus(false),
     search, searchRef, editBookmarks, bookmarks: data.bookmarks, logSmoke, logCraving: () => logCraving(),
   });
@@ -606,7 +605,7 @@ export function App({ cached }: { cached: AppState | null }) {
       if (next.conferenceType) subline += ` · ${next.conferenceType}`;
     } else subline = 'Nothing else on today';
   }
-  // The tail of the summary line, which Bento's clock tile shows under the next event.
+  // The tail of the summary line, which Focus's clock tile shows under the next event.
   const extras: string[] = [];
   const overdue = data.google.connected && data.prefs.sources.tasks ? data.tasks.filter((t) => t.due && dayDiff(now, parseYmd(t.due)) < 0).length : 0;
   if (overdue) extras.push(`${overdue} overdue task${overdue > 1 ? 's' : ''}`);
@@ -637,10 +636,9 @@ export function App({ cached }: { cached: AppState | null }) {
   // Vista's photos are its wallpaper; Focus has room for one beside the tabs.
   if (photoCount > 0 && design !== 'vista') shown.add('photo');
   if (photoCount > 1 && design !== 'vista' && design !== 'focus') shown.add('photo2');
-  // Bento and Focus open with a clock tile; Console and Bento print the weather details as a panel.
-  if (design === 'bento' || design === 'focus') shown.add('hero');
+  // Focus opens with a clock tile.
+  if (design === 'focus') shown.add('hero');
   const weatherOn = !!data.prefs.weatherArea && !hidden.has('top:weather');
-  if ((design === 'console' || design === 'bento') && weatherOn) shown.add('wx');
   const grid = gridLayout(layout, shown, design, data.prefs.homeLayouts);
   const smokesToday = smokesOn(data.smokes, now).length;
   const inboxCount = inboxBadge(data);
@@ -735,7 +733,6 @@ export function App({ cached }: { cached: AppState | null }) {
       case 'photo': return photoPanel('photo');
       case 'photo2': return photoPanel('photo2');
       case 'hero': return heroPanel;
-      case 'wx': return <WeatherPanel data={data} now={now} />;
       case 'bm': return bookmarksPanel;
     }
   };
@@ -779,8 +776,8 @@ export function App({ cached }: { cached: AppState | null }) {
     startStudy, stopStudy, logStudy, setWeight, runSpeedTest, openServerTab,
     addPackage: () => setDrawer({ type: 'add' }),
     addEvent: google.addEvent,
-    // The field is in the Today panel, which Horizon's home doesn't have.
-    openAddEvent: shown.has('today') && design !== 'horizon' ? () => (setView('home'), setHomeTab('today'), setAddEventSignal((n) => n + 1)) : undefined,
+    // The field is in the Today panel.
+    openAddEvent: shown.has('today') ? () => (setView('home'), setHomeTab('today'), setAddEventSignal((n) => n + 1)) : undefined,
     refreshInbox,
     openDigestTab: (tab) => (setView('digest'), setDigestTab((t) => ({ tab, n: (t?.n ?? 0) + 1 }))),
     openNote: (id: string) => (pickNote(id), setHomeTab('notes'), setView('home')),
@@ -945,11 +942,11 @@ export function App({ cached }: { cached: AppState | null }) {
             notify={showToast}
           />
         ) : view === 'money' ? (
-          <MoneyView money={data.money} now={now} saved={moneySaved} onChange={setMoney} onImport={importMoney} notify={showToast} together={design !== 'broadsheet' && layout !== 'narrow'} bills={data.bills} onDropBill={google.dismissBill} />
+          <MoneyView money={data.money} now={now} saved={moneySaved} onChange={setMoney} onImport={importMoney} notify={showToast} together={layout !== 'narrow'} bills={data.bills} onDropBill={google.dismissBill} />
         ) : view === 'music' ? (
           <MusicView now={now} notify={showToast} />
         ) : view === 'server' ? (
-          <Server data={data} now={now} openTab={serverTab} onOpenSettings={() => setDrawer({ type: 'settings' })} onPinFolders={(pinnedFolders) => setPrefs({ ...data.prefs, pinnedFolders })} onAutoUnpack={(autoUnpack) => setPrefs({ ...data.prefs, autoUnpack })} split={design !== 'broadsheet' && layout !== 'narrow'} />
+          <Server data={data} now={now} openTab={serverTab} onOpenSettings={() => setDrawer({ type: 'settings' })} onPinFolders={(pinnedFolders) => setPrefs({ ...data.prefs, pinnedFolders })} onAutoUnpack={(autoUnpack) => setPrefs({ ...data.prefs, autoUnpack })} split={layout !== 'narrow'} />
         ) : (
           design === 'focus' ? (
             <FocusHome
@@ -961,38 +958,6 @@ export function App({ cached }: { cached: AppState | null }) {
               panel={activeTab === 'today' ? todayPanel : activeTab === 'tasks' ? tasksPanel : activeTab === 'notes' ? notesPanel : packagesPanel}
               bookmarks={shown.has('bm') && bookmarksPanel}
               empty={noPanels}
-            />
-          ) : design === 'horizon' ? (
-            <HorizonHome
-              data={data}
-              now={now}
-              smokesToday={smokesToday}
-              countdown={soon}
-              show={{ today: shown.has('today'), tasks: shown.has('tasks'), packages: shown.has('pkgs') }}
-              onConnect={connect}
-              onAddTask={addTask}
-              onCompleteTask={completeTask}
-              onOpenPackage={(id) => setDrawer({ type: 'pkg', id })}
-              onAddPackage={() => setDrawer({ type: 'add' })}
-              onKeepPackage={keepPackage}
-              onDismissPackage={archivePackage}
-              onRefreshPackage={refreshPackage}
-              onUpdateTask={google.updateTask}
-              onMoveTask={google.moveTask}
-              onDeleteTask={(t) => google.deleteTask(t)}
-              onLogSmoke={logSmoke}
-              onOpenLearn={() => setView('learn')}
-              notify={showToast}
-              notes={shown.has('notes') && notesPanel}
-              photos={
-                photoCount > 0 && (
-                  <div className="hz-photos">
-                    {photoCount > 0 && photoPanel('photo')}
-                    {photoCount > 1 && photoPanel('photo2')}
-                  </div>
-                )
-              }
-              bookmarks={shown.has('bm') && bookmarksPanel}
             />
           ) : (
           <main className="lp-grid" style={{ gridTemplateAreas: grid.areas, gridTemplateColumns: grid.columns, gridTemplateRows: grid.rows }}>

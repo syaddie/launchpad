@@ -22,8 +22,6 @@ export const SHORTCUT_GROUPS: { title: string; rows: Row[] }[] = [
     title: 'Go to a view',
     rows: [
       ...VIEWS.map((v) => ({ keys: [['G', v.letter]], what: v.name })),
-      { keys: [['F1'], [`F${VIEWS.length}`]], what: `Console layout: the views in rail order, F1 to F${VIEWS.length}` },
-      { keys: [[`F${VIEWS.length + 1}`]], what: 'Console layout: Settings' },
     ],
   },
   {
@@ -56,9 +54,9 @@ export const SHORTCUT_GROUPS: { title: string; rows: Row[] }[] = [
   },
 ];
 
-/** A row's keys: "G then H", "⌘ K or Ctrl K", "F1 – F8" for a range. */
+/** A row's keys: "G then H", "⌘ K or Ctrl K", "1 – 9" for a range. */
 function Keys({ keys }: { keys: string[][] }) {
-  const range = keys.length === 2 && keys.every((k) => k.length === 1) && /^(F?\d+)$/.test(keys[0][0]) && /^(F?\d+)$/.test(keys[1][0]);
+  const range = keys.length === 2 && keys.every((k) => k.length === 1) && /^\d+$/.test(keys[0][0]) && /^\d+$/.test(keys[1][0]);
   const between = range ? '–' : 'or';
   const sep = (combo: string[]) => (combo[0] === 'G' && combo.length === 2 ? 'then' : '');
   return (

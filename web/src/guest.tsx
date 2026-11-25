@@ -8,7 +8,7 @@ import './styles.css';
 import './designs.css';
 import './motion.css';
 import './mission.css';
-import type { GuestMusic } from '../../shared/types';
+import { knownDesign, type GuestMusic } from '../../shared/types';
 import { api, cachedGuest, cacheGuest } from './api';
 import { ContextMenuHost, copyText, menuProps, placeOf } from './components/ContextMenu';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -73,9 +73,9 @@ function GuestApp() {
     if (guide) GUEST.load().then((n) => setPlaces(n.watching), () => {});
   }, [guide]);
 
-  const design = l?.design ?? 'broadsheet';
+  const design = knownDesign(l?.design);
   const theme = l?.theme ?? 'system';
-  const dark = design === 'console' || theme === 'dark' || (theme === 'system' && systemDark);
+  const dark = theme === 'dark' || (theme === 'system' && systemDark);
   useLayoutEffect(() => {
     const root = document.documentElement;
     root.dataset.mode = dark ? 'dark' : 'light';

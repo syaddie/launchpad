@@ -15,16 +15,18 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Geist:wght@200..700&family=Geist+Mono:wght@400&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500;700&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400..700&family=Archivo:wght@400..900&family=Atkinson+Hyperlegible+Next:wght@400..700&family=Atkinson+Hyperlegible+Mono:wght@500&family=Doto:wght@800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@200..700&family=Geist+Mono:wght@400&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400..700&family=Archivo:wght@400..900&family=Atkinson+Hyperlegible+Next:wght@400..700&family=Atkinson+Hyperlegible+Mono:wght@500&family=Doto:wght@800&display=swap"
     />
     <script>
       // The look the last visit was given (the owner's design, accent and theme), before first paint, so it never flashes the wrong colours.
       (function () {
         var l = {};
         try { l = (JSON.parse(localStorage.getItem('launchpad:guest-music') || '{}') || {}).look || {}; } catch (e) {}
-        var d = l.design || 'broadsheet';
+        var d = l.design || 'mission';
+        // A layout that's since been retired shows the default (shared/types.ts, DESIGN_KEYS).
+        if (['mission', 'vista', 'focus', 'poster'].indexOf(d) < 0) d = 'mission';
         var t = l.theme || 'system';
-        var dark = d === 'console' || t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+        var dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
         document.documentElement.dataset.mode = dark ? 'dark' : 'light';
         document.documentElement.dataset.accent = l.accent || 'sage';
         document.documentElement.dataset.design = d;

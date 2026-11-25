@@ -6,7 +6,7 @@ import { MAX_JOURNAL } from '../../shared/trackers';
 import { cleanSubjects } from '../../shared/digest';
 import { parseNewsSource } from '../../shared/news';
 import { cleanKg } from '../../shared/training';
-import { ALERT_KINDS, DESIGN_KEYS, HOME_AREAS } from '../../shared/types';
+import { ALERT_KINDS, DESIGN_KEYS, HOME_AREAS, knownDesign } from '../../shared/types';
 import type { BookmarkGroup, Countdown, DesignKey, HomeArea, HomeLayouts, Mood, Note, Package, Prefs, SearchEngine, Snippet } from '../../shared/types';
 
 export const isStr = (v: unknown): v is string => typeof v === 'string';
@@ -69,7 +69,7 @@ export function cleanPrefs(body: Partial<Prefs>, prev: Prefs): Prefs {
     name: isStr(body.name) ? body.name.slice(0, 40) : prev.name,
     theme: ['system', 'light', 'dark'].includes(body.theme as string) ? body.theme! : prev.theme,
     accent: ['sage', 'slate', 'terracotta'].includes(body.accent as string) ? body.accent! : prev.accent,
-    design: DESIGN_KEYS.includes(body.design as DesignKey) ? body.design! : prev.design ?? 'broadsheet',
+    design: DESIGN_KEYS.includes(body.design as DesignKey) ? body.design! : knownDesign(prev.design),
     hiddenCalendars: Array.isArray(body.hiddenCalendars) ? body.hiddenCalendars.filter(isStr) : prev.hiddenCalendars,
     sources: { ...prev.sources, ...pickBools(body.sources, Object.keys(prev.sources)) },
     digestSubjects: Array.isArray(body.digestSubjects) ? cleanSubjects(body.digestSubjects) : prev.digestSubjects,

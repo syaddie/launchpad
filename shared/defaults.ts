@@ -1,5 +1,5 @@
 import { DEFAULT_SUBJECTS } from './digest';
-import type { BookmarkGroup, Note, Prefs, SearchEngine } from './types';
+import { DEFAULT_DESIGN, type BookmarkGroup, type Note, type Prefs, type SearchEngine } from './types';
 
 export const STARTER_BOOKMARKS: BookmarkGroup[] = [
   {
@@ -26,7 +26,7 @@ export const DEFAULT_PREFS: Prefs = {
   name: 'Syaddie',
   theme: 'system',
   accent: 'sage',
-  design: 'mission',
+  design: DEFAULT_DESIGN,
   hiddenCalendars: [],
   sources: { calendar: true, tasks: true, gmail: true },
   digestSubjects: DEFAULT_SUBJECTS,

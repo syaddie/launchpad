@@ -3,7 +3,6 @@ import { startOfDay } from '../../../shared/dates';
 import type { Package } from '../../../shared/types';
 import { trackUrl } from '../../../shared/carriers';
 import { chipOf, segColor, statusText } from '../util';
-import { Readout } from './Motion';
 import { copyText, menuProps, type MenuItem } from './ContextMenu';
 
 export interface PackageMenuActions {
@@ -14,7 +13,7 @@ export interface PackageMenuActions {
   notify?: (msg: string) => void;
 }
 
-/** Right-click on a package, here and in Horizon's cards. Archive can't be undone, so it asks. */
+/** Right-click on a package. Archive can't be undone, so it asks. */
 export function packageMenu(p: Package, a: PackageMenuActions): MenuItem[] {
   return [
     { label: 'Details…', icon: 'ph-info', onSelect: () => a.onOpen(p.id) },
@@ -50,14 +49,6 @@ export function Packages({ packages, now, onAdd, ...actions }: Props) {
           Add package
         </button>
       </div>
-      {active.length > 0 && (
-        <div className="big-count" aria-hidden="true">
-          <b>
-            <Readout text={String(active.filter((p) => p.stage === 2).length || active.length)} id="packages-count" />
-          </b>
-          <span>{active.some((p) => p.stage === 2) ? 'out for delivery' : 'on the way'}{active.some((p) => p.exception) && <em>{active.filter((p) => p.exception).length} need a look</em>}</span>
-        </div>
-      )}
       <div className="scroll" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {active.map((p) => {
           const chip = chipOf(p);

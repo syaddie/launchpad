@@ -22,7 +22,7 @@ type Draft = { date: string; note: string; category: MoneyCategory | ''; kind: K
 
 export function MonthTab({ money, today, month, onMonth, onChange, onOpenOwed, together }: {
   money: Money;
-  /** Show the calendar and the list side by side (Console, Bento and Horizon on a wide enough screen). */
+  /** Show the calendar and the list side by side (on a wide enough screen). */
   together?: boolean;
   today: string;
   month: string;

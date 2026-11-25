@@ -22,7 +22,7 @@ export function useActiveTabInView<T extends HTMLElement = HTMLDivElement>(activ
     if (!followResize || typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(show);
     ro.observe(row);
-    // A row that keeps its size (Console's F-key bar spans the window) still gets wider inside
+    // A row that keeps its size (one that spans the window) still gets wider inside
     // once its typeface has loaded.
     let live = true;
     document.fonts?.ready.then(() => live && requestAnimationFrame(() => live && show()));
