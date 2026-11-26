@@ -174,7 +174,7 @@ describe('Drive pruning', () => {
 const NOW = Date.parse('2026-11-12T12:00:00Z');
 const H = 3_600_000;
 const iso = (msAgo: number) => new Date(NOW - msAgo).toISOString();
-const KEYS: SourceKey[] = ['calendar', 'tasks', 'gmail', 'carriers', 'digest', 'inbox', 'weather', 'speedtest'];
+const KEYS: SourceKey[] = ['calendar', 'tasks', 'gmail', 'carriers', 'digest', 'inbox', 'weather', 'speedtest', 'hevy'];
 const fine: SyncStatus = { lastSuccess: iso(60_000), lastAttempt: iso(60_000), lastError: null, failures: 0 };
 const DRIVE_OK: DriveStatus = { on: true, allowed: true, lastSuccess: iso(H), lastAttempt: iso(H), lastError: null, running: false };
 

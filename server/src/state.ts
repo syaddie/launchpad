@@ -3,6 +3,7 @@
 // only the parts those keys feed (GET /api/state?keys=…).
 import { config, googleConfigured } from './config';
 import { claudeEnabled } from './claude';
+import { hevyEnabled } from './hevy';
 import { docVersion, store } from './store';
 import { smokeDaysFrom } from '../../shared/trackers';
 import { driveStatus } from './drive';
@@ -68,6 +69,7 @@ const FIELDS: { [F in Field]: () => AppState[F] } = {
   digest: () => digestState(),
   newsLists: () => store.newsLists(),
   newsSummaries: () => claudeEnabled(),
+  hevy: () => hevyEnabled(),
   inbox: inboxState,
   weather: () => store.weather(),
   photos: () => store.photos().map(({ id, focus }): Photo => ({ id, focus })),
@@ -126,6 +128,8 @@ export const KEY_FIELDS: Record<string, Field[]> = {
   weights: ['weights'],
   money: ['money'],
   training: ['training'],
+  // A copy kept on the server only.
+  trainingBeforeSync: [],
   exerciseMuscles: ['exerciseMuscles'],
   learn: ['learn'],
   learnNote: ['learnNote'],

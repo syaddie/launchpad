@@ -20,6 +20,7 @@ const NAMES: Record<SourceKey, string> = {
   inbox: 'Inbox',
   weather: 'Weather',
   speedtest: 'Speed test',
+  hevy: 'Hevy',
 };
 
 /** "never", "5 min ago", "3 h ago", "2 days ago": a length of time, so it reads the same whatever the server's time zone. */

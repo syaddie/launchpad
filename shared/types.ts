@@ -86,7 +86,7 @@ export const HOME_AREAS: HomeArea[] = ['today', 'notes', 'photo', 'photo2', 'her
  */
 export type HomeLayouts = Partial<Record<DesignKey | 'narrow', HomeArea[][]>>;
 export type GoogleSource = 'calendar' | 'tasks' | 'gmail';
-export type SourceKey = GoogleSource | 'carriers' | 'digest' | 'inbox' | 'weather' | 'speedtest';
+export type SourceKey = GoogleSource | 'carriers' | 'digest' | 'inbox' | 'weather' | 'speedtest' | 'hevy';
 export type ViewKey = 'home' | 'digest' | 'inbox' | 'you' | 'training' | 'learn' | 'money' | 'server' | 'review' | 'music';
 
 /** One place to search: "yt lofi" opens url with %s replaced by "lofi". The first engine is the default. */
@@ -858,8 +858,8 @@ export interface ExerciseMuscles {
 /** Workouts from Hevy, newest first, and where they came from (shared/training.ts). */
 export interface Training {
   workouts: Workout[];
-  /** 'csv' for Hevy's export; empty before the first import. */
-  source: 'csv' | '';
+  /** 'csv' for Hevy's export, 'api' for the live sync; empty before the first of either. */
+  source: 'csv' | 'api' | '';
   importedAt: string | null;
 }
 
@@ -1547,6 +1547,8 @@ export interface AppState {
   tracking: { allCarriers: boolean };
   digest: DigestState;
   newsLists: NewsLists;
+  /** HEVY_API_KEY is set, so workouts come from Hevy by themselves (server/src/hevy.ts). */
+  hevy: boolean;
   /** ANTHROPIC_API_KEY is set, so there's a daily digest and the inbox gets summaries and not just lists. */
   newsSummaries: boolean;
   inbox: InboxState;

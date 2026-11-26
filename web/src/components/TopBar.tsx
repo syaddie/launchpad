@@ -288,6 +288,8 @@ export function TopBar({ data, now, title, subline, search, onSearch, searchRef,
     { key: 'inbox', name: 'Inbox', ok: 'Updated' },
     { key: 'weather', name: 'Weather', ok: 'Updated' },
     { key: 'speedtest', name: 'Speed test', ok: 'Ran' },
+    // Only listed once the server has a Hevy key.
+    ...(data.hevy ? [{ key: 'hevy' as const, name: 'Hevy', ok: 'Synced' }] : []),
   ];
   const needsGoogle = (k: SourceKey) => k === 'calendar' || k === 'gmail' || k === 'inbox';
   const connected = data.google.connected;

@@ -59,7 +59,7 @@ function merge(...checks: Check[]): Check {
 // ---------- health warnings ----------
 
 // Not Google Tasks or the carriers: they were retired with their panels (sync.ts, enabled).
-const SYNCS: SourceKey[] = ['calendar', 'gmail', 'digest', 'inbox', 'weather', 'speedtest'];
+const SYNCS: SourceKey[] = ['calendar', 'gmail', 'digest', 'inbox', 'weather', 'speedtest', 'hevy'];
 
 /**
  * What health.ts warns about, as problems. Only Launchpad's own wording goes in the message, not

@@ -230,6 +230,8 @@ export const store = {
 
   training: (): Training => cleanTraining(get<unknown>('training', null)),
   setTraining: (v: Training) => set('training', v),
+  /** The imported workouts as they were before Hevy's live sync last replaced them. */
+  setTrainingBeforeSync: (v: Training) => set('trainingBeforeSync', v),
   /** Claude's reading of each exercise name; kept across imports, since names don't change what they train. */
   exerciseMuscles: () => get<Record<string, ExerciseMuscles>>('exerciseMuscles', {}),
   setExerciseMuscles: (v: Record<string, ExerciseMuscles>) => set('exerciseMuscles', v),
@@ -282,6 +284,7 @@ export const store = {
       inbox: s.inbox || EMPTY_SYNC,
       weather: s.weather || EMPTY_SYNC,
       speedtest: s.speedtest || EMPTY_SYNC,
+      hevy: s.hevy || EMPTY_SYNC,
     };
   },
   setSync: (key: SourceKey, v: SyncStatus) => set('sync', { ...store.sync(), [key]: v }),

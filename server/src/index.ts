@@ -607,7 +607,7 @@ app.post('/api/money/statement', bodyLimit({ maxSize: 256 * 1024, onError: (c) =
 
 // ---------- training ----------
 
-/** Every workout, read from Hevy's export in the page. An import replaces what's here. */
+/** Every workout, as the page has them after reading Hevy's export (or undoing that). It replaces what's here. */
 app.put('/api/training', bodyLimit({ maxSize: 8 * 1024 * 1024, onError: (c) => c.json({ error: 'That’s too many workouts to save at once.' }, 413) }), async (c) => {
   const body = await c.req.json();
   if (!body || typeof body !== 'object' || !Array.isArray(body.workouts)) return c.json({ error: 'Invalid workouts' }, 400);
@@ -1266,14 +1266,15 @@ app.delete('/api/photos/:id', (c) => {
 
 app.post('/api/sync/:source', async (c) => {
   const key = c.req.param('source') as SourceKey;
-  if (!['calendar', 'tasks', 'gmail', 'carriers', 'digest', 'inbox', 'weather', 'speedtest'].includes(key)) return c.json({ error: 'Unknown source' }, 400);
+  if (!['calendar', 'tasks', 'gmail', 'carriers', 'digest', 'inbox', 'weather', 'speedtest', 'hevy'].includes(key)) return c.json({ error: 'Unknown source' }, 400);
   if (key === 'digest' || key === 'inbox') {
     await refreshSummaries(key);
     return c.json(state());
   }
   // ?ifOlderThan=30 lets the page ask for a refresh on focus without hammering Google.
   const minAge = Number(c.req.query('ifOlderThan') || 0) * 1000;
-  await (minAge ? runIfStale(key, minAge) : runSource(key));
+  // Asking for Hevy by hand downloads everything again, whether or not it reports a change.
+  await (minAge ? runIfStale(key, minAge) : runSource(key, key === 'hevy'));
   return c.json(state());
 });
 

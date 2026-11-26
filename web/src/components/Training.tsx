@@ -7,7 +7,7 @@ import {
 } from '../../../shared/training';
 import type { AppState, ExerciseMuscles, Training, Workout, WorkoutSet } from '../../../shared/types';
 import { localGet, localSet } from '../api';
-import { fmtDay, hm, niceMax } from '../util';
+import { ago, fmtDay, hm, niceMax } from '../util';
 import { copyText, menuProps } from './ContextMenu';
 import { Glide, Readout } from './Motion';
 
@@ -18,6 +18,8 @@ interface Props {
   now: Date;
   /** Replace every workout; the summary goes in a toast with Undo. */
   onImport: (t: Training, summary: string) => void;
+  /** Download from Hevy now, when the server has a key. */
+  onSync: () => Promise<void>;
   onOpenExercise: (title: string) => void;
   /** One session, with every exercise and set, in the drawer. */
   onOpenWorkout: (id: string) => void;
@@ -34,8 +36,8 @@ const monthYear = (d: Date) => `${MON[d.getMonth()]} ${d.getFullYear()}`;
 /** Sets per muscle can be halves, from secondary muscles. */
 const fmtSets = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
-/** The Training view: workouts from Hevy's CSV export, by week, muscle and lift, beside the other logs. */
-export function TrainingView({ data, now, onImport, onOpenExercise, onOpenWorkout, onOpenSettings, onWeight, weightSignal, notify }: Props) {
+/** The Training view: workouts from Hevy, by week, muscle and lift, beside the other logs. */
+export function TrainingView({ data, now, onImport, onSync, onOpenExercise, onOpenWorkout, onOpenSettings, onWeight, weightSignal, notify }: Props) {
   const [error, setError] = useState('');
   const [bwWeeks, setBwWeeks] = useState(() => BW_RANGES.find((r) => String(r.weeks) === localGet('bwRange'))?.weeks ?? 12);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -61,22 +63,61 @@ export function TrainingView({ data, now, onImport, onOpenExercise, onOpenWorkou
   const latest = ws[0] ? new Date(ws[0].start) : null;
   const behind = latest ? dayDiff(latest, today) : 0;
 
+  // With a key on the server, importing a file is only for when the sync isn't working.
+  const live = data.hevy;
+  const { lastSuccess, lastError } = data.sync.hevy;
+  const canImport = !live || !!lastError;
+  const [syncing, setSyncing] = useState(false);
+  const sync = () => {
+    setSyncing(true);
+    onSync().finally(() => setSyncing(false));
+  };
+  const pickFile = () => fileRef.current?.click();
+  const synced = !live || lastError ? '' : lastSuccess ? `synced with Hevy ${ago(lastSuccess, now)}` : 'waiting for the first sync with Hevy';
+  const stale = !live && behind > 3 ? 'export from Hevy again to bring in newer ones' : '';
+  const syncButton = (className: string) => (
+    <button className={className} title="Download your workouts from Hevy now" disabled={syncing} onClick={sync}>
+      <i className="ph-duotone ph-arrows-clockwise" />
+      {syncing ? 'Syncing…' : 'Sync now'}
+    </button>
+  );
+  const importButton = (className: string) => (
+    <button
+      className={className}
+      title={live ? 'Read the workouts CSV that Hevy exports. The next sync that works replaces it' : 'Read the workouts CSV that Hevy exports, replacing what’s here'}
+      onClick={pickFile}
+    >
+      <i className="ph-duotone ph-upload-simple" />
+      Import Hevy .csv
+    </button>
+  );
+  const menu = menuProps(
+    () => [
+      ...(live ? [{ label: 'Sync now', icon: 'ph-arrows-clockwise', onSelect: sync }] : []),
+      { label: 'Import Hevy .csv', icon: 'ph-upload-simple', onSelect: pickFile },
+    ],
+    'Workouts from Hevy',
+  );
+
   return (
     <main className="you training" aria-label="Training">
-      <div className="tr-head">
+      <div className="tr-head" {...menu}>
         <span className="meta">
           {latest
-            ? `${ws.length} workouts since ${monthYear(new Date(ws[ws.length - 1].start))} · latest ${behind === 0 ? 'today' : behind === 1 ? 'yesterday' : fmtDay(latest)}${behind > 3 ? ' · export from Hevy again to bring in newer ones' : ''}`
+            ? [`${ws.length} workout${ws.length === 1 ? '' : 's'} since ${monthYear(new Date(ws[ws.length - 1].start))}`, `latest ${behind === 0 ? 'today' : behind === 1 ? 'yesterday' : fmtDay(latest)}`, synced, stale]
+                .filter(Boolean)
+                .join(' · ')
             : ''}
         </span>
         <div className="tr-actions">
           {error && <span className="meta" style={{ color: 'var(--wn)' }}>{error}</span>}
-          {ws.length > 0 && (
-            <button className="btn btn-ghost btn-small" title="Read the workouts CSV that Hevy exports, replacing what’s here" onClick={() => fileRef.current?.click()}>
-              <i className="ph-duotone ph-upload-simple" />
-              Import Hevy .csv
-            </button>
+          {ws.length > 0 && live && lastError && (
+            <span className="meta" style={{ color: 'var(--wn)' }}>
+              Couldn’t sync with Hevy: {lastError}
+            </span>
           )}
+          {ws.length > 0 && live && syncButton('btn btn-ghost btn-small')}
+          {ws.length > 0 && canImport && importButton('btn btn-ghost btn-small')}
         </div>
         <input
           ref={fileRef}
@@ -107,17 +148,31 @@ export function TrainingView({ data, now, onImport, onOpenExercise, onOpenWorkou
           </div>
         </>
       ) : (
-        <section className="panel you-panel">
+        <section className="panel you-panel" {...menu}>
           <div className="empty">
-            <h2 className="panel-title">Bring in your workouts from Hevy</h2>
-            <p>
-              In the Hevy app, open Settings › Export &amp; Import Data and export your workouts. Then import the .csv here. Launchpad reads every set and
-              shows your weeks, the muscles you’re training and how your lifts are moving. Importing again later replaces what’s here, so newer workouts come in.
-            </p>
-            <button className="btn btn-primary" onClick={() => fileRef.current?.click()}>
-              <i className="ph-duotone ph-upload-simple" />
-              Import Hevy .csv
-            </button>
+            <h2 className="panel-title">{live ? 'Your workouts from Hevy' : 'Bring in your workouts from Hevy'}</h2>
+            {live ? (
+              <>
+                <p>
+                  Launchpad checks Hevy every 15 minutes. Once your workouts arrive, it shows your weeks, the muscles you’re training and how your lifts are moving.
+                </p>
+                {lastError ? (
+                  <p style={{ color: 'var(--wn)' }}>Couldn’t sync with Hevy: {lastError} You can import Hevy’s .csv export meanwhile.</p>
+                ) : (
+                  lastSuccess && <p>Hevy had no workouts when last checked, {ago(lastSuccess, now)}.</p>
+                )}
+                {syncButton('btn btn-primary')}
+                {canImport && importButton('btn btn-ghost')}
+              </>
+            ) : (
+              <>
+                <p>
+                  In the Hevy app, open Settings › Export &amp; Import Data and export your workouts. Then import the .csv here. Launchpad reads every set and
+                  shows your weeks, the muscles you’re training and how your lifts are moving. Importing again later replaces what’s here, so newer workouts come in.
+                </p>
+                {importButton('btn btn-primary')}
+              </>
+            )}
           </div>
         </section>
       )}

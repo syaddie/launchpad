@@ -1,8 +1,7 @@
-// Workouts from Hevy. For now they come from the CSV that Hevy's app exports
-// (Settings › Export & Import Data); the shape follows Hevy's API so a live
-// sync can fill the same document later. Everything shown in the Training view
-// is worked out here: weekly totals, sets per muscle, lift trends and PRs.
-// Also cleaning for what the page sends.
+// Workouts from Hevy: from its API when the server has a key (server/src/hevy.ts),
+// else from the CSV that Hevy's app exports (Settings › Export & Import Data).
+// Everything shown in the Training view is worked out here: weekly totals, sets
+// per muscle, lift trends and PRs. Also cleaning for what the page sends.
 import { addDays, dayDiff, startOfDay, ymd } from './dates';
 import type { ExerciseMuscles, Muscle, SetType, Training, Workout, WorkoutExercise, WorkoutSet } from './types';
 
@@ -124,6 +123,49 @@ export function workoutsFromHevyCsv(text: string): Workout[] {
   return sortWorkouts(list);
 }
 
+// ---------- reading Hevy's API ----------
+
+const record = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
+const list = (v: unknown) => (Array.isArray(v) ? v.map(record) : []);
+const text = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+const metric = (v: unknown) => (typeof v === 'number' ? v : null);
+/** In the order Hevy shows them. */
+const byIndex = (items: Record<string, unknown>[]) => [...items].sort((a, b) => Number(a.index ?? 0) - Number(b.index ?? 0));
+
+/** One workout as GET /v1/workouts sends it, or null when it has no id, start time or list of exercises. */
+export function workoutFromHevyApi(v: unknown): Workout | null {
+  const w = record(v);
+  const start = Date.parse(text(w.start_time));
+  if (!text(w.id) || Number.isNaN(start) || !Array.isArray(w.exercises)) return null;
+  const end = Date.parse(text(w.end_time));
+  return {
+    id: text(w.id),
+    title: text(w.title) || 'Workout',
+    start: new Date(start).toISOString(),
+    end: new Date(Number.isNaN(end) ? start : end).toISOString(),
+    exercises: byIndex(list(w.exercises)).map((e) => ({
+      title: text(e.title),
+      notes: text(e.notes),
+      sets: byIndex(list(e.sets)).map((s): WorkoutSet => {
+        const metres = metric(s.distance_meters);
+        return {
+          type: SET_TYPES.includes(s.type as SetType) ? (s.type as SetType) : 'normal',
+          kg: metric(s.weight_kg),
+          reps: metric(s.reps),
+          km: metres === null ? null : metres / 1000,
+          sec: metric(s.duration_seconds),
+          rpe: metric(s.rpe),
+        };
+      }),
+    })),
+  };
+}
+
+/** The document a download from Hevy's API saves, held to the same limits as an import. */
+export function trainingFromHevy(workouts: Workout[], importedAt: string): Training {
+  return cleanTraining({ workouts: sortWorkouts(workouts), source: 'api', importedAt });
+}
+
 // ---------- cleaning ----------
 
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '');
@@ -153,7 +195,7 @@ export function cleanTraining(v: unknown): Training {
   });
   return {
     workouts: sortWorkouts(workouts),
-    source: t.source === 'csv' ? 'csv' : '',
+    source: t.source === 'csv' || t.source === 'api' ? t.source : '',
     importedAt: isIso(t.importedAt) ? t.importedAt : null,
   };
 }
