@@ -270,6 +270,21 @@ A server started some other way (systemd, `nohup`) shows up with its log, but La
 
   Launchpad tells the two sign-ins apart by which application signed the token (`server/src/access.ts`), not by the address, so a Music-only sign-in can't reach anything else at any address. Until `CF_ACCESS_MUSIC_AUD` is set, their sign-in is refused outright. To take it away, remove their email from the policy (or delete the application).
 
+## 14. Optional: Hevy live sync
+
+Without this, Training reads the .csv you export from Hevy. With it, Launchpad fetches your workouts from Hevy by itself. Hevy only gives API keys to Pro subscribers.
+
+1. Sign in at <https://developers.hevy.com> and open your personal API key page.
+2. Add the key to `.env` on the server and `docker compose up -d`:
+   ```
+   HEVY_API_KEY=...
+   ```
+   Keep it to that file: anyone with the key can read and change your Hevy data. Launchpad only reads, sends the key to `api.hevyapp.com` and nowhere else, and never sends it to the page.
+
+Every 15 minutes Launchpad asks Hevy whether any workout changed, and when one did, downloads the whole history again, so edits and deletions come through. **Sync now** in the Training view downloads it straight away. Hevy's data replaces what's in the view. Workouts you'd imported from a .csv are copied aside in the database first (under `trainingBeforeSync`), and nothing is replaced if a download fails part way or comes back empty. While the sync is failing, the view says why and offers **Import Hevy .csv** again; the top bar's sync dot and Server › Services show it too.
+
+To stop, empty `HEVY_API_KEY` and `docker compose up -d`. The workouts already fetched stay.
+
 ## Backups
 
 Everything is in one SQLite file inside the `launchpad-data` volume, with photos in a `photos` folder beside it, images pasted into notes in `note-images` and bookmark icons in `favicons` (a cache, fetched again when missing). Settings → General → **Backup** has:

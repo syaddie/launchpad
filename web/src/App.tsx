@@ -376,6 +376,17 @@ export function App({ cached }: { cached: AppState | null }) {
       .catch(onSaveError);
   };
 
+  /** Download everything from Hevy now (Training › Sync now). */
+  const syncHevy = () =>
+    api
+      .sync('hevy')
+      .then((s) => {
+        merge(s);
+        const error = s.sync.hevy.lastError;
+        showToast(error ? `Couldn’t sync with Hevy: ${error}` : 'Synced with Hevy');
+      })
+      .catch((e) => showToast(`Couldn’t sync with Hevy: ${e.message}`));
+
   const togglePin = (title: string) => {
     const pins = data.prefs.pinnedLifts;
     setPrefs({ ...data.prefs, pinnedLifts: pins.includes(title) ? pins.filter((t) => t !== title) : [...pins, title] });
@@ -780,6 +791,7 @@ export function App({ cached }: { cached: AppState | null }) {
             data={data}
             now={now}
             onImport={importTraining}
+            onSync={syncHevy}
             onOpenExercise={(title) => setDrawer({ type: 'exercise', title })}
             onOpenWorkout={(id) => setDrawer({ type: 'workout', id })}
             onOpenSettings={() => setDrawer({ type: 'settings' })}

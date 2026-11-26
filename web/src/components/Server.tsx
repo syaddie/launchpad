@@ -673,6 +673,7 @@ const SYNCS: { key: SourceKey; name: string }[] = [
   { key: 'inbox', name: 'Inbox' },
   { key: 'weather', name: 'Weather and air' },
   { key: 'speedtest', name: 'Speed test' },
+  { key: 'hevy', name: 'Hevy' },
 ];
 
 function ServicesPanel({ s, data, now, onChanged }: { s: ServerStats; data: AppState; now: Date; onChanged: () => void }) {
@@ -709,7 +710,7 @@ function ServicesPanel({ s, data, now, onChanged }: { s: ServerStats; data: AppS
         <div className="task-group-label" style={{ paddingTop: 14 }}>
           Syncs
         </div>
-        {SYNCS.map((x) => {
+        {SYNCS.filter((x) => x.key !== 'hevy' || data.hevy).map((x) => {
           const st = data.sync[x.key];
           const h = data.health?.find((w) => w.key === x.key);
           return (

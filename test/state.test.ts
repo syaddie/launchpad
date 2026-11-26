@@ -56,7 +56,7 @@ describe('state for changed keys', () => {
   it('has a key behind every part of the state that changes', () => {
     const fed = new Set(Object.values(st.KEY_FIELDS).flat());
     // Set from the server's config, so they only change with a restart (and a full fetch).
-    const fixed = ['tracking', 'newsSummaries', 'versions'];
+    const fixed = ['tracking', 'newsSummaries', 'hevy', 'versions'];
     for (const f of Object.keys(st.state())) if (!fixed.includes(f)) expect(fed.has(f as never), f).toBe(true);
   });
 

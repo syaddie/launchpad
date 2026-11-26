@@ -1,5 +1,5 @@
-// Background sync: pulls Google data and carrier status on a schedule and
-// records success/failure per source for the sync dot.
+// Background sync: pulls Google data, carrier status and Hevy workouts on a schedule
+// and records success/failure per source for the sync dot.
 import { randomUUID } from 'node:crypto';
 import { googleConfigured } from './config';
 import { claudeEnabled } from './claude';
@@ -7,6 +7,7 @@ import { addFinds, CLAUDE_BATCH, readBill, readBillsWithClaude, withoutDueDate, 
 import { fetchBillMail, fetchCalendar, fetchInbox, fetchTasks, GoogleError } from './google';
 import { inRange, summariseInbox } from './inbox';
 import { runDigest } from './digest';
+import { hevyEnabled, syncHevy } from './hevy';
 import { asServer, store, updatePackages } from './store';
 import { runSpeedTest } from './speedtest';
 import { canTrack, track, TrackingUnavailable } from './tracking';
@@ -26,6 +27,8 @@ const EVERY: Record<SourceKey, number> = {
   weather: 10 * MIN,
   // Checks whether a test is due; the interval itself is prefs.speedTestHours.
   speedtest: 10 * MIN,
+  // One small request asks Hevy what changed; the history is downloaded only when something did.
+  hevy: 15 * MIN,
 };
 const ARCHIVE_AFTER = 3 * 24 * 60 * MIN;
 // The same for the inbox: the two-day digest keeps up through the day, the week's
@@ -63,6 +66,7 @@ function enabled(key: SourceKey, force: boolean): boolean {
   // The inbox reads Gmail too, so the Gmail switch covers it; hiding the view stops it.
   if (key === 'inbox') return googleConfigured() && !!store.google() && store.prefs().sources.gmail && !store.prefs().hidden.includes('view:inbox');
   if (key === 'weather') return !!store.prefs().weatherArea;
+  if (key === 'hevy') return hevyEnabled();
   return googleConfigured() && !!store.google() && store.prefs().sources[key];
 }
 
@@ -190,9 +194,10 @@ const JOBS: Record<SourceKey, (force: boolean) => Promise<void>> = {
   inbox: runInbox,
   weather: runWeather,
   speedtest: runSpeed,
+  hevy: syncHevy,
 };
 
-/** `force` summarises new mail now instead of waiting, and runs a speed test even when one isn't due. */
+/** `force` summarises new mail now instead of waiting, runs a speed test even when one isn't due, and downloads all of Hevy's workouts again. */
 export function runSource(key: SourceKey, force = false): Promise<void> {
   const existing = running.get(key);
   if (existing) return existing;
