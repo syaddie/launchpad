@@ -51,7 +51,8 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
 - **The default** settles like paper: gentle decelerations, a 2% spring. Opening, each panel is laid down on the desk,
   its shadow tightening as it lands. The rail's highlight glides to the view you picked.
 - **Mission** starts from the default and adds its own (in `mission.css`): the strip and the dock come in, the sources
-  report in, the day's ascent draws on, and ticking off the last task launches the rocket. In Money › Month, changing
+  report in, the day's ascent draws on, and ticking off the last task launches the rocket. Its sun and moon keep their
+  real times for Singapore, the moon at its real phase, fading out as it sets and back in as it rises. In Money › Month, changing
   month is a radar-like scan, the day you pick is locked on to, today breathes a ring and a ticked entry flares. A box
   ticked by hand sends out a ring of light. With no photos, Home's ground is a lit apron whose runway lights flash in
   sequence toward the horizon. In the launch clock's last ten seconds a soft ring goes out from it each second and the
