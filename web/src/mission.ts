@@ -144,3 +144,64 @@ export function clearOf(p: Pt, boxes: { left: number; top: number; right: number
   }
   return { x: p.x, y };
 }
+
+/** A light on the apron: where it is, how big (it shrinks with distance), its row from the nearest (0), and whether it
+ * flashes in the sequence that runs toward the horizon (the runway's) or burns steady (the taxiways'). */
+export type ApronLamp = { x: number; y: number; r: number; row: number; seq: boolean };
+
+/** The runway's lines (its edges and centre) and the taxiways' further out, as how far each is from the middle at
+ * the foot of the ground, in heights of the ground: at that slope the runway stays in the open ground between the
+ * panels, and the taxiways pass under them and come in from the sides. */
+export const APRON_RUNWAY = [-0.4, 0, 0.4];
+export const APRON_TAXI = [-1.05, 1.05, -1.9, 1.9];
+/** How many rows the sequence runs through before it starts again. */
+export const APRON_ROWS = 20;
+
+/**
+ * The launch site's apron, for Home's ground when there are no photos: rows of lights in perspective, each line running
+ * from the foot of a `w`×`h` box to the horizon at the middle of its top edge. Rows are evenly spaced on the ground, so
+ * on the screen they crowd together toward the horizon and the lights get smaller. Also the painted lines (`paint`,
+ * an SVG path): each line of lights, the runway's centre dashed between its lights, and a joint across every third row.
+ */
+export function apron(w: number, h: number): { lamps: ApronLamp[]; paint: string; dashes: string } {
+  if (w < 40 || h < 40) return { lamps: [], paint: '', dashes: '' };
+  const mid = w / 2;
+  // Distance on the ground, the nearest row 1 (just inside the foot of the box).
+  const z = (row: number) => 1.04 + row * 0.42;
+  const yOf = (d: number) => h / d;
+  const near = Math.min(3.6, Math.max(1.8, h * 0.0062));
+  const lamps: ApronLamp[] = [];
+  const r2 = (n: number) => Math.round(n * 10) / 10;
+  for (let row = 0; row < APRON_ROWS; row++) {
+    const d = z(row);
+    const y = yOf(d);
+    // Lost in the haze at the horizon.
+    if (y < 22) break;
+    const r = Math.max(0.7, near / d);
+    for (const [seq, list] of [[true, APRON_RUNWAY], [false, APRON_TAXI]] as const) {
+      for (const s of list) {
+        // The taxiways' lights are half as many: every other row.
+        if (!seq && row % 2) continue;
+        const x = mid + (s * h) / d;
+        if (x < -r || x > w + r) continue;
+        lamps.push({ x: r2(x), y: r2(y), r: r2(r), row, seq });
+      }
+    }
+  }
+  const lines = [...APRON_RUNWAY.filter((s) => s !== 0), ...APRON_TAXI].map((s) => `M${r2(mid)} 0 L${r2(mid + s * h)} ${r2(h)}`);
+  const joints: string[] = [];
+  for (let row = 1; row < APRON_ROWS; row += 3) {
+    const y = yOf(z(row) + 0.21);
+    if (y < 22) break;
+    joints.push(`M0 ${r2(y)} H${r2(w)}`);
+  }
+  // The centre line: a dash in the middle of the gap between each light and the next, as long as a third of the gap.
+  const dashes: string[] = [];
+  for (let row = 0; row < APRON_ROWS - 1; row++) {
+    const a = yOf(z(row) + 0.14);
+    const b = yOf(z(row) + 0.28);
+    if (b < 22) break;
+    dashes.push(`M${r2(mid)} ${r2(a)} V${r2(b)}`);
+  }
+  return { lamps, paint: [...lines, ...joints].join(' '), dashes: dashes.join(' ') };
+}

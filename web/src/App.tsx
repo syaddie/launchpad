@@ -39,6 +39,7 @@ import { skyWeather } from './mission';
 import { loadable } from './loadable';
 import { viewStep } from './motion';
 import { endOpening, viewTransition } from './viewTransition';
+import { markTicks } from './tickMarks';
 import { send } from './outbox';
 import { paletteAsk, paletteItems, paletteSearches, type AskHandlers, type PaletteContext } from './paletteItems';
 import { hm, inboxBadge, inMinutes } from './util';
@@ -156,6 +157,9 @@ export function App({ cached }: { cached: AppState | null }) {
     const t = window.setTimeout(endOpening, 2200);
     return () => window.clearTimeout(t);
   }, []);
+
+  // A box ticked by hand is marked, so a design can make that tick land with some light (tickMarks.ts).
+  useEffect(() => markTicks(), []);
 
   useEffect(() => {
     const idle = window.requestIdleCallback ?? ((f: () => void) => window.setTimeout(f, 1500));

@@ -51,8 +51,9 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
   its shadow tightening as it lands. The rail's highlight glides to the view you picked.
 - **Mission** starts from the default and adds its own (in `mission.css`): the strip and the dock come in, the sources
   report in, the day's ascent draws on, and ticking off the last task launches the rocket. In Money › Month, changing
-  month is a radar-like scan, the day you pick is locked on to, today breathes a ring and a ticked entry flares. See
-  [`mission-layout.md`](mission-layout.md).
+  month is a radar-like scan, the day you pick is locked on to, today breathes a ring and a ticked entry flares. A box
+  ticked by hand sends out a ring of light. With no photos, Home's ground is a lit apron whose runway lights flash in
+  sequence toward the horizon. See [`mission-layout.md`](mission-layout.md).
 - **Vista** drifts like light on glass: long, soft arrivals and a 7% spring. Its photo drifts so slowly you only notice
   it has moved. Its views don't use the browser's transitions (`--m-view-mode: enter`): the glass blurs the photo
   behind it, which a part pictured on its own, or anything inside a fading container, can't see. So the new view's
@@ -98,7 +99,9 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
   CHARTS): bars fill from empty, columns rise one after another (where the browser has `sibling-index()`; all at
   once where it hasn't), lines draw across; and a bar slides to a new reading when it changes.
 - **Ticking things off.** A task's tick lands, its line is struck through and it dims for its 5-second undo; then it
-  folds away and the tasks below close up (`.task-item.leaving`). A task added slides in while it saves. The undo bar
+  folds away and the tasks below close up (`.task-item.leaving`). A box ticked by hand is marked `data-ticked` for a
+  moment (`tickMarks.ts`, one listener for the app), so a design can give that tick some light without every box already
+  ticked lighting up as it comes into view (Mission's ring; a notepad's line dims as it fades). A task added slides in while it saves. The undo bar
   rises in and sinks away.
 - **What's on now.** Today's event on now has a line along its foot that fills as the minutes go (how far through it
   you are), and its "in 35 min" rolls down to the start. A package out for delivery has a light travelling along its
@@ -120,7 +123,8 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
 Little moves by itself, and each thing that does is slow or stepped, so a page left open all day costs next to
 nothing: the clock's minutes, Vista's photo drifting (it steps once a second, so the glass over it is redrawn once a
 second rather than every frame), Mission's sky and the ring today's date breathes on Money's calendar (scaled, so
-nothing is repainted for it). Busy states
+nothing is repainted for it), and the runway lights on Mission's apron when Home has no photos (each dot on or off, a
+run every few seconds). Busy states
 (a spinner, a skeleton line) move only while something is being waited for.
 
 ## Less motion

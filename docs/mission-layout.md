@@ -42,6 +42,16 @@ that only Mission shows.
   the month's name relights letter by letter from the same side, like the launch clock's dots. The day you pick is
   locked on to (four corners close in, then fade to its ring), today's date breathes a ring now and then, and an entry
   you tick sends out one ring of light.
+- Home's ground with no photos (idea 27; `Apron` in `MissionHome.tsx`, the maths in `mission.ts`, the look in
+  `mission-home.css`): the launch site's apron, rows of lights in perspective from your feet to the middle of the
+  horizon, crowding together and getting smaller as they go, with painted lines and joints. The runway's lights flash in
+  sequence toward the horizon, two rows at a time, then rest (every 3.2 s); the taxiways' burn steady blue, passing
+  under the panels. The flash is on or off, never between, so a page left open redraws only those dots. By day the
+  fixtures are dots and the flash is the accent; by night they glow. On a phone it's the band under the sky, as tall as a
+  photo's, with the invitation to add photos on it. Photos switched off: no apron. Less motion: the lights burn steady.
+- A box ticked by hand sends out one ring of light (idea 28, `msTickFlare`): in the Notepad too, where the line now dims
+  as the ring fades rather than before it, so the ring goes out at full strength. Boxes already ticked no longer flare as
+  they come into view (the app opening, another notepad, another view): `tickMarks.ts` marks a box ticked by hand.
 - Reduced motion: the sky still shows the hour; nothing moves and nothing launches.
 
 ## Not built yet (in the design system, not in the app)
@@ -115,12 +125,6 @@ small mono labels; the messages themselves stay plain.
 24. A right-click menu's items relight in turn as it opens, like the month's name. **S**
 25. An Undo message's line along its foot is a row of T-5 dots going out one by one. **S**
 26. The tab's title says "T-08:12" before an event or while studying, and its icon gets a flame. **M** *(every design)*
-
-**Home**
-
-27. With no photos, the ground is the launch site's apron: runway lights in perspective, blinking in sequence toward the
-    horizon. **M**
-28. A box ticked in the Notepad sends out the same ring of light as any ticked box. **S**
 
 **Digest and Inbox**
 
