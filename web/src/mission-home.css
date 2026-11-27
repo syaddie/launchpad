@@ -49,6 +49,26 @@
 [data-design='mission'] .msh-add i { font-size: 34px; color: var(--t3); }
 [data-design='mission'] .msh-add p { margin: 0; }
 
+/* ---------- no photos: the ground is the launch site's apron (MissionHome.tsx's Apron, the maths in mission.ts) ---------- */
+
+/* By day it's plain concrete, so no dusk at its edges; by night only a little. */
+[data-design='mission'] .msh-apron::after { content: none; }
+:root[data-design='mission'][data-mode='dark'] .msh-apron::after { content: ''; background: radial-gradient(120% 95% at 50% 30%, transparent 50%, rgba(5, 8, 16, 0.35)); }
+[data-design='mission'] .msh-paint { position: absolute; inset: 0; width: 100%; height: 100%; }
+[data-design='mission'] .msh-paint path { fill: none; stroke: var(--ms-apron-paint); stroke-linecap: round; }
+[data-design='mission'] .msh-paint-lines { stroke-width: 1; }
+[data-design='mission'] .msh-paint-dashes { stroke-width: 2; }
+/* A light, as big as it is near (--r). The taxiways' burn blue and steady. */
+[data-design='mission'] .msh-lamp { position: absolute; width: calc(var(--r) * 2); height: calc(var(--r) * 2); margin: calc(var(--r) * -1) 0 0 calc(var(--r) * -1); border-radius: 50%; background: var(--ms-apron-taxi); box-shadow: 0 0 calc(var(--r) * 3) var(--r) var(--ms-apron-taxi-glow); }
+/* The runway's are fixtures that flash in turn, the nearest row first (--row), running out to the horizon and resting
+   before the next run. On or off, never between, two rows at a time, so each light changes twice a run and nothing else is redrawn. */
+[data-design='mission'] .msh-lamp--seq { background: var(--ms-apron-fixture); box-shadow: none; }
+[data-design='mission'] .msh-lamp--seq::after { content: ''; position: absolute; inset: -35%; border-radius: 50%; background: var(--ms-apron-flash); box-shadow: 0 0 calc(var(--r) * 5) calc(var(--r) * 1.4) var(--ms-apron-flash-glow); opacity: 0; }
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .msh-lamp--seq::after { animation: mshRabbit var(--ms-apron-cycle) steps(1, end) infinite; animation-delay: calc(var(--row) * var(--ms-apron-step)); }
+}
+@keyframes mshRabbit { 0% { opacity: 1; } 4%, 100% { opacity: 0; } }
+
 /* ---------- phones: the photo as a band of ground off both edges right under the sky, then Today and the Notepad ---------- */
 
 [data-layout='narrow'][data-design='mission'] .msh { flex-direction: column; flex: none; }
@@ -60,7 +80,7 @@
 }
 /* The photo's controls sit over that band. */
 [data-layout='narrow'][data-design='mission'] .msh-window { order: 2; flex: none; height: min(100vw, 480px); margin-top: calc(-16px - min(100vw, 480px)); }
-[data-layout='narrow'][data-design='mission'] .msh--nophoto .msh-window { height: auto; margin-top: 0; }
+/* With no photos the band is the apron, as tall as a photo's, and the invitation to add some stands on it. */
 [data-layout='narrow'][data-design='mission'] .msh-card--notes { order: 4; }
 
 @media (prefers-reduced-motion: reduce) {

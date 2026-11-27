@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { along, ascentCurve, clearOf, clockText, countdown, dayFraction, hoursOf, orbPlace, pathTable, seeded, skyWeather } from '../web/src/mission';
+import { along, apron, APRON_ROWS, ascentCurve, clearOf, clockText, countdown, dayFraction, hoursOf, orbPlace, pathTable, seeded, skyWeather } from '../web/src/mission';
 
 const at = (h: number, m = 0, s = 0) => new Date(2026, 10, 25, h, m, s);
 
@@ -133,5 +133,51 @@ describe('small things', () => {
     const box = { left: 400, top: 200, right: 900, bottom: 390 };
     expect(clearOf({ x: 600, y: 380 }, [box], 400, 70).y).toBe(174);
     expect(clearOf({ x: 100, y: 300 }, [box], 400, 70)).toEqual({ x: 100, y: 300 });
+  });
+});
+
+describe('the apron with no photos', () => {
+  const { lamps, paint, dashes } = apron(1440, 545);
+  it('keeps every light inside the ground, below the haze at the horizon', () => {
+    expect(lamps.length).toBeGreaterThan(40);
+    for (const l of lamps) {
+      expect(l.x).toBeGreaterThanOrEqual(-l.r);
+      expect(l.x).toBeLessThanOrEqual(1440 + l.r);
+      expect(l.y).toBeGreaterThanOrEqual(22);
+      expect(l.y).toBeLessThanOrEqual(545);
+    }
+  });
+  it('crowds the rows together and shrinks the lights toward the horizon', () => {
+    const centre = lamps.filter((l) => l.seq && l.x === 720).sort((a, b) => a.row - b.row);
+    expect(centre.length).toBe(APRON_ROWS);
+    for (let i = 2; i < centre.length; i++) {
+      expect(centre[i].y).toBeLessThan(centre[i - 1].y);
+      expect(centre[i - 1].y - centre[i].y).toBeLessThanOrEqual(centre[i - 2].y - centre[i - 1].y);
+      expect(centre[i].r).toBeLessThanOrEqual(centre[i - 1].r);
+    }
+  });
+  it('runs every line of lights to the middle of the horizon', () => {
+    for (const row of [0, 5, 12]) {
+      const xs = lamps.filter((l) => l.row === row && l.seq).map((l) => l.x - 720);
+      const y = lamps.find((l) => l.row === row)!.y;
+      // The runway's edges are as far out as the ground is deep at that row: in line with the middle of the top edge.
+      expect(Math.max(...xs) / y).toBeCloseTo(0.4, 1);
+    }
+  });
+  it('flashes the runway in sequence and keeps the taxiways steady, every other row', () => {
+    expect(lamps.filter((l) => l.seq).every((l) => Math.abs(l.x - 720) <= 0.4 * 545 + 1)).toBe(true);
+    const taxi = lamps.filter((l) => !l.seq);
+    expect(taxi.length).toBeGreaterThan(0);
+    expect(taxi.every((l) => l.row % 2 === 0)).toBe(true);
+  });
+  it('paints its lines, and leaves a box too small to see alone', () => {
+    expect(paint).toMatch(/^M720 0 L/);
+    expect(dashes.split('M').length - 1).toBeGreaterThan(5);
+    expect(apron(30, 400).lamps).toEqual([]);
+  });
+  it('leaves out the lights a narrow band can’t show', () => {
+    const band = apron(390, 390);
+    expect(band.lamps.every((l) => l.x >= -l.r && l.x <= 390 + l.r)).toBe(true);
+    expect(band.lamps.length).toBeLessThan(lamps.length);
   });
 });

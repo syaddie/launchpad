@@ -87,6 +87,14 @@
   --ms-hull-line: #7b869a;
   --ms-band: #3d8bff;
   --ms-tile: #0b1120;
+  /* Home's apron with no photos (mission-home.css): painted lines, the runway's lights and the flash running along
+     them, the taxiways' steady blue. By day the fixtures are only dots and the flash is the accent's. */
+  --ms-apron-paint: rgba(91, 100, 116, 0.17);
+  --ms-apron-fixture: rgba(91, 100, 116, 0.42);
+  --ms-apron-taxi: color-mix(in srgb, var(--ac) 52%, transparent);
+  --ms-apron-taxi-glow: transparent;
+  --ms-apron-flash: var(--ac);
+  --ms-apron-flash-glow: color-mix(in srgb, var(--ac) 38%, transparent);
   color-scheme: light;
 }
 :root[data-design='mission'][data-mode='dark'][data-accent] {
@@ -140,6 +148,12 @@
   --ms-hull: #eef1f6;
   --ms-hull-shade: #a9b4c9;
   --ms-hull-line: #4b566c;
+  --ms-apron-paint: rgba(127, 178, 255, 0.09);
+  --ms-apron-fixture: rgba(170, 200, 255, 0.3);
+  --ms-apron-taxi: #7fb2ff;
+  --ms-apron-taxi-glow: rgba(127, 178, 255, 0.5);
+  --ms-apron-flash: #f4f8ff;
+  --ms-apron-flash-glow: rgba(190, 215, 255, 0.65);
   color-scheme: dark;
 }
 
@@ -163,6 +177,9 @@
   --m-view-mode: enter;
   /* Leaving the pad: almost still at first, then faster and faster. */
   --ms-e-ascent: cubic-bezier(0.6, 0, 0.9, 0.35);
+  /* The apron's flash (mission-home.css): how often it runs toward the horizon, and how long from one row to the next. */
+  --ms-apron-cycle: 3.2s;
+  --ms-apron-step: 64ms;
 }
 
 /* =====================================================================
@@ -433,8 +450,15 @@
 [data-design='mission'] .kbd { border-bottom-width: 2px; background: color-mix(in srgb, var(--tx) 6%, transparent); }
 /* The event that's on, or next: lit like the selector. */
 [data-design='mission'] .event.focus { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ac) 40%, transparent); }
-/* A ticked box sends out one ring of light as its tick lands. */
-[data-design='mission'] .check.on { animation: msTickFlare 700ms var(--e-out); }
+/* A box ticked sends out one ring of light as its tick lands: only one ticked by hand (tickMarks.ts marks it), not the
+   ones already ticked as they come into view (the app opening, another notepad, another view). */
+[data-design='mission'] .check.on[data-ticked] { animation: msTickFlare 700ms var(--e-out); }
+/* A line ticked in a notepad dims as that light fades, rather than before it, so the ring goes out at full strength.
+   (Its inline opacity is where it settles.) */
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .note-line:has(> .check.on[data-ticked]) { animation: msTickDim 700ms var(--e-out); }
+}
+@keyframes msTickDim { from { opacity: 1; } }
 @keyframes msTickFlare { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ac) 45%, transparent); } 100% { box-shadow: 0 0 0 12px transparent; } }
 
 /* =====================================================================

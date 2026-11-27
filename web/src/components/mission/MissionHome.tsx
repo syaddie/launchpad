@@ -1,6 +1,7 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { Photo } from '../../../../shared/types';
 import { photoUrl } from '../../api';
+import { apron } from '../../mission';
 import { menuProps } from '../ContextMenu';
 
 const focusPos = (p: Photo) => `${p.focus.x}% ${p.focus.y}%`;
@@ -25,6 +26,44 @@ function usePhotoClock(n: number, start: number) {
     setLap((l) => l + 1);
   };
   return { i: n ? wrap(i, n) : 0, step, moving: !(held || still || n < 2), setHeld };
+}
+
+/**
+ * The ground with no photos: the launch site's apron, lit. Rows of lights in perspective run from your feet to the
+ * horizon, and the runway's flash in sequence toward it, one row after another, then rest (mission-home.css). Only the
+ * lights' own opacity changes, in steps, so little is redrawn for it; with less motion they burn steady.
+ */
+function Apron() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState<{ w: number; h: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      const next = { w: Math.round(el.clientWidth), h: Math.round(el.clientHeight) };
+      setBox((b) => (b && b.w === next.w && b.h === next.h ? b : next));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const site = useMemo(() => (box ? apron(box.w, box.h) : null), [box]);
+  return (
+    <div ref={ref} className="msh-land msh-apron" aria-hidden="true">
+      {box && site && (
+        <>
+          <svg className="msh-paint" viewBox={`0 0 ${box.w} ${box.h}`}>
+            <path className="msh-paint-lines" d={site.paint} />
+            <path className="msh-paint-dashes" d={site.dashes} />
+          </svg>
+          {site.lamps.map((l) => (
+            <i key={`${l.row}:${l.x}`} className={'msh-lamp' + (l.seq ? ' msh-lamp--seq' : '')} style={{ left: l.x, top: l.y, '--r': `${l.r}px`, '--row': l.row } as CSSProperties} />
+          ))}
+        </>
+      )}
+    </div>
+  );
 }
 
 interface Props {
@@ -72,6 +111,8 @@ export function MissionHome({ photos: all, photosOff, start, today, notes, onMan
   const frame = String(clock.i + 1).padStart(2, '0');
   return (
     <main className={'msh' + (n ? '' : ' msh--nophoto') + (photosOff ? ' msh--photosoff' : '') + (today ? '' : ' msh--notoday') + (notes ? '' : ' msh--nonotes')}>
+      {/* No photos yet: the ground is the site's apron, under the invitation to add some. */}
+      {n === 0 && !photosOff && <Apron />}
       {n > 0 && (
         <div className="msh-land" aria-hidden="true">
           {photos.map((x, k) => (
