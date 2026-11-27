@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { DOW, MON, addDays, dayDiff, parseYmd, startOfDay, ymd } from '../../../shared/dates';
 import { fmtMoney, monthName } from '../../../shared/money';
 import {
@@ -9,8 +9,8 @@ import type { AppState, ExerciseMuscles, Training, Workout, WorkoutSet } from '.
 import { localGet, localSet } from '../api';
 import { ago, fmtDay, hm, niceMax } from '../util';
 import { copyText, menuProps } from './ContextMenu';
-import { periodStep } from '../motion';
-import { Glide, Glyphs, Readout, usePeriodScan } from './Motion';
+import { landedDay, periodStep, unseen } from '../motion';
+import { Glide, Glyphs, Readout, usePeriodScan, useSettled } from './Motion';
 import { EmptyArt } from './mission/EmptyArt';
 
 type Muscles = Record<string, ExerciseMuscles>;
@@ -64,18 +64,25 @@ export function TrainingView({ data, now, onImport, onSync, onOpenExercise, onOp
 
   const latest = ws[0] ? new Date(ws[0].start) : null;
   const behind = latest ? dayDiff(latest, today) : 0;
+  // Sessions that came in while Training was showing slide in (a sync, an import, another device's).
+  const arrived = useArrivals(latest ? latest.getTime() : null);
 
   // With a key on the server, importing a file is only for when the sync isn't working.
   const live = data.hevy;
   const { lastSuccess, lastError } = data.sync.hevy;
   const canImport = !live || !!lastError;
   const [syncing, setSyncing] = useState(false);
+  /** Whether a sync has run since Training opened, so the line it gives way to comes back in. */
+  const [synced, setSynced] = useState(false);
   const sync = () => {
     setSyncing(true);
-    onSync().finally(() => setSyncing(false));
+    onSync().finally(() => {
+      setSyncing(false);
+      setSynced(true);
+    });
   };
   const pickFile = () => fileRef.current?.click();
-  const synced = !live || lastError ? '' : lastSuccess ? `synced with Hevy ${ago(lastSuccess, now)}` : 'waiting for the first sync with Hevy';
+  const syncedWords = !live || lastError ? '' : lastSuccess ? `synced with Hevy ${ago(lastSuccess, now)}` : 'waiting for the first sync with Hevy';
   const stale = !live && behind > 3 ? 'export from Hevy again to bring in newer ones' : '';
   const syncButton = (className: string) => (
     <button className={className} title="Download your workouts from Hevy now" disabled={syncing} onClick={sync}>
@@ -95,7 +102,8 @@ export function TrainingView({ data, now, onImport, onSync, onOpenExercise, onOp
   );
   const menu = menuProps(
     () => [
-      ...(live ? [{ label: 'Sync now', icon: 'ph-arrows-clockwise', onSelect: sync }] : []),
+      // As the button: one sync at a time.
+      ...(live ? [{ label: syncing ? 'Syncing…' : 'Sync now', icon: 'ph-arrows-clockwise', onSelect: sync, disabled: syncing }] : []),
       { label: 'Import Hevy .csv', icon: 'ph-upload-simple', onSelect: pickFile },
     ],
     'Workouts from Hevy',
@@ -104,13 +112,31 @@ export function TrainingView({ data, now, onImport, onSync, onOpenExercise, onOp
   return (
     <main className="you training" aria-label="Training">
       <div className="tr-head" {...menu}>
-        <span className="meta">
-          {latest
-            ? [`${ws.length} workout${ws.length === 1 ? '' : 's'} since ${monthYear(new Date(ws[ws.length - 1].start))}`, `latest ${behind === 0 ? 'today' : behind === 1 ? 'yesterday' : fmtDay(latest)}`, synced, stale]
-                .filter(Boolean)
-                .join(' · ')
-            : ''}
-        </span>
+        {syncing ? (
+          // While a sync runs: a downlink, in each design's way (styles.css, TRAINING; Mission's in mission.css).
+          <span key="downlink" className="meta tr-downlink" role="status">
+            <span className="tr-dl-mono" aria-hidden="true">
+              Downlink
+            </span>
+            <span className="tr-dl-bars" aria-hidden="true">
+              {[0, 1, 2, 3].map((i) => (
+                <i key={i} style={{ '--i': i } as CSSProperties} />
+              ))}
+            </span>
+            <span className="tr-dl-words">Downloading from Hevy…</span>
+            <span className="tr-dl-stream" aria-hidden="true">
+              <i />
+            </span>
+          </span>
+        ) : (
+          <span key="meta" className="meta" data-back={synced ? '' : undefined}>
+            {latest
+              ? [`${ws.length} workout${ws.length === 1 ? '' : 's'} since ${monthYear(new Date(ws[ws.length - 1].start))}`, `latest ${behind === 0 ? 'today' : behind === 1 ? 'yesterday' : fmtDay(latest)}`, syncedWords, stale]
+                  .filter(Boolean)
+                  .join(' · ')
+              : ''}
+          </span>
+        )}
         <div className="tr-actions">
           {error && <span className="meta" style={{ color: 'var(--wn)' }}>{error}</span>}
           {ws.length > 0 && live && lastError && (
@@ -137,7 +163,7 @@ export function TrainingView({ data, now, onImport, onSync, onOpenExercise, onOp
       {ws.length ? (
         <>
           <div className="you-row">
-            <ThisWeek workouts={ws} today={today} muscles={muscles} gymMonthly={data.prefs.gymMonthly} onOpenSettings={onOpenSettings} />
+            <ThisWeek workouts={ws} today={today} muscles={muscles} gymMonthly={data.prefs.gymMonthly} arrived={arrived} onOpenSettings={onOpenSettings} />
             <MusclePanel workouts={ws} today={today} muscles={muscles} goal={data.prefs.setsPerWeek} onOpenSettings={onOpenSettings} />
           </div>
           <div className="you-row">
@@ -146,7 +172,7 @@ export function TrainingView({ data, now, onImport, onSync, onOpenExercise, onOp
           </div>
           <div className="you-row">
             <WeightAndTraining workouts={ws} weights={data.weights} today={today} weeks={bwWeeks} onWeeks={(n) => (setBwWeeks(n), localSet('bwRange', String(n)))} />
-            <Recent workouts={ws} muscles={muscles} onOpen={onOpenWorkout} notify={notify} />
+            <Recent workouts={ws} muscles={muscles} arrived={arrived} onOpen={onOpenWorkout} notify={notify} />
           </div>
         </>
       ) : (
@@ -188,11 +214,47 @@ export function TrainingView({ data, now, onImport, onSync, onOpenExercise, onOp
   );
 }
 
+// ---------- sessions arriving ----------
+
+/** How long sessions that just arrived are marked as arriving: past the end of the longest way a design brings them in. */
+const ARRIVING_MS = 2000;
+
+/**
+ * Sessions that arrive while Training is showing (Sync now, an import, a sync on the server or another device's), so a
+ * design can bring them in: for a moment, the start (ms) of the newest session shown before they came, so every session
+ * after it is new; otherwise null. What's there as Training opens, or comes in during its first frames, just shows
+ * (useSettled). Worked out while rendering, so the new rows are marked from the first frame they're drawn in.
+ */
+function useArrivals(newest: number | null): number | null {
+  const settled = useSettled();
+  const [shown, setShown] = useState(newest);
+  const [after, setAfter] = useState<{ at: number } | null>(null);
+  if (newest !== shown) {
+    setShown(newest);
+    // Two arrivals close together: the first's are still coming in, so they stay marked.
+    if (settled && newest !== null && shown !== null && newest > shown) setAfter({ at: after ? Math.min(after.at, shown) : shown });
+  }
+  useEffect(() => {
+    if (!after) return;
+    const t = window.setTimeout(() => setAfter(null), ARRIVING_MS);
+    return () => window.clearTimeout(t);
+  }, [after]);
+  return after?.at ?? null;
+}
+
 // ---------- week ----------
 
 const weekName = (offset: number) => (offset === 0 ? 'This week' : offset === -1 ? 'Last week' : `${-offset} weeks ago`);
 
-function ThisWeek({ workouts, today, muscles, gymMonthly, onOpenSettings }: { workouts: Workout[]; today: Date; muscles: Muscles; gymMonthly: number; onOpenSettings: () => void }) {
+function ThisWeek({ workouts, today, muscles, gymMonthly, arrived, onOpenSettings }: {
+  workouts: Workout[];
+  today: Date;
+  muscles: Muscles;
+  gymMonthly: number;
+  /** Sessions after this (ms) just arrived (useArrivals): their day brings them in. */
+  arrived: number | null;
+  onOpenSettings: () => void;
+}) {
   /** Weeks back from this one: 0 is this week, -1 last week. */
   const [offset, setOffset] = useState(0);
   // The arrows and the columns move the week the way you went (periodMotion.ts).
@@ -234,8 +296,14 @@ function ThisWeek({ workouts, today, muscles, gymMonthly, onOpenSettings }: { wo
         {week.days.map(({ date, workouts: day }) => {
           const d = dayDiff(today, date);
           const w = day[0];
+          const isNew = arrived !== null && day.some((x) => Date.parse(x.start) > arrived);
           return (
-            <div key={date.getTime()} className={'tr-day lp-scan-cell' + (w ? ' done' : '') + (d === 0 ? ' today' : '') + (d > 0 ? ' ahead' : '')} title={day.map((x) => `${x.title} · ${hm(new Date(x.start))}`).join('\n') || undefined}>
+            <div
+              key={date.getTime()}
+              className={'tr-day lp-scan-cell' + (w ? ' done' : '') + (d === 0 ? ' today' : '') + (d > 0 ? ' ahead' : '')}
+              title={day.map((x) => `${x.title} · ${hm(new Date(x.start))}`).join('\n') || undefined}
+              data-new={isNew ? '' : undefined}
+            >
               <span className="tr-dn">{d === 0 ? 'Today' : DOW[date.getDay()]}</span>
               {w ? (
                 <>
@@ -395,17 +463,32 @@ export function liftValue(measure: LiftMeasure, v: number): string {
 
 const MEASURE_NAMES: Record<LiftMeasure, string> = { e1rm: 'Est. 1-rep max', reps: 'Most reps', km: 'Longest', sec: 'Longest' };
 
-function Spark({ values, w = 96, h = 28, wide }: { values: number[]; w?: number; h?: number; wide?: boolean }) {
+/**
+ * A lift's recent sessions as a line. `fresh` (a new best since it was last seen): Mission draws the line on from the
+ * session before to the new high, which pulses once (mission.css, TRAINING). The line and its fill are in one group so
+ * they can be drawn on together; `--from` is how far across the session before is.
+ */
+function Spark({ values, w = 96, h = 28, wide, fresh }: { values: number[]; w?: number; h?: number; wide?: boolean; fresh?: boolean }) {
   const lo = Math.min(...values);
   const span = Math.max(...values) - lo || 1;
   const xy = values.map((v, i) => [values.length > 1 ? (i / (values.length - 1)) * w : w / 2, h - 3 - ((v - lo) / span) * (h - 6)]);
   const line = xy.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
   const [lx, ly] = xy[xy.length - 1];
+  const from = values.length > 1 ? (values.length - 2) / (values.length - 1) : 0;
   return (
-    <svg className={wide ? 'tr-spark wide' : 'tr-spark'} viewBox={`0 0 ${w} ${h}`} aria-hidden="true">
-      <polygon points={`${xy[0][0]},${h} ${line} ${lx},${h}`} fill="var(--act)" />
-      <polyline points={line} fill="none" stroke="var(--ac)" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={lx} cy={ly} r="2.6" fill="var(--acd)" />
+    <svg
+      className={wide ? 'tr-spark wide' : 'tr-spark'}
+      viewBox={`0 0 ${w} ${h}`}
+      aria-hidden="true"
+      data-new={fresh ? '' : undefined}
+      style={fresh ? ({ '--from': `${(from * 100).toFixed(1)}%` } as CSSProperties) : undefined}
+    >
+      <g className="tr-spark-line">
+        <polygon points={`${xy[0][0]},${h} ${line} ${lx},${h}`} fill="var(--act)" />
+        <polyline points={line} fill="none" stroke="var(--ac)" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
+      </g>
+      {fresh && <circle className="tr-spark-pulse" cx={lx} cy={ly} r="2.6" fill="none" stroke="var(--ac)" strokeWidth="1.2" />}
+      <circle className="tr-spark-high" cx={lx} cy={ly} r="2.6" fill="var(--acd)" />
     </svg>
   );
 }
@@ -413,8 +496,43 @@ function Spark({ values, w = 96, h = 28, wide }: { values: number[]; w?: number;
 /** Lifts in the list; it scrolls past the first several. */
 const LIFTS_SHOWN = 40;
 
+/** A best as the list shows it: the lift and its new high, so the same best is the same key however often it's drawn. */
+const bestKey = (l: { title: string; latest: number | null }) => `${l.title}|${l.latest}`;
+
+/**
+ * The bests (`bestKey`) that are new since this device last showed Your lifts, so a design can light them once when
+ * they land (Mission does) rather than every time Training opens. Worked out while rendering, so a new best's chip is
+ * marked from the first frame it's drawn in, and only while the page is in view, so one that arrives with a sync while
+ * the tab is in the background is still new when you come back to it.
+ */
+function useNewBests(keys: string[]): ReadonlySet<string> {
+  const sig = keys.join('\n');
+  const visible = usePageVisible();
+  const [state, setState] = useState(() => ({ sig: null as string | null, seen: localGet('seenBests'), fresh: new Set<string>() as ReadonlySet<string> }));
+  if (visible && state.sig !== sig) {
+    const found = unseen(keys, state.seen);
+    setState({ sig, seen: JSON.stringify(keys), fresh: found.length ? new Set(found) : state.fresh });
+  }
+  useEffect(() => {
+    if (state.sig !== null) localSet('seenBests', state.seen!);
+  }, [state.sig, state.seen]);
+  return state.fresh;
+}
+
+/** Whether the page is in view (not a tab in the background), following it. */
+function usePageVisible(): boolean {
+  const [visible, setVisible] = useState(() => !document.hidden);
+  useEffect(() => {
+    const on = () => setVisible(!document.hidden);
+    document.addEventListener('visibilitychange', on);
+    return () => document.removeEventListener('visibilitychange', on);
+  }, []);
+  return visible;
+}
+
 function Lifts({ workouts, today, muscles, pinned, onOpen }: { workouts: Workout[]; today: Date; muscles: Muscles; pinned: string[]; onOpen: (title: string) => void }) {
   const lifts = useMemo(() => liftTrends(workouts, today, { pinned, muscles, n: LIFTS_SHOWN }), [workouts, today, pinned, muscles]);
+  const fresh = useNewBests(useMemo(() => lifts.filter((l) => l.pr).map(bestKey), [lifts]));
   return (
     <section className="panel you-panel tr-lifts" aria-label="Your lifts">
       <div className="panel-head">
@@ -427,17 +545,18 @@ function Lifts({ workouts, today, muscles, pinned, onOpen }: { workouts: Workout
             const first = l.points[0]?.value ?? 0;
             const last = l.points[l.points.length - 1]?.value ?? 0;
             const diff = Math.round((last - first) * 10) / 10;
+            const isNew = l.pr && fresh.has(bestKey(l));
             return (
-              <button key={l.title} className="tr-lift" title={`${l.title}: every session`} onClick={() => onOpen(l.title)}>
+              <button key={l.title} className="tr-lift" title={`${l.title}: every session`} data-new={isNew ? '' : undefined} onClick={() => onOpen(l.title)}>
                 <div style={{ minWidth: 0 }}>
                   <div className="tr-ln">
                     {l.pinned && <i className="ph-duotone ph-push-pin" aria-label="Pinned" />}
                     <span className="tr-ln-text">{l.title}</span>
-                    {l.pr && <span className="chip chip-accent" title="Best session yet">PR</span>}
+                    {l.pr && <span className="chip chip-accent tr-pr" title="Best session yet">PR</span>}
                   </div>
                   <div className="meta">{[l.top && `Last top set ${fmtSet(l.top)}`, `${l.sessions} session${l.sessions === 1 ? '' : 's'}`].filter(Boolean).join(' · ')}</div>
                 </div>
-                {l.points.length > 1 ? <Spark values={l.points.map((p) => p.value)} /> : <span className="meta tr-spark-none">{l.points.length ? '' : 'Not in 12 weeks'}</span>}
+                {l.points.length > 1 ? <Spark values={l.points.map((p) => p.value)} fresh={isNew} /> : <span className="meta tr-spark-none">{l.points.length ? '' : 'Not in 12 weeks'}</span>}
                 <div className="tr-lv" title={MEASURE_NAMES[l.measure]}>
                   <span className="tnum">{l.latest !== null ? liftValue(l.measure, l.latest) : '–'}</span>
                   {l.points.length > 1 && (
@@ -477,9 +596,18 @@ function workoutText(w: Workout, label: string): string {
 
 const SET_TYPE_NAMES: Record<WorkoutSet['type'], string> = { normal: '', warmup: 'warm-up', dropset: 'drop set', failure: 'to failure' };
 
-function Recent({ workouts, muscles, onOpen, notify }: { workouts: Workout[]; muscles: Muscles; onOpen: (id: string) => void; notify: (msg: string) => void }) {
+function Recent({ workouts, muscles, arrived, onOpen, notify }: {
+  workouts: Workout[];
+  muscles: Muscles;
+  /** Sessions after this (ms) just arrived (useArrivals): they slide in at the top. */
+  arrived: number | null;
+  onOpen: (id: string) => void;
+  notify: (msg: string) => void;
+}) {
   const prs = useMemo(() => prsByWorkout(workouts, muscles), [workouts, muscles]);
   const list = workouts.slice(0, RECENT_SHOWN);
+  // By start, not id: an import's ids and Hevy's differ for the same session, which isn't new.
+  const fresh = arrived === null ? 0 : list.filter((w) => Date.parse(w.start) > arrived).length;
   return (
     <section className="panel you-panel tr-recent" aria-label="Recent sessions">
       <div className="panel-head">
@@ -487,7 +615,7 @@ function Recent({ workouts, muscles, onOpen, notify }: { workouts: Workout[]; mu
         <span className="meta">Last {list.length} · click one for every set</span>
       </div>
       <div className="tr-list tr-scroll tr-scroll-recent" tabIndex={0} aria-label={`${list.length} most recent sessions`}>
-        {list.map((w) => {
+        {list.map((w, i) => {
           const start = new Date(w.start);
           const pr = prs.get(w.id);
           const shown = w.exercises.slice(0, 4);
@@ -497,6 +625,9 @@ function Recent({ workouts, muscles, onOpen, notify }: { workouts: Workout[]; mu
               key={w.id}
               className="tr-ses"
               title={`${label}: every exercise and set`}
+              // The oldest of those arriving comes in first, nearest the ones already there.
+              data-new={i < fresh ? '' : undefined}
+              style={i < fresh ? ({ '--i': fresh - 1 - i } as CSSProperties) : undefined}
               onClick={() => onOpen(w.id)}
               {...menuProps(
                 () => [
@@ -630,6 +761,8 @@ function BodyWeight({ weights, today, focusSignal, onSave }: {
   useEffect(() => {
     if (focusSignal) inputRef.current?.focus();
   }, [focusSignal]);
+  // A weight logged (here, in ⌘K, or on another device) drops onto the chart.
+  const landing = useLanding(weights);
 
   const series = useMemo(() => weightSeries(weights), [weights]);
   const from = ymd(addDays(today, -(days - 1)));
@@ -721,7 +854,7 @@ function BodyWeight({ weights, today, focusSignal, onSave }: {
       </div>
 
       {shown.length > 0 ? (
-        <WeightChart points={shown} from={from} to={ymd(today)} />
+        <WeightChart points={shown} from={from} to={ymd(today)} landing={landing} />
       ) : (
         series.length > 0 && <p className="meta">Nothing logged in the last {WEIGHT_RANGES.find((r) => r.days === days)!.name}.</p>
       )}
@@ -729,8 +862,40 @@ function BodyWeight({ weights, today, focusSignal, onSave }: {
   );
 }
 
-/** Daily entries as dots and the 7-day average as a line, over the chosen range. */
-function WeightChart({ points, from, to }: { points: WeightPoint[]; from: string; to: string }) {
+/** A day's weight just logged or changed, and what it was before (null if it's new); `n` counts them, so each lands afresh. */
+type Landing = { date: string; was: number | null; n: number };
+
+/** How long a weight logged is marked as landing: past the end of the longest way a design brings it in. */
+const LANDING_MS = 2200;
+
+/**
+ * The weight just logged, for a moment (landedDay: one day added or changed; not a removal or a restore of many). Worked
+ * out while rendering, so its dot is marked from the first frame it's drawn in. Not in the panel's first frames
+ * (useSettled): those weights were there.
+ */
+function useLanding(weights: Record<string, number>): Landing | null {
+  const settled = useSettled();
+  const [before, setBefore] = useState(weights);
+  const [landing, setLanding] = useState<Landing | null>(null);
+  if (weights !== before) {
+    setBefore(weights);
+    const day = settled ? landedDay(before, weights) : null;
+    if (day) setLanding({ date: day, was: before[day] ?? null, n: (landing?.n ?? 0) + 1 });
+  }
+  useEffect(() => {
+    if (!landing) return;
+    const t = window.setTimeout(() => setLanding(null), LANDING_MS);
+    return () => window.clearTimeout(t);
+  }, [landing]);
+  return landing;
+}
+
+/**
+ * Daily entries as dots and the 7-day average as a line, over the chosen range. A weight just logged (`landing`) drops
+ * onto it, from above the chart (from where it was, if it changed), and the line runs on to it when it's the latest:
+ * each design in its own way (styles.css and designs.css, TRAINING; Mission's touchdown in mission.css).
+ */
+function WeightChart({ points, from, to, landing }: { points: WeightPoint[]; from: string; to: string; landing: Landing | null }) {
   const ref = useRef<HTMLDivElement>(null);
   const [W, setW] = useState(600);
   useEffect(() => {
@@ -740,6 +905,9 @@ function WeightChart({ points, from, to }: { points: WeightPoint[]; from: string
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+  // One logged before the chart was drawn (its first weight, a range that just took it in) just shows, as the chart does.
+  const mounted = useRef(landing?.n);
+  const land = landing && landing.n !== mounted.current && points.some((p) => p.date === landing.date) ? landing : null;
   const H = W < 420 ? 140 : 170;
   const L = 38;
   const R = 10;
@@ -755,9 +923,16 @@ function WeightChart({ points, from, to }: { points: WeightPoint[]; from: string
   const total = Math.max(1, dayDiff(parseYmd(from), parseYmd(to)));
   const x = (d: string) => L + (dayDiff(parseYmd(from), parseYmd(d)) / total) * (W - L - R);
   const y = (v: number) => T + ((hi - v) / (hi - lo)) * (H - T - B);
-  const line = points.map((p) => `${x(p.date).toFixed(1)},${y(p.avg).toFixed(1)}`).join(' ');
   const last = points[points.length - 1];
+  // The latest weight landing: the line stops at the day before, and its last stretch runs on to the new average.
+  const runOn = !!land && land.date === last.date && points.length > 1;
+  const linePoints = runOn ? points.slice(0, -1) : points;
+  const line = linePoints.map((p) => `${x(p.date).toFixed(1)},${y(p.avg).toFixed(1)}`).join(' ');
+  const prev = points[points.length - 2];
   const mid = ymd(addDays(parseYmd(from), Math.round(total / 2)));
+  const landKg = land ? points.find((p) => p.date === land.date)!.kg : 0;
+  // From just above the chart for a new day, from where it was for one changed.
+  const drop = land ? (land.was !== null ? y(land.was) : T - 6) - y(landKg) : 0;
 
   return (
     <div ref={ref}>
@@ -775,13 +950,40 @@ function WeightChart({ points, from, to }: { points: WeightPoint[]; from: string
           {i === 2 ? 'Today' : `${parseYmd(d).getDate()} ${MON[parseYmd(d).getMonth()]}`}
         </text>
       ))}
-      {points.map((p) => (
-        <circle key={p.date} cx={x(p.date)} cy={y(p.kg)} r="2.4" fill="var(--t3)" opacity="0.6">
-          <title>{`${fmtDay(parseYmd(p.date))}: ${fmtKg(p.kg)} kg`}</title>
-        </circle>
-      ))}
-      {points.length > 1 && <polyline points={line} fill="none" stroke="var(--ac)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />}
-      <circle cx={x(last.date)} cy={y(last.avg)} r="3.4" fill="var(--acd)" />
+      {points.map((p) => {
+        const landsHere = land?.date === p.date;
+        return (
+          <circle
+            key={landsHere ? `${p.date}:${land!.n}` : p.date}
+            className={landsHere ? 'tr-wt-drop' : undefined}
+            style={landsHere ? ({ '--drop': `${drop.toFixed(1)}px` } as CSSProperties) : undefined}
+            cx={x(p.date)}
+            cy={y(p.kg)}
+            r="2.4"
+            fill="var(--t3)"
+            opacity="0.6"
+          >
+            <title>{`${fmtDay(parseYmd(p.date))}: ${fmtKg(p.kg)} kg`}</title>
+          </circle>
+        );
+      })}
+      {land && <circle key={`touch:${land.n}`} className="tr-wt-touch" cx={x(land.date)} cy={y(landKg)} r="2.4" fill="none" stroke="var(--ac)" strokeWidth="1.2" aria-hidden="true" />}
+      {linePoints.length > 1 && <polyline points={line} fill="none" stroke="var(--ac)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />}
+      {runOn && (
+        <line
+          key={`run:${land!.n}`}
+          className="tr-wt-run"
+          x1={x(prev.date)}
+          y1={y(prev.avg)}
+          x2={x(last.date)}
+          y2={y(last.avg)}
+          pathLength={1}
+          stroke="var(--ac)"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+      )}
+      <circle key={runOn ? `end:${land!.n}` : 'end'} className="tr-wt-end" data-land={runOn ? '' : undefined} cx={x(last.date)} cy={y(last.avg)} r="3.4" fill="var(--acd)" />
     </svg>
     </div>
   );

@@ -91,6 +91,23 @@ that only Mission shows.
   figures roll from the week before. Every layout has its own version (docs/motion.md, "Changing a period"). Music's
   slot calendar has no arrows (it shows every day that's known at once), so there's no period to change there; Check
   now's scan across it (idea 57) can use the same pieces.
+- A new best lands (idea 38; `useNewBests` in `Training.tsx`, `mission.css` TRAINING): in Your lifts, a PR that's new
+  since this device last showed it (not every time Training opens; one that arrives while the tab is in the background
+  waits until you're back) comes down with a flare, the lift's line draws on from the session before to the new high,
+  which lights and sends out one ring, and the figure glows. Other layouts show the chip as before.
+- Syncing from Hevy is a downlink (idea 39, every layout; `TrainingView`, `useArrivals` in `Training.tsx`): while Sync
+  now runs, the line over Training says "Downloading from Hevy…" with a light running along under it (Vista's a long
+  soft glow, Focus's a quick short one, Poster's a block of ink stepping across); Mission adds a small DOWNLINK, its
+  signal bars lighting in turn, and packets streaming along the line. Sessions that arrive (a sync, an import, the
+  server's own sync) slide in at the top of Recent sessions, the oldest first, and their day in the week brings them in;
+  in Mission each new session lights as it reports in, its PR chip flares, and its day lights as the scan's cells do.
+  Sessions are told apart by when they started, as an import's and Hevy's ids differ for the same session.
+- A weight logged lands on the chart (idea 40, every layout; `useLanding`, `WeightChart` in `Training.tsx`): it drops
+  onto its day from just above the chart (from where it was, when a day's weight changes), and when it's the latest the
+  7-day line runs on to it and its end lights again. Logged in the panel, in ⌘K, or on another device; not a removal.
+  Vista floats it down, Focus is quick with no bounce, Poster slams it down and it squashes as it hits; in Mission it's
+  a landing: it comes down lit, slowing to a touchdown, a ring goes out as it touches, and it cools to the other days'
+  grey before the line runs on at a steady rate.
 - Reduced motion: the sky still shows the hour; nothing moves and nothing launches.
 
 ## Not built yet (in the design system, not in the app)
@@ -160,12 +177,6 @@ small mono labels; the messages themselves stay plain.
 36. Year in pixels: today's pixel twinkles slowly, like the sky's stars. **S**
 37. Countdowns: the nearest in the matrix face; on its day the card lifts off once (`msLiftoff`); past ones dim like
     spent stages. **M**
-
-**Training**
-
-38. A new best (the PR chip) lands with a flare, and the lift's line draws to its new high, which pulses once. **S**
-39. Syncing from Hevy shows a downlink while it runs; new sessions slide in. **S** *(every design)*
-40. A body weight logged drops onto the chart and the line runs on to it. **M** *(every design)*
 
 **Learn**
 

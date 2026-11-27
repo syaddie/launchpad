@@ -1543,6 +1543,42 @@ i.file-pinned { color: var(--ac); }
 .tr-gym { align-items: baseline; }
 .tr-gym b { font-family: var(--f-display); font-size: 18px; font-weight: 400; }
 
+/* What arrives while Training is showing, and what you log there (docs/motion.md). Each design's own way is in
+   designs.css (TRAINING); Mission's in mission.css (TRAINING). */
+/* Sync now: a downlink while it runs, in place of the line about your workouts. The words say what's happening, and a
+   light runs along under them. Mission adds its mono label and signal bars. */
+.tr-downlink { position: relative; display: inline-flex; align-items: center; gap: 8px; min-width: 0; padding-bottom: 5px; animation: lpFadeIn var(--m-state) var(--e-out) both; }
+.tr-dl-mono, .tr-dl-bars { display: none; }
+.tr-dl-words { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tr-dl-stream { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 1px; overflow: hidden; background: color-mix(in srgb, var(--ac) 18%, transparent); }
+.tr-dl-stream > i { position: absolute; top: 0; bottom: 0; left: 0; width: 36%; border-radius: inherit; background: linear-gradient(90deg, transparent, var(--ac), transparent); animation: trStream calc(var(--m-sweep) * 1.6) var(--e-io) infinite; }
+@keyframes trStream { from { translate: -100% 0; } to { translate: 280% 0; } }
+/* The line it stood in for comes back as the sync ends. */
+.tr-head > .meta[data-back] { animation: lpFadeIn var(--m-state) var(--e-out) both; }
+/* Sessions that arrive (useArrivals in Training.tsx) slide in at the top of Recent sessions, the oldest first, and their
+   day in the week brings them in. */
+.tr-ses[data-new], .tr-day[data-new] > :not(.tr-dn) { animation: trArrive var(--m-move) var(--e-settle) both; animation-delay: calc(var(--m-stagger) * 2 * var(--i, 0)); }
+@keyframes trArrive { from { opacity: 0; translate: 0 calc(var(--m-rise) * -1.5); } }
+/* A weight logged drops onto the body weight chart (WeightChart): from just above it, or from where it was if it
+   changed (--drop). When it's the latest, the 7-day line runs on to it and its end lights again. Mission's touchdown ring
+   (.tr-wt-touch) and a new best's pulse (.tr-spark-pulse) are Mission's only. */
+.tr-wt-chart { --land-for: calc(var(--m-move) * 1.3); --run-at: calc(var(--land-for) * 0.8); --run-for: calc(var(--m-sweep) * 0.8); }
+.tr-wt-drop { transform-box: fill-box; transform-origin: 50% 100%; animation: trDrop var(--land-for) var(--e-settle) both; }
+@keyframes trDrop { from { translate: 0 var(--drop, 0px); opacity: 0; } }
+.tr-wt-run { stroke-dasharray: 1 1; animation: trRunOn var(--run-for) var(--e-io) var(--run-at) both; }
+@keyframes trRunOn { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.tr-wt-end[data-land] { transform-box: fill-box; transform-origin: center; animation: trEndIn var(--m-state) var(--e-settle) calc(var(--run-at) + var(--run-for) * 0.9) both; }
+@keyframes trEndIn { from { scale: 0; opacity: 0; } }
+.tr-wt-touch, .tr-spark-pulse { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .tr-dl-stream > i { display: none; }
+  .tr-dl-stream { background: color-mix(in srgb, var(--ac) 40%, transparent); }
+  @keyframes trArrive { from { opacity: 0; } }
+  @keyframes trDrop { from { opacity: 0; } }
+  @keyframes trRunOn { from { opacity: 0; } }
+  @keyframes trEndIn { from { opacity: 0; } }
+}
+
 .tr-note { gap: 10px; }
 .tr-note-head { margin: 0; font-size: 19px; line-height: 1.4; text-wrap: pretty; max-width: 72ch; }
 .tr-note-points { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; color: var(--t2); max-width: 80ch; }

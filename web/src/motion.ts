@@ -68,3 +68,31 @@ export function rollDirection(text: string, previous: string | undefined): 'up' 
   const b = value(text);
   return Number.isFinite(a) && Number.isFinite(b) && b < a ? 'down' : 'up';
 }
+
+/**
+ * Which of `keys` are new since they were last shown, for something that lights up once when it first appears
+ * (Training's new bests). `seen` is the record saved last time (`JSON.stringify` of the keys then). With no record yet,
+ * or one that can't be read, nothing is new: what's there when the record starts was there before it.
+ */
+export function unseen(keys: string[], seen: string | null): string[] {
+  if (seen === null) return [];
+  let was: unknown;
+  try {
+    was = JSON.parse(seen);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(was)) return [];
+  const known = new Set(was);
+  return keys.filter((k) => !known.has(k));
+}
+
+/**
+ * The one day whose weight was just logged or changed, comparing the weights by day before and after (Training's body
+ * weight drops it onto its chart). Null when nothing was added or changed (a day only removed, the same weights saved
+ * back), or when several days changed at once, which is a restore or an import rather than a weight logged.
+ */
+export function landedDay(before: Record<string, number>, after: Record<string, number>): string | null {
+  const changed = Object.keys(after).filter((d) => before[d] !== after[d]);
+  return changed.length === 1 ? changed[0] : null;
+}

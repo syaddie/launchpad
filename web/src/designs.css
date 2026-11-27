@@ -483,6 +483,37 @@
 [data-design='poster'] .month-tab[data-arrive='next'] .days-scroll > :not(.lp-found) { animation: calWipeIn var(--m-view) var(--e-out) backwards; }
 [data-design='poster'] .month-tab[data-arrive='prev'] .days-scroll > :not(.lp-found) { animation: calWipeInBack var(--m-view) var(--e-out) backwards; }
 
+/* ---------- Training: a sync's downlink, sessions arriving, a weight logged (styles.css has the base) ---------- */
+
+/* Vista drifts: a long soft glow along the line; what arrives settles in slowly, and a weight floats down. */
+[data-design='vista'] .tr-dl-stream > i { width: 60%; opacity: 0.85; animation-name: trStreamWide; animation-duration: calc(var(--m-sweep) * 2.6); }
+@keyframes trStreamWide { from { translate: -100% 0; } to { translate: 167% 0; } }
+[data-design='vista'] :is(.tr-ses[data-new], .tr-day[data-new] > :not(.tr-dn)) { animation-duration: calc(var(--m-view) * 1.4); animation-timing-function: var(--e-out); }
+[data-design='vista'] .tr-wt-chart { --land-for: calc(var(--m-view) * 1.5); }
+[data-design='vista'] .tr-wt-drop { animation-timing-function: var(--e-out); }
+/* Focus is quick and exact: a short light on a thin line, and a weight that lands without a bounce. */
+[data-design='focus'] .tr-dl-stream { height: 1.5px; }
+[data-design='focus'] .tr-dl-stream > i { width: 24%; animation-name: trStreamNarrow; animation-duration: calc(var(--m-sweep) * 1.1); }
+@keyframes trStreamNarrow { from { translate: -100% 0; } to { translate: 417% 0; } }
+[data-design='focus'] .tr-wt-chart { --land-for: var(--m-move); }
+/* Poster slams: a block of ink steps along the line; a session arriving is wiped in, and a weight logged slams down,
+   squashing as it hits. */
+[data-design='poster'] .tr-dl-stream { height: 3px; border-radius: 0; background: var(--ln); }
+[data-design='poster'] .tr-dl-stream > i { width: 25%; border-radius: 0; background: var(--tx); animation: trStreamBlock calc(var(--m-sweep) * 1.4) steps(4, jump-none) infinite; }
+@keyframes trStreamBlock { from { translate: 0 0; } to { translate: 300% 0; } }
+[data-design='poster'] :is(.tr-ses[data-new], .tr-day[data-new] > :not(.tr-dn)) { animation-name: lpWipeIn; animation-timing-function: var(--e-out); }
+[data-design='poster'] .tr-wt-drop { animation: trSlam var(--land-for) linear both; }
+@keyframes trSlam {
+  0% { translate: 0 var(--drop, 0px); animation-timing-function: var(--e-in); }
+  60% { translate: 0 0; scale: 1; animation-timing-function: var(--e-out); }
+  72% { scale: 1.8 0.45; }
+  100% { translate: 0 0; scale: 1; }
+}
+[data-design='poster'] .tr-wt-run { animation-timing-function: var(--e-out); }
+@media (prefers-reduced-motion: reduce) {
+  @keyframes trSlam { from { opacity: 0; } }
+}
+
 /* ---------- Learn's rows in each design: they reach to the panel's edge, as far as its sides go ---------- */
 
 [data-design='poster'] :is(.ln-due-row, .ln-class) { margin-inline: -8px; padding-inline: 8px; }
