@@ -141,3 +141,6 @@ moves by itself: no drift, no blinking.
    the glass panel itself.
 3. Ask what it shows. A move that doesn't say what changed is decoration; leave it out.
 4. Check it in every design, at desktop, wide and phone sizes, and with less motion on.
+
+Ideas for more motion, kept for later, are at the end of [`mission-layout.md`](mission-layout.md) ("Ideas to push it
+further"); the ones marked *(every design)* belong to all of them, not only Mission.
