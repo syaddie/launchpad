@@ -525,7 +525,7 @@
 @keyframes msGlyphGlow { from { text-shadow: 0 0 12px var(--ac), 0 0 2px var(--ac); } }
 
 /* The day you pick is locked on to: four corners close in on it and fade, leaving its ring. Not the copy of the old
-   month leaving (monthMotion.ts), only the real calendar. */
+   month leaving (periodMotion.ts), only the real calendar. */
 [data-design='mission'] .cal-day { position: relative; }
 [data-design='mission'] .cal > .cal-grid .cal-day.on::after {
   content: '';

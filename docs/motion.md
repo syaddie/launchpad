@@ -5,7 +5,8 @@ changed; very little moves by itself. Each design moves in its own character, fr
 
 The code: `web/src/motion.css` (the tokens, each design's character, and the shared motion: controls, highlights,
 figures, things that open and close, views, the opening, what's alive on its own, less motion);
-`web/src/components/Motion.tsx` (`Presence`, `Readout`, `useGlide`, `useSettled`); `web/src/viewTransition.ts`
+`web/src/components/Motion.tsx` (`Presence`, `Readout`, `useGlide`, `useSettled`, `usePeriodScan`, `Glyphs`);
+`web/src/periodMotion.ts` (changing a period with arrows); `web/src/viewTransition.ts`
 (changing view); `web/src/motion.ts` (the pure parts, tested in `test/motion.test.ts`); `web/src/loadable.tsx` (views
 that render at once once their code is in). A part of the app's own motion (a task ticking off, a meter filling) is
 in `styles.css` next to that part's other rules, using the tokens; how one design does it differently is in that
@@ -54,7 +55,11 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
   month is a radar-like scan, the day you pick is locked on to, today breathes a ring and a ticked entry flares. A box
   ticked by hand sends out a ring of light. With no photos, Home's ground is a lit apron whose runway lights flash in
   sequence toward the horizon. In the launch clock's last ten seconds a soft ring goes out from it each second and the
-  vehicle on the ascent brightens; as each event ends, that vehicle sheds a spent stage that falls away. See
+  vehicle on the ascent brightens; as each event ends, that vehicle sheds a spent stage that falls away. Every period
+  with arrows changes with Money › Month's scan. Learn's study timer is T+ in the dot-matrix face and starting it is an
+  ignition; Server › Services is a go/no-go poll that reports in; moving money sends a point of light on an arc between
+  the two accounts before their balances roll; losing the server puts the source lights out one at a time, and they
+  report back in when it's back; empty states have a drawing of the site (pad clear, vehicle away, launch scrubbed). See
   [`mission-layout.md`](mission-layout.md).
 - **Vista** drifts like light on glass: long, soft arrivals and a 7% spring. Its photo drifts so slowly you only notice
   it has moved. Its views don't use the browser's transitions (`--m-view-mode: enter`): the glass blurs the photo
@@ -108,13 +113,17 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
 - **What's on now.** Today's event on now has a line along its foot that fills as the minutes go (how far through it
   you are), and its "in 35 min" rolls down to the start. A package out for delivery has a light travelling along its
   stage, and the stages fill in turn as the panel appears.
-- **Changing month** (Money › Month: the arrows and This month; `MonthTab.tsx`, `monthMotion.ts`, the rules after the
-  calendar's in `styles.css`) goes the way you went, as views do. A copy of the old month's calendar stays over the new
-  one (inert, hidden from screen readers) and a line crosses the calendar, the new month behind it and the old ahead,
-  in `--sweep` (1.5 × `--m-view`); the title and the list come in from that side, and the four figures roll one after
-  another. Vista and Focus slide instead (the old month clears first, then the new one arrives); Poster slams a bar of
-  ink across and stamps the title; Mission makes it a scan (in `mission.css`). Opening Month on a month from elsewhere
-  just shows it.
+- **Changing a period** with arrows goes the way you went, as views do: Money › Month (and This month), Mood's month,
+  Year in pixels' year, Review's week (and This week), Training's week (and its columns). `usePeriodScan` (Motion.tsx)
+  and `periodMotion.ts` do it for any of them: the host is `lp-scan` and marked `data-arrive` while the new period comes
+  in, what changes is `lp-scan-grid` (keyed by the period, so it comes in whole), the cells that light are
+  `lp-scan-cell`, and the period's name is `lp-period-label` with `Glyphs` in it; the rules are after the calendar's in
+  `styles.css`. A copy of the old grid stays over the new one (inert, hidden from screen readers) and a line crosses it,
+  the new period behind it and the old ahead, in `--sweep` (1.5 × `--m-view`); the name comes in from that side, and
+  the figures roll (Money › Month's four one after another). Vista and Focus slide instead (the old period clears
+  first, then the new one arrives); Poster slams a bar of ink across and stamps the name; Mission makes it a scan (in
+  `mission.css`), each cell lighting as the beam reaches it (`--x`, where the cell is across the grid). Opening a
+  period from elsewhere (a day picked in the year, Money's Month from Overview) just shows it.
 - **Lists animate what's added to them**, not what was there when they appeared (that comes in with its view):
   `useSettled` marks a list `data-settled` two frames after it's drawn, and the list's items have an
   `@starting-style` under that mark. (Tasks do it more simply: a task still saving has the page's own id, so it's
@@ -126,7 +135,8 @@ Little moves by itself, and each thing that does is slow or stepped, so a page l
 nothing: the clock's minutes, Vista's photo drifting (it steps once a second, so the glass over it is redrawn once a
 second rather than every frame), Mission's sky and the ring today's date breathes on Money's calendar (scaled, so
 nothing is repainted for it), and the runway lights on Mission's apron when Home has no photos (each dot on or off, a
-run every few seconds). Busy states
+run every few seconds). In Mission, a running study timer's digits relight as they change and its dot breathes a
+beacon (scaled), and an empty state's drawing has its mast lamp blinking with the site's (stepped). Busy states
 (a spinner, a skeleton line) move only while something is being waited for.
 
 ## Less motion
