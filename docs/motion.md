@@ -50,7 +50,8 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
 - **The default** settles like paper: gentle decelerations, a 2% spring. Opening, each panel is laid down on the desk,
   its shadow tightening as it lands. The rail's highlight glides to the view you picked.
 - **Mission** starts from the default and adds its own (in `mission.css`): the strip and the dock come in, the sources
-  report in, the day's ascent draws on, and ticking off the last task launches the rocket. See
+  report in, the day's ascent draws on, and ticking off the last task launches the rocket. In Money › Month, changing
+  month is a radar-like scan, the day you pick is locked on to, today breathes a ring and a ticked entry flares. See
   [`mission-layout.md`](mission-layout.md).
 - **Vista** drifts like light on glass: long, soft arrivals and a 7% spring. Its photo drifts so slowly you only notice
   it has moved. Its views don't use the browser's transitions (`--m-view-mode: enter`): the glass blurs the photo
@@ -102,6 +103,13 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
 - **What's on now.** Today's event on now has a line along its foot that fills as the minutes go (how far through it
   you are), and its "in 35 min" rolls down to the start. A package out for delivery has a light travelling along its
   stage, and the stages fill in turn as the panel appears.
+- **Changing month** (Money › Month: the arrows and This month; `MonthTab.tsx`, `monthMotion.ts`, the rules after the
+  calendar's in `styles.css`) goes the way you went, as views do. A copy of the old month's calendar stays over the new
+  one (inert, hidden from screen readers) and a line crosses the calendar, the new month behind it and the old ahead,
+  in `--sweep` (1.5 × `--m-view`); the title and the list come in from that side, and the four figures roll one after
+  another. Vista and Focus slide instead (the old month clears first, then the new one arrives); Poster slams a bar of
+  ink across and stamps the title; Mission makes it a scan (in `mission.css`). Opening Month on a month from elsewhere
+  just shows it.
 - **Lists animate what's added to them**, not what was there when they appeared (that comes in with its view):
   `useSettled` marks a list `data-settled` two frames after it's drawn, and the list's items have an
   `@starting-style` under that mark. (Tasks do it more simply: a task still saving has the page's own id, so it's
@@ -111,7 +119,8 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
 
 Little moves by itself, and each thing that does is slow or stepped, so a page left open all day costs next to
 nothing: the clock's minutes, Vista's photo drifting (it steps once a second, so the glass over it is redrawn once a
-second rather than every frame), Mission's sky. Busy states
+second rather than every frame), Mission's sky and the ring today's date breathes on Money's calendar (scaled, so
+nothing is repainted for it). Busy states
 (a spinner, a skeleton line) move only while something is being waited for.
 
 ## Less motion

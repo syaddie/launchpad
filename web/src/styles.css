@@ -1716,7 +1716,8 @@ i.file-pinned { color: var(--ac); }
 .days-count { margin-right: auto; }
 .days-today { flex: none; margin-left: auto; }
 .days-scroll { position: relative; min-width: 0; padding: 0 14px 14px 16px; }
-.lp-root:not([data-layout='narrow']) .month-split .days-scroll { min-height: 0; overflow-y: auto; contain: size; }
+/* (Not sideways: a month's days slide in from the side, and that mustn't show a scrollbar.) */
+.lp-root:not([data-layout='narrow']) .month-split .days-scroll { min-height: 0; overflow-x: hidden; overflow-y: auto; contain: size; }
 .days-key { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 18px 2px 2px; }
 .days-key > span { display: inline-flex; align-items: center; gap: 6px; }
 .days-key .ent-tick { width: 12px; height: 12px; }
@@ -2018,6 +2019,53 @@ i.file-pinned { color: var(--ac); }
 [data-layout='narrow'] .cal-x { display: none; }
 [data-layout='narrow'] .cal-r { display: inline; }
 [data-layout='narrow'] .cal-low i { font-size: 11px; }
+
+/* Changing month (MonthTab.tsx, monthMotion.ts): the way you went, the new month's calendar wipes in behind a line
+   crossing it, over a copy of the old one going ahead of the line; its title and its days in the list come in from
+   that side, and its four figures roll one after another. --sweep is how long the line takes to cross. Each design
+   does it its own way (designs.css, mission.css). */
+.month-tab { --sweep: calc(var(--m-view) * 1.5); --sweep-ease: var(--e-io); }
+.cal { position: relative; }
+.cal-sweep { position: absolute; z-index: 1; overflow: hidden; pointer-events: none; }
+.cal-sweep > .cal-copy { width: 100%; height: 100%; animation: calWipeOut var(--sweep) var(--sweep-ease) forwards; }
+.cal-sweep[data-step='prev'] > .cal-copy { animation-name: calWipeOutBack; }
+.month-tab[data-arrive='next'] .cal > .cal-grid { animation: calWipeIn var(--sweep) var(--sweep-ease) backwards; }
+.month-tab[data-arrive='prev'] .cal > .cal-grid { animation: calWipeInBack var(--sweep) var(--sweep-ease) backwards; }
+@keyframes calWipeIn { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes calWipeInBack { from { clip-path: inset(0 0 0 100%); } to { clip-path: inset(0 0 0 0); } }
+@keyframes calWipeOut { from { clip-path: inset(0 0 0 0); } to { clip-path: inset(0 0 0 100%); } }
+@keyframes calWipeOutBack { from { clip-path: inset(0 0 0 0); } to { clip-path: inset(0 100% 0 0); } }
+/* The line: the leading edge of a box as wide as the calendar, moved across it in step with the wipe. */
+.cal-scan { position: absolute; inset: 0; animation: calScan var(--sweep) var(--sweep-ease) both; }
+.cal-scan::after { content: ''; position: absolute; top: 0; bottom: 0; right: -1px; width: 2px; border-radius: 1px; background: var(--ac); }
+.cal-sweep[data-step='prev'] > .cal-scan { animation-name: calScanBack; }
+.cal-sweep[data-step='prev'] > .cal-scan::after { right: auto; left: -1px; }
+@keyframes calScan { from { translate: -100% 0; } 90% { opacity: 1; } to { translate: 0 0; opacity: 0; } }
+@keyframes calScanBack { from { translate: 100% 0; } 90% { opacity: 1; } to { translate: 0 0; opacity: 0; } }
+/* The title, the line under it and the list come in from the side you went. */
+.month-tab[data-arrive='next'] :is(.month-title, .days-scroll > :not(.lp-found)) { animation: monthIn var(--m-view) var(--e-out) both; }
+.month-tab[data-arrive='prev'] :is(.month-title, .days-scroll > :not(.lp-found)) { animation: monthInBack var(--m-view) var(--e-out) both; }
+.month-tab[data-arrive] .month-foot { animation: lpFadeIn var(--m-view) var(--e-out) both; }
+@keyframes monthIn { from { opacity: 0; translate: calc(var(--m-travel) * 0.6) 0; } }
+@keyframes monthInBack { from { opacity: 0; translate: calc(var(--m-travel) * -0.6) 0; } }
+/* The figures roll in turn, from the side you went (each .m-stat has its place as --i). */
+.month-tab[data-arrive='next'] .month-sum .digit.rolling > * { animation-delay: calc(var(--i, 0) * 45ms); }
+.month-tab[data-arrive='prev'] .month-sum .digit.rolling > * { animation-delay: calc((3 - var(--i, 0)) * 45ms); }
+/* "This month" pops up once you've left it, and the arrows give a little push the way they go. */
+.month-now { animation: monthNowIn var(--m-move) var(--e-settle) both; }
+@keyframes monthNowIn { from { opacity: 0; scale: 0.88; } }
+.month-step > i { transition: translate var(--m-move) var(--e-settle); }
+.month-step.prev:active:not(:disabled) > i { translate: calc(var(--m-travel) * -0.14) 0; transition-duration: var(--m-press); }
+.month-step.next:active:not(:disabled) > i { translate: calc(var(--m-travel) * 0.14) 0; transition-duration: var(--m-press); }
+@media (prefers-reduced-motion: reduce) {
+  @keyframes calWipeIn { from { opacity: 0; } }
+  @keyframes calWipeInBack { from { opacity: 0; } }
+  @keyframes calWipeOut { to { opacity: 0; } }
+  @keyframes calWipeOutBack { to { opacity: 0; } }
+  @keyframes monthNowIn { from { opacity: 0; } }
+  .cal-scan { display: none; }
+  .month-tab[data-arrive] .month-sum .digit.rolling > * { animation-delay: 0s; }
+}
 
 .m-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
 .m-stat { display: flex; flex-direction: column; gap: 3px; padding: 14px 16px; border: none; border-radius: var(--r); background: var(--sf); color: var(--tx); font: inherit; text-align: left; }

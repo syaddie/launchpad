@@ -1,4 +1,4 @@
-import { useEffect, useRef, type KeyboardEvent } from 'react';
+import { type CSSProperties, useEffect, useRef, type KeyboardEvent } from 'react';
 import { accountBalance, balanceOn, effectOn, fmtMoney, type MonthCalc, monthName } from '../../../../shared/money';
 import type { Money, MoneyAccount, MoneyEntry } from '../../../../shared/types';
 import { parseYmd } from '../../util';
@@ -83,7 +83,8 @@ export function MonthCalendar({ month, money, entries, calc, today, picked, onPi
 
   return (
     <section className="panel you-panel cal" aria-label={`${monthName(month)} as a calendar`}>
-      <div className="cal-grid" role="grid" aria-label={`${monthName(month)}, a day at a time`} ref={grid} onKeyDown={onKey}>
+      {/* A new grid for each month, so it comes in as a whole (monthMotion.ts and styles.css, "Changing month"). */}
+      <div key={month} className="cal-grid" role="grid" aria-label={`${monthName(month)}, a day at a time`} ref={grid} onKeyDown={onKey}>
         <div className="cal-row" role="row">
           {HEAD.map((d) => (
             <span key={d} className="cal-dow" role="columnheader">
@@ -117,7 +118,7 @@ export function MonthCalendar({ month, money, entries, calc, today, picked, onPi
                 .filter(Boolean)
                 .join(', ');
               return (
-                <span key={date} className="cal-cell" role="gridcell" aria-selected={picked === date}>
+                <span key={date} className="cal-cell" role="gridcell" aria-selected={picked === date} style={{ '--c': di } as CSSProperties}>
                   <button
                     type="button"
                     data-date={date}

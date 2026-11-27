@@ -37,6 +37,11 @@ that only Mission shows.
   settle every 18 s; a line fills while one stays, pointing at it holds it (a recording light goes still), and the
   open ground between Today and the Notepad has its frame number and arrows. On a phone it's a band under the sky.
   The glass over the photos is thicker, and the edges dusk a little (more at night), so words stay easy to read.
+- Money › Month (`mission.css`, MONEY › MONTH): changing month is a scan. A beam with an afterglow crosses the
+  calendar at a steady rate the way you went, wiping the old month off; each day lights as it passes, then cools, and
+  the month's name relights letter by letter from the same side, like the launch clock's dots. The day you pick is
+  locked on to (four corners close in, then fade to its ring), today's date breathes a ring now and then, and an entry
+  you tick sends out one ring of light.
 - Reduced motion: the sky still shows the hour; nothing moves and nothing launches.
 
 ## Not built yet (in the design system, not in the app)
