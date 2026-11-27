@@ -1,14 +1,16 @@
+import { useEffect, useRef } from 'react';
 import { fmtMoney } from '../../../../shared/money';
 import { EVERY_NAMES, type Series } from '../../../../shared/subscriptions';
 import type { Money, MoneyEntry } from '../../../../shared/types';
-import { AccountSelect, CategoryCell, DateCell, entryTitle, type Kind, KindSwitch, namesOf, NumCell, otherAccount, shortDate, signed, TextCell } from './shared';
+import { copyText, menuProps } from '../ContextMenu';
+import { AccountSelect, CategoryCell, DateCell, entryTitle, type Kind, KindSwitch, namesOf, type Notify, NumCell, otherAccount, shortDate, signed, TextCell } from './shared';
 
 /**
- * One entry: a tick, what it was, its account and the amount. Click it to change it.
- * An invoice's money is tagged with the invoice; its amount, and its date while it's
- * planned, follow the invoice, so those are changed in Owed.
+ * One entry: a tick, what it was, its account and the amount. Click it to change it; right-click
+ * (or long-press) for the same and more. An invoice's money is tagged with the invoice; its amount,
+ * and its date while it's planned, follow the invoice, so those are changed in Owed.
  */
-export function EntryRow({ e, series, isSub, onSub, money, today, open, onOpen, onClose, onPatch, onDelete, onOpenOwed }: {
+export function EntryRow({ e, series, isSub, onSub, money, today, open, onOpen, onClose, onPatch, onDelete, onOpenOwed, notify }: {
   e: MoneyEntry;
   /** The repeat it's part of, if any: one that's money out can be marked as a subscription. */
   series?: Series;
@@ -17,16 +19,62 @@ export function EntryRow({ e, series, isSub, onSub, money, today, open, onOpen, 
   money: Money;
   today: string;
   open: boolean;
-  onOpen: () => void;
+  /** `keyboard`: opened from the keyboard, so its first field takes focus. */
+  onOpen: (keyboard: boolean) => void;
   onClose: () => void;
   onPatch: (p: Partial<MoneyEntry>) => void;
   onDelete: () => void;
   onOpenOwed: () => void;
+  notify: Notify;
 }) {
   const late = e.planned && e.date < today;
   const names = namesOf(money);
   const title = entryTitle(e, names);
   const inv = e.invoice ? money.invoices.find((i) => i.id === e.invoice) : undefined;
+  const amount = e.kind === 'move' ? fmtMoney(e.amount) : fmtMoney(signed(e), true);
+
+  // From the keyboard, opening puts focus in the form and closing puts it back on the entry, so it
+  // isn't lost with the part that was there; a click leaves it where it lands.
+  const row = useRef<HTMLDivElement>(null);
+  const focusForm = useRef(false);
+  const refocus = useRef(false);
+  const wasOpen = useRef(open);
+  useEffect(() => {
+    if (open === wasOpen.current) return;
+    wasOpen.current = open;
+    const el = row.current;
+    if (!el) return;
+    if (open) {
+      const first = focusForm.current ? el.querySelector<HTMLElement>('.ent-form :is(input, select, button)') : null;
+      const lost = !document.activeElement || document.activeElement === document.body;
+      if (first) first.focus({ preventScroll: true });
+      else if (lost) el.focus({ preventScroll: true });
+    } else if (refocus.current) el.querySelector<HTMLElement>('.ent-main')?.focus({ preventScroll: true });
+    focusForm.current = false;
+    refocus.current = false;
+  }, [open]);
+  const openIt = (keyboard: boolean) => {
+    focusForm.current = keyboard;
+    onOpen(keyboard);
+  };
+  const close = (keyboard: boolean) => {
+    refocus.current = keyboard;
+    onClose();
+  };
+
+  const menu = menuProps(
+    () => [
+      { label: e.planned ? 'Mark as done' : 'Mark as planned', icon: e.planned ? 'ph-check-circle' : 'ph-circle-dashed', onSelect: () => onPatch({ planned: !e.planned }) },
+      open ? { label: 'Done changing', icon: 'ph-check', onSelect: () => close(true) } : { label: 'Change', icon: 'ph-pencil-simple', onSelect: () => openIt(false) },
+      !!series?.every && e.kind === 'out' && { label: isSub ? 'Not a subscription' : 'Mark as a subscription', icon: 'ph-repeat', onSelect: () => onSub(!isSub) },
+      !!inv && { label: 'Change it in Owed', icon: 'ph-link-simple', onSelect: onOpenOwed },
+      'sep',
+      { label: 'Copy', icon: 'ph-copy', onSelect: () => copyText(`${shortDate(e.date)} · ${title} · ${amount}${e.planned ? ' (planned)' : ''}`, notify) },
+      'sep',
+      { label: inv ? 'Delete, along with its invoice' : 'Delete', icon: 'ph-trash', danger: true, onSelect: onDelete },
+    ],
+    title,
+  );
   const tick = (
     <button
       className="ent-check"
@@ -48,11 +96,22 @@ export function EntryRow({ e, series, isSub, onSub, money, today, open, onOpen, 
     const setKind = (kind: Kind) => onPatch(kind === 'move' ? { kind, category: '', to: e.to && e.to !== e.account ? e.to : otherAccount(money, e.account) } : { kind, to: '' });
     return (
       <div
+        ref={row}
         className="ent editing"
+        data-entry={e.id}
+        tabIndex={-1}
+        {...menu}
+        // Esc anywhere in it (a field too) closes it, and goes no further: not to the field, nor to the app's Esc for Home.
+        onKeyDownCapture={(k) => {
+          if (k.key !== 'Escape') return;
+          k.preventDefault();
+          k.stopPropagation();
+          close(true);
+        }}
         onKeyDown={(k) => {
-          if (k.key === 'Escape' || (k.key === 'Enter' && (k.target as HTMLElement).tagName !== 'BUTTON')) {
+          if (k.key === 'Enter' && (k.target as HTMLElement).tagName !== 'BUTTON') {
             k.preventDefault();
-            onClose();
+            close(true);
           }
         }}
       >
@@ -98,7 +157,7 @@ export function EntryRow({ e, series, isSub, onSub, money, today, open, onOpen, 
           ) : (
             <CategoryCell value={e.category} label="Category" className="ent-field" empty="Category" onChange={(category) => onPatch({ category })} />
           )}
-          <button className="btn btn-primary btn-small" onClick={onClose}>
+          <button className="btn btn-primary btn-small" onClick={(ev) => close(ev.detail === 0)}>
             Done
           </button>
           {del}
@@ -126,9 +185,9 @@ export function EntryRow({ e, series, isSub, onSub, money, today, open, onOpen, 
   }
 
   return (
-    <div className={'ent' + (e.planned ? ' planned' : '') + (late ? ' late' : '') + (e.kind === 'move' ? ' move' : '')}>
+    <div ref={row} className={'ent' + (e.planned ? ' planned' : '') + (late ? ' late' : '') + (e.kind === 'move' ? ' move' : '')} data-entry={e.id} {...menu}>
       {tick}
-      <button className="ent-main" title="Change this entry" onClick={onOpen}>
+      <button className="ent-main" title="Change this entry" onClick={(ev) => openIt(ev.detail === 0)}>
         <span className="ent-note">
           {e.kind === 'move' && <i className="ph-duotone ph-arrows-left-right ent-move" aria-hidden="true" />}
           {e.kind !== 'move' && !e.note ? <span className="ent-none">No note</span> : title}
@@ -152,12 +211,12 @@ export function EntryRow({ e, series, isSub, onSub, money, today, open, onOpen, 
         </span>
       </button>
       <span className="ent-acts">
-        <button className="icon-btn ent-x" title="Change" aria-label={`Change ${title}`} onClick={onOpen}>
+        <button className="icon-btn ent-x" title="Change" aria-label={`Change ${title}`} onClick={(ev) => openIt(ev.detail === 0)}>
           <i className="ph-duotone ph-pencil-simple" />
         </button>
         {del}
       </span>
-      <span className={'ent-amt tnum' + (e.kind === 'in' ? ' in' : '')}>{e.kind === 'move' ? fmtMoney(e.amount) : fmtMoney(signed(e), true)}</span>
+      <span className={'ent-amt tnum' + (e.kind === 'in' ? ' in' : '')}>{amount}</span>
     </div>
   );
 }
