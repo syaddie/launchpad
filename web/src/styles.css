@@ -1236,8 +1236,8 @@ button.pix-cell:hover { box-shadow: inset 0 0 0 1px var(--t3); }
 .disk-setup li .copy-block { margin-top: 6px; }
 .sync-row { padding: 4px 10px; font-size: 13px; }
 .sync-row-name { display: inline-flex; align-items: center; gap: 8px; min-width: 0; color: var(--t2); }
-/* Mission's go/no-go poll (mission.css, SERVER). */
-.svc-mark, .svc-poll { display: none; }
+/* Mission's go/no-go poll (mission.css, SERVER; more specific than .ms-mark, which shows it). */
+.services .svc-mark, .svc-poll { display: none; }
 [data-layout='narrow'] .server-row > .services { max-height: none; }
 
 /* Terminal and files: tabs over the view, and a panel that fills the rest of it. */
@@ -1454,7 +1454,7 @@ i.file-pinned { color: var(--ac); }
 
 .tr-head:not(:has(> :not(:empty))) { display: none; }
 .tr-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 20px; min-height: 26px; }
-.tr-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.tr-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; max-width: 100%; }
 .you-row > .tr-week { flex: 1.6 1 520px; min-width: 0; }
 .you-row > .tr-musc { flex: 1 1 320px; min-width: 0; }
 .you-row > .tr-lifts { flex: 1 1 400px; min-width: 0; }
@@ -2199,12 +2199,13 @@ button.m-stat { cursor: default; }
 .ln-rule { height: 1px; background: var(--ln); }
 .ln-track { position: relative; display: block; height: 6px; border-radius: var(--r-s); background: var(--hv); overflow: hidden; }
 .ln-track > span { position: absolute; inset: 0 auto 0 0; border-radius: var(--r-s); }
-.ln-timer { display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 0 4px 0 12px; border-radius: var(--r); background: var(--act); color: var(--acd); font-size: 13px; }
-.ln-timer .ln-dot { background: var(--ac); }
+.ln-timer { display: flex; align-items: center; gap: 10px; min-width: 0; max-width: 100%; min-height: 34px; padding: 0 4px 0 12px; border-radius: var(--r); background: var(--act); color: var(--acd); font-size: 13px; }
+.ln-timer .ln-dot { flex: none; background: var(--ac); }
+.ln-timer .ln-clock { flex: none; }
 .ln-timer-what { min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ln-timer > .btn { flex: none; }
-/* Mission's face for the time (mission.css, LEARN). */
-.ln-met { display: none; }
+/* Mission's face for the time (mission.css, LEARN; more specific than .ms-matrix, which shows it). */
+.ln-timer .ln-met { display: none; }
 .learn .tr-actions .input.sm { width: auto; max-width: 220px; }
 .ln-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; padding: 12px; border-radius: var(--r); background: var(--bg); }
 .ln-form .input { width: 100%; }

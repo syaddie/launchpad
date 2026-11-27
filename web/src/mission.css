@@ -613,7 +613,7 @@
 [data-design='mission'] .ln-timer .ln-dot::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: var(--ms-ignition-glow); animation: msBeacon 2.4s var(--e-out) infinite; }
 [data-design='mission'] .ln-timer .btn { color: var(--ms-ignition-ink) !important; }
 [data-design='mission'] .ln-timer .ln-clock { display: none; }
-[data-design='mission'] .ln-timer .ln-met { display: inline-block; flex: none; font-size: 21px; color: var(--ms-ignition-ink); text-shadow: 0 0 16px var(--ms-ignition-glow); }
+[data-design='mission'] .ln-timer .ln-met { display: inline-block; flex: none; font-size: 21px; color: var(--ms-ignition-ink); text-shadow: 0 0 10px var(--ms-ignition-glow); }
 [data-layout='narrow'][data-design='mission'] .ln-timer .ln-met { font-size: 18px; }
 @media (prefers-reduced-motion: no-preference) {
   [data-design='mission'] .ln-timer[data-ignite] { animation: msIgnite calc(var(--m-sweep) * 1.2) var(--e-out); }
