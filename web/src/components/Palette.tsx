@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Glide } from './Motion';
 
 export interface PaletteItem {
   id: string;
@@ -149,10 +150,12 @@ export function Palette({ items, searches, ask, onClose }: {
           <span className="kbd">esc</span>
         </label>
         <div className="palette-list" id="palette-list" role="listbox" ref={listRef}>
+          {/* The highlight glides from row to row as the selection moves (motion.css); typing places it afresh. */}
+          <Glide key={q} on={`${cur}:${shown[cur]?.id ?? ''}`} />
           {shown.map((it, i) => {
             const head = it.group !== lastGroup ? (lastGroup = it.group) : '';
             return (
-              <div key={it.id}>
+              <Fragment key={it.id}>
                 {head && <div className="palette-group">{head}</div>}
                 <div
                   role="option"
@@ -174,7 +177,7 @@ export function Palette({ items, searches, ask, onClose }: {
                     </span>
                   ))}
                 </div>
-              </div>
+              </Fragment>
             );
           })}
           {!shown.length && <div className="palette-empty">Nothing matches “{q.trim()}”.</div>}

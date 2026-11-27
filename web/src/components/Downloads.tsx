@@ -645,7 +645,7 @@ function DownloadList({ info, error, shellReady, onChanged, onOpenFolder }: {
       ) : !jobs.length ? (
         <div className="empty">
           <EmptyArt kind={!!info && 'clear'} />
-          <p>{info ? 'Nothing downloaded since Launchpad last started.' : error ? '' : 'Loading…'}</p>
+          <p className={info || error ? undefined : 'lp-loading'}>{info ? 'Nothing downloaded since Launchpad last started.' : error ? '' : 'Loading…'}</p>
         </div>
       ) : (
         <div className="dl-items">
@@ -1007,7 +1007,7 @@ function Torrents({ info, error, onInfo, onOpenFolder }: { info: TorrentsInfo | 
       ) : !list.length ? (
         <div className="empty">
           <EmptyArt kind={!!info && !info.error && 'clear'} />
-          <p>{info ? (info.error ? '' : 'No torrents. Paste a magnet link above.') : error ? '' : 'Loading…'}</p>
+          <p className={info || error ? undefined : 'lp-loading'}>{info ? (info.error ? '' : 'No torrents. Paste a magnet link above.') : error ? '' : 'Loading…'}</p>
         </div>
       ) : (
         <div className="dl-items">
@@ -1268,7 +1268,7 @@ function TorrentDetail({ t, onInfo, onOpenFolder }: { t: Torrent; onInfo: (t: To
       </form>
       {error && <span className="meta" style={{ color: 'var(--wn)' }}>{error}</span>}
       {!files ? (
-        !error && <span className="meta">Loading its files…</span>
+        !error && <span className="meta lp-loading">Loading its files…</span>
       ) : !files.length ? (
         <span className="meta">qBittorrent doesn’t know its files yet. They show once it has the torrent’s details.</span>
       ) : (

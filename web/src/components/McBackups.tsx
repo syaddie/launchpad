@@ -95,7 +95,7 @@ export function McBackupsView({ s, onChanged }: { s: McStatus; onChanged: () => 
   return (
     <div className="mc-view" aria-label="Backups">
       <div className="mc-view-head">
-        <span className="meta mc-view-where" title={data?.dir}>
+        <span className={'meta mc-view-where' + (data ? '' : ' lp-loading')} title={data?.dir}>
           {data ? `Keeps the newest ${data.keep} in ${data.dir}${data.free !== null ? ` · ${fmtSize(data.free)} free` : ''}` : 'Looking for backups…'}
         </span>
         <button className="btn btn-primary btn-small" disabled={!canBackUp} onClick={backUp} title={s.running && !s.attached ? 'It runs outside tmux or screen, so its saving can’t be paused for a clean copy' : undefined}>

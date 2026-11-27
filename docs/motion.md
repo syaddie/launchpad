@@ -59,10 +59,13 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
   with arrows changes with Money › Month's scan. Learn's study timer is T+ in the dot-matrix face and starting it is an
   ignition; Server › Services is a go/no-go poll that reports in; moving money sends a point of light on an arc between
   the two accounts before their balances roll; losing the server puts the source lights out one at a time, and they
-  report back in when it's back; empty states have a drawing of the site (pad clear, vehicle away, launch scrubbed). In
-  Training, a new best lands with a flare and its lift's line draws on to the new high, which sends out a ring; a sync
-  is a downlink (DOWNLINK, signal bars, packets) and what it brings reports in, lit; a weight logged comes down to a
-  touchdown on its day before the line runs on to it. See [`mission-layout.md`](mission-layout.md).
+  report back in when it's back; empty states have a drawing of the site (pad clear, vehicle away, launch scrubbed).
+  Anything saved blinks its source's light in the strip, like a packet going up (`uplink.ts`); "Loading…" is a scan line
+  acquiring and a spinner a small satellite circling; ⌘K's highlight is a lit plate; a right-click menu's items relight
+  in turn as it opens; an Undo message counts down in five dots going out one by one. In Training, a new best lands with
+  a flare and its lift's line draws on to the new high, which sends out a ring; a sync is a downlink (DOWNLINK, signal
+  bars, packets) and what it brings reports in, lit; a weight logged comes down to a touchdown on its day before the line
+  runs on to it. See [`mission-layout.md`](mission-layout.md).
 - **Vista** drifts like light on glass: long, soft arrivals and a 7% spring. Its photo drifts so slowly you only notice
   it has moved. Its views don't use the browser's transitions (`--m-view-mode: enter`): the glass blurs the photo
   behind it, which a part pictured on its own, or anything inside a fading container, can't see. So the new view's
@@ -84,7 +87,8 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
 - **The active item's highlight glides** (`useGlide`, or `<Glide on={…} />` first in a row): the rail, every row of
   tabs and every segmented control draw their active item's background on one span that moves from item to item, so
   changing view or tab shows where you went from and to. The item arriving takes its colours as the highlight reaches
-  it. (Not Server's own tabs, which light two at once when Terminal and Files share the view.)
+  it. (Not Server's own tabs, which light two at once when Terminal and Files share the view.) ⌘K's highlighted result
+  glides the same way between rows as the arrows or the pointer move it; typing places it afresh.
 - **Figures roll** (`Readout`): a changed digit leaves as its new one arrives, upward when the figure grew and downward
   when it shrank; the digits that didn't change stay still, and the units stay put when a figure grows a digit. The
   clock's minutes roll over. A figure remembers what it showed last (by its `id`), so coming back to a view shows it
@@ -93,7 +97,7 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
   page, marked `data-leaving` and inert, until its exit animation has run, at most 450ms): popovers and menus drop
   from what opened them; the drawer slides in from the edge over a dimming page; the palette and the shortcuts sheet
   drop into place on a spring; messages rise from the bottom edge and sink back. A message with an Undo shows how long
-  it has left with a line along its foot, and stays while pointed at.
+  it has left with a line along its foot (Mission: five dots going out one by one), and stays while pointed at.
 - **Views move the way you went along the rail** (`viewTransition.ts`): toward a view further along it is `next`, back
   toward Home is `prev`, along the rail's own direction (down where it runs down the side, sideways where it runs
   across: a phone's, Mission's strip and dock). The old view clears first, then the new one arrives,
@@ -127,6 +131,10 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
   first, then the new one arrives); Poster slams a bar of ink across and stamps the name; Mission makes it a scan (in
   `mission.css`), each cell lighting as the beam reaches it (`--x`, where the cell is across the grid). Opening a
   period from elsewhere (a day picked in the year, Money's Month from Overview) just shows it.
+- **The tab says what's coming** (`tabTitle.ts`, `hooks/useTabTitle.ts`, every design): inside the hour before the
+  day's next event its title counts down ("T-08:12 · Gym: push day"), and while studying it counts up ("T+24:10 ·
+  Studying ASE 301"); inside the launch clock's ten minutes, and while studying, its icon lifts off on a flame. Written
+  at most once a second and only while counting; the icon only when it changes.
 - **Lists animate what's added to them**, not what was there when they appeared (that comes in with its view):
   `useSettled` marks a list `data-settled` two frames after it's drawn, and the list's items have an
   `@starting-style` under that mark. (Tasks do it more simply: a task still saving has the page's own id, so it's
@@ -154,7 +162,9 @@ second rather than every frame), Mission's sky and the ring today's date breathe
 nothing is repainted for it), and the runway lights on Mission's apron when Home has no photos (each dot on or off, a
 run every few seconds). In Mission, a running study timer's digits relight as they change and its dot breathes a
 beacon (scaled), and an empty state's drawing has its mast lamp blinking with the site's (stepped). Busy states
-(a spinner, a skeleton line, Training's downlink) move only while something is being waited for.
+(a spinner, a skeleton line, Mission's acquiring line and satellite, Training's downlink) move only while something is
+being waited for. The tab's title changes once a second only while it counts to an event inside the hour or a running
+study timer.
 
 ## Less motion
 
@@ -162,7 +172,7 @@ When the device asks for less motion (`prefers-reduced-motion`), the tokens take
 `--m-travel`, `--m-press-y` 0, `--m-press-s` 1, no overshoot, sweeps instant), and the keyframes that move without
 travelling (wipes, scans, pops, stamps, the photo settling) are defined again as quick fades. So nothing travels,
 rolls, sweeps, springs or drifts, but what appears or changes still fades, quickly, so no change is missed. Nothing
-moves by itself: no drift, no blinking.
+moves by itself: no drift, no blinking. (The tab's title still counts: it's words, not motion.)
 
 ## Adding motion to something
 

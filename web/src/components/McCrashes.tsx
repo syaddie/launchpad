@@ -99,7 +99,7 @@ export function McCrashesView({ s, explain, open, onOpen, onSaved }: { s: McStat
       )}
       <section className="mc-section" aria-label="Crash reports">
         <span className="drawer-label">Crash reports{data ? ` · ${data.reports.length}${data.reports.length >= 50 ? '+' : ''}` : ''}</span>
-        {!data && !error && <p className="meta">Looking in crash-reports…</p>}
+        {!data && !error && <p className="meta lp-loading">Looking in crash-reports…</p>}
         {data && !data.reports.length && <p className="meta">No crash reports in {s.dir ? `${s.dir}/crash-reports` : 'crash-reports'}. That’s good.</p>}
         {!!data?.reports.length && (
           <ul className="mc-crashes">
@@ -158,7 +158,7 @@ function CrashReader({ s, name, explain, onBack }: { s: McStatus; name: string; 
       </span>
       {ex.state && <ExplainBox state={ex.state} onClose={ex.close} onRetry={run} />}
       {error && <div className="status-line" style={{ margin: 0 }}>{error}</div>}
-      {!data && !error && <p className="meta">Reading the report…</p>}
+      {!data && !error && <p className="meta lp-loading">Reading the report…</p>}
       {data && (
         <>
           <pre className="mono mc-report">{data.text}</pre>

@@ -180,7 +180,7 @@ export function SlotFinder({ now, notify, guest }: { now: Date; notify: (msg: st
       {!s ? (
         <>
           {loadError && <EmptyArt kind="scrubbed" />}
-          <p className="meta nac-empty">{loadError ? `Couldn’t load the slots: ${loadError}` : 'Loading…'}</p>
+          <p className={'meta nac-empty' + (loadError ? '' : ' lp-loading')}>{loadError ? `Couldn’t load the slots: ${loadError}` : 'Loading…'}</p>
         </>
       ) : (
         <>

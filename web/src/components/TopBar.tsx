@@ -4,6 +4,7 @@ import { fmtStudy, timerMinutes } from '../../../shared/learn';
 import { engineUrl, parseSearch } from '../../../shared/trackers';
 import type { AppState, SearchEngine, SourceKey, Weather } from '../../../shared/types';
 import { fmtMinutes, lastTrained, minutes, workoutLabel } from '../../../shared/training';
+import { onUplink, lastSaved, type UplinkKey } from '../uplink';
 import { ago, fmtDay, hm, psiBand, uvBand, weatherIcon, weatherLabel } from '../util';
 import { Readout } from './Motion';
 
@@ -25,7 +26,23 @@ interface Props {
   lead?: ReactNode;
   /** The server can't be reached (its banner is up): Mission's source lights go out, and report back in once it's back. */
   lost?: boolean;
+  /** Edits waiting in this browser to be saved (outbox.ts): Mission's Launchpad light holds while there are any. */
+  waiting?: number;
 }
+
+/**
+ * Saves the server has taken, per light (uplink.ts), and when the last was: each new one starts that light's packet
+ * again (its key is the count), so Mission's strip blinks the light once per save.
+ */
+function useUplinks(): { n: Partial<Record<UplinkKey, number>>; at: number | null } {
+  const [ups, setUps] = useState<{ n: Partial<Record<UplinkKey, number>>; at: number | null }>(() => ({ n: {}, at: lastSaved() }));
+  useEffect(() => onUplink((k) => setUps((u) => ({ n: { ...u.n, [k]: (u.n[k] ?? 0) + 1 }, at: lastSaved() }))), []);
+  return ups;
+}
+
+type Mark = 'go' | 'hold' | 'scrub' | 'standby';
+/** A source in the strip: its line in the popover, and its light in Mission's (`up`: the light a save blinks). */
+type Line = { name: string; text: string; warn: boolean; off?: boolean; why?: string | null; up?: UplinkKey; mark?: Mark; mission?: boolean };
 
 /** How long the source lights are marked as reporting back in: past the last one's turn. */
 const BACK_MS = 2000;
@@ -264,9 +281,10 @@ export function searchRows(q: string, engines: SearchEngine[]): Row[] {
   return engines.map((e) => ({ key: 'e:' + e.prefix, url: engineUrl(e, term), engine: e, term }));
 }
 
-export function TopBar({ data, now, title, subline, search, onSearch, searchRef, smokesToday, onLogSmoke, onOpenTraining, onOpenLearn, lead, lost = false }: Props) {
+export function TopBar({ data, now, title, subline, search, onSearch, searchRef, smokesToday, onLogSmoke, onOpenTraining, onOpenLearn, lead, lost = false, waiting = 0 }: Props) {
   const [focused, setFocused] = useState(false);
   const back = useReacquired(lost);
+  const ups = useUplinks();
   const [sel, setSel] = useState(0);
   const [syncHover, setSyncHover] = useState(false);
   const blurT = useRef<number>(0);
@@ -315,9 +333,10 @@ export function TopBar({ data, now, title, subline, search, onSearch, searchRef,
   const needsGoogle = (k: SourceKey) => k === 'calendar' || k === 'gmail' || k === 'inbox';
   const connected = data.google.connected;
   const health = data.health ?? [];
-  const lines = sources
+  const upOf = (k: SourceKey): UplinkKey | undefined => (k === 'calendar' || k === 'inbox' || k === 'digest' ? k : undefined);
+  const lines: Line[] = sources
     .filter((s) => connected || !needsGoogle(s.key))
-    .map((s) => {
+    .map((s): Line => {
       const h = health.find((w) => w.key === s.key);
       const st = data.sync[s.key];
       const off =
@@ -330,14 +349,25 @@ export function TopBar({ data, now, title, subline, search, onSearch, searchRef,
               : s.key === 'speedtest'
                 ? !data.prefs.speedTestHours
                 : needsGoogle(s.key) && !data.prefs.sources[s.key as 'calendar'];
-      if (off) return { name: s.name, text: 'Off', warn: false, off: true };
-      if (h) return { name: s.name, text: h.text, warn: true, why: h.detail ?? st.lastError };
-      if (failing(st)) return { name: s.name, text: `Couldn’t sync · last synced ${ago(st.lastSuccess, now)}`, warn: true, why: st.lastError };
-      return { name: s.name, text: st.lastSuccess ? `${s.ok} ${ago(st.lastSuccess, now)}` : 'Waiting for first sync', warn: false };
+      const up = upOf(s.key);
+      if (off) return { name: s.name, text: 'Off', warn: false, off: true, up };
+      if (h) return { name: s.name, text: h.text, warn: true, why: h.detail ?? st.lastError, up };
+      if (failing(st)) return { name: s.name, text: `Couldn’t sync · last synced ${ago(st.lastSuccess, now)}`, warn: true, why: st.lastError, up };
+      return { name: s.name, text: st.lastSuccess ? `${s.ok} ${ago(st.lastSuccess, now)}` : 'Waiting for first sync', warn: false, up };
     });
   if (data.google.signedOut) lines.unshift({ name: 'Google', text: 'Signed out · reconnect in Settings', warn: true, why: data.google.signedOut.reason });
   else if (!connected) lines.unshift({ name: 'Google', text: 'Not connected', warn: false });
   else if (data.google.missingScopes?.length) lines.unshift({ name: 'Google', text: 'Reconnect in Settings to allow backups to Drive, creating events and inbox actions', warn: false });
+  // Launchpad's own store, Mission's last light: what's saved there (notes, money, the trackers…) blinks it (uplink.ts),
+  // and it holds while edits wait in this browser. Only Mission lists it: the other layouts show one dot, no lights.
+  lines.push({
+    name: 'Launchpad',
+    text: waiting ? `${waiting === 1 ? '1 change' : `${waiting} changes`} waiting to save` : ups.at ? `Saved ${ago(new Date(ups.at).toISOString(), now)}` : 'Everything’s saved',
+    warn: false,
+    up: 'launchpad',
+    mark: waiting ? 'hold' : 'go',
+    mission: true,
+  });
   // The database, the daily copy and Drive, from the server's health check.
   for (const w of health) if (!sources.some((s) => s.key === w.key)) lines.push({ name: w.name, text: w.text, warn: true, why: w.detail ?? null });
   const anyFail = lines.some((l) => l.warn);
@@ -444,9 +474,15 @@ export function TopBar({ data, now, title, subline, search, onSearch, searchRef,
             {/* Mission's poll: a light for each source, in its state (mission.css; the other layouts show the one dot). While
                 the server can't be reached they go out one at a time (loss of signal), and report back in when it's back. */}
             <span className="sync-lights" role="img" aria-label={lost ? 'Can’t reach the server' : anyFail ? 'A source needs a look' : 'Every source is fine'} data-los={lost ? '' : undefined} data-aos={back ? '' : undefined}>
-              {lines.map((l, i) => (
-                <i key={l.name} className={'ms-mark ms-mark--' + (l.warn ? ('why' in l && l.why ? 'scrub' : 'hold') : 'off' in l || l.text === 'Not connected' ? 'standby' : 'go')} style={{ '--i': i } as CSSProperties} />
-              ))}
+              {lines.map((l, i) => {
+                const n = l.up ? ups.n[l.up] : 0;
+                return (
+                  <i key={l.name} className={'ms-mark ms-mark--' + (l.mark ?? (l.warn ? (l.why ? 'scrub' : 'hold') : l.off || l.text === 'Not connected' ? 'standby' : 'go'))} style={{ '--i': i } as CSSProperties}>
+                    {/* A save it took: the light blinks and a packet goes up (mission.css), once for each. */}
+                    {n ? <b key={n} className="ms-up" /> : null}
+                  </i>
+                );
+              })}
             </span>
             {lost && (
               <span className="sync-los" aria-hidden="true">
@@ -457,11 +493,11 @@ export function TopBar({ data, now, title, subline, search, onSearch, searchRef,
               <div className="popover sync-tip">
                 {lines.map((l) => (
                   <Fragment key={l.name}>
-                    <div className="sync-line">
+                    <div className={'sync-line' + (l.mission ? ' sync-line--ms' : '')}>
                       <span style={{ color: 'var(--t2)' }}>{l.name}</span>
                       <span style={{ color: l.warn ? 'var(--wn)' : 'var(--t3)', textAlign: 'right' }}>{l.text}</span>
                     </div>
-                    {'why' in l && l.why && <div className="sync-err">{l.why}</div>}
+                    {l.why && <div className="sync-err">{l.why}</div>}
                   </Fragment>
                 ))}
               </div>

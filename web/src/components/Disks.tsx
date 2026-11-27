@@ -157,7 +157,7 @@ export function DisksPanel({ now }: { now: Date }) {
       {!r ? (
         !error && (
           <div className="empty">
-            <p style={{ fontSize: 13 }}>Reading SMART…</p>
+            <p className="lp-loading" style={{ fontSize: 13 }}>Reading SMART…</p>
           </div>
         )
       ) : r.status === 'ok' ? (

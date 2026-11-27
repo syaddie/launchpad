@@ -29,6 +29,7 @@ import { TopBar } from './components/TopBar';
 import { useAppData } from './hooks/useAppData';
 import { useGoogleActions } from './hooks/useGoogleActions';
 import { useHashView, useLayout, useMinuteNow, useSystemDark } from './hooks/useDevice';
+import { useTabTitle } from './hooks/useTabTitle';
 import { useShortcuts } from './hooks/useShortcuts';
 import { useSidewaysWheel } from './hooks/useSidewaysWheel';
 import { useFlash, useToast } from './hooks/useToast';
@@ -151,6 +152,8 @@ export function App({ cached }: { cached: AppState | null }) {
   // ---------- data ----------
 
   const { data, update, savers, merge, replace, refresh, serverIssue, waiting } = useAppData({ cached, notify: showToast, onSaveError, onNotesSaved: flashSaved, onMoneySaved: flashMoneySaved, noteEditing });
+  // The tab counts down to the next event or up while studying, and its icon lights (tabTitle.ts).
+  useTabTitle(data, now);
   const photoSlots = usePhotoSlots(data.photos.length);
 
   // The opening (motion.css) plays once as the app starts; after that, only changes move.
@@ -762,7 +765,7 @@ export function App({ cached }: { cached: AppState | null }) {
         }
       />
       <div className="lp-inner">
-        <TopBar data={data} now={now} title={view === 'home' ? undefined : VIEWS.find((v) => v.key === view)?.name} subline={subline} search={search} onSearch={setSearch} searchRef={searchRef} smokesToday={smokesToday} onLogSmoke={logSmoke} onOpenTraining={() => setView('training')} onOpenLearn={() => setView('learn')} lost={!!serverIssue} lead={design === 'mission' && view === 'home' ? <MissionHero data={data} now={now} extras={extras.join(' · ')} /> : undefined} />
+        <TopBar data={data} now={now} title={view === 'home' ? undefined : VIEWS.find((v) => v.key === view)?.name} subline={subline} search={search} onSearch={setSearch} searchRef={searchRef} smokesToday={smokesToday} onLogSmoke={logSmoke} onOpenTraining={() => setView('training')} onOpenLearn={() => setView('learn')} lost={!!serverIssue} waiting={waiting} lead={design === 'mission' && view === 'home' ? <MissionHero data={data} now={now} extras={extras.join(' · ')} /> : undefined} />
         {/* Mission brings it down and takes it back up (mission.css, LOSS OF SIGNAL); the others show and hide it. */}
         <Presence show={!!serverIssue}>{serverIssue && <ServerBanner issue={serverIssue} waiting={waiting} onRetry={() => refresh()} />}</Presence>
         <ErrorBoundary resetKey={view}>
@@ -936,6 +939,14 @@ export function App({ cached }: { cached: AppState | null }) {
               >
                 {toast.action.label}
               </button>
+            )}
+            {/* Mission's count: the line along its foot as five dots going out one by one (mission.css). */}
+            {toast.action && (
+              <span className="toast-count" aria-hidden="true">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <i key={i} style={{ '--i': i } as CSSProperties} />
+                ))}
+              </span>
             )}
           </div>
         )}

@@ -9,6 +9,7 @@ import type { AskResult } from '../../shared/ask';
 import type { ShellAskResult, ShellAskStatus } from '../../shared/shellAsk';
 import type { UsageReport } from '../../shared/claudeUsage';
 import { kvGet, kvSet } from './idb';
+import { noteSent } from './uplink';
 
 /** What a torrent is added with: a category (made if it's new), tags, and a ratio to seed to. */
 export interface TorrentAdd {
@@ -226,6 +227,8 @@ export async function req<T>(method: string, url: string, body?: unknown, keepal
     throw new ConflictError(c.version, c.value);
   }
   if (!res.ok) throw new Error((json as { error?: string }).error || `Request failed (${res.status})`);
+  // A save the server took: Mission's strip blinks its light (uplink.ts).
+  if (method !== 'GET') noteSent(method, url);
   return json as T;
 }
 

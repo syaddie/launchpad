@@ -219,7 +219,7 @@ function LearnNoteBox({ state, busy, now, onRefresh }: { state: AppState['learnN
           )}
         </>
       ) : busy || !error ? (
-        <p className="meta">{busy ? 'Reading your courses and writing a note…' : 'A short note on what’s coming up appears here once a day.'}</p>
+        <p className={'meta' + (busy ? ' lp-loading' : '')}>{busy ? 'Reading your courses and writing a note…' : 'A short note on what’s coming up appears here once a day.'}</p>
       ) : null}
       {error && !busy && <p className="meta" style={{ color: 'var(--wn)' }}>{error}</p>}
     </section>

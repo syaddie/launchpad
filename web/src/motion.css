@@ -245,6 +245,14 @@
 .lp-root[data-design='focus'] :is(.tabs, .note-tabs) > .glide { background: var(--tx); }
 .lp-root[data-design='poster'] :is(.tabs, .note-tabs) > .glide { border-radius: 0; background: var(--tx); }
 
+/* The palette's highlighted result glides from row to row, by the keys or under the pointer (Palette.tsx; typing places
+   it afresh). Each design's own pace comes from its tokens: Vista drifts on its spring, Focus is quick, Poster slams
+   from row to row; Mission's is a lit plate (mission.css). The row's icon lights as the highlight reaches it. */
+.palette-list > .glide { border-radius: var(--r); background: var(--act); }
+.palette-list[data-glide] > .palette-row.sel { background: transparent; }
+.palette-list[data-glide='on'] > .palette-row .palette-icon { transition: background-color var(--m-hover) var(--e-out), color var(--m-hover) var(--e-out); }
+.palette-list[data-glide='on'] > .palette-row.sel .palette-icon { transition-delay: calc(var(--m-move) * 0.3); }
+
 /* =====================================================================
    FIGURES ROLL (Readout, components/Motion.tsx)
    A changed digit leaves as its new one arrives: upward when the figure grew, downward when it shrank.

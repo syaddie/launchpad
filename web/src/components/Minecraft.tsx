@@ -156,7 +156,7 @@ export function MinecraftPanel({ onFailed }: { onFailed: () => void }) {
           </div>
           {error && <div className="status-line" style={{ margin: 0 }}>{error}</div>}
           {list === null ? (
-            <p className="meta">{error ? '' : 'Looking for servers…'}</p>
+            <p className={'meta' + (error ? '' : ' lp-loading')}>{error ? '' : 'Looking for servers…'}</p>
           ) : !list.length ? (
             <div className="mc-empty meta">
               <EmptyArt kind="clear" />
@@ -584,7 +584,7 @@ function Console({ s, onChanged, onSaved, onEdit }: { s: McStatus; onChanged: ()
         {logError && !lines ? (
           <p className="meta">Couldn’t read the log: {logError}</p>
         ) : lines === null ? (
-          <p className="meta">Reading the log…</p>
+          <p className="meta lp-loading">Reading the log…</p>
         ) : missing ? (
           <p className="meta">{s.dir ? `There’s no logs/latest.log in ${s.dir} yet.` : 'Launchpad can’t see this server’s folder, so it can’t show its log. Save it with its folder.'}</p>
         ) : !lines.length ? (

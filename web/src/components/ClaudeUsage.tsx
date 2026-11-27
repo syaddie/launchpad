@@ -51,7 +51,7 @@ export function ClaudeUsagePanel({ data, onOpenSettings }: { data: AppState; onO
         {head}
         <div className="empty">
           <EmptyArt kind={!!error && 'scrubbed'} />
-          <p>{error ? `Couldn’t load the usage: ${error}` : 'Adding up Claude’s usage…'}</p>
+          <p className={error ? undefined : 'lp-loading'}>{error ? `Couldn’t load the usage: ${error}` : 'Adding up Claude’s usage…'}</p>
         </div>
       </section>
     );
