@@ -122,7 +122,7 @@ export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
               )}
             </>
           ) : (
-            <p className="meta" style={{ margin: 0 }}>
+            <p className={'meta' + (busy ? ' lp-loading' : '')} style={{ margin: 0 }}>
               {busy ? 'Reading the week and writing a recap…' : offset === 0 ? 'Claude writes a short recap of the week on Sunday evening. Press refresh to have one now.' : 'No recap for this week. Press refresh to write one.'}
             </p>
           )}

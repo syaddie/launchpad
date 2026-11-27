@@ -245,7 +245,7 @@ function Today({ data, now, busy, error, act, onMerge, onSubjects, onArchive }: 
                 <h2 className="panel-title">{s}</h2>
               </div>
               <div className="dg-body">
-                <p className="news-note">Writing today’s lesson…</p>
+                <p className="news-note lp-loading">Writing today’s lesson…</p>
                 <span className="dg-bar" />
                 <span className="dg-bar short" />
                 <span className="dg-bar" />
@@ -715,7 +715,7 @@ ${starred}`;
       </div>
       <div className="scroll dg-archive-list">
         {error && <div className="news-note" style={{ color: 'var(--wn)' }}>Couldn’t load the archive: {error}</div>}
-        {!res && !error && <div className="news-note">Loading…</div>}
+        {!res && !error && <div className="news-note lp-loading">Loading…</div>}
         {res && !res.cards.length && (
           <div className="news-note">
             {filtered ? 'No lessons match that.' : 'No lessons yet. Each day’s go here, to search and look back on.'}

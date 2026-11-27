@@ -306,7 +306,7 @@ export function LogsDrawer({ c, canRestart, onClose, onRestarted }: { c: Contain
           }}
         >
           {lines === null ? (
-            <p className="meta">{error ? '' : 'Reading the log…'}</p>
+            <p className={'meta' + (error ? '' : ' lp-loading')}>{error ? '' : 'Reading the log…'}</p>
           ) : !shown.length ? (
             <p className="meta">{all.length ? 'No lines match.' : 'Nothing in the log yet.'}</p>
           ) : (

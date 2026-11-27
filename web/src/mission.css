@@ -601,6 +601,28 @@
 }
 
 /* =====================================================================
+   WAITING
+   ===================================================================== */
+
+/* "Loading…" is a scan line acquiring: a line crosses what's being waited for (anything marked lp-loading, and a view
+   whose code is still coming), its afterglow behind it, again and again until it's there. It starts a moment late, so
+   a wait too short to notice shows nothing. A spinner is a small satellite circling its planet. Both run only while
+   something is being waited for, and move only by transform and opacity. */
+[data-design='mission'] :is(.lp-loading, .view-loading) { position: relative; clip-path: inset(-6px 0); }
+/* Across the words themselves, not the whole width of a panel. */
+[data-design='mission'] :is(p, div).lp-loading { width: fit-content; max-width: 100%; }
+[data-design='mission'] :is(.lp-loading, .view-loading)::after { content: ''; position: absolute; inset: -2px 0; pointer-events: none; background: linear-gradient(90deg, transparent calc(100% - 3.2em), color-mix(in srgb, var(--ac) 18%, transparent) calc(100% - 2px), var(--ac) calc(100% - 2px)); animation: msAcquire calc(var(--m-sweep) * 2.4) linear var(--m-state) infinite both; }
+[data-design='mission'] .view-loading { overflow: hidden; }
+[data-design='mission'] .view-loading::after { inset: 0; }
+@keyframes msAcquire { 0% { translate: -100% 0; opacity: 0; } 8% { opacity: 1; } 72% { translate: 0 0; opacity: 1; } 84%, 100% { translate: 0 0; opacity: 0; } }
+[data-design='mission'] .ph-duotone.ph-circle-notch.spin { position: relative; display: inline-block; width: 1em; height: 1em; vertical-align: -0.125em; animation: msSatellite calc(var(--m-sweep) * 2.5) linear infinite; }
+/* The orbit, faint and dashed, round the planet. */
+[data-design='mission'] .ph-duotone.ph-circle-notch.spin::before { content: ''; position: absolute; inset: 0.17em; margin: 0; border: 0.07em dashed currentColor; border-radius: 50%; opacity: 0.55; background: radial-gradient(circle, currentColor 0 0.08em, transparent 0.1em); }
+/* The satellite on it: a body between two panels. */
+[data-design='mission'] .ph-duotone.ph-circle-notch.spin::after { content: ''; position: absolute; left: 50%; top: 0.07em; width: 0.62em; height: 0.2em; margin: 0 0 0 -0.31em; background: linear-gradient(currentColor, currentColor) center / 26% 100% no-repeat, linear-gradient(90deg, currentColor 0 34%, transparent 34% 66%, currentColor 66%) center / 100% 46% no-repeat; }
+@keyframes msSatellite { to { rotate: 360deg; } }
+
+/* =====================================================================
    LEARN
    ===================================================================== */
 
@@ -711,5 +733,8 @@
   @keyframes msBannerUp { to { opacity: 0; } }
   [data-design='mission'] .sync-los { animation: none; }
   @keyframes msUpRing { from { opacity: 1; } to { opacity: 0; } }
+  /* Waiting: no line crosses, and the satellite stands still on its orbit. */
+  [data-design='mission'] :is(.lp-loading, .view-loading)::after { display: none; }
+  [data-design='mission'] .ph-duotone.ph-circle-notch.spin { animation: none; }
   [data-design='mission'] .ms-up::after { display: none; }
 }

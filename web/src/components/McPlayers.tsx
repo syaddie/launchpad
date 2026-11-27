@@ -104,7 +104,7 @@ export function McPlayersView({ s, onNote }: { s: McStatus; onNote: (text: strin
         </button>
       </div>
       {error && <div className="status-line" style={{ margin: 0 }}>{error}</div>}
-      {!data && !error && <p className="meta">Looking for players…</p>}
+      {!data && !error && <p className="meta lp-loading">Looking for players…</p>}
       {data?.note && <p className="meta mc-note">{data.note}</p>}
       {data?.running && !s.attached && <p className="meta mc-note">{s.name} isn’t running in tmux or screen, so the buttons can’t type into its console.</p>}
       {data?.running && !players.length && data.online === 0 && <p className="meta">No one’s online.</p>}

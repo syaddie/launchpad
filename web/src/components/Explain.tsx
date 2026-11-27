@@ -104,7 +104,7 @@ export function ExplainBox({ state, onClose, onRetry }: { state: ExplainState; o
           </button>
         </span>
       </div>
-      {state.busy && <p className="meta" style={{ margin: 0 }}>Sending it to Claude, secrets taken out…</p>}
+      {state.busy && <p className="meta lp-loading" style={{ margin: 0 }}>Sending it to Claude, secrets taken out…</p>}
       {'error' in state && (
         <div className="status-line" style={{ margin: 0 }}>
           {state.error}

@@ -99,7 +99,7 @@ function AskAnswer({ a, canUse, onInsert, onSave }: { a: CommandAsk; canUse: boo
     return (
       <div className="cmd-answer" role="status">
         <div className="cmd-answer-top">
-          <p className="meta" style={{ flex: 1, margin: 0 }}>Working it out…</p>
+          <p className="meta lp-loading" style={{ flex: 1, margin: 0 }}>Working it out…</p>
           {close}
         </div>
       </div>
@@ -262,7 +262,7 @@ export function SnippetsPanel({ canUse, cwd, onInsert, onRun, onClose }: {
         <AskAnswer a={asking} canUse={canUse} onInsert={onInsert} onSave={(q, command) => newSnippet({ name: (q[0].toUpperCase() + q.slice(1)).slice(0, 80), command })} />
         {editing === 'new' && <SnippetForm key={draft.command ?? ''} start={draft} onCancel={() => setEditing(null)} onSave={(name, command) => api.addSnippet({ name, command }).then(saved)} />}
         {list === null ? (
-          !error && <p className="meta">Loading…</p>
+          !error && <p className="meta lp-loading">Loading…</p>
         ) : !list.length && editing !== 'new' ? (
           <div className="empty" style={{ padding: 0, gap: 10 }}>
             <EmptyArt kind="clear" />

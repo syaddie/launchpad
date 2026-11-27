@@ -126,7 +126,7 @@ export function Server({ data, now, openTab, onOpenSettings, onPinFolders, onAut
             (tab === 'terminal' || both) && (
               <section className="panel srv-panel term-panel">
                 <div className="empty">
-                  <p>Opening the terminal…</p>
+                  <p className="lp-loading">Opening the terminal…</p>
                 </div>
               </section>
             )
@@ -183,7 +183,7 @@ function ShellSetup({ info, error, onRetry, onTrusted }: { info: ShellInfo | nul
       <section className="panel srv-panel">
         <div className="empty">
           <EmptyArt kind={!!error && 'scrubbed'} />
-          <p>{error ? `Couldn’t reach the server: ${error}` : 'Checking the SSH setup…'}</p>
+          <p className={error ? undefined : 'lp-loading'}>{error ? `Couldn’t reach the server: ${error}` : 'Checking the SSH setup…'}</p>
           {error && (
             <button className="btn btn-secondary btn-small" onClick={onRetry}>
               Try again
@@ -289,7 +289,7 @@ function Overview({ data, now, onOpenSettings }: { data: AppState; now: Date; on
       <div className="panel">
         <div className="empty">
           <EmptyArt kind={!!error && 'scrubbed'} />
-          <p>{error ? `Couldn’t reach the server: ${error}` : 'Reading the server’s health…'}</p>
+          <p className={error ? undefined : 'lp-loading'}>{error ? `Couldn’t reach the server: ${error}` : 'Reading the server’s health…'}</p>
         </div>
       </div>
     );

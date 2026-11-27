@@ -113,7 +113,7 @@ export function FilesTrash({ now, jobs, onJob, onClose }: {
         </div>
       )}
       <div className="files-list scroll" role="list" aria-label="Trash">
-        {!listing && !error && <div className="empty"><p>Looking in the trash…</p></div>}
+        {!listing && !error && <div className="empty"><p className="lp-loading">Looking in the trash…</p></div>}
         {listing && !items.length && (
           <div className="empty">
             <EmptyArt kind="clear" />

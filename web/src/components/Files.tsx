@@ -521,7 +521,7 @@ export function FilesPanel({ publicKey, hidden, now, open, pins, onPins, onOpenT
       <section className="panel srv-panel files-panel" aria-label="Files" style={style}>
         <div className="empty">
           <EmptyArt kind={!!error && (keyRefused(error) ? 'away' : 'scrubbed')} />
-          <p>{error ? `Couldn’t open the server’s files: ${error}` : 'Opening the server’s files…'}</p>
+          <p className={error ? undefined : 'lp-loading'}>{error ? `Couldn’t open the server’s files: ${error}` : 'Opening the server’s files…'}</p>
           {keyRefused(error) && <Copyable text={authorizeLine(publicKey)} />}
           {error && (
             <button className="btn btn-secondary btn-small" onClick={() => load('/').catch(() => onFailedRef.current())}>

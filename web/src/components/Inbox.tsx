@@ -169,7 +169,7 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, a
 
       {!inbox.fetchedAt ? (
         <div className="panel">
-          <div className="news-note">{st.lastError ? `Couldn’t read Gmail: ${st.lastError}` : 'Reading your inbox…'}</div>
+          <div className={'news-note' + (st.lastError ? '' : ' lp-loading')}>{st.lastError ? `Couldn’t read Gmail: ${st.lastError}` : 'Reading your inbox…'}</div>
         </div>
       ) : !emails.length ? (
         <div className="panel">
