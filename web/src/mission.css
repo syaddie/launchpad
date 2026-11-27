@@ -195,9 +195,18 @@
 .ms-fx { inset: 0; width: 100%; height: 100%; }
 /* Warm light on the horizon under the sun or moon: --glow is 1 as it rises and sets, 0 when it's high. */
 .ms-glow { inset: 0 0 auto 0; height: var(--hz, 38vh); background: radial-gradient(58% 80% at var(--orb-x, 70%) 100%, var(--ms-horizon-glow), transparent 72%); opacity: var(--glow, 0); transition: opacity 1.2s var(--e-out); }
-.ms-orb { left: 0; top: 0; width: 34px; height: 34px; margin: -17px; border-radius: 50%; background: var(--ms-orb); box-shadow: 0 0 34px 10px var(--ms-orb-glow), 0 0 120px 46px var(--ms-orb-glow); transform: translate(calc(var(--orb-x, 70vw) + var(--px, 0) * -9px), calc(var(--orb-y, 12vh) + var(--py, 0) * -6px)); transition: transform 0.9s var(--e-out); }
-/* By night it's a crescent: a second disc in the sky's colour covers most of it. By day that disc is clear. */
+.ms-orb { left: 0; top: 0; width: 34px; height: 34px; margin: -17px; border-radius: 50%; background: var(--ms-orb); box-shadow: 0 0 34px 10px var(--ms-orb-glow), 0 0 120px 46px var(--ms-orb-glow); transform: translate(calc(var(--orb-x, 70vw) + var(--px, 0) * -9px), calc(var(--orb-y, 12vh) + var(--py, 0) * -6px)); transition: transform 0.9s var(--e-out), opacity 1.2s var(--e-out); }
+/* (Without the moon's own drawing: a crescent, a second disc in the sky's colour covering most of it. By day it's clear.) */
 .ms-orb::after { content: ''; position: absolute; left: 24%; top: -14%; width: 100%; height: 100%; border-radius: 50%; background: var(--ms-orb-cut); }
+/* By night the moon is at its real phase (mission.ts, Scene.tsx): its lit part, turned to face the sun, over the faint
+   rest of it, and a halo as strong as it is full. Down (near new moon it's up by day instead), it's gone, fading as it
+   sets and coming back as it rises. */
+.ms-orb[data-moon] { background: none; box-shadow: 0 0 34px 10px color-mix(in srgb, var(--ms-orb-glow) calc(20% + var(--lit, 1) * 80%), transparent), 0 0 120px 46px color-mix(in srgb, var(--ms-orb-glow) calc(var(--lit, 1) * 100%), transparent); }
+.ms-orb[data-moon]::after { display: none; }
+.ms-orb[data-down] { opacity: 0; }
+.ms-moon { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; rotate: var(--moon-turn, 0deg); }
+.ms-moon-lit { fill: var(--ms-orb); }
+.ms-moon-dim { fill: var(--ms-orb); opacity: 0.1; }
 .ms-clouds { inset: 0 0 auto 0; height: var(--hz, 38vh); transform: translate(calc(var(--px, 0) * -14px), calc(var(--py, 0) * -4px)); transition: transform 0.9s var(--e-out); }
 .ms-clouds i { position: absolute; left: 0; height: 26px; border-radius: 999px; background: var(--ms-cloud); filter: blur(10px); animation: msCloud linear infinite; }
 .ms-clouds i:nth-child(1) { top: 20%; width: 240px; animation-duration: 190s; animation-delay: -40s; }

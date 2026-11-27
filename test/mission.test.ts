@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { along, apron, APRON_ROWS, ascentCurve, clearOf, clockText, countdown, dayFraction, finalCount, hoursOf, orbPlace, pathTable, seeded, skyWeather, stagesShed } from '../web/src/mission';
+import { along, apron, APRON_ROWS, ascentCurve, clearOf, clockText, countdown, dayFraction, finalCount, hoursOf, moonPath, moonPhase, moonTimes, moonTurn, orbPlace, pathTable, seeded, skyPoint, skyWeather, stagesShed, sunTimes } from '../web/src/mission';
 
 const at = (h: number, m = 0, s = 0) => new Date(2026, 10, 25, h, m, s);
 
@@ -55,25 +55,122 @@ describe('the path', () => {
 });
 
 describe('the sun and the moon', () => {
-  it('the sun rises at 07:00, is highest at 13:00 and sets at 19:00', () => {
-    expect(orbPlace(7, false)).toMatchObject({ f: 0, glow: 1 });
-    expect(orbPlace(13, false).lift).toBeCloseTo(1);
-    expect(orbPlace(13, false).glow).toBe(0);
-    expect(orbPlace(19, false).f).toBe(1);
+  // Singapore time (the tests run in Asia/Singapore). The almanac's figures are timeanddate.com's for Singapore.
+  const at = (y: number, mo: number, d: number, h: number, mi = 0) => new Date(y, mo - 1, d, h, mi);
+  const minutesOff = (a: Date, b: Date) => Math.abs(a.getTime() - b.getTime()) / 60_000;
+
+  it('the sun rises and sets at Singapore’s real times, through the year', () => {
+    const cases: [Date, Date, Date][] = [
+      [at(2026, 11, 28, 9), at(2026, 11, 28, 6, 50), at(2026, 11, 28, 18, 54)],
+      [at(2026, 11, 1, 15), at(2026, 11, 1, 6, 46), at(2026, 11, 1, 18, 50)],
+      [at(2027, 2, 10, 2), at(2027, 2, 10, 7, 16), at(2027, 2, 10, 19, 20)],
+    ];
+    for (const [day, rise, set] of cases) {
+      const s = sunTimes(day);
+      expect(minutesOff(s.rise, rise)).toBeLessThan(2);
+      expect(minutesOff(s.set, set)).toBeLessThan(2);
+    }
   });
-  it('lights the horizon only when it’s low', () => {
-    expect(orbPlace(7.5, false).glow).toBeGreaterThan(0.7);
-    expect(orbPlace(10, false).glow).toBe(0);
-    expect(orbPlace(18.5, false).glow).toBeGreaterThan(0.7);
+
+  it('the sun is on its arc from sunrise to sunset, highest between them, lighting the horizon only when low', () => {
+    const { rise, set } = sunTimes(at(2026, 11, 28, 12));
+    expect(orbPlace(rise, false)).toMatchObject({ f: 0, glow: 1 });
+    expect(orbPlace(set, false).f).toBeCloseTo(1);
+    const noon = new Date((rise.getTime() + set.getTime()) / 2);
+    expect(orbPlace(noon, false).lift).toBeCloseTo(1);
+    expect(orbPlace(noon, false).glow).toBe(0);
+    expect(orbPlace(at(2026, 11, 28, 7, 15), false).glow).toBeGreaterThan(0.7);
+    expect(orbPlace(at(2026, 11, 28, 10), false).glow).toBe(0);
   });
-  it('the moon is up from 19:00 to 07:00, across midnight', () => {
-    expect(orbPlace(19, true).f).toBe(0);
-    expect(orbPlace(1, true).f).toBe(0.5);
-    expect(orbPlace(6, true).f).toBeCloseTo(11 / 12);
+
+  it('the moon is lit as it really is, waxing and waning', () => {
+    expect(moonPhase(at(2026, 11, 9, 15)).lit).toBeLessThan(0.01);
+    expect(moonPhase(at(2026, 11, 24, 23)).lit).toBeGreaterThan(0.99);
+    expect(moonPhase(at(2026, 11, 17, 20)).lit).toBeCloseTo(0.5, 1);
+    expect(moonPhase(at(2026, 11, 17, 20)).waxing).toBe(true);
+    expect(moonPhase(at(2026, 11, 28, 4)).lit).toBeCloseTo(0.854, 1);
+    expect(moonPhase(at(2026, 11, 28, 4)).waxing).toBe(false);
   });
+
+  it('the moon rises and sets at its real times', () => {
+    // 28 Nov: it set at 10:25 and rises again at 22:52; on the 24th it rose at 18:34, full.
+    const morning = moonTimes(at(2026, 11, 28, 4));
+    expect(morning.up).toBe(true);
+    expect(minutesOff(morning.rise!, at(2026, 11, 27, 21, 51))).toBeLessThan(6);
+    expect(minutesOff(morning.set!, at(2026, 11, 28, 10, 25))).toBeLessThan(6);
+    const evening = moonTimes(at(2026, 11, 28, 20));
+    expect(evening.up).toBe(false);
+    expect(minutesOff(evening.rise!, at(2026, 11, 28, 22, 52))).toBeLessThan(6);
+    expect(minutesOff(moonTimes(at(2026, 11, 24, 21)).rise!, at(2026, 11, 24, 18, 34))).toBeLessThan(6);
+  });
+
+  it('its lit side faces the sun in the scene’s sky: the right in the evening, the left before dawn, down at midnight', () => {
+    // Facing right is 0°, clockwise (down the screen is positive).
+    const turnAt = (t: Date) => {
+      const o = orbPlace(t, true);
+      return moonTurn(o.f, o.sun);
+    };
+    const cos = (deg: number) => Math.cos((deg * Math.PI) / 180);
+    const sin = (deg: number) => Math.sin((deg * Math.PI) / 180);
+    // Waxing, an hour or two after sunset: the sun just under the right-hand horizon, so lit on its lower right.
+    expect(cos(turnAt(at(2026, 11, 13, 19, 30)))).toBeGreaterThan(0.3);
+    expect(sin(turnAt(at(2026, 11, 13, 19, 30)))).toBeGreaterThan(0.5);
+    expect(cos(turnAt(at(2026, 11, 20, 21)))).toBeGreaterThan(0.3);
+    // Waning, before dawn: the sun under the left-hand horizon (a crescent low in the east is lit mostly from below).
+    expect(cos(turnAt(at(2026, 11, 5, 5, 30)))).toBeLessThan(0);
+    expect(sin(turnAt(at(2026, 11, 5, 5, 30)))).toBeGreaterThan(0.5);
+    expect(cos(turnAt(at(2026, 11, 28, 4)))).toBeLessThan(-0.2);
+    // A full moon high at midnight is lit from below, and the sun's place under the horizon doesn't jump at midnight.
+    expect(sin(turnAt(at(2026, 11, 25, 0, 30)))).toBeGreaterThan(0.8);
+    expect(Math.abs(turnAt(at(2026, 11, 24, 23, 59)) - turnAt(at(2026, 11, 25, 0, 1)))).toBeLessThan(3);
+  });
+
+  it('puts the sun under the horizon by night, from where it set to where it will rise', () => {
+    const evening = orbPlace(at(2026, 11, 28, 19, 30), false).sun;
+    expect(evening.below).toBe(true);
+    expect(evening.f).toBeLessThan(0.1);
+    const dawn = orbPlace(at(2026, 11, 28, 6, 30), false).sun;
+    expect(dawn.below).toBe(true);
+    expect(dawn.f).toBeGreaterThan(0.95);
+    // Just risen on the left with the sun set long ago: lit from below and to the right, toward it under the ground.
+    const risen = moonTurn(0.02, { f: 0.37, below: true });
+    expect(risen).toBeGreaterThan(25);
+    expect(risen).toBeLessThan(70);
+    // A sky point: rising on the left, highest in the middle, setting on the right.
+    expect(skyPoint(0, 1000, 400)).toEqual({ x: 160, y: 390 });
+    expect(skyPoint(0.5, 1000, 400).y).toBeCloseTo(390 - 264);
+    expect(skyPoint(1, 1000, 400).x).toBeCloseTo(860);
+  });
+
+  it('by night the moon follows its own rise and set, and is gone when it’s down', () => {
+    // Up from 21:51 on the 27th to 10:25 on the 28th: at 04:00 a little past halfway, waning.
+    const o = orbPlace(at(2026, 11, 28, 4), true);
+    expect(o.up).toBe(true);
+    expect(o.f).toBeGreaterThan(0.45);
+    expect(o.f).toBeLessThan(0.6);
+    expect(o.moon?.lit).toBeCloseTo(0.854, 1);
+    // At 20:00 on the 28th it hasn't risen.
+    expect(orbPlace(at(2026, 11, 28, 20), true)).toMatchObject({ up: false, glow: 0 });
+  });
+
+  it('a thin moon lights the horizon less', () => {
+    const full = orbPlace(at(2026, 11, 24, 19), true);
+    const thin = orbPlace(at(2026, 11, 11, 19, 30), true);
+    expect(full.up && thin.up).toBe(true);
+    expect(thin.glow / Math.max(0.01, 1 - thin.lift * 1.5)).toBeLessThan(full.glow / Math.max(0.01, 1 - full.lift * 1.5));
+  });
+
   it('sits low and late when the theme and the clock disagree', () => {
-    expect(orbPlace(14, true).f).toBe(0.86);
-    expect(orbPlace(22, false).f).toBe(0.86);
+    expect(orbPlace(at(2026, 11, 28, 14), true)).toMatchObject({ f: 0.86, up: true });
+    expect(orbPlace(at(2026, 11, 28, 22), false)).toMatchObject({ f: 0.86, up: true, moon: null });
+  });
+
+  it('draws the lit part from a crescent to full', () => {
+    expect(moonPath(0)).toBe('M0 -1 A1 1 0 0 1 0 1 A1 1 0 0 0 0 -1Z');
+    expect(moonPath(0.25)).toBe('M0 -1 A1 1 0 0 1 0 1 A0.5 1 0 0 0 0 -1Z');
+    expect(moonPath(0.5)).toBe('M0 -1 A1 1 0 0 1 0 1 A0 1 0 0 1 0 -1Z');
+    expect(moonPath(0.85)).toBe('M0 -1 A1 1 0 0 1 0 1 A0.7 1 0 0 1 0 -1Z');
+    expect(moonPath(1)).toBe('M0 -1 A1 1 0 0 1 0 1 A1 1 0 0 1 0 -1Z');
   });
 });
 

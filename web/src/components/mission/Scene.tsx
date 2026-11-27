@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { along, ascentCurve, clearOf, dayFraction, hoursOf, orbPlace, pathTable, seeded, stagesShed, type PathTable, type SkyWeather } from '../../mission';
+import { along, ascentCurve, clearOf, dayFraction, hoursOf, moonPath, moonTurn, orbPlace, pathTable, seeded, skyPoint, stagesShed, type PathTable, type SkyWeather } from '../../mission';
 import { hm } from '../../util';
 import { Vehicle } from './Mark';
 
@@ -30,6 +30,10 @@ type Geo = {
   orbX: number;
   orbY: number;
   glow: number;
+  /** Whether the sun or moon is up: by night the moon may not have risen. */
+  orbUp: boolean;
+  /** By night, the moon's phase: how much is lit, and which way its lit side faces (toward the sun, mission.ts). */
+  moon: { lit: number; turn: number } | null;
 };
 
 type Particle = { k: 'ex' | 'smoke' | 'vap'; x: number; y: number; vx: number; vy: number; life: number; age: number; size: number };
@@ -93,12 +97,28 @@ export function MissionScene({ now, dark, narrow, home, events, wx, launch }: {
       const band = narrow ? 58 : rail ? rail.bottom - box.top : 60;
       const arcTop = site && words ? Math.max(band + 14, words.top - box.top - (narrow ? 26 : 38)) : null;
       const names = !narrow && arcTop !== null && arcTop - band >= 46;
-      const orb = orbPlace(hour, dark);
+      // The sun and moon at their real times for Singapore (mission.ts), the moon at its real phase.
+      const orb = orbPlace(now, dark);
       const boxes = [hero, narrow ? top('.clock-row') : top('.top-right'), narrow ? tools : rail, home ? null : top('.top-left')]
         .filter((b): b is DOMRect => !!b)
         .map((b) => ({ left: b.left - box.left, top: b.top - box.top, right: b.right - box.left, bottom: b.bottom - box.top }));
-      const at = clearOf({ x: w * (0.16 + 0.7 * orb.f), y: hz - 10 - orb.lift * hz * 0.66 }, boxes, hz - 4, narrow ? 20 : 70);
-      const next: Geo = { w, h, hz, padX: Math.round(padX), k, site, arcTop: arcTop === null ? null : Math.round(arcTop), names, orbX: Math.round(at.x), orbY: Math.round(at.y), glow: r2(orb.glow) };
+      const at = clearOf(skyPoint(orb.f, w, hz), boxes, hz - 4, narrow ? 20 : 70);
+      const moon = orb.moon ? { lit: orb.moon.lit, turn: moonTurn(orb.f, orb.sun) } : null;
+      const next: Geo = {
+        w,
+        h,
+        hz,
+        padX: Math.round(padX),
+        k,
+        site,
+        arcTop: arcTop === null ? null : Math.round(arcTop),
+        names,
+        orbX: Math.round(at.x),
+        orbY: Math.round(at.y),
+        glow: r2(orb.glow),
+        orbUp: orb.up,
+        moon,
+      };
       setGeo((g) => (g && JSON.stringify(g) === JSON.stringify(next) ? g : next));
     };
     measure();
@@ -445,7 +465,19 @@ export function MissionScene({ now, dark, narrow, home, events, wx, launch }: {
       <div className="ms-sky" />
       <canvas ref={starsRef} className="ms-stars" />
       <div className="ms-glow" />
-      <i className="ms-orb" />
+      <i
+        className="ms-orb"
+        data-moon={geo?.moon ? '' : undefined}
+        data-down={geo && !geo.orbUp ? '' : undefined}
+        style={geo?.moon ? ({ '--lit': geo.moon.lit, '--moon-turn': `${geo.moon.turn}deg` } as CSSProperties) : undefined}
+      >
+        {geo?.moon && (
+          <svg className="ms-moon" viewBox="-1 -1 2 2">
+            <circle className="ms-moon-dim" r="1" />
+            <path className="ms-moon-lit" d={moonPath(geo.moon.lit)} />
+          </svg>
+        )}
+      </i>
       <div className="ms-clouds">
         <i />
         <i />

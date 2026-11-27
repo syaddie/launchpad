@@ -15,7 +15,7 @@ The design system it is built from (tokens, components with live previews, the m
 | The scene: sky, sun and moon, stars, clouds, the site, the ascent, particles, the launch | `web/src/components/mission/Scene.tsx` |
 | The launch clock and what it counts to | `web/src/components/mission/Hero.tsx` |
 | The mark, drawn inline | `web/src/components/mission/Mark.tsx` |
-| The maths with no page in it (the path, the sun's place, the countdown's text, "all done") | `web/src/mission.ts`, tested in `test/mission.test.ts` |
+| The maths with no page in it (the path, the sun's and moon's real times and the moon's phase, the countdown's text, "all done") | `web/src/mission.ts`, tested in `test/mission.test.ts` |
 | Home: the photos as the ground, Today and the Notepad on it | `web/src/components/mission/MissionHome.tsx`, `web/src/mission-home.css` |
 | Which source light a save blinks | `web/src/uplink.ts` (called from `req` in `api.ts`), tested in `test/uplink.test.ts` |
 | The tab's title and icon (every layout) | `web/src/tabTitle.ts`, tested in `test/tab-title.test.ts`; `web/src/hooks/useTabTitle.ts`; `web/public/favicon-lit.svg` |
@@ -28,6 +28,14 @@ that only Mission shows (with Launchpad's own light and its line in the poll's l
 
 - The sky by theme, the sun or moon on its arc by the clock, the horizon's glow near rising and setting, stars and
   twinklers, clouds, a satellite or a contrail now and then, cloud and rain from the forecast.
+- Real sunrise and sunset, and the real moon (idea 1; `sunTimes`, `moonTimes`, `moonPhase`, `orbPlace` in `mission.ts`,
+  drawn by `Scene.tsx`): the sun rises and sets at Singapore's times for the day (06:46 to 07:16, 18:50 to 19:20 over
+  the year), worked out on the page with the usual almanac formulas, nothing asked of the network, within a minute or
+  two of the almanacs. By night the moon rises and sets at its own times and is drawn at its real phase, a crescent to
+  full, its lit side facing the sun in the scene's own sky (under the right-hand horizon after sunset, the left before
+  dawn), its halo as strong as it is full. When it's down (it's up by day near new moon) the night has none: it fades as
+  it sets and comes back up on the left, behind the pad, when it rises. When the theme and the clock disagree (Night at
+  noon), it still sits low and late. A thin moon lights the horizon less.
 - The site: tower, masts with blinking lamps, water tower, floodlights at night, the vehicle venting.
 - The day's ascent with its waypoints and the vehicle on it, burning.
 - The launch clock (T- to the next event, T+ during one, the time of day when nothing is left).
@@ -156,8 +164,6 @@ that only Mission shows (with Launchpad's own light and its line in the poll's l
 
 Kept from the design sessions, roughly in the order worth trying.
 
-1. **Real sunrise and sunset.** The sun is up at 07:00 and down at 19:00. Singapore's are within twenty minutes of
-   that all year, but the real times (and the moon's real phase and rise) are a small calculation with no network.
 2. **Dawn and dusk as their own skies.** Today the horizon warms inside one theme. A third and fourth palette
    (indigo into rose into orange) for the half hour either side of sunrise and sunset, cross-faded.
 3. **Weather that is more than cloud and rain.** Thunder as a far flash behind the cloud; haze from the PSI reading
