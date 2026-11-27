@@ -6,7 +6,7 @@
 
 /* ---------- pieces only Mission shows ---------- */
 
-.sync-lights, .ms-brand, .ms-empty-art { display: none; }
+.sync-lights, .ms-brand, .ms-empty-art, .sync-line--ms { display: none; }
 
 /* ---------- Settings › Layout ---------- */
 
@@ -661,6 +661,29 @@
 :root:not([data-design='mission']) .lp-presence[data-leaving] > .server-banner { animation: none; }
 
 /* =====================================================================
+   SAVES GOING UP
+   ===================================================================== */
+
+/* Anything the server saves blinks its source's light once, like a packet going up (uplink.ts, TopBar.tsx): an event
+   added is the calendar's, an email archived the inbox's, a lesson starred the digest's, and whatever is kept in
+   Launchpad's own store (notes, money, Learn, the trackers, settings) the last light's, Launchpad's own, which holds
+   while edits wait in this browser. A ring pulses off the light, and a packet streaks up from it and goes out. */
+[data-design='mission'] .sync-line--ms { display: flex; }
+[data-design='mission'] .sync-lights > i { position: relative; }
+[data-design='mission'] .ms-up { position: absolute; inset: -2px; pointer-events: none; }
+[data-design='mission'] .ms-up::before, [data-design='mission'] .ms-up::after { content: ''; position: absolute; }
+[data-design='mission'] .ms-up::before { inset: 0; border-radius: 50%; box-shadow: 0 0 0 1.5px currentColor, 0 0 8px currentColor; animation: msUpRing var(--m-sweep) var(--e-out) both; }
+[data-design='mission'] .ms-up::after { left: 50%; bottom: 50%; width: 3px; height: 10px; margin-left: -1.5px; border-radius: 2px; background: linear-gradient(to top, transparent, currentColor 70%); animation: msUpPacket var(--m-sweep) var(--e-out) both; }
+/* The scrubbed light is turned on its corner: its packet still rises straight up. */
+[data-design='mission'] .ms-mark--scrub > .ms-up::after { rotate: -45deg; --up-x: -15px; --up-y: -15px; }
+@keyframes msUpRing { 0% { opacity: 1; scale: 0.9; } 100% { opacity: 0; scale: 2.3; } }
+@keyframes msUpPacket {
+  0% { opacity: 0; translate: 0 0; }
+  12% { opacity: 1; }
+  100% { opacity: 0; translate: var(--up-x, 0) var(--up-y, -22px); }
+}
+
+/* =====================================================================
    LESS MOTION
    Nothing breathes, burns, drifts, blinks, falls or crosses the sky, and nothing launches (Scene.tsx checks too).
    The sky still shows the hour and the weather's cloud, standing still.
@@ -687,4 +710,6 @@
   @keyframes msBannerDown { from { opacity: 0; } }
   @keyframes msBannerUp { to { opacity: 0; } }
   [data-design='mission'] .sync-los { animation: none; }
+  @keyframes msUpRing { from { opacity: 1; } to { opacity: 0; } }
+  [data-design='mission'] .ms-up::after { display: none; }
 }
