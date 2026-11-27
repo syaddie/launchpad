@@ -184,7 +184,19 @@ export function MoneyView({ money: given, now, saved, onChange: save, onImport, 
       </div>
       {statement && <StatementDrawer statement={statement} money={money} bills={bills} notify={notify} onApply={applyStatement} onClose={() => setStatement(null)} />}
       {tab === 'overview' && <Overview money={money} today={today} onOpenMonth={openMonth} onChange={onChange} />}
-      {tab === 'month' && <MonthTab money={money} today={today} month={month} onMonth={setMonth} onChange={onChange} onOpenOwed={() => setTab('owed')} together={together} />}
+      {tab === 'month' && (
+        <MonthTab
+          money={money}
+          today={today}
+          month={month}
+          onMonth={setMonth}
+          onChange={onChange}
+          onOpenOwed={() => setTab('owed')}
+          together={together}
+          notify={notify}
+          undo={(msg, back) => notify(msg, { label: 'Undo', run: () => onChange(back(latest.current)) })}
+        />
+      )}
       {tab === 'subs' && <Subscriptions money={money} today={today} onChange={onChange} onOpenMonth={openMonth} notify={notify} />}
       {tab === 'owed' && <Owed money={money} today={today} onChange={onChange} onOpenMonth={openMonth} notify={notify} />}
       {tab === 'wishlist' && (

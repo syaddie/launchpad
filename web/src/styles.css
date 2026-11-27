@@ -1621,35 +1621,55 @@ i.file-pinned { color: var(--ac); }
 /* inline-size containment keeps a wide table scrolling inside its panel instead of widening the page. */
 .sum-scroll { overflow-x: auto; contain: inline-size; }
 
-/* Month: the entries for one calendar month, planned and done. */
+/* Month: the entries for one calendar month, planned and done. Off a phone (`.together`) it fits
+   the window: the month and its numbers in one band, then the calendar and the list side by side
+   taking the rest of the height (MonthTab.tsx). */
+.month-tab { container: month / inline-size; }
+.month-tab.together { gap: 14px; }
+[data-layout='wide'] .month-tab.together { gap: 20px; }
+.month-top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 28px; }
+.month-lead { flex: 0 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .month-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 30px; }
 .month-nav { display: flex; align-items: center; gap: 4px; }
 .month-title { min-width: 170px; margin: 0; font-size: 24px; font-weight: 600; text-align: center; white-space: nowrap; }
+[data-layout='narrow'] .month-lead { flex-basis: 100%; }
 [data-layout='narrow'] .month-title { min-width: 0; font-size: 20px; }
 [data-layout='narrow'] .month-nav { flex-wrap: wrap; row-gap: 8px; }
-/* The list reads as a column; the calendar keeps the full width. */
-.month-tab > :not(.cal) { width: 100%; max-width: 920px; margin-inline: auto; }
-.month-sum { display: flex; flex-direction: column; gap: 8px; }
-.month-sum .m-stat { border-radius: var(--r-m); }
-.month-sum .m-stat .serif { font-size: 24px; }
-.month-sum .m-stat.hero .serif { font-size: 28px; }
+/* On a phone the list reads as a column; the calendar keeps the full width. */
+.month-tab:not(.together) > :not(.cal) { width: 100%; max-width: 920px; margin-inline: auto; }
+.month-sum { flex: 1 1 540px; min-width: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.month-sum .m-stat { min-width: 0; gap: 1px; padding: 9px 13px 10px; border-radius: var(--r-m); }
+.month-sum .m-stat .serif { font-size: clamp(18px, 1.6cqi, 22px); }
+[data-layout='wide'] .month-sum .m-stat .serif { font-size: 26px; }
+@container month (max-width: 560px) {
+  .month-sum { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .month-sum .m-stat .serif { font-size: 20px; }
+}
 .m-stat .serif.m-in { color: var(--acd); }
-.month-foot { margin: 0; padding: 0 4px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 22px; font-size: 13px; color: var(--t2); }
+.month-foot { margin: 0; padding: 0 4px; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 18px; font-size: 13px; color: var(--t2); }
 .month-foot:empty { display: none; }
 .month-foot > span { display: inline-flex; align-items: center; gap: 6px; }
 .month-foot i { color: var(--wn); font-size: 15px; }
 
-.review-bar { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border-radius: var(--r-m); background: var(--wnt); color: var(--wn); font-size: 13px; }
+.review-bar { display: flex; flex-direction: column; gap: 1px; padding: 8px 14px; border-radius: var(--r-m); background: var(--wnt); color: var(--wn); font-size: 13px; }
 .review-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .review-head i { font-size: 17px; }
 .review-head b { font-weight: 600; }
 .review-head .btn { margin-left: auto; color: var(--wn); border-color: color-mix(in srgb, var(--wn) 35%, transparent); }
-.review-item { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 5px 0 2px 25px; color: var(--tx); }
+.review-item { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 3px 0 1px 25px; color: var(--tx); }
 .review-what { flex: 1 1 200px; min-width: 0; }
 .review-item b { font-weight: 600; }
 .review-yes { background: var(--wn); color: var(--on); }
 .review-yes:hover { filter: brightness(0.94); }
 .review-item .btn-ghost { color: var(--wn); }
+.review-acts { display: inline-flex; align-items: center; gap: 4px 12px; }
+/* A narrow column or a phone: what and how much, then the two buttons under them. */
+@container listcol (max-width: 470px) {
+  .review-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; }
+  .review-acts { grid-column: 1 / -1; justify-self: end; }
+}
+[data-layout='narrow'] .review-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; }
+[data-layout='narrow'] .review-acts { grid-column: 1 / -1; justify-self: end; }
 .review-more { padding: 4px 0 0 25px; color: var(--t2); }
 
 /* Adding: what it's for, in or out, how much; then when, category and repeats. */
@@ -1664,20 +1684,54 @@ i.file-pinned { color: var(--ac); }
 .composer .cell.composer-field.tone-neutral { color: var(--tx); font-weight: 500; }
 .composer-hint { margin-left: auto; }
 [data-layout='narrow'] .composer-hint { margin-left: 0; width: 100%; }
+/* Month's add row: what, in or out, how much; under it, the day, the account, the category and repeats. */
+.month-add .composer-note { flex-basis: 120px; }
+/* A narrow column (a small window) or a phone: in or out, how much and Add on one line, what it's
+   for on the next; the list's heading without its count. */
+@container listcol (max-width: 470px) {
+  .month-add .composer-main { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; }
+  .month-add .composer-note { grid-row: 2; grid-column: 1 / -1; }
+  .month-add .cell.composer-amt { justify-self: end; }
+  .month-add .composer-hint, .days-count { display: none; }
+}
+[data-layout='narrow'] .month-add .composer-main { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; }
+[data-layout='narrow'] .month-add .composer-note { grid-row: 2; grid-column: 1 / -1; }
+[data-layout='narrow'] .month-add .cell.composer-amt { justify-self: end; }
+[data-layout='narrow'] .days-count { display: none; }
+.month-add .composer-opts { padding-top: 6px; border-top: 1px solid var(--ln); }
 
 .seg { flex: none; display: inline-flex; padding: 2px; border-radius: var(--r-m); background: var(--bg); }
 .seg button:hover:not(.on) { color: var(--tx); }
 .seg button { height: 30px; padding: 0 12px; border: none; border-radius: var(--r); background: none; color: var(--t2); font: inherit; font-size: 13px; cursor: pointer; }
 .seg button.on { background: var(--rz); color: var(--tx); font-weight: 600; box-shadow: 0 1px 2px rgba(34, 32, 30, 0.1); }
 
-/* The entries a day at a time. */
-.days { padding: 4px 16px 14px; gap: 0; }
-.days-key { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 16px; padding: 10px 2px 0; }
+/* The entries a day at a time: a heading for each day (its date in full, its balance at the end),
+   under a bar to pick the account shown and jump to today. Off a phone the list scrolls inside its
+   panel and each day's heading stays at the top while its entries go by. */
+.month-tab .panel.days { padding: 0; gap: 0; }
+.days-head { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 9px 14px 8px 16px; border-bottom: 1px solid var(--ln); }
+.days-show { display: inline-flex; align-items: center; gap: 6px; }
+.days-pick.input { width: auto; max-width: 200px; height: 30px; padding: 0 6px; }
+.days-pick.input.on { border-color: var(--ac); color: var(--acd); font-weight: 600; }
+.days-count { margin-right: auto; }
+.days-today { flex: none; margin-left: auto; }
+.days-scroll { position: relative; min-width: 0; padding: 0 14px 14px 16px; }
+.lp-root:not([data-layout='narrow']) .month-split .days-scroll { min-height: 0; overflow-y: auto; contain: size; }
+.days-key { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 18px 2px 2px; }
 .days-key > span { display: inline-flex; align-items: center; gap: 6px; }
 .days-key .ent-tick { width: 12px; height: 12px; }
-.day-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 16px 2px 4px; border-bottom: 1px solid var(--ln); }
-.day-head h3 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--t2); }
-.day-bal { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; }
+.day + .day, .today-line + .day { margin-top: 6px; }
+.day-head { display: flex; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 12px 2px 7px; border-bottom: 1px solid var(--ln); }
+.lp-root:not([data-layout='narrow']) .month-split .day-head { position: sticky; top: 0; z-index: 2; margin: 0 -14px 0 -16px; padding-inline: 18px 16px; background: var(--pop, var(--sf)); }
+.lp-root:is([data-design='mission'], [data-design='vista']):not([data-layout='narrow']) .month-split .day-head { backdrop-filter: blur(16px) saturate(1.3); }
+.day-title { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; font-size: 14.5px; font-weight: 600; line-height: 1.3; color: var(--tx); }
+.day-rel { font-size: 12.5px; font-weight: 600; color: var(--t2); }
+.day-rel.now { padding: 0 8px; border-radius: 999px; background: var(--ac); color: var(--on); line-height: 20px; }
+.day-bal { flex: none; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; }
+.day-none { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; min-height: 50px; padding: 6px 2px; font-size: 13.5px; color: var(--t2); }
+/* Brought into view from the calendar, Today or "Change it", or just added: a tint that fades, so the eye finds it. */
+.lp-found, .month-split .lp-found > .day-head { animation: lpFound calc(var(--m-move) * 4) var(--e-out); }
+@keyframes lpFound { from { background-color: var(--act); } }
 
 .ent { display: flex; align-items: center; gap: 8px; min-height: 54px; padding: 3px 2px; border-radius: var(--r); }
 .ent + .ent { border-top: 1px solid var(--ln); }
@@ -1698,6 +1752,8 @@ i.file-pinned { color: var(--ac); }
 .ent-acts { display: flex; gap: 2px; opacity: 0; transition: opacity 0.15s; }
 .ent:hover .ent-acts, .ent:focus-within .ent-acts { opacity: 1; }
 @media (hover: none) { .ent-acts { opacity: 0.6; } }
+/* A phone: tapping an entry changes it and a long press has the rest, so its note gets the room. */
+[data-layout='narrow'] .ent-acts { display: none; }
 .ent-x { width: 30px; height: 30px; border-radius: var(--r); }
 .ent.editing { background: var(--bg); align-items: flex-start; padding: 8px 6px; }
 .ent.editing .ent-check { margin-top: -3px; }
@@ -1881,16 +1937,21 @@ i.file-pinned { color: var(--ac); }
 .move-ends .meta { margin-top: 2px; }
 .move-swap { align-self: center; margin-top: 4px; }
 
-/* Calendar: each day's in, out and end-of-day balance. */
-.cal { padding: 16px; gap: 12px; }
-.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+/* Calendar: each day's in, out and end-of-day balance. Today's date is in the accent; the picked
+   day (the add row's, shown in the list) is ringed (MonthCalendar.tsx). */
+.cal { container: cal / inline-size; padding: 12px; gap: 8px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: auto; grid-auto-rows: minmax(0, 1fr); gap: 6px; }
+.cal-row { display: contents; }
 .cal-dow { padding: 0 8px 2px; font-size: 12px; font-weight: 600; color: var(--t3); }
+.cal-cell { display: flex; min-width: 0; }
 .cal-day {
-  min-height: 96px;
+  flex: 1;
+  min-width: 0;
+  min-height: 56px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 7px 9px 8px;
+  gap: 1px;
+  padding: 5px 8px 6px;
   border: none;
   border-radius: var(--r);
   background: var(--bg);
@@ -1904,27 +1965,59 @@ i.file-pinned { color: var(--ac); }
 .cal-day:hover { box-shadow: inset 0 0 0 1px var(--t3); }
 .cal-day.past { background: transparent; box-shadow: inset 0 0 0 1px var(--ln); }
 .cal-day.past:hover { box-shadow: inset 0 0 0 1px var(--t3); }
-.cal-day.today { background: var(--act); box-shadow: inset 0 0 0 1.5px var(--ac); }
-.cal-num { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--t3); }
-.cal-day.today .cal-num { color: var(--acd); font-weight: 700; }
-.cal-late { width: 6px; height: 6px; border-radius: 50%; background: var(--wn); }
-.cal-low { margin-left: auto; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--t3); }
-.cal-amts { flex: 1; display: flex; flex-direction: column; gap: 0; font-size: 12px; line-height: 1.35; }
+.cal-day.today { background: var(--act); box-shadow: none; }
+.cal-day.on, .cal-day.on:hover { box-shadow: inset 0 0 0 2px var(--ac); }
+.cal-num { display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 12px; line-height: 17px; color: var(--t3); }
+.cal-n { flex: none; }
+.cal-day.today .cal-n { padding: 0 6px; margin-left: -3px; border-radius: 999px; background: var(--ac); color: var(--on); font-weight: 700; }
+.cal-day.on .cal-n { color: var(--tx); font-weight: 700; }
+.cal-day.today.on .cal-n { color: var(--on); }
+.cal-late { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--wn); }
+.cal-low { margin-left: auto; min-width: 0; display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; color: var(--t3); }
+.cal-low i { font-size: 13px; color: var(--wn); }
+/* Days too narrow for the word keep its arrow. */
+@container cal (max-width: 760px) { .cal-low-t { display: none; } }
+.cal-amts { flex: 1; display: flex; flex-direction: column; gap: 0; font-size: 12px; line-height: 1.2; }
 .cal-in { color: var(--acd); font-weight: 600; }
 .cal-out { color: var(--t2); }
 .cal-day.planned .cal-amts { font-style: italic; }
-.cal-bal { font-weight: 600; color: var(--t2); white-space: nowrap; }
+.cal-bal { margin-top: auto; font-weight: 600; line-height: 1.2; color: var(--t2); white-space: nowrap; }
+.cal-net, .cal-r { display: none; }
+.cal-in, .cal-out, .cal-net { white-space: nowrap; }
+/* Off a phone the weeks share the calendar's height, so a day gets what there is and shows what
+   fits: short, a day with money both ways shows its net instead of the two; shorter, just its
+   balance (the tooltip and the list have the rest). */
+.lp-root:not([data-layout='narrow']) .cal-cell { container: day / size; min-height: 44px; }
+@container day (max-height: 75px) {
+  .cal-day.both .cal-amts > :not(.cal-net) { display: none; }
+  .cal-day.both .cal-net { display: block; }
+}
+@container day (max-height: 59px) {
+  .cal-day { padding-block: 4px 5px; }
+  .cal-amts { display: none; }
+}
+/* Too narrow for cents: whole dollars. */
+@container day (max-width: 90px) {
+  .cal-x { display: none; }
+  .cal-r { display: inline; }
+  .cal-day { padding-inline: 6px; }
+}
 .cal-day.has .cal-bal, .cal-day.today .cal-bal { color: var(--tx); }
 .cal-bal.neg, .cal-day.has .cal-bal.neg { color: var(--wn); }
-.cal-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 20px; }
+.cal-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 20px; }
 .cal-foot b { font-weight: 600; }
-[data-layout='wide'] .cal-day { min-height: 120px; font-size: 14px; }
+[data-layout='wide'] .cal-day { min-height: 76px; padding: 8px 10px 9px; font-size: 14px; }
+[data-layout='wide'] .cal-amts { font-size: 13px; }
 [data-layout='narrow'] .cal { padding: 10px 6px; }
 [data-layout='narrow'] .cal-grid { gap: 3px; }
 [data-layout='narrow'] .cal-dow { padding: 0 2px; font-size: 11px; text-align: center; }
 [data-layout='narrow'] .cal-day { min-height: 74px; padding: 5px 3px; font-size: 10px; }
+[data-layout='narrow'] .cal-day.today .cal-n { padding: 0 4px; margin-left: -1px; }
 [data-layout='narrow'] .cal-amts { font-size: 10px; }
-[data-layout='narrow'] .cal-low { display: none; }
+/* A phone's days are too narrow for cents: whole dollars, as in a narrow day off a phone. */
+[data-layout='narrow'] .cal-x { display: none; }
+[data-layout='narrow'] .cal-r { display: inline; }
+[data-layout='narrow'] .cal-low i { font-size: 11px; }
 
 .m-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
 .m-stat { display: flex; flex-direction: column; gap: 3px; padding: 14px 16px; border: none; border-radius: var(--r); background: var(--sf); color: var(--tx); font: inherit; text-align: left; }

@@ -63,10 +63,23 @@
 
 /* ---------- things every design keeps side by side on a wide enough screen ---------- */
 
-/* Money › Month: the calendar and the list at once. */
-.month-split { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 20px; align-items: start; width: 100%; max-width: none !important; }
-.month-split > .cal { margin: 0; }
-.month-list-col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+/* Money › Month: the calendar and the list at once, taking the rest of the window's height (a
+   window too short for even small days, or the add row, scrolls the tab instead). The list scrolls
+   in its own panel. Too narrow for both side by side, the list goes under the calendar, both at
+   their full height, and the tab scrolls like a phone's page, the days' headings sticking to its top. */
+.month-tab > .month-split { flex: 1 0 auto; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(340px, 1fr); gap: 16px; width: 100%; }
+[data-layout='wide'] .month-tab > .month-split { gap: 24px; }
+.month-split > .cal { margin: 0; min-width: 0; }
+.month-split .cal-grid { flex: 1 1 auto; }
+.month-list-col { container: listcol / inline-size; display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; }
+/* Its heading, then at least 200px of list (clipped, not scrolled, so that minimum holds). */
+.month-list-col > .days { flex: 1 1 0; min-height: auto; overflow: clip; display: grid; grid-template-rows: auto minmax(200px, 1fr); }
+@container month (max-width: 819px) {
+  .month-tab > .month-split { flex: none; grid-template-columns: minmax(0, 1fr); }
+  .lp-root .month-split .cal-cell { min-height: 78px; }
+  .month-list-col > .days { flex: none; }
+  .lp-root:not([data-layout='narrow']) .month-split .days-scroll { flex: none; min-height: 0; overflow: visible; contain: none; }
+}
 /* Server: Terminal and Files at once. */
 .server.split-shell { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
 .server.split-shell > .server-head { grid-column: 1 / -1; }
@@ -442,7 +455,7 @@
 /* ---------- Small things in each design ---------- */
 
 /* Poster keeps chips, pills and badges square too. */
-[data-design='poster'] :is(.dg-option.sm, .dg-pill, .topic-chip, .topic-chip button, .acct-chip, .days-left, .ent-acct, .ent-inv, .note-filter, .mc-sheet, .mc-diag, .mc-job, .explain, .design-pick) { border-radius: 0; }
+[data-design='poster'] :is(.dg-option.sm, .dg-pill, .topic-chip, .topic-chip button, .acct-chip, .days-left, .ent-acct, .ent-inv, .note-filter, .mc-sheet, .mc-diag, .mc-job, .explain, .design-pick, .day-rel.now, .cal-day.today .cal-n) { border-radius: 0; }
 /* Poster's accent is its red: money coming in, a lift going up and a friend's chat line are good news, so they're ink. */
 [data-design='poster'] :is(.m-in, .ent-amt.in, .cal-in, .tr-ld.up, .acct-up, .mc-line.chat, .sheet.owed-sheet td.amt .cell, .ent-lock.in) { color: var(--tx) !important; }
 /* The course filter takes each design's active tab look, as other tab rows do. */
