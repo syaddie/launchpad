@@ -460,13 +460,63 @@
 :root[data-design='mission'][data-entering] .lp-inner > main :is(.panel, .photo-panel):not(.panel .panel) { animation: msRiseUp var(--m-view) var(--e-out) both; }
 
 /* =====================================================================
+   MONEY › MONTH
+   ===================================================================== */
+
+/* Changing month is a scan (styles.css has the wipe it rides on). The line is a beam with an afterglow behind it,
+   crossing at a steady rate like a radar's, and each day lights as the beam passes it, then cools. The month's name
+   relights letter by letter from the same side, the way the launch clock's dots do. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .month-tab { --sweep-ease: linear; }
+  [data-design='mission'] .cal-scan::after { width: 2px; background: linear-gradient(180deg, transparent, var(--ac) 10%, var(--ac) 90%, transparent); box-shadow: 0 0 10px 1px color-mix(in srgb, var(--ac) 70%, transparent), 0 0 30px 5px color-mix(in srgb, var(--ac) 26%, transparent); }
+  [data-design='mission'] .cal-scan::before { content: ''; position: absolute; top: 0; bottom: 0; right: 0; width: min(160px, 34%); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--ac) 16%, transparent)); }
+  [data-design='mission'] .cal-sweep[data-step='prev'] > .cal-scan::before { right: auto; left: 0; background: linear-gradient(270deg, transparent, color-mix(in srgb, var(--ac) 16%, transparent)); }
+  /* --c is the day's column: it lights as the beam reaches the middle of it. */
+  [data-design='mission'] .month-tab[data-arrive] .cal > .cal-grid .cal-day { animation: msDayLit calc(var(--sweep) * 1.5) var(--e-out) both; animation-delay: calc(var(--sweep) * (var(--c, 0) + 0.5) / 7); }
+  [data-design='mission'] .month-tab[data-arrive='prev'] .cal > .cal-grid .cal-day { animation-delay: calc(var(--sweep) * (6.5 - var(--c, 0)) / 7); }
+  /* --i is each letter's place and --n how many there are (MonthTab.tsx). */
+  [data-design='mission'] .month-tab[data-arrive] .month-title { animation: none; }
+  [data-design='mission'] .month-tab[data-arrive] .month-glyphs > span { animation: msRelight 260ms steps(3, end) both, msGlyphGlow 720ms var(--e-out) both; animation-delay: calc(var(--i) * 26ms); }
+  [data-design='mission'] .month-tab[data-arrive='prev'] .month-glyphs > span { animation-delay: calc((var(--n) - 1 - var(--i)) * 26ms); }
+}
+@keyframes msDayLit { from { background-color: color-mix(in srgb, var(--ac) 24%, var(--bg)); box-shadow: inset 0 0 0 1px var(--ac), 0 0 18px -4px var(--ac); } }
+@keyframes msGlyphGlow { from { text-shadow: 0 0 12px var(--ac), 0 0 2px var(--ac); } }
+
+/* The day you pick is locked on to: four corners close in on it and fade, leaving its ring. Not the copy of the old
+   month leaving (monthMotion.ts), only the real calendar. */
+[data-design='mission'] .cal-day { position: relative; }
+[data-design='mission'] .cal > .cal-grid .cal-day.on::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: calc(var(--r) - 4px);
+  pointer-events: none;
+  background:
+    linear-gradient(var(--ac) 0 0) 0 0 / 9px 2px, linear-gradient(var(--ac) 0 0) 0 0 / 2px 9px,
+    linear-gradient(var(--ac) 0 0) 100% 0 / 9px 2px, linear-gradient(var(--ac) 0 0) 100% 0 / 2px 9px,
+    linear-gradient(var(--ac) 0 0) 0 100% / 9px 2px, linear-gradient(var(--ac) 0 0) 0 100% / 2px 9px,
+    linear-gradient(var(--ac) 0 0) 100% 100% / 9px 2px, linear-gradient(var(--ac) 0 0) 100% 100% / 2px 9px;
+  background-repeat: no-repeat;
+  opacity: 0;
+  animation: msLockOn 760ms var(--e-out) both;
+}
+@keyframes msLockOn { 0% { opacity: 0; scale: 1.45; } 38% { opacity: 1; scale: 1; } 70% { opacity: 1; } 100% { opacity: 0; scale: 1; } }
+/* Today breathes out a ring now and then, like the beacon on whatever is happening now. (Scaled, not a growing shadow,
+   so a page left open all day doesn't repaint for it.) */
+[data-design='mission'] .cal-day.today .cal-n { position: relative; }
+[data-design='mission'] .cal > .cal-grid .cal-day.today .cal-n::after { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: 0 0 0 1.5px var(--ac); pointer-events: none; opacity: 0; animation: msTodayRing 2.8s var(--e-out) infinite; }
+@keyframes msTodayRing { 0% { opacity: 0.8; scale: 1; } 70%, 100% { opacity: 0; scale: 1.55 1.7; } }
+/* An entry ticked off sends out one ring of light, like a ticked box (not the ones already done as a month comes in). */
+[data-design='mission'] .ent-check.ticked .ent-tick.on { animation: msTickFlare 700ms var(--e-out); }
+
+/* =====================================================================
    LESS MOTION
    Nothing breathes, burns, drifts, blinks, falls or crosses the sky, and nothing launches (Scene.tsx checks too).
    The sky still shows the hour and the weather's cloud, standing still.
    ===================================================================== */
 
 @media (prefers-reduced-motion: reduce) {
-  .ms-clouds i, .ms-twinkles i, .ms-lamp, .ms-flames, .ms-flame-core, .ms-ring, .ms-beacon::after, .ms-cell, .ms-logo--liftoff :is(.ms-vehicle, .ms-flames), .ms-rollout .ms-lift { animation: none !important; }
+  .ms-clouds i, .ms-twinkles i, .ms-lamp, .ms-flames, .ms-flame-core, .ms-ring, .ms-beacon::after, .ms-cell, .ms-logo--liftoff :is(.ms-vehicle, .ms-flames), .ms-rollout .ms-lift, .cal-day.today .cal-n::after, .cal-day.on::after { animation: none !important; }
   .ms-sat, .ms-trace, .ms-fx, .ms-ring { display: none; }
   .ms-scene[data-wx='rain'] .ms-rain { animation: none; }
   .ms-orb, .ms-clouds { transition: none; transform: translate(var(--orb-x, 70vw), var(--orb-y, 12vh)); }

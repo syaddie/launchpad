@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { fmtMoney } from '../../../../shared/money';
 import { EVERY_NAMES, type Series } from '../../../../shared/subscriptions';
 import type { Money, MoneyEntry } from '../../../../shared/types';
@@ -61,10 +61,16 @@ export function EntryRow({ e, series, isSub, onSub, money, today, open, onOpen, 
     refocus.current = keyboard;
     onClose();
   };
+  /** Ticked here (not just shown done), so a design can make the tick land with some light (Mission's flare). */
+  const [ticked, setTicked] = useState(false);
+  const toggle = () => {
+    setTicked(e.planned);
+    onPatch({ planned: !e.planned });
+  };
 
   const menu = menuProps(
     () => [
-      { label: e.planned ? 'Mark as done' : 'Mark as planned', icon: e.planned ? 'ph-check-circle' : 'ph-circle-dashed', onSelect: () => onPatch({ planned: !e.planned }) },
+      { label: e.planned ? 'Mark as done' : 'Mark as planned', icon: e.planned ? 'ph-check-circle' : 'ph-circle-dashed', onSelect: toggle },
       open ? { label: 'Done changing', icon: 'ph-check', onSelect: () => close(true) } : { label: 'Change', icon: 'ph-pencil-simple', onSelect: () => openIt(false) },
       !!series?.every && e.kind === 'out' && { label: isSub ? 'Not a subscription' : 'Mark as a subscription', icon: 'ph-repeat', onSelect: () => onSub(!isSub) },
       !!inv && { label: 'Change it in Owed', icon: 'ph-link-simple', onSelect: onOpenOwed },
@@ -77,11 +83,11 @@ export function EntryRow({ e, series, isSub, onSub, money, today, open, onOpen, 
   );
   const tick = (
     <button
-      className="ent-check"
+      className={'ent-check' + (ticked ? ' ticked' : '')}
       title={e.planned ? 'Planned. Tick it once it’s happened' : 'Done. Untick to make it planned again'}
       aria-label={e.planned ? `Mark ${title} as done` : `Mark ${title} as planned`}
       aria-pressed={!e.planned}
-      onClick={() => onPatch({ planned: !e.planned })}
+      onClick={toggle}
     >
       <span className={'ent-tick' + (e.planned ? '' : ' on') + (late ? ' late' : '')}>{!e.planned && <i className="ph-duotone ph-check" />}</span>
     </button>

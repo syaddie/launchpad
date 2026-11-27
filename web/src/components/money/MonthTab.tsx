@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type CSSProperties, Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { accountBalance, addMonths, balanceOn, calcMonths, fmtMoney, MAX_ENTRIES, monthKeys, monthName, type Repeat, repeatDates, sortEntries, toReview } from '../../../../shared/money';
 import { looksLikeSub, markSub, seriesByEntry, unmarkSub } from '../../../../shared/subscriptions';
 import type { Money, MoneyCategory, MoneyEntry } from '../../../../shared/types';
@@ -9,6 +9,7 @@ import { Glide, Readout } from '../Motion';
 import { EntryRow } from './EntryRow';
 import { MonthCalendar, type PickHow, TodayLine } from './MonthCalendar';
 import { dayGroups, dayName, dayTitle, scrollFor } from './monthList';
+import { leaveMonth, type MonthStep, monthStep } from './monthMotion';
 import { WhatIf } from './WhatIf';
 import { AccountSelect, Calc, CategoryCell, entryTitle, type Kind, KindSwitch, lastAccount, namesOf, type Notify, NumCell, otherAccount, shortDate, signed } from './shared';
 
@@ -35,6 +36,9 @@ type Jump = { target: Target; smooth: boolean; n: number };
 
 /** Every review shows at most this many; the rest are marked Overdue in the list. */
 const REVIEW_SHOWN = 3;
+
+/** How long a new month is marked as coming in: past the end of its longest animation (the calendar's days lighting up). */
+const ARRIVING_MS = 1600;
 
 const less = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -156,6 +160,26 @@ export function MonthTab({ money, today, month, onMonth, onChange, onOpenOwed, t
     localSet('moneyLayout', l);
   };
   const listShown = together || layout === 'list';
+
+  /**
+   * The way the month last changed, while the new one comes in (`data-arrive` on the tab): the calendar wipes across
+   * that way, the title lights up from that side, and the list slides in from it. Only a change made here moves:
+   * opening Month on a month from elsewhere just shows it.
+   */
+  const tabRef = useRef<HTMLDivElement>(null);
+  const [arrive, setArrive] = useState<{ step: MonthStep; n: number } | null>(null);
+  const toMonth = (k: string) => {
+    const step = monthStep(month, k);
+    if (!step) return;
+    leaveMonth(tabRef.current, step);
+    setArrive((a) => ({ step, n: (a?.n ?? 0) + 1 }));
+    onMonth(k);
+  };
+  useEffect(() => {
+    if (!arrive) return;
+    const t = window.setTimeout(() => setArrive(null), ARRIVING_MS);
+    return () => window.clearTimeout(t);
+  }, [arrive]);
 
   const listRef = useRef<HTMLDivElement>(null);
   const addRef = useRef<HTMLDivElement>(null);
@@ -415,7 +439,8 @@ export function MonthTab({ money, today, month, onMonth, onChange, onOpenOwed, t
             </button>
           )}
         </div>
-        <div className="days-scroll" ref={listRef} onWheel={hold} onTouchStart={hold} onPointerDown={hold} onKeyDown={hold}>
+        {/* A new one for each month, so the month coming in comes in whole (the list opens at its day again anyway). */}
+        <div key={month} className="days-scroll" ref={listRef} onWheel={hold} onTouchStart={hold} onPointerDown={hold} onKeyDown={hold}>
           {days.map((d, i) => {
             const t = dayTitle(d.date, today);
             return (
@@ -557,20 +582,30 @@ export function MonthTab({ money, today, month, onMonth, onChange, onOpenOwed, t
   );
 
   return (
-    <div className={'money-body month-tab' + (together ? ' together' : '')}>
+    <div ref={tabRef} className={'money-body month-tab' + (together ? ' together' : '')} data-arrive={arrive?.step}>
       <div className="month-top">
         <div className="month-lead">
           <div className="month-bar">
             <div className="month-nav">
-              <button className="icon-btn md" aria-label="Previous month" disabled={month <= addMonths(keys[0], -1)} onClick={() => onMonth(addMonths(month, -1))}>
+              <button className="icon-btn md month-step prev" aria-label="Previous month" disabled={month <= addMonths(keys[0], -1)} onClick={() => toMonth(addMonths(month, -1))}>
                 <i className="ph-duotone ph-caret-left" />
               </button>
-              <h2 className="serif month-title">{monthName(month)}</h2>
-              <button className="icon-btn md" aria-label="Next month" disabled={month >= addMonths(today.slice(0, 7), 24)} onClick={() => onMonth(addMonths(month, 1))}>
+              {/* Each letter its own, so a design can light them one after another (Mission's dot-matrix relight). */}
+              <h2 key={month} className="serif month-title">
+                <span className="lp-sr">{monthName(month)}</span>
+                <span className="month-glyphs" aria-hidden="true">
+                  {[...monthName(month)].map((ch, i, all) => (
+                    <span key={i} style={{ '--i': i, '--n': all.length } as CSSProperties}>
+                      {ch}
+                    </span>
+                  ))}
+                </span>
+              </h2>
+              <button className="icon-btn md month-step next" aria-label="Next month" disabled={month >= addMonths(today.slice(0, 7), 24)} onClick={() => toMonth(addMonths(month, 1))}>
                 <i className="ph-duotone ph-caret-right" />
               </button>
               {!isNow && (
-                <button className="btn btn-ghost btn-small" onClick={() => onMonth(today.slice(0, 7))}>
+                <button className="btn btn-ghost btn-small month-now" onClick={() => toMonth(today.slice(0, 7))}>
                   This month
                 </button>
               )}
@@ -587,7 +622,7 @@ export function MonthTab({ money, today, month, onMonth, onChange, onOpenOwed, t
               </div>
             )}
           </div>
-          <p className="month-foot">
+          <p key={month} className="month-foot">
             {isNow && (
               <span>
                 Started with <Calc v={calc.opening} title="What your day-to-day accounts had at the start of the month" strong />
@@ -603,10 +638,11 @@ export function MonthTab({ money, today, month, onMonth, onChange, onOpenOwed, t
         </div>
         <section className="month-sum" aria-label={`${monthName(month)} in numbers`} data-copy="the month’s numbers" data-copy-text={[monthName(month), ...stats.map((s) => `${s.label}: ${fmtMoney(s.value, s.sign)} (${s.note})`)].join('\n')}>
           {stats.map((s, i) => (
-            <div key={s.label} className={'m-stat' + (i === 0 ? ' hero' : '')} title={s.title}>
+            <div key={s.label} className={'m-stat' + (i === 0 ? ' hero' : '')} title={s.title} style={{ '--i': i } as CSSProperties}>
               <span className="meta">{s.label}</span>
               <span className={'serif tnum' + (s.tone === 'in' ? ' m-in' : '')} style={s.value < 0 && !s.sign ? { color: 'var(--wn)' } : undefined}>
-                <Readout text={fmtMoney(s.value, s.sign)} id={`month-${s.label}`} />
+                {/* By its place, not its name ("End of Nov"), so each figure rolls from last month's to this one's. */}
+                <Readout text={fmtMoney(s.value, s.sign)} id={`month-stat-${i}`} />
               </span>
               <span className="meta">{s.note}</span>
             </div>
