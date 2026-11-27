@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { AppState } from '../../../../shared/types';
-import { countdown } from '../../mission';
+import { countdown, finalCount } from '../../mission';
 import { hm } from '../../util';
 import { todayAgenda } from '../Today';
 
@@ -22,6 +22,10 @@ export function MissionHero({ data, now, extras }: { data: AppState; now: Date; 
   const { cur, next } = calOn ? todayAgenda(data, t) : { cur: undefined, next: undefined };
   const c = countdown(t, cur, next);
   const event = cur ?? next;
+  // The last ten seconds: a soft ring goes out from the clock with each one, and the vehicle on the ascent brightens
+  // (mission.css). The ring and the beacon are keyed by the second, so each starts again as its digit changes.
+  const final = finalCount(t, next, cur);
+  const second = c.text.slice(-2);
 
   const label = cur ? `Now · until ${hm(cur.e)}` : next ? `Next · ${hm(next.s)}` : 'Site time';
   const what = event
@@ -37,9 +41,9 @@ export function MissionHero({ data, now, extras }: { data: AppState; now: Date; 
   const sub = [where, extras].filter(Boolean).join(' · ');
 
   return (
-    <div className={'ms-hero' + (c.soon ? ' ms-hero--soon' : '') + (c.state === 'now' ? ' ms-hero--now' : '')}>
+    <div className={'ms-hero' + (c.soon ? ' ms-hero--soon' : '') + (c.state === 'now' ? ' ms-hero--now' : '') + (final ? ' ms-hero--final' : '')}>
       <span className="ms-hero-label">
-        {(c.soon || c.state === 'now') && <span className="ms-beacon" aria-hidden="true" />}
+        {(c.soon || c.state === 'now') && <span key={final ? second : 'on'} className="ms-beacon" aria-hidden="true" />}
         {label}
         {c.state === 'now' && <span className="ms-live">Live</span>}
       </span>
@@ -50,6 +54,7 @@ export function MissionHero({ data, now, extras }: { data: AppState; now: Date; 
             {ch}
           </span>
         ))}
+        {final && <i key={second} className="ms-pulse" aria-hidden="true" />}
       </span>
       <h1 className="ms-hero-what" data-copy="title">
         {what}

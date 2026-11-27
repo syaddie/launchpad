@@ -720,7 +720,7 @@ export function App({ cached }: { cached: AppState | null }) {
           dark={dark}
           narrow={layout === 'narrow'}
           home={view === 'home'}
-          events={data.google.connected && data.prefs.sources.calendar ? todayAgenda(data, now).todays.map((e) => ({ id: e.id, at: e.s, name: e.title })) : []}
+          events={data.google.connected && data.prefs.sources.calendar ? todayAgenda(data, now).todays.map((e) => ({ id: e.id, at: e.s, end: e.e, name: e.title })) : []}
           wx={skyWeather(weatherOn ? data.weather.now?.forecast : null)}
           launch={launches}
         />

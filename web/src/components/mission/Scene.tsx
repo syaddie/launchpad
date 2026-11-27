@@ -1,10 +1,16 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { along, ascentCurve, clearOf, dayFraction, hoursOf, orbPlace, pathTable, seeded, type PathTable, type SkyWeather } from '../../mission';
+import { along, ascentCurve, clearOf, dayFraction, hoursOf, orbPlace, pathTable, seeded, stagesShed, type PathTable, type SkyWeather } from '../../mission';
 import { hm } from '../../util';
 import { Vehicle } from './Mark';
 
-/** An event on the day's ascent. */
-export type SkyEvent = { id: string; at: Date; name: string };
+/** An event on the day's ascent: when it starts (its waypoint) and ends (a stage shed). */
+export type SkyEvent = { id: string; at: Date; end: Date; name: string };
+
+/** A spent stage falling away from the vehicle on the ascent: where it parted, the vehicle's heading then, its fall. */
+type Stage = { key: string; x: number; y: number; deg: number; k: number; fx: number; fy: number; spin: number };
+/** How long a spent stage falls and fades (mission.css's msStageFall, three of Mission's 900ms sweeps), and a little
+ * more before it's taken away. */
+const STAGE_MS = 2800;
 
 /** Everything the scene draws from, measured off the page (the strip, the top bar, where the panels start). */
 type Geo = {
@@ -160,6 +166,29 @@ export function MissionScene({ now, dark, narrow, home, events, wx, launch }: {
   useEffect(() => {
     live.current = { geo, here: arc?.here ?? null };
   }, [geo, arc]);
+
+  // ---------- staging: as each event ends, the vehicle sheds a spent stage that falls away and fades ----------
+
+  const [stages, setStages] = useState<Stage[]>([]);
+  const lastTick = useRef(now);
+  const stageTimers = useRef<number[]>([]);
+  useEffect(() => () => stageTimers.current.forEach((t) => window.clearTimeout(t)), []);
+  useEffect(() => {
+    const before = lastTick.current;
+    lastTick.current = now;
+    const here = live.current.here;
+    if (!here || calm() || document.hidden) return;
+    const shed = stagesShed(events, before, now);
+    if (!shed.length) return;
+    // In the vehicle's own frame (nose up, a 256 box): the stage drops back along its axis and, as it slows, falls
+    // toward the ground, tumbling. "Down" on the screen is (sin, cos) of the heading in that frame.
+    const deg = (here.a * 180) / Math.PI + 90;
+    const th = (deg * Math.PI) / 180;
+    const fall = 600;
+    const add = shed.map((e) => ({ key: `${e.id}:${e.end.getTime()}`, x: r2(here.x), y: r2(here.y), deg: r2(deg), k: narrow ? 0.11 : 0.15, fx: r2(Math.sin(th) * fall), fy: r2(300 + Math.cos(th) * fall), spin: Math.sin(th) >= 0 ? 38 : -38 }));
+    setStages((list) => [...list, ...add]);
+    stageTimers.current.push(window.setTimeout(() => setStages((list) => list.filter((x) => !add.includes(x))), STAGE_MS));
+  }, [now]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- stars ----------
 
@@ -464,6 +493,16 @@ export function MissionScene({ now, dark, narrow, home, events, wx, launch }: {
                         </text>
                       </>
                     ))}
+                </g>
+              ))}
+              {stages.map((st) => (
+                <g key={st.key} transform={`translate(${st.x} ${st.y}) rotate(${st.deg}) scale(${st.k}) translate(-128 -110)`}>
+                  <g className="ms-stage" style={{ '--fx': `${st.fx}px`, '--fy': `${st.fy}px`, '--spin': `${st.spin}deg` } as CSSProperties}>
+                    <path className="ms-stage-body" d="M90 172 H166 V222 H90 Z" />
+                    <path className="ms-hull-shade" d="M128 172 H166 V222 H128 Z" />
+                    <path className="ms-stage-bell" d="M108 222 H148 L156 244 H100 Z" />
+                    <path className="ms-stage-ember" d="M110 244 H146 L142 252 H114 Z" />
+                  </g>
                 </g>
               ))}
               <circle className="ms-ring" cx={r2(here.x)} cy={r2(here.y)} r={10} />

@@ -52,6 +52,14 @@ that only Mission shows.
 - A box ticked by hand sends out one ring of light (idea 28, `msTickFlare`): in the Notepad too, where the line now dims
   as the ring fades rather than before it, so the ring goes out at full strength. Boxes already ticked no longer flare as
   they come into view (the app opening, another notepad, another view): `tickMarks.ts` marks a box ticked by hand.
+- The launch clock's last ten seconds (idea 4; `finalCount` in `mission.ts`, `Hero.tsx`): a soft ring goes out from
+  its face with each second, the beacon by its label breathing with it, and the vehicle on the ascent burns brighter
+  until the event starts. Nothing louder. Less motion: no ring; the vehicle still brightens, as the clock still turns
+  the colour of now.
+- Staging (idea 5; `stagesShed` in `mission.ts`, `Scene.tsx`): as each event ends, the vehicle on the ascent sheds a
+  spent stage. It's pushed off the tail, then falls toward the ground, tumbling, its engine's ember going out, and
+  fades. Only the last one when several ended at once (the page asleep), none while on another view or with the page
+  hidden, and none with less motion.
 - Reduced motion: the sky still shows the hour; nothing moves and nothing launches.
 
 ## Not built yet (in the design system, not in the app)
@@ -75,9 +83,6 @@ Kept from the design sessions, roughly in the order worth trying.
    (indigo into rose into orange) for the half hour either side of sunrise and sunset, cross-faded.
 3. **Weather that is more than cloud and rain.** Thunder as a far flash behind the cloud; haze from the PSI reading
    as a pale band over the horizon; wind bending the vehicle's vapour.
-4. **The countdown's last ten seconds.** A soft pulse ring from the clock on each second, and the vehicle on the
-   ascent brightening. Nothing loud.
-5. **Staging.** As each event ends, the vehicle on the ascent sheds a spent stage that falls away and fades.
 6. **A recovery.** After a launch, minutes later, a far point of light comes back down to the horizon and lands.
 7. **Parcels arriving as landings.** "Out for delivery" puts a small descending light in the sky; "Delivered" lands
    it beside the pad. (On hold: Packages was retired on 25 Nov 2026, its data kept.)
