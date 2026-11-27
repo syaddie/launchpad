@@ -205,3 +205,24 @@ export function apron(w: number, h: number): { lamps: ApronLamp[]; paint: string
   }
   return { lamps, paint: [...lines, ...joints].join(' '), dashes: dashes.join(' ') };
 }
+
+/** Inside this long before an event, the launch clock's last seconds: a soft ring each second, the vehicle brighter. */
+export const FINAL_MS = 10_000;
+
+/** Whether the launch clock is in its last ten seconds before `next` starts (the T- face reads 09 down to 00). */
+export function finalCount(now: Date, next: { s: Date } | undefined, cur?: unknown): boolean {
+  if (cur || !next) return false;
+  const left = next.s.getTime() - now.getTime();
+  return left > 0 && left < FINAL_MS;
+}
+
+/**
+ * The events that ended between two ticks of the clock (after `before`, by `now`): each one is a stage the vehicle on
+ * the ascent sheds. Only the last of them when several ended at once (the page asleep, or a long gap), so a return
+ * doesn't drop a stack of stages; none when the clock went back or stood still.
+ */
+export function stagesShed<E extends { id: string; end: Date }>(events: E[], before: Date, now: Date): E[] {
+  if (now <= before) return [];
+  const ended = events.filter((e) => e.end > before && e.end <= now).sort((a, b) => a.end.getTime() - b.end.getTime());
+  return ended.slice(-1);
+}

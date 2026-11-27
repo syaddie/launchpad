@@ -53,7 +53,9 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
   report in, the day's ascent draws on, and ticking off the last task launches the rocket. In Money › Month, changing
   month is a radar-like scan, the day you pick is locked on to, today breathes a ring and a ticked entry flares. A box
   ticked by hand sends out a ring of light. With no photos, Home's ground is a lit apron whose runway lights flash in
-  sequence toward the horizon. See [`mission-layout.md`](mission-layout.md).
+  sequence toward the horizon. In the launch clock's last ten seconds a soft ring goes out from it each second and the
+  vehicle on the ascent brightens; as each event ends, that vehicle sheds a spent stage that falls away. See
+  [`mission-layout.md`](mission-layout.md).
 - **Vista** drifts like light on glass: long, soft arrivals and a 7% spring. Its photo drifts so slowly you only notice
   it has moved. Its views don't use the browser's transitions (`--m-view-mode: enter`): the glass blurs the photo
   behind it, which a part pictured on its own, or anything inside a fading container, can't see. So the new view's

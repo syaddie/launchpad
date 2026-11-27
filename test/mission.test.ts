@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { along, apron, APRON_ROWS, ascentCurve, clearOf, clockText, countdown, dayFraction, hoursOf, orbPlace, pathTable, seeded, skyWeather } from '../web/src/mission';
+import { along, apron, APRON_ROWS, ascentCurve, clearOf, clockText, countdown, dayFraction, finalCount, hoursOf, orbPlace, pathTable, seeded, skyWeather, stagesShed } from '../web/src/mission';
 
 const at = (h: number, m = 0, s = 0) => new Date(2026, 10, 25, h, m, s);
 
@@ -179,5 +179,37 @@ describe('the apron with no photos', () => {
     const band = apron(390, 390);
     expect(band.lamps.every((l) => l.x >= -l.r && l.x <= 390 + l.r)).toBe(true);
     expect(band.lamps.length).toBeLessThan(lamps.length);
+  });
+});
+
+describe('the countdown’s last ten seconds', () => {
+  const next = { s: at(14) };
+  it('starts once fewer than ten seconds are left and lasts until the event starts', () => {
+    expect(finalCount(at(13, 59, 50), next)).toBe(false);
+    expect(finalCount(at(13, 59, 51), next)).toBe(true);
+    expect(finalCount(new Date(at(14).getTime() - 1), next)).toBe(true);
+    expect(finalCount(at(14), next)).toBe(false);
+  });
+  it('is never on during an event or with nothing next', () => {
+    expect(finalCount(at(13, 59, 55), next, { s: at(13) })).toBe(false);
+    expect(finalCount(at(13, 59, 55), undefined)).toBe(false);
+  });
+  it('shows 09 down to 00 on the clock while it lasts', () => {
+    expect(countdown(at(13, 59, 51), undefined, next).text).toBe('T-00:00:09');
+    expect(countdown(new Date(at(14).getTime() - 400), undefined, next).text).toBe('T-00:00:00');
+  });
+});
+
+describe('staging', () => {
+  const ev = (id: string, h: number, m = 0) => ({ id, end: at(h, m) });
+  const day = [ev('gym', 8, 15), ev('class', 12, 30), ev('lunch', 14), ev('dinner', 21, 30)];
+  it('sheds a stage for an event that ended since the last tick', () => {
+    expect(stagesShed(day, at(13, 59), at(14)).map((e) => e.id)).toEqual(['lunch']);
+    expect(stagesShed(day, at(14), at(14, 1))).toEqual([]);
+  });
+  it('sheds only the last when several ended at once, and none when the clock stood still or went back', () => {
+    expect(stagesShed(day, at(7), at(15)).map((e) => e.id)).toEqual(['lunch']);
+    expect(stagesShed(day, at(14), at(14))).toEqual([]);
+    expect(stagesShed(day, at(15), at(13))).toEqual([]);
   });
 });
