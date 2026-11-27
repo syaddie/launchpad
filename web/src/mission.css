@@ -626,6 +626,56 @@
 @keyframes msIgniteFace { from { text-shadow: 0 0 22px var(--ms-ignition), 0 0 3px var(--ms-ignition); } }
 
 /* =====================================================================
+   TRAINING
+   ===================================================================== */
+
+/* A new best lands: only one new since Your lifts was last shown on this device (Training.tsx, useNewBests), not every
+   time Training opens. Its PR chip comes down with a flare, the lift's line draws on from the session before to the new
+   high, which lights and pulses once, and the figure glows. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .tr-lift { --pr-at: calc(var(--m-view) * 1.2); --pr-high: calc(var(--pr-at) + var(--m-move) * 0.5 + var(--m-sweep) * 0.9); }  [data-design='mission'] .tr-lift[data-new] .tr-pr { animation: msPrLand var(--m-move) var(--e-settle) var(--pr-at) backwards, msTickFlare calc(var(--m-sweep) * 1.1) var(--e-out) calc(var(--pr-at) + var(--m-move) * 0.6) backwards; }
+  [data-design='mission'] .tr-spark[data-new] .tr-spark-line { animation: msDrawTo var(--m-sweep) var(--e-io) calc(var(--pr-at) + var(--m-move) * 0.5) backwards; }
+  [data-design='mission'] .tr-spark[data-new] .tr-spark-high { transform-box: fill-box; transform-origin: center; animation: msArrive var(--m-move) var(--e-settle) var(--pr-high) backwards; }
+  [data-design='mission'] .tr-spark[data-new] .tr-spark-pulse { display: inline; transform-box: fill-box; transform-origin: center; opacity: 0; animation: msRingOut calc(var(--m-sweep) * 1.4) var(--e-out) var(--pr-high) forwards; }
+  [data-design='mission'] .tr-lift[data-new] .tr-lv > .tnum { animation: msGlyphGlow calc(var(--m-sweep) * 1.6) var(--e-out) var(--pr-high); }
+}
+@keyframes msPrLand { from { scale: 1.8; opacity: 0; } }
+/* --from is how far across the session before is (Spark in Training.tsx). */
+@keyframes msDrawTo { from { clip-path: inset(-6px calc(100% - var(--from, 0%)) -6px -6px); } to { clip-path: inset(-6px -6px -6px -6px); } }
+/* A ring going out once from a point (a new high, a weight touching down). Held as it ends, not before it starts. */
+@keyframes msRingOut { from { opacity: 0.9; scale: 1; } to { opacity: 0; scale: 3.6; } }
+
+/* Sync now is a downlink: by the words, a small DOWNLINK and its signal bars lighting one after another, and packets
+   streaming along the line under them. Stepped and moved, never redrawn, and only while the sync runs. */
+[data-design='mission'] .tr-dl-mono { display: inline; flex: none; font: 600 10px/12px var(--f-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ac); }
+[data-design='mission'] .tr-dl-bars { display: inline-flex; flex: none; align-items: flex-end; gap: 2px; height: 10px; }
+[data-design='mission'] .tr-dl-bars > i { width: 3px; height: calc(4px + var(--i) * 2px); border-radius: 1px; background: var(--ac); opacity: 0.25; animation: msSignal calc(var(--m-sweep) * 1.4) steps(1, end) infinite; animation-delay: calc(var(--m-sweep) * 0.35 * var(--i)); }
+@keyframes msSignal { 0% { opacity: 1; } 25%, 100% { opacity: 0.25; } }
+[data-design='mission'] .tr-dl-stream { background: color-mix(in srgb, var(--ac) 12%, transparent); }
+[data-design='mission'] .tr-dl-stream > i { width: 200%; border-radius: 0; background: repeating-linear-gradient(90deg, var(--ac) 0 5px, transparent 5px 13px); opacity: 0.85; animation: msPackets calc(var(--m-sweep) * 1.4) linear infinite; }
+/* Four of the pattern's 13px, so it loops without a seam. */
+@keyframes msPackets { from { translate: -52px 0; } to { translate: 0 0; } }
+/* What the downlink brought reports in: each new session lights as it comes in, its PR chip flares, and its day in the
+   week lights as the beam's cells do. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .tr-ses[data-new] { animation: trArrive var(--m-move) var(--e-settle) both, msDayLit calc(var(--m-sweep) * 1.6) var(--e-out) both; animation-delay: calc(var(--m-stagger) * 2 * var(--i, 0)); }
+  [data-design='mission'] .tr-ses[data-new] .chip { animation: msTickFlare calc(var(--m-sweep) * 1.1) var(--e-out) calc(var(--m-move) + var(--m-stagger) * 2 * var(--i, 0)) both; }
+  [data-design='mission'] .tr-day[data-new] { animation: msDayLit calc(var(--m-sweep) * 1.6) var(--e-out) both; }
+}
+
+/* A weight logged is a landing: it comes down slowing to a touchdown on its day, lit, a ring goes out as it touches,
+   and it cools to the other days' grey; then the 7-day line runs on to it at a steady rate and its end lights. */
+@media (prefers-reduced-motion: no-preference) {
+  /* It's all but down halfway through its descent (an ease out), so the ring and the line go from there. */
+  [data-design='mission'] .tr-wt-chart { --land-for: calc(var(--m-sweep) * 1.1); --run-at: calc(var(--land-for) * 0.6); --run-for: var(--m-sweep); }
+  [data-design='mission'] .tr-wt-drop { animation: trDrop var(--land-for) var(--e-out) both, msCool calc(var(--land-for) + var(--m-sweep)) var(--e-in) both; }
+  [data-design='mission'] .tr-wt-touch { display: inline; transform-box: fill-box; transform-origin: center; opacity: 0; animation: msRingOut calc(var(--m-sweep) * 1.2) var(--e-out) calc(var(--land-for) * 0.5) forwards; }
+  [data-design='mission'] .tr-wt-run { animation-timing-function: linear; }
+  [data-design='mission'] .tr-wt-end[data-land] { animation: msArrive var(--m-move) var(--e-settle) calc(var(--run-at) + var(--run-for) * 0.95) both; }
+}
+@keyframes msCool { from { fill: var(--ac); opacity: 1; } }
+
+/* =====================================================================
    SERVER
    ===================================================================== */
 
@@ -687,4 +737,8 @@
   @keyframes msBannerDown { from { opacity: 0; } }
   @keyframes msBannerUp { to { opacity: 0; } }
   [data-design='mission'] .sync-los { animation: none; }
+  /* Training: the downlink's bars stand lit, a new best's chip fades in, and nothing draws, lands or rings. */
+  [data-design='mission'] .tr-dl-bars > i { animation: none; opacity: 0.8; }
+  [data-design='mission'] .tr-dl-stream { background: color-mix(in srgb, var(--ac) 40%, transparent); }
+  [data-design='mission'] .tr-lift[data-new] .tr-pr { animation: lpFadeIn var(--m-state) var(--e-out) both; }
 }

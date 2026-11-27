@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { periodStep, readoutCells, rollDirection, viewStep } from '../web/src/motion';
+import { landedDay, periodStep, readoutCells, rollDirection, unseen, viewStep } from '../web/src/motion';
 
 describe('periodStep', () => {
   it('goes next to a later period and prev to an earlier one', () => {
@@ -73,5 +73,43 @@ describe('rollDirection', () => {
   it('rolls up the first time, or when there is no number to compare', () => {
     expect(rollDirection('7', undefined)).toBe('up');
     expect(rollDirection('Today', 'Yesterday')).toBe('up');
+  });
+});
+
+describe('unseen', () => {
+  it('is what was not in the last record', () => {
+    expect(unseen(['Bench|90', 'Squat|105'], JSON.stringify(['Bench|90']))).toEqual(['Squat|105']);
+    expect(unseen(['Bench|92.5'], JSON.stringify(['Bench|90', 'Squat|105']))).toEqual(['Bench|92.5']);
+    expect(unseen([], JSON.stringify(['Bench|90']))).toEqual([]);
+  });
+
+  it('is nothing without a record, or with one that cannot be read', () => {
+    expect(unseen(['Bench|90'], null)).toEqual([]);
+    expect(unseen(['Bench|90'], 'not json')).toEqual([]);
+    expect(unseen(['Bench|90'], '{"a":1}')).toEqual([]);
+  });
+
+  it('is everything new against an empty record', () => {
+    expect(unseen(['Bench|90', 'Squat|105'], '[]')).toEqual(['Bench|90', 'Squat|105']);
+  });
+});
+
+describe('landedDay', () => {
+  const before = { '2026-11-26': 73.4, '2026-11-27': 73.1 };
+
+  it('is the day added or changed', () => {
+    expect(landedDay(before, { ...before, '2026-11-28': 72.9 })).toBe('2026-11-28');
+    expect(landedDay(before, { ...before, '2026-11-27': 73.0 })).toBe('2026-11-27');
+    expect(landedDay(before, { '2026-11-20': 74, ...before })).toBe('2026-11-20');
+  });
+
+  it('is nothing for a removal or the same weights saved back', () => {
+    expect(landedDay(before, { '2026-11-26': 73.4 })).toBeNull();
+    expect(landedDay(before, { ...before })).toBeNull();
+  });
+
+  it('is nothing when several days changed at once', () => {
+    expect(landedDay(before, { ...before, '2026-11-28': 72.9, '2026-11-29': 72.8 })).toBeNull();
+    expect(landedDay({}, before)).toBeNull();
   });
 });

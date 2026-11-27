@@ -362,8 +362,9 @@
 :is(.cig-col, .tr-wcol, .cu-col, .ln-day, .io-col) { --rise: calc((sibling-index() - 1) * 22ms); }
 :is(.cig-col, .tr-wcol, .cu-col, .ln-day, .io-col) :is(.cig-bar, .tr-wbar, .cu-bar, .ln-day-col, .io-bar) { animation-delay: var(--rise, 0ms); }
 .ln-weeks > span:not(.ln-goal) { animation-delay: calc((sibling-index() - 1) * 22ms); }
-/* Lines and dots draw across, left to right: sparklines, body weight, the network and speed charts, the balance. */
-:is(.tr-spark, .tr-wt-chart, .mini-chart > svg, .sc-plot > svg, .bal-chart > svg) { animation: lpDrawAcross calc(var(--m-sweep) * 1.4) var(--e-io) both; }
+/* Lines and dots draw across, left to right: sparklines, body weight, the network and speed charts, the balance. Once
+   drawn, nothing clips them, so a dot at a line's very end shows whole. */
+:is(.tr-spark, .tr-wt-chart, .mini-chart > svg, .sc-plot > svg, .bal-chart > svg) { animation: lpDrawAcross calc(var(--m-sweep) * 1.4) var(--e-io) backwards; }
 
 /* =====================================================================
    VIEWS (viewTransition.ts)

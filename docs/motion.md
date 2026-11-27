@@ -59,8 +59,10 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
   with arrows changes with Money › Month's scan. Learn's study timer is T+ in the dot-matrix face and starting it is an
   ignition; Server › Services is a go/no-go poll that reports in; moving money sends a point of light on an arc between
   the two accounts before their balances roll; losing the server puts the source lights out one at a time, and they
-  report back in when it's back; empty states have a drawing of the site (pad clear, vehicle away, launch scrubbed). See
-  [`mission-layout.md`](mission-layout.md).
+  report back in when it's back; empty states have a drawing of the site (pad clear, vehicle away, launch scrubbed). In
+  Training, a new best lands with a flare and its lift's line draws on to the new high, which sends out a ring; a sync
+  is a downlink (DOWNLINK, signal bars, packets) and what it brings reports in, lit; a weight logged comes down to a
+  touchdown on its day before the line runs on to it. See [`mission-layout.md`](mission-layout.md).
 - **Vista** drifts like light on glass: long, soft arrivals and a 7% spring. Its photo drifts so slowly you only notice
   it has moved. Its views don't use the browser's transitions (`--m-view-mode: enter`): the glass blurs the photo
   behind it, which a part pictured on its own, or anything inside a fading container, can't see. So the new view's
@@ -104,7 +106,8 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
   until the app is opened again.
 - **Meters fill and charts draw** as they appear (`lpSweepX`, `lpSweepY`, `lpDrawAcross` in motion.css's METERS AND
   CHARTS): bars fill from empty, columns rise one after another (where the browser has `sibling-index()`; all at
-  once where it hasn't), lines draw across; and a bar slides to a new reading when it changes.
+  once where it hasn't), lines draw across, and once drawn nothing clips them (so a dot at a line's very end shows
+  whole); and a bar slides to a new reading when it changes.
 - **Ticking things off.** A task's tick lands, its line is struck through and it dims for its 5-second undo; then it
   folds away and the tasks below close up (`.task-item.leaving`). A box ticked by hand is marked `data-ticked` for a
   moment (`tickMarks.ts`, one listener for the app), so a design can give that tick some light without every box already
@@ -127,7 +130,21 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
 - **Lists animate what's added to them**, not what was there when they appeared (that comes in with its view):
   `useSettled` marks a list `data-settled` two frames after it's drawn, and the list's items have an
   `@starting-style` under that mark. (Tasks do it more simply: a task still saving has the page's own id, so it's
-  marked `data-new` while it slides in.)
+  marked `data-new` while it slides in.) Training's sessions are marked `data-new` for a moment instead
+  (`useArrivals`, which waits for `useSettled` too), by when they started, since an import's ids and Hevy's differ for
+  the same session: those after the newest one shown slide in at the top of Recent sessions, the oldest first, and their
+  day in the week brings them in (`trArrive` in `styles.css`; Vista drifts, Poster wipes, Mission lights them).
+- **Waiting on a sync.** Training's Sync now puts a downlink in place of the line about your workouts while it runs:
+  the words, and a light running along under them in each design's way (`.tr-downlink`). It's the only thing there
+  that moves by itself, and only for as long as the sync takes.
+- **What you log lands.** A weight logged drops onto the body weight chart, on its day, from just above the chart (or
+  from where it was, if that day's weight changed), and when it's the latest the 7-day line runs on to it and its end
+  lights again (`useLanding`, `WeightChart`; `trDrop`, `trRunOn` in `styles.css`). Vista floats it down, Focus is quick,
+  Poster slams it so it squashes as it hits, Mission brings it down to a touchdown with a ring. A removal, or many days
+  changing at once (a restore), doesn't land anything.
+- **A new best** in Training's Your lifts lands once, the first time this device shows it (`useNewBests`, keeping
+  what's been seen in `localStorage`): Mission's flare and line drawing to the new high (`mission.css`, TRAINING); the
+  other designs show the chip as they always have.
 
 ## Alive on its own
 
@@ -137,7 +154,7 @@ second rather than every frame), Mission's sky and the ring today's date breathe
 nothing is repainted for it), and the runway lights on Mission's apron when Home has no photos (each dot on or off, a
 run every few seconds). In Mission, a running study timer's digits relight as they change and its dot breathes a
 beacon (scaled), and an empty state's drawing has its mast lamp blinking with the site's (stepped). Busy states
-(a spinner, a skeleton line) move only while something is being waited for.
+(a spinner, a skeleton line, Training's downlink) move only while something is being waited for.
 
 ## Less motion
 
