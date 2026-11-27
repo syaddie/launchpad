@@ -17,10 +17,12 @@ The design system it is built from (tokens, components with live previews, the m
 | The mark, drawn inline | `web/src/components/mission/Mark.tsx` |
 | The maths with no page in it (the path, the sun's place, the countdown's text, "all done") | `web/src/mission.ts`, tested in `test/mission.test.ts` |
 | Home: the photos as the ground, Today and the Notepad on it | `web/src/components/mission/MissionHome.tsx`, `web/src/mission-home.css` |
+| Which source light a save blinks | `web/src/uplink.ts` (called from `req` in `api.ts`), tested in `test/uplink.test.ts` |
+| The tab's title and icon (every layout) | `web/src/tabTitle.ts`, tested in `test/tab-title.test.ts`; `web/src/hooks/useTabTitle.ts`; `web/public/favicon-lit.svg` |
 
 The other layouts are untouched. What Mission adds to shared components is small and inert elsewhere: the rail takes
 an optional `brand`, the top bar an optional `lead` (the hero in place of the greeting) and a row of source lights
-that only Mission shows.
+that only Mission shows (with Launchpad's own light and its line in the poll's list).
 
 ## Built, against the design system
 
@@ -91,6 +93,36 @@ that only Mission shows.
   figures roll from the week before. Every layout has its own version (docs/motion.md, "Changing a period"). Music's
   slot calendar has no arrows (it shows every day that's known at once), so there's no period to change there; Check
   now's scan across it (idea 57) can use the same pieces.
+- A save blinks its source's light, like a packet going up (idea 21; `uplink.ts`, `TopBar.tsx`, `mission.css` SAVES
+  GOING UP): the API layer notes every save the server takes, and the light it belongs to blinks once, a ring pulsing
+  off it as a packet streaks up. An event added is the calendar's, an email archived or a bill dropped the inbox's, a
+  lesson marked or a story saved the digest's. Everything kept in Launchpad's own store (notes, money, Learn, the
+  trackers, settings, photos) goes to a new last light, Launchpad's own ("Saved just now" in the poll's list), which
+  holds while edits wait in this browser to be sent. Reads, refreshes, syncs, Claude's answers and actions on the server
+  (a restart, a download, a file) aren't saves. Queued edits sent after a loss of signal blink as they go. Less motion:
+  the ring fades, nothing travels.
+- Waiting (idea 22; `mission.css` WAITING): "Loading…" is a scan line acquiring. A line with its afterglow crosses the
+  words of whatever is being waited for (26 places marked `lp-loading`: the server's health, the SSH check, the files,
+  logs, slots, downloads, Claude writing a note…) and the placeholder of a view whose code is still coming, again and
+  again until it's there, starting a moment late so a quick wait shows nothing. A spinner is a small satellite, a body
+  between two panels, circling a planet on a faint dashed orbit. Less motion: no line, and the satellite stands still.
+- ⌘K's highlighted result glides from row to row (idea 23, every layout; `Palette.tsx`, `motion.css`): as the arrows or
+  the pointer move the selection, the highlight travels in each layout's pace (Vista's spring, Focus quick, Poster's
+  hard stops), Mission's a lit plate like the strip's selector. Typing places it afresh rather than flying it.
+- A right-click menu's items relight in turn as it opens (idea 24; `mission.css` MENUS), top to bottom, each in three
+  steps with a moment's glow, like a period's name; a long menu is lit within half a second. Only light: every item
+  answers the pointer and the keys at once, and the one with focus or the pointer is lit straight away. Less motion:
+  none.
+- An Undo message counts down in five dots (idea 25; `App.tsx`, `mission.css`): the line along its foot is a row of
+  five dots that go out one by one from the right, like the source lights losing signal, the last as the message goes.
+  Pointing at it holds them, as it holds the message. Less motion: they fade out in turn without shrinking.
+- The tab counts down (idea 26, every layout; `tabTitle.ts`, `useTabTitle.ts`): inside the hour before the day's next
+  event the tab's title is "T-08:12 · Gym: push day", and while the study timer runs "T+24:10 · Studying ASE 301" (an
+  event inside ten minutes comes first). Inside the launch clock's ten minutes, and while studying, the icon is the
+  rocket lifting off on a long flame (`favicon-lit.svg`). Further off it's "Launchpad" and the usual icon. The title is
+  written once a second only while it counts, on the second; otherwise it's looked at once a minute, and the icon is
+  swapped only when it changes. A browser slows a hidden tab's timers after a few minutes, so a tab in the background
+  may then count in steps of up to a minute.
 - Reduced motion: the sky still shows the hour; nothing moves and nothing launches.
 
 ## Not built yet (in the design system, not in the app)
@@ -135,15 +167,6 @@ aerospace quirks. Most are Mission's own; those marked *(every design)* are moti
 way (docs/motion.md). **S** is small, mostly reusing what's there (the Month scan and lock-on corners in `mission.css`,
 `msReport`, `msLiftoff`, `Readout`, `useGlide`); **M** is a new piece. Aerospace words ("T+", "LOS", "go") stay in the
 small mono labels; the messages themselves stay plain.
-
-**Everywhere**
-
-21. Anything saving makes its source light in the strip blink once, like a packet going up. **S**
-22. "Loading…" is a scan line acquiring; a spinner is a small satellite circling. **S**
-23. The palette's highlighted result glides between rows (`useGlide`) instead of jumping. **S** *(every design)*
-24. A right-click menu's items relight in turn as it opens, like the month's name. **S**
-25. An Undo message's line along its foot is a row of T-5 dots going out one by one. **S**
-26. The tab's title says "T-08:12" before an event or while studying, and its icon gets a flame. **M** *(every design)*
 
 **Digest and Inbox**
 
