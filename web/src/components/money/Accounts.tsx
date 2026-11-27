@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ACCOUNT_KINDS, accountBalance, addMonths, daysIn, fmtMoney, goalPerMonth, MAX_ACCOUNTS, monthName } from '../../../../shared/money';
 import type { Money, MoneyAccount } from '../../../../shared/types';
+import { Readout } from '../Motion';
 import { AccountDrawer, MoveDrawer } from './AccountDrawers';
 import { entryTitle, namesOf, shortDate } from './shared';
 
@@ -13,10 +14,67 @@ const lastDay = (key: string) => `${key}-${String(daysIn(key)).padStart(2, '0')}
 export const monthYear = (key: string) => `${monthName(key, true)} ${key.slice(0, 4)}`;
 export const isZero = (n: number) => Math.abs(n) < 0.005;
 
+/** A move made just now that changes today's balances: from one account to another. */
+type Orbit = { from: string; to: string; n: number };
+
+/** How long a move's light is in the air and the cards answer it: past the landing's flare. */
+const ORBIT_MS = 2200;
+
+/**
+ * Mission's transfer orbit (mission.css, MONEY › ACCOUNTS): a point of light leaves the account the money came from and
+ * travels on an arc to the one it went to, over a faint trace, then both balances roll. Drawn over the cards (the grid
+ * is positioned), in the grid's own units, so a grid drawn scaled (Vista's views come in scaled) puts it in the same
+ * place. Hidden in the other layouts, where the balances just roll. Nothing is drawn when a card isn't on screen (an
+ * archived account, hidden).
+ */
+function TransferOrbit({ grid, orbit }: { grid: RefObject<HTMLDivElement | null>; orbit: Orbit | null }) {
+  const [d, setD] = useState<string | null>(null);
+  useLayoutEffect(() => {
+    const g = grid.current;
+    const card = (id: string) => g?.querySelector<HTMLElement>(`[data-acct="${CSS.escape(id)}"] .acct-bal`);
+    const a = orbit && card(orbit.from);
+    const b = orbit && card(orbit.to);
+    if (!g || !a || !b) return setD(null);
+    const box = g.getBoundingClientRect();
+    const k = box.width / g.offsetWidth || 1;
+    const at = (el: HTMLElement) => {
+      const r = el.getBoundingClientRect();
+      return { x: (r.left + Math.min(r.width, 60) / 2 - box.left) / k, y: (r.top + r.height / 2 - box.top) / k };
+    };
+    const p = at(a);
+    const q = at(b);
+    const len = Math.hypot(q.x - p.x, q.y - p.y) || 1;
+    // Bulging away from the line between them: upward where they're side by side, outward where they're stacked.
+    let nx = -(q.y - p.y) / len;
+    let ny = (q.x - p.x) / len;
+    if (ny > 0 || (Math.abs(ny) < 0.2 && nx < 0)) (nx = -nx), (ny = -ny);
+    const lift = Math.max(36, len * 0.42);
+    const c = { x: (p.x + q.x) / 2 + nx * lift, y: (p.y + q.y) / 2 + ny * lift };
+    const r = (v: number) => Math.round(v * 10) / 10;
+    setD(`M${r(p.x)} ${r(p.y)} Q${r(c.x)} ${r(c.y)} ${r(q.x)} ${r(q.y)}`);
+  }, [grid, orbit]);
+  if (!orbit || !d) return null;
+  return (
+    <span key={orbit.n} className="acct-orbit" aria-hidden="true">
+      <svg>
+        <path className="acct-orbit-trace" d={d} />
+      </svg>
+      <i className="acct-orbit-dot" style={{ offsetPath: `path('${d}')` }} />
+    </span>
+  );
+}
+
 /** Where the money is today: each account, the total and how it splits, and the latest moves between them. */
 export function AccountsPanel({ money, today, onChange }: { money: Money; today: string; onChange: (m: Money) => void }) {
   const [open, setOpen] = useState<{ kind: 'account'; id: string | null } | { kind: 'move' } | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [orbit, setOrbit] = useState<Orbit | null>(null);
+  useEffect(() => {
+    if (!orbit) return;
+    const t = window.setTimeout(() => setOrbit(null), ORBIT_MS);
+    return () => window.clearTimeout(t);
+  }, [orbit]);
   const month = today.slice(0, 7);
   const prevEnd = lastDay(addMonths(month, -1));
   const names = namesOf(money);
@@ -64,12 +122,13 @@ export function AccountsPanel({ money, today, onChange }: { money: Money; today:
         )}
       </div>
 
-      <div className="acct-grid">
+      <div className="acct-grid" ref={gridRef}>
         {rows
           .filter((r) => showArchived || !r.a.archived)
           .map((r) => (
-            <AccountCard key={r.a.id} row={r} today={today} onOpen={() => setOpen({ kind: 'account', id: r.a.id })} />
+            <AccountCard key={r.a.id} row={r} today={today} orbit={orbit?.from === r.a.id ? 'from' : orbit?.to === r.a.id ? 'to' : undefined} onOpen={() => setOpen({ kind: 'account', id: r.a.id })} />
           ))}
+        <TransferOrbit grid={gridRef} orbit={orbit} />
         {money.accounts.length < MAX_ACCOUNTS && (
           <button className="acct-card acct-add" onClick={() => setOpen({ kind: 'account', id: null })}>
             <span className="acct-icon">
@@ -139,16 +198,17 @@ export function AccountsPanel({ money, today, onChange }: { money: Money; today:
       )}
 
       {open?.kind === 'account' && <AccountDrawer money={money} today={today} id={open.id} onChange={onChange} onClose={() => setOpen(null)} />}
-      {open?.kind === 'move' && <MoveDrawer money={money} today={today} onChange={onChange} onClose={() => setOpen(null)} />}
+      {open?.kind === 'move' && <MoveDrawer money={money} today={today} onChange={onChange} onMoved={(from, to) => setOrbit((o) => ({ from, to, n: (o?.n ?? 0) + 1 }))} onClose={() => setOpen(null)} />}
     </section>
   );
 }
 
-function AccountCard({ row: { a, now, end, change }, today, onOpen }: { row: AccountRow; today: string; onOpen: () => void }) {
+/** `orbit`: money just moved from or to this account (Mission's transfer orbit leaves or lands here). */
+function AccountCard({ row: { a, now, end, change }, today, orbit, onOpen }: { row: AccountRow; today: string; orbit?: 'from' | 'to'; onOpen: () => void }) {
   const kind = ACCOUNT_KINDS.find((k) => k.key === a.kind) ?? ACCOUNT_KINDS[0];
   const month = today.slice(0, 7);
   return (
-    <button className={'acct-card' + (a.archived ? ' archived' : '')} title={`Change ${a.name}`} onClick={onOpen}>
+    <button className={'acct-card' + (a.archived ? ' archived' : '')} title={`Change ${a.name}`} data-acct={a.id} data-orbit={orbit} onClick={onOpen}>
       <span className="acct-name">
         <span className="acct-icon">
           <i className={'ph-duotone ' + kind.icon} aria-hidden="true" />
@@ -158,7 +218,10 @@ function AccountCard({ row: { a, now, end, change }, today, onOpen }: { row: Acc
           <span className="meta">{a.archived ? 'Archived' : a.spendable ? 'Day to day' : kind.name}</span>
         </span>
       </span>
-      <span className={'serif tnum acct-bal' + (now < 0 ? ' neg' : '')}>{fmtMoney(now)}</span>
+      {/* It rolls when money moves (in Mission, once the transfer's light has landed). */}
+      <span className={'serif tnum acct-bal' + (now < 0 ? ' neg' : '')}>
+        <Readout text={fmtMoney(now)} id={`acct-${a.id}`} />
+      </span>
       {a.goal !== null ? (
         <span className="acct-lines">
           <span className="acct-bar" role="img" aria-label={`${Math.round((Math.max(0, now) / a.goal) * 100)}% of the goal`}>

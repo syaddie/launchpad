@@ -23,6 +23,26 @@ interface Props {
   onOpenLearn: () => void;
   /** Shown in place of the greeting and the summary line (Mission's launch clock on Home). */
   lead?: ReactNode;
+  /** The server can't be reached (its banner is up): Mission's source lights go out, and report back in once it's back. */
+  lost?: boolean;
+}
+
+/** How long the source lights are marked as reporting back in: past the last one's turn. */
+const BACK_MS = 2000;
+
+/** True for a moment after `lost` turns false: the signal is back. */
+function useReacquired(lost: boolean): boolean {
+  const [back, setBack] = useState(false);
+  const was = useRef(lost);
+  useEffect(() => {
+    const reacquired = was.current && !lost;
+    was.current = lost;
+    if (!reacquired) return setBack(false);
+    setBack(true);
+    const t = window.setTimeout(() => setBack(false), BACK_MS);
+    return () => window.clearTimeout(t);
+  }, [lost]);
+  return back;
 }
 
 /** Days without training before the button turns orange. */
@@ -244,8 +264,9 @@ export function searchRows(q: string, engines: SearchEngine[]): Row[] {
   return engines.map((e) => ({ key: 'e:' + e.prefix, url: engineUrl(e, term), engine: e, term }));
 }
 
-export function TopBar({ data, now, title, subline, search, onSearch, searchRef, smokesToday, onLogSmoke, onOpenTraining, onOpenLearn, lead }: Props) {
+export function TopBar({ data, now, title, subline, search, onSearch, searchRef, smokesToday, onLogSmoke, onOpenTraining, onOpenLearn, lead, lost = false }: Props) {
   const [focused, setFocused] = useState(false);
+  const back = useReacquired(lost);
   const [sel, setSel] = useState(0);
   const [syncHover, setSyncHover] = useState(false);
   const blurT = useRef<number>(0);
@@ -418,14 +439,20 @@ export function TopBar({ data, now, title, subline, search, onSearch, searchRef,
               <span>{trained.days === 0 ? 'Today' : `${trained.days}d`}</span>
             </button>
           )}
-          <div className="sync" onMouseEnter={() => setSyncHover(true)} onMouseLeave={() => setSyncHover(false)}>
+          <div className="sync" onMouseEnter={() => setSyncHover(true)} onMouseLeave={() => setSyncHover(false)} style={{ '--n': lines.length } as CSSProperties}>
             <span className="sync-dot" style={{ background: dot }} />
-            {/* Mission's poll: a light for each source, in its state (mission.css; the other layouts show the one dot). */}
-            <span className="sync-lights" role="img" aria-label={anyFail ? 'A source needs a look' : 'Every source is fine'}>
+            {/* Mission's poll: a light for each source, in its state (mission.css; the other layouts show the one dot). While
+                the server can't be reached they go out one at a time (loss of signal), and report back in when it's back. */}
+            <span className="sync-lights" role="img" aria-label={lost ? 'Can’t reach the server' : anyFail ? 'A source needs a look' : 'Every source is fine'} data-los={lost ? '' : undefined} data-aos={back ? '' : undefined}>
               {lines.map((l, i) => (
                 <i key={l.name} className={'ms-mark ms-mark--' + (l.warn ? ('why' in l && l.why ? 'scrub' : 'hold') : 'off' in l || l.text === 'Not connected' ? 'standby' : 'go')} style={{ '--i': i } as CSSProperties} />
               ))}
             </span>
+            {lost && (
+              <span className="sync-los" aria-hidden="true">
+                LOS
+              </span>
+            )}
             {syncHover && (
               <div className="popover sync-tip">
                 {lines.map((l) => (

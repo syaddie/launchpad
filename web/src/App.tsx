@@ -760,8 +760,9 @@ export function App({ cached }: { cached: AppState | null }) {
         }
       />
       <div className="lp-inner">
-        <TopBar data={data} now={now} title={view === 'home' ? undefined : VIEWS.find((v) => v.key === view)?.name} subline={subline} search={search} onSearch={setSearch} searchRef={searchRef} smokesToday={smokesToday} onLogSmoke={logSmoke} onOpenTraining={() => setView('training')} onOpenLearn={() => setView('learn')} lead={design === 'mission' && view === 'home' ? <MissionHero data={data} now={now} extras={extras.join(' · ')} /> : undefined} />
-        {serverIssue && <ServerBanner issue={serverIssue} waiting={waiting} onRetry={() => refresh()} />}
+        <TopBar data={data} now={now} title={view === 'home' ? undefined : VIEWS.find((v) => v.key === view)?.name} subline={subline} search={search} onSearch={setSearch} searchRef={searchRef} smokesToday={smokesToday} onLogSmoke={logSmoke} onOpenTraining={() => setView('training')} onOpenLearn={() => setView('learn')} lost={!!serverIssue} lead={design === 'mission' && view === 'home' ? <MissionHero data={data} now={now} extras={extras.join(' · ')} /> : undefined} />
+        {/* Mission brings it down and takes it back up (mission.css, LOSS OF SIGNAL); the others show and hide it. */}
+        <Presence show={!!serverIssue}>{serverIssue && <ServerBanner issue={serverIssue} waiting={waiting} onRetry={() => refresh()} />}</Presence>
         <ErrorBoundary resetKey={view}>
         <Suspense fallback={<main className="view-loading" aria-busy="true" />}>
         {view === 'digest' ? (

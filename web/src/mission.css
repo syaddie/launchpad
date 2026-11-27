@@ -552,13 +552,96 @@
 [data-design='mission'] .ent-check.ticked .ent-tick.on { animation: msTickFlare 700ms var(--e-out); }
 
 /* =====================================================================
+   MONEY › ACCOUNTS
+   ===================================================================== */
+
+/* Moving money is a transfer orbit (Accounts.tsx): once the drawer has gone, the account it leaves gives a short burn,
+   a point of light climbs off it and travels on an arc over a faint trace to the account it goes to, which flares as it
+   lands; then both balances roll. */
+[data-design='mission'] .acct-orbit { display: block; position: absolute; inset: 0; z-index: 2; pointer-events: none; --orbit-at: var(--m-exit); --orbit-for: calc(var(--m-sweep) * 1.1); }
+[data-design='mission'] .acct-orbit svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+[data-design='mission'] .acct-orbit-trace { fill: none; stroke: var(--ac); stroke-width: 1.5; stroke-linecap: round; stroke-dasharray: 1 6; opacity: 0; animation: msOrbitTrace calc(var(--orbit-for) * 1.6) var(--e-out) var(--orbit-at) both; }
+[data-design='mission'] .acct-orbit-dot {
+  position: absolute; left: 0; top: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--ac); offset-anchor: center; offset-rotate: 0deg;
+  box-shadow: 0 0 8px 2px color-mix(in srgb, var(--ac) 65%, transparent), 0 0 22px 6px color-mix(in srgb, var(--ac) 24%, transparent);
+  animation: msOrbit var(--orbit-for) var(--e-io) var(--orbit-at) both;
+}
+@keyframes msOrbit { 0% { offset-distance: 0%; opacity: 0; scale: 0.4; } 12% { opacity: 1; scale: 1; } 88% { opacity: 1; scale: 1; } 100% { offset-distance: 100%; opacity: 0; scale: 0.6; } }
+@keyframes msOrbitTrace { 0% { opacity: 0; } 20%, 60% { opacity: 0.55; } 100% { opacity: 0; } }
+[data-design='mission'] .acct-card[data-orbit='from'] { animation: msOrbitBurn var(--m-move) var(--e-out) var(--m-exit); }
+[data-design='mission'] .acct-card[data-orbit='to'] { animation: msTickFlare calc(var(--m-sweep) * 0.8) var(--e-out) calc(var(--m-exit) + var(--m-sweep) * 1.05); }
+@keyframes msOrbitBurn { from { box-shadow: 0 0 0 1px var(--ac), 0 0 18px -2px color-mix(in srgb, var(--ac) 55%, transparent); } }
+/* Both balances hold until it has landed, then roll. */
+[data-design='mission'] .acct-card[data-orbit] .acct-bal .digit.rolling > * { animation-delay: calc(var(--m-exit) + var(--m-sweep) * 1.05); }
+
+/* =====================================================================
+   LEARN
+   ===================================================================== */
+
+/* The running study timer is mission elapsed time: "T+00:24:10" in the launch clock's dot-matrix face, in the colour of
+   now (it's what's happening this minute, as the top bar's study button says), its dot a beacon. Its digits relight as
+   they change, as the clock's do. Starting it is an ignition: as it takes Start studying's place it flares, hot, and
+   sends out one ring. */
+[data-design='mission'] .ln-timer { background: var(--ms-ignition-soft); color: var(--ms-ignition-ink); }
+[data-design='mission'] .ln-timer .ln-dot { position: relative; background: var(--ms-ignition); box-shadow: var(--ms-glow-now); }
+[data-design='mission'] .ln-timer .ln-dot::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: var(--ms-ignition-glow); animation: msBeacon 2.4s var(--e-out) infinite; }
+[data-design='mission'] .ln-timer .btn { color: var(--ms-ignition-ink) !important; }
+[data-design='mission'] .ln-timer .ln-clock { display: none; }
+[data-design='mission'] .ln-timer .ln-met { display: inline-block; flex: none; font-size: 21px; color: var(--ms-ignition-ink); text-shadow: 0 0 16px var(--ms-ignition-glow); }
+[data-layout='narrow'][data-design='mission'] .ln-timer .ln-met { font-size: 18px; }
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .ln-timer[data-ignite] { animation: msIgnite calc(var(--m-sweep) * 1.2) var(--e-out); }
+  [data-design='mission'] .ln-timer[data-ignite] .ln-met { animation: msIgniteFace calc(var(--m-sweep) * 1.2) var(--e-out); }
+}
+@keyframes msIgnite {
+  0% { background-color: color-mix(in srgb, var(--ms-ignition) 42%, var(--ms-ignition-soft)); box-shadow: 0 0 0 0 var(--ms-ignition-glow), 0 0 30px 6px var(--ms-ignition-glow); }
+  100% { box-shadow: 0 0 0 14px transparent, 0 0 0 0 transparent; }
+}
+@keyframes msIgniteFace { from { text-shadow: 0 0 22px var(--ms-ignition), 0 0 3px var(--ms-ignition); } }
+
+/* =====================================================================
+   SERVER
+   ===================================================================== */
+
+/* Services is a go/no-go poll: each container, sync and health check has a light with the source lights' marks (go,
+   hold, scrub, standby; Containers.tsx and Server.tsx decide which), and they report in one after another as the panel
+   opens, as the sources do when the app opens. The head counts them in the poll's words. */
+[data-design='mission'] .services .svc-mark { display: block; animation: msReport var(--m-move) var(--e-settle) both; animation-delay: calc(var(--m-state) + var(--m-stagger) * var(--i, 0)); }
+[data-design='mission'] .container-row { grid-template-columns: 10px minmax(0, 1fr) auto auto; }
+[data-design='mission'] .container-row > .dot { display: none; }
+[data-design='mission'] .svc-poll { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 12px; margin-left: auto; font: 500 11px/14px var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--t3); }
+[data-design='mission'] .svc-poll > span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+[data-design='mission'] .svc-poll .ms-mark { width: 8px; height: 8px; border-width: 1.5px; }
+[data-design='mission'] .services > .panel-head { flex-wrap: wrap; row-gap: 4px; }
+
+/* =====================================================================
+   LOSS OF SIGNAL
+   ===================================================================== */
+
+/* Losing the server: as its banner comes down, the source lights go out one at a time, left to right, and a small LOS
+   lights beside them. When it's reached again the banner goes back up and the lights report back in, in turn, as they
+   do when the app opens. (TopBar.tsx marks the lights data-los, then data-aos for a moment.) The other layouts show
+   and hide the banner as they always have. */
+:root[data-design='mission'] .sync-lights[data-los] > i { animation: msLightOut var(--m-move) var(--e-in) forwards; animation-delay: calc(var(--m-stagger) * 2 * var(--i, 0)); }
+:root[data-design='mission'] .sync-lights[data-aos] > i { animation: msReport var(--m-move) var(--e-settle) both; animation-delay: calc(var(--m-state) + var(--m-stagger) * 2 * var(--i, 0)); }
+@keyframes msLightOut { to { opacity: 0.2; scale: 0.6; filter: grayscale(1); } }
+[data-design='mission'] .sync { grid-auto-flow: column; gap: 6px; }
+[data-design='mission'] .sync-los { display: block; font: 600 10px/12px var(--f-mono); letter-spacing: 0.1em; color: var(--wn); animation: msRelight var(--m-state) steps(3, end) both; animation-delay: calc(var(--m-stagger) * 2 * var(--n, 6)); }
+[data-design='mission'] .lp-presence > .server-banner { animation: msBannerDown var(--m-move) var(--e-settle) both; }
+[data-design='mission'] .lp-presence[data-leaving] > .server-banner { animation: msBannerUp var(--m-exit) var(--e-in) both; }
+@keyframes msBannerDown { from { opacity: 0; translate: 0 -14px; clip-path: inset(0 0 100% 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes msBannerUp { from { clip-path: inset(0 0 0 0); } to { opacity: 0; translate: 0 -10px; clip-path: inset(0 0 100% 0); } }
+/* Only Mission takes the banner away slowly: elsewhere it goes at once, as it always has. */
+:root:not([data-design='mission']) .lp-presence[data-leaving] > .server-banner { animation: none; }
+
+/* =====================================================================
    LESS MOTION
    Nothing breathes, burns, drifts, blinks, falls or crosses the sky, and nothing launches (Scene.tsx checks too).
    The sky still shows the hour and the weather's cloud, standing still.
    ===================================================================== */
 
 @media (prefers-reduced-motion: reduce) {
-  .ms-clouds i, .ms-twinkles i, .ms-lamp, .ms-flames, .ms-flame-core, .ms-ring, .ms-beacon::after, .ms-cell, .ms-logo--liftoff :is(.ms-vehicle, .ms-flames), .ms-rollout .ms-lift, .cal-day.today .cal-n::after, .cal-day.on::after { animation: none !important; }
+  .ms-clouds i, .ms-twinkles i, .ms-lamp, .ms-flames, .ms-flame-core, .ms-ring, .ms-beacon::after, .ms-cell, .ms-logo--liftoff :is(.ms-vehicle, .ms-flames), .ms-rollout .ms-lift, .cal-day.today .cal-n::after, .cal-day.on::after, .ln-timer .ln-dot::after { animation: none !important; }
   .ms-sat, .ms-trace, .ms-fx, .ms-ring, .ms-pulse, .ms-stage { display: none; }
   .ms-scene[data-wx='rain'] .ms-rain { animation: none; }
   .ms-orb, .ms-clouds { transition: none; transform: translate(var(--orb-x, 70vw), var(--orb-y, 12vh)); }
@@ -570,4 +653,12 @@
   @keyframes msDrawOn { from { opacity: 0; } }
   @keyframes msArrive { from { opacity: 0; } }
   @keyframes msTickFlare { from { opacity: 1; } }
+  [data-design='mission'] .ln-timer[data-ignite] { animation: lpFadeIn var(--m-state) var(--e-out); }
+  @keyframes msLightOut { to { opacity: 0.2; } }
+  .acct-orbit { display: none !important; }
+  @keyframes msOrbitBurn { from { opacity: 1; } }
+  [data-design='mission'] .acct-card[data-orbit] .acct-bal .digit.rolling > * { animation-delay: 0s; }
+  @keyframes msBannerDown { from { opacity: 0; } }
+  @keyframes msBannerUp { to { opacity: 0; } }
+  [data-design='mission'] .sync-los { animation: none; }
 }

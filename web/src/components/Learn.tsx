@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { DOW, addDays, dayDiff, parseYmd, startOfDay, ymd } from '../../../shared/dates';
 import {
   COURSE_COLORS, DUE_GROUPS, GRADES, KINDS, SIDE_STALE_DAYS, STATUS_NAMES, classesOn, courseGrade, dueGroup, fmtStudy, letterOf, neededFor, nextUp, openWork,
@@ -6,6 +6,7 @@ import {
 } from '../../../shared/learn';
 import type { AppState, Assessment, AssessmentKind, AssessmentStatus, Course, Learn, SideLearning } from '../../../shared/types';
 import { ago, fmtDay, hm, inMinutes, newId, shortDay } from '../util';
+import { menuProps } from './ContextMenu';
 
 type Notify = (msg: string, action?: { label: string; run: () => void }) => void;
 
@@ -51,6 +52,32 @@ const clock = (min: number) => {
   const h = Math.floor(s / 3600);
   return `${h ? `${h}:` : ''}${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`;
 };
+/** "T+00:24:10": the timer as mission elapsed time, for Mission's dot-matrix face. */
+const met = (min: number) => {
+  const s = Math.floor(min * 60);
+  return `T+${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`;
+};
+
+/** How long a timer that has just started is marked as igniting: past the end of its flare. */
+const IGNITING_MS = 1400;
+
+/**
+ * True for a moment after the timer starts while the view is open (Start studying, or ⌘K), not for one already
+ * running when it opened: Mission flares the timer as it takes the button's place, like an ignition.
+ */
+function useIgnition(start: string | undefined): boolean {
+  const [lit, setLit] = useState(false);
+  const was = useRef(start);
+  useEffect(() => {
+    const started = !!start && start !== was.current;
+    was.current = start;
+    if (!started) return setLit(false);
+    setLit(true);
+    const t = window.setTimeout(() => setLit(false), IGNITING_MS);
+    return () => window.clearTimeout(t);
+  }, [start]);
+  return lit;
+}
 
 /** The Learn view: what's due, today's classes and exams, courses, study time and learning on the side. */
 export function LearnView({ data, now: minuteNow, noteBusy, addSignal, onChange, onStart, onStop, onOpenCourse, onRefreshNote, notify }: Props) {
@@ -72,6 +99,8 @@ export function LearnView({ data, now: minuteNow, noteBusy, addSignal, onChange,
   const exams = upcomingExams(learn, today);
   const timer = learn.timer;
   const timerCourseObj = timer ? learn.courses.find((c) => c.id === timer.courseId) : undefined;
+  const igniting = useIgnition(timer?.start);
+  const studied = timer ? timerMinutes(timer, now) : 0;
 
   return (
     <main className="you learn" aria-label="Learn">
@@ -88,10 +117,24 @@ export function LearnView({ data, now: minuteNow, noteBusy, addSignal, onChange,
         </span>
         <div className="tr-actions">
           {timer ? (
-            <div className="ln-timer" role="status">
-              <span className="ln-dot" style={{ background: 'var(--ac)' }} />
-              <span style={{ fontWeight: 600 }}>Studying {timerCourseObj?.name ?? 'general'}</span>
-              <span className="mono tnum">{clock(timerMinutes(timer, now))}</span>
+            <div
+              className="ln-timer"
+              role="status"
+              data-ignite={igniting ? '' : undefined}
+              {...menuProps(() => [{ label: 'Stop and log', icon: 'ph-stop', danger: true, onSelect: onStop }], `Studying ${timerCourseObj?.name ?? 'general'}`)}
+            >
+              <span className="ln-dot" />
+              <span className="ln-timer-what" title={`Studying ${timerCourseObj?.name ?? 'general'}`}>Studying {timerCourseObj?.name ?? 'general'}</span>
+              {/* Mission shows it as mission elapsed time, in the launch clock's dot-matrix face (mission.css, LEARN); a
+                  digit that changed relights (its key is its place and value). */}
+              <span className="mono tnum ln-clock">{clock(studied)}</span>
+              <span className="ms-matrix ln-met" data-ghost={met(studied).replace(/\d/g, '8')} aria-hidden="true">
+                {[...met(studied)].map((ch, i) => (
+                  <span key={`${i}${ch}`} className="ms-cell">
+                    {ch}
+                  </span>
+                ))}
+              </span>
               <button className="btn btn-ghost btn-small" style={{ color: 'var(--acd)' }} onClick={onStop}>
                 <i className="ph-duotone ph-stop" />
                 Stop and log

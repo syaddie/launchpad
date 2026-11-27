@@ -195,8 +195,11 @@ export function AccountDrawer({ money, today, id, onChange, onClose }: { money: 
   );
 }
 
-/** Moves money from one account to another, once or on repeat. The total stays the same. */
-export function MoveDrawer({ money, today, onChange, onClose }: { money: Money; today: string; onChange: (m: Money) => void; onClose: () => void }) {
+/**
+ * Moves money from one account to another, once or on repeat. The total stays the same. `onMoved` hears of a move that
+ * changes today's balances (one done by today), for the transfer's light between the cards.
+ */
+export function MoveDrawer({ money, today, onChange, onMoved, onClose }: { money: Money; today: string; onChange: (m: Money) => void; onMoved?: (from: string, to: string) => void; onClose: () => void }) {
   const [from, setFrom] = useState(() => lastAccount(money));
   const [to, setTo] = useState(() => otherAccount(money, lastAccount(money)));
   const [amount, setAmount] = useState<number | null>(null);
@@ -214,6 +217,7 @@ export function MoveDrawer({ money, today, onChange, onClose }: { money: Money; 
     const moves = dates.map((d): MoneyEntry => ({ id: newId('e'), date: d, kind: 'move', amount: Math.abs(amount!), note: note.trim(), category: '', planned: d > today, account: from, to }));
     onChange({ ...money, entries: sortEntries([...money.entries, ...moves]) });
     localSet('moneyAccount', from);
+    if (moves.some((m) => !m.planned)) onMoved?.(from, to);
     onClose();
   };
 

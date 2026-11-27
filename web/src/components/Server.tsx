@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { DOW, MON } from '../../../shared/dates';
 import { fmtDuration } from '../../../shared/trackers';
 import type { AppState, ServerStats, ShellInfo, SourceKey, SpeedTest } from '../../../shared/types';
@@ -6,7 +6,7 @@ import { api, cachedServer, cacheServer, localGet, localSet } from '../api';
 import { useActiveTabInView } from '../hooks/useActiveTabInView';
 import { ago, fmtBytes, hm, niceMax } from '../util';
 import { ClaudeUsagePanel } from './ClaudeUsage';
-import { ContainerRow, LogsDrawer } from './Containers';
+import { ContainerRow, LogsDrawer, markOf, type PollMark } from './Containers';
 import { authorizeLine, Copyable } from './Copyable';
 import { DisksPanel } from './Disks';
 import { ErrorBoundary } from './ErrorBoundary';
@@ -676,6 +676,15 @@ const SYNCS: { key: SourceKey; name: string }[] = [
   { key: 'hevy', name: 'Hevy' },
 ];
 
+/** A sync's or a health check's light in Mission's poll: failing with a reason is scrubbed, without one holds. */
+const syncMark = (warn: boolean, why: string | null | undefined, ran: boolean): PollMark => (warn ? (why ? 'scrub' : 'hold') : ran ? 'go' : 'standby');
+const POLL_ORDER: PollMark[] = ['go', 'hold', 'scrub', 'standby'];
+
+/**
+ * The containers, the syncs and the server's health checks. In Mission it's a go/no-go poll: each has a light with the
+ * marks the source lights use (go, hold, scrub, standby), reporting in one after another as the panel opens, and the
+ * head counts them.
+ */
 function ServicesPanel({ s, data, now, onChanged }: { s: ServerStats; data: AppState; now: Date; onChanged: () => void }) {
   const [logsOf, setLogsOf] = useState<string | null>(null);
   const [note, setNote] = useState<{ text: string; failed: boolean } | null>(null);
@@ -684,10 +693,30 @@ function ServicesPanel({ s, data, now, onChanged }: { s: ServerStats; data: AppS
     setNote(error ? { text: `Couldn’t restart ${name}: ${error}`, failed: true } : { text: `Restarted ${name}.`, failed: false });
     onChanged();
   };
+  const syncs = SYNCS.filter((x) => x.key !== 'hevy' || data.hevy).map((x) => {
+    const st = data.sync[x.key];
+    const h = data.health?.find((w) => w.key === x.key);
+    return { ...x, st, h, mark: syncMark(!!h || !!st.lastError, h?.detail || st.lastError, !!st.lastSuccess) };
+  });
+  const checks = (data.health ?? []).filter((w) => !SYNCS.some((x) => x.key === w.key));
+  const marks = [...(s.containers ?? []).map(markOf), ...syncs.map((x) => x.mark), ...checks.map((w) => syncMark(true, w.detail, true))];
+  const poll = POLL_ORDER.map((m) => ({ m, n: marks.filter((x) => x === m).length })).filter((p) => p.n);
+  const nContainers = s.containers?.length ?? 0;
   return (
     <section className="panel srv-panel services" aria-label="Services">
       <div className="panel-head">
         <h2 className="panel-title">Services</h2>
+        {/* Mission's count of the poll, in its small mono words (mission.css); the rows say the same in full. */}
+        {poll.length > 0 && (
+          <span className="svc-poll" aria-hidden="true">
+            {poll.map((p) => (
+              <span key={p.m}>
+                <i className={'ms-mark ms-mark--' + p.m} />
+                {p.n} {p.m}
+              </span>
+            ))}
+          </span>
+        )}
         <span className="meta">{s.hostname}</span>
       </div>
       {note && (
@@ -697,7 +726,7 @@ function ServicesPanel({ s, data, now, onChanged }: { s: ServerStats; data: AppS
       )}
       <div className="scroll">
         {s.containers ? (
-          s.containers.map((c) => <ContainerRow key={c.id || c.name} c={c} canRestart={s.canRestart} onLogs={() => setLogsOf(c.id)} onRestarted={restarted(c.name)} notify={(text) => setNote({ text, failed: false })} />)
+          s.containers.map((c, i) => <ContainerRow key={c.id || c.name} c={c} order={i} canRestart={s.canRestart} onLogs={() => setLogsOf(c.id)} onRestarted={restarted(c.name)} notify={(text) => setNote({ text, failed: false })} />)
         ) : (
           <div className="empty" style={{ gap: 6 }}>
             <p style={{ fontSize: 13 }}>
@@ -710,12 +739,13 @@ function ServicesPanel({ s, data, now, onChanged }: { s: ServerStats; data: AppS
         <div className="task-group-label" style={{ paddingTop: 14 }}>
           Syncs
         </div>
-        {SYNCS.filter((x) => x.key !== 'hevy' || data.hevy).map((x) => {
-          const st = data.sync[x.key];
-          const h = data.health?.find((w) => w.key === x.key);
+        {syncs.map(({ st, h, mark, ...x }, i) => {
           return (
             <div key={x.key} className="split sync-row">
-              <span style={{ color: 'var(--t2)' }}>{x.name}</span>
+              <span className="sync-row-name">
+                <i className={'ms-mark svc-mark ms-mark--' + mark} style={{ '--i': nContainers + i } as CSSProperties} aria-hidden="true" />
+                {x.name}
+              </span>
               <span className="meta" style={h || st.lastError ? { color: 'var(--wn)' } : undefined} title={h?.detail || st.lastError || undefined}>
                 {h ? h.text : st.lastError ? `Failing · ${ago(st.lastSuccess, now)}` : st.lastSuccess ? ago(st.lastSuccess, now) : 'Not yet'}
               </span>
@@ -723,9 +753,12 @@ function ServicesPanel({ s, data, now, onChanged }: { s: ServerStats; data: AppS
           );
         })}
         {/* The database, the daily copy and Drive, from the server's health check. */}
-        {data.health?.filter((w) => !SYNCS.some((x) => x.key === w.key)).map((w) => (
+        {checks.map((w, i) => (
           <div key={w.key} className="split sync-row">
-            <span style={{ color: 'var(--t2)' }}>{w.name}</span>
+            <span className="sync-row-name">
+              <i className={'ms-mark svc-mark ms-mark--' + syncMark(true, w.detail, true)} style={{ '--i': nContainers + syncs.length + i } as CSSProperties} aria-hidden="true" />
+              {w.name}
+            </span>
             <span className="meta" style={{ color: 'var(--wn)' }} title={w.detail}>
               {w.text}
             </span>
