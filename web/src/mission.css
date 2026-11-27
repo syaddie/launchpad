@@ -501,24 +501,25 @@
 :root[data-design='mission'][data-entering] .lp-inner > main :is(.panel, .photo-panel):not(.panel .panel) { animation: msRiseUp var(--m-view) var(--e-out) both; }
 
 /* =====================================================================
-   MONEY › MONTH
+   CHANGING A PERIOD, AND MONEY › MONTH
    ===================================================================== */
 
-/* Changing month is a scan (styles.css has the wipe it rides on). The line is a beam with an afterglow behind it,
-   crossing at a steady rate like a radar's, and each day lights as the beam passes it, then cools. The month's name
+/* Changing a period with arrows is a scan (styles.css has the wipe it rides on): Money › Month, Mood's month, Year in
+   pixels, Review's week, Training's week. The line is a beam with an afterglow behind it, crossing at a steady rate
+   like a radar's, and each day (each cell, `lp-scan-cell`) lights as the beam passes it, then cools. The period's name
    relights letter by letter from the same side, the way the launch clock's dots do. */
 @media (prefers-reduced-motion: no-preference) {
-  [data-design='mission'] .month-tab { --sweep-ease: linear; }
+  [data-design='mission'] .lp-scan { --sweep-ease: linear; }
   [data-design='mission'] .cal-scan::after { width: 2px; background: linear-gradient(180deg, transparent, var(--ac) 10%, var(--ac) 90%, transparent); box-shadow: 0 0 10px 1px color-mix(in srgb, var(--ac) 70%, transparent), 0 0 30px 5px color-mix(in srgb, var(--ac) 26%, transparent); }
   [data-design='mission'] .cal-scan::before { content: ''; position: absolute; top: 0; bottom: 0; right: 0; width: min(160px, 34%); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--ac) 16%, transparent)); }
   [data-design='mission'] .cal-sweep[data-step='prev'] > .cal-scan::before { right: auto; left: 0; background: linear-gradient(270deg, transparent, color-mix(in srgb, var(--ac) 16%, transparent)); }
-  /* --c is the day's column: it lights as the beam reaches the middle of it. */
-  [data-design='mission'] .month-tab[data-arrive] .cal > .cal-grid .cal-day { animation: msDayLit calc(var(--sweep) * 1.5) var(--e-out) both; animation-delay: calc(var(--sweep) * (var(--c, 0) + 0.5) / 7); }
-  [data-design='mission'] .month-tab[data-arrive='prev'] .cal > .cal-grid .cal-day { animation-delay: calc(var(--sweep) * (6.5 - var(--c, 0)) / 7); }
-  /* --i is each letter's place and --n how many there are (MonthTab.tsx). */
-  [data-design='mission'] .month-tab[data-arrive] .month-title { animation: none; }
-  [data-design='mission'] .month-tab[data-arrive] .month-glyphs > span { animation: msRelight 260ms steps(3, end) both, msGlyphGlow 720ms var(--e-out) both; animation-delay: calc(var(--i) * 26ms); }
-  [data-design='mission'] .month-tab[data-arrive='prev'] .month-glyphs > span { animation-delay: calc((var(--n) - 1 - var(--i)) * 26ms); }
+  /* --x is where the cell's middle is across the grid (periodMotion.ts): it lights as the beam reaches it. */
+  [data-design='mission'] [data-arrive] .lp-scan-grid:not(.cal-copy) .lp-scan-cell { animation: msDayLit calc(var(--sweep) * 1.5) var(--e-out) both; animation-delay: calc(var(--sweep) * var(--x, 0)); }
+  [data-design='mission'] [data-arrive='prev'] .lp-scan-grid:not(.cal-copy) .lp-scan-cell { animation-delay: calc(var(--sweep) * (1 - var(--x, 0))); }
+  /* --i is each letter's place and --n how many there are (Glyphs in Motion.tsx). */
+  [data-design='mission'] [data-arrive] .lp-period-label { animation: none; }
+  [data-design='mission'] [data-arrive] .lp-glyphs > span { animation: msRelight 260ms steps(3, end) both, msGlyphGlow 720ms var(--e-out) both; animation-delay: calc(var(--i) * 26ms); }
+  [data-design='mission'] [data-arrive='prev'] .lp-glyphs > span { animation-delay: calc((var(--n) - 1 - var(--i)) * 26ms); }
 }
 @keyframes msDayLit { from { background-color: color-mix(in srgb, var(--ac) 24%, var(--bg)); box-shadow: inset 0 0 0 1px var(--ac), 0 0 18px -4px var(--ac); } }
 @keyframes msGlyphGlow { from { text-shadow: 0 0 12px var(--ac), 0 0 2px var(--ac); } }

@@ -19,6 +19,16 @@ export function viewStep(from: ViewKey, to: ViewKey): ViewStep {
 }
 
 /**
+ * Which way a period with arrows changed (a month, a year, a week; periodMotion.ts): to a later one is `next`, to an
+ * earlier one `prev`, and the same one is no change. Months as "2026-11" compare as text, years and offsets as numbers.
+ */
+export type PeriodStep = 'next' | 'prev';
+
+export function periodStep<T extends string | number>(from: T, to: T): PeriodStep | null {
+  return to === from ? null : to > from ? 'next' : 'prev';
+}
+
+/**
  * One character of a readout. `key` is its place counted from the right, so the units stay put
  * when a value grows a digit ("9 min" to "10 min"). `from` is the digit that was in its place
  * before: undefined when there was no value before (the readout is new), null when there was no

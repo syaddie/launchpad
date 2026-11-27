@@ -5,11 +5,11 @@ import type { Money, MoneyCategory, MoneyEntry } from '../../../../shared/types'
 import { localGet, localSet } from '../../api';
 import { newId } from '../../util';
 import { copyText, menuProps } from '../ContextMenu';
-import { Glide, Readout } from '../Motion';
+import { periodStep } from '../../motion';
+import { Glide, Glyphs, Readout, usePeriodScan } from '../Motion';
 import { EntryRow } from './EntryRow';
 import { MonthCalendar, type PickHow, TodayLine } from './MonthCalendar';
 import { dayGroups, dayName, dayTitle, scrollFor } from './monthList';
-import { leaveMonth, type MonthStep, monthStep } from './monthMotion';
 import { WhatIf } from './WhatIf';
 import { AccountSelect, Calc, CategoryCell, entryTitle, type Kind, KindSwitch, lastAccount, namesOf, type Notify, NumCell, otherAccount, shortDate, signed } from './shared';
 
@@ -36,9 +36,6 @@ type Jump = { target: Target; smooth: boolean; n: number };
 
 /** Every review shows at most this many; the rest are marked Overdue in the list. */
 const REVIEW_SHOWN = 3;
-
-/** How long a new month is marked as coming in: past the end of its longest animation (the calendar's days lighting up). */
-const ARRIVING_MS = 1600;
 
 const less = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -164,22 +161,15 @@ export function MonthTab({ money, today, month, onMonth, onChange, onOpenOwed, t
   /**
    * The way the month last changed, while the new one comes in (`data-arrive` on the tab): the calendar wipes across
    * that way, the title lights up from that side, and the list slides in from it. Only a change made here moves:
-   * opening Month on a month from elsewhere just shows it.
+   * opening Month on a month from elsewhere just shows it. (The calendar's part is shared: usePeriodScan.)
    */
-  const tabRef = useRef<HTMLDivElement>(null);
-  const [arrive, setArrive] = useState<{ step: MonthStep; n: number } | null>(null);
+  const scan = usePeriodScan<HTMLDivElement>();
   const toMonth = (k: string) => {
-    const step = monthStep(month, k);
+    const step = periodStep(month, k);
     if (!step) return;
-    leaveMonth(tabRef.current, step);
-    setArrive((a) => ({ step, n: (a?.n ?? 0) + 1 }));
+    scan.go(step);
     onMonth(k);
   };
-  useEffect(() => {
-    if (!arrive) return;
-    const t = window.setTimeout(() => setArrive(null), ARRIVING_MS);
-    return () => window.clearTimeout(t);
-  }, [arrive]);
 
   const listRef = useRef<HTMLDivElement>(null);
   const addRef = useRef<HTMLDivElement>(null);
@@ -582,26 +572,19 @@ export function MonthTab({ money, today, month, onMonth, onChange, onOpenOwed, t
   );
 
   return (
-    <div ref={tabRef} className={'money-body month-tab' + (together ? ' together' : '')} data-arrive={arrive?.step}>
+    <div ref={scan.ref} className={'money-body month-tab lp-scan' + (together ? ' together' : '')} data-arrive={scan.arrive}>
       <div className="month-top">
         <div className="month-lead">
           <div className="month-bar">
             <div className="month-nav">
-              <button className="icon-btn md month-step prev" aria-label="Previous month" disabled={month <= addMonths(keys[0], -1)} onClick={() => toMonth(addMonths(month, -1))}>
+              <button className="icon-btn md lp-step prev" aria-label="Previous month" disabled={month <= addMonths(keys[0], -1)} onClick={() => toMonth(addMonths(month, -1))}>
                 <i className="ph-duotone ph-caret-left" />
               </button>
               {/* Each letter its own, so a design can light them one after another (Mission's dot-matrix relight). */}
-              <h2 key={month} className="serif month-title">
-                <span className="lp-sr">{monthName(month)}</span>
-                <span className="month-glyphs" aria-hidden="true">
-                  {[...monthName(month)].map((ch, i, all) => (
-                    <span key={i} style={{ '--i': i, '--n': all.length } as CSSProperties}>
-                      {ch}
-                    </span>
-                  ))}
-                </span>
+              <h2 key={month} className="serif month-title lp-period-label">
+                <Glyphs text={monthName(month)} />
               </h2>
-              <button className="icon-btn md month-step next" aria-label="Next month" disabled={month >= addMonths(today.slice(0, 7), 24)} onClick={() => toMonth(addMonths(month, 1))}>
+              <button className="icon-btn md lp-step next" aria-label="Next month" disabled={month >= addMonths(today.slice(0, 7), 24)} onClick={() => toMonth(addMonths(month, 1))}>
                 <i className="ph-duotone ph-caret-right" />
               </button>
               {!isNow && (

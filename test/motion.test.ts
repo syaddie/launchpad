@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { readoutCells, rollDirection, viewStep } from '../web/src/motion';
+import { periodStep, readoutCells, rollDirection, viewStep } from '../web/src/motion';
+
+describe('periodStep', () => {
+  it('goes next to a later period and prev to an earlier one', () => {
+    expect(periodStep('2026-11', '2026-12')).toBe('next');
+    expect(periodStep('2026-11', '2025-12')).toBe('prev');
+    expect(periodStep(2026, 2025)).toBe('prev');
+    expect(periodStep(-1, 0)).toBe('next');
+    expect(periodStep(-2, -10)).toBe('prev');
+  });
+
+  it('is no change to the same period', () => {
+    expect(periodStep('2026-11', '2026-11')).toBeNull();
+    expect(periodStep(0, 0)).toBeNull();
+  });
+});
 
 describe('viewStep', () => {
   it('goes next along the rail and back toward Home', () => {
