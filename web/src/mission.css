@@ -722,6 +722,11 @@
 [data-design='mission'] .ms-up::after { left: 50%; bottom: 50%; width: 3px; height: 10px; margin-left: -1.5px; border-radius: 2px; background: linear-gradient(to top, transparent, currentColor 70%); animation: msUpPacket var(--m-sweep) var(--e-out) both; }
 /* The scrubbed light is turned on its corner: its packet still rises straight up. */
 [data-design='mission'] .ms-mark--scrub > .ms-up::after { rotate: -45deg; --up-x: -15px; --up-y: -15px; }
+/* On a small phone the row, a light longer than it was, keeps to the width it had, so the search box keeps its room. */
+@media (max-width: 380px) {
+  [data-layout='narrow'][data-design='mission'] .sync-lights { gap: 4px; }
+  [data-layout='narrow'][data-design='mission'] .sync-lights > .ms-mark { width: 8px; height: 8px; border-width: 1.5px; }
+}
 @keyframes msUpRing { 0% { opacity: 1; scale: 0.9; } 100% { opacity: 0; scale: 2.3; } }
 @keyframes msUpPacket {
   0% { opacity: 0; translate: 0 0; }
