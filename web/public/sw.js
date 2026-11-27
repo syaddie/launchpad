@@ -18,7 +18,7 @@ self.addEventListener('install', (e) => {
   e.waitUntil(
     caches
       .open(CACHE)
-      .then((c) => c.addAll([SHELL, '/favicon.svg', '/manifest.webmanifest']))
+      .then((c) => c.addAll([SHELL, '/favicon.svg', '/favicon-lit.svg', '/manifest.webmanifest']))
       // Behind Cloudflare Access a lapsed sign-in turns these into a redirect; the pages fill the cache later.
       .catch(() => {})
       .then(() => self.skipWaiting()),

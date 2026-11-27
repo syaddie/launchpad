@@ -29,6 +29,7 @@ import { TopBar } from './components/TopBar';
 import { useAppData } from './hooks/useAppData';
 import { useGoogleActions } from './hooks/useGoogleActions';
 import { useHashView, useLayout, useMinuteNow, useSystemDark } from './hooks/useDevice';
+import { useTabTitle } from './hooks/useTabTitle';
 import { useShortcuts } from './hooks/useShortcuts';
 import { useSidewaysWheel } from './hooks/useSidewaysWheel';
 import { useFlash, useToast } from './hooks/useToast';
@@ -151,6 +152,8 @@ export function App({ cached }: { cached: AppState | null }) {
   // ---------- data ----------
 
   const { data, update, savers, merge, replace, refresh, serverIssue, waiting } = useAppData({ cached, notify: showToast, onSaveError, onNotesSaved: flashSaved, onMoneySaved: flashMoneySaved, noteEditing });
+  // The tab counts down to the next event or up while studying, and its icon lights (tabTitle.ts).
+  useTabTitle(data, now);
   const photoSlots = usePhotoSlots(data.photos.length);
 
   // The opening (motion.css) plays once as the app starts; after that, only changes move.
