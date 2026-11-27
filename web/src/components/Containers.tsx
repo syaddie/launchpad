@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MON } from '../../../shared/dates';
 import type { ContainerInfo, LogLine } from '../../../shared/types';
@@ -53,8 +53,21 @@ const chipOf = (c: ContainerInfo) => {
   };
 };
 
-/** One container in the Services panel, with its logs and, when the restart proxy is there, a restart. */
-export function ContainerRow({ c, canRestart, onLogs, onRestarted, notify }: { c: ContainerInfo; canRestart: boolean; onLogs: () => void; onRestarted: (error: string | null) => void; notify?: (msg: string) => void }) {
+/** A light's state in Mission's go/no-go poll (the marks the source lights use, mission.css). */
+export type PollMark = 'go' | 'hold' | 'scrub' | 'standby';
+
+/** Up and healthy is go; starting or restarting holds; unhealthy or dead is scrubbed; stopped, made or paused stands by. */
+export function markOf(c: ContainerInfo): PollMark {
+  if (c.state === 'restarting' || /health: starting/i.test(c.status)) return 'hold';
+  if (/unhealthy/i.test(c.status) || c.state === 'dead') return 'scrub';
+  return c.state === 'running' ? 'go' : 'standby';
+}
+
+/**
+ * One container in the Services panel, with its logs and, when the restart proxy is there, a restart. `order` is its
+ * place in the panel, so Mission's lights report in one after another as it opens.
+ */
+export function ContainerRow({ c, order = 0, canRestart, onLogs, onRestarted, notify }: { c: ContainerInfo; order?: number; canRestart: boolean; onLogs: () => void; onRestarted: (error: string | null) => void; notify?: (msg: string) => void }) {
   const chip = chipOf(c);
   const restart = () =>
     api
@@ -73,6 +86,7 @@ export function ContainerRow({ c, canRestart, onLogs, onRestarted, notify }: { c
   return (
     <div className="container-row" {...menu}>
       <span className="dot" style={{ width: 8, height: 8, background: chip.dot }} />
+      <i className={'ms-mark svc-mark ms-mark--' + markOf(c)} style={{ '--i': order } as CSSProperties} aria-hidden="true" />
       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <span className="mono" style={{ fontSize: 13 }}>
           {c.name}

@@ -3,6 +3,7 @@ import type { Snippet } from '../../../shared/types';
 import { cleanCommand, MAX_SHELL_ASK, type ShellAnswer, type ShellAskStatus } from '../../../shared/shellAsk';
 import { api } from '../api';
 import { closeMenu, menuProps, openMenu, type MenuItem } from './ContextMenu';
+import { EmptyArt } from './mission/EmptyArt';
 
 type Asked = { q: string; status: 'busy' } | { q: string; status: 'done'; answer: ShellAnswer } | { q: string; status: 'failed'; error: string };
 
@@ -264,6 +265,7 @@ export function SnippetsPanel({ canUse, cwd, onInsert, onRun, onClose }: {
           !error && <p className="meta">Loading…</p>
         ) : !list.length && editing !== 'new' ? (
           <div className="empty" style={{ padding: 0, gap: 10 }}>
+            <EmptyArt kind="clear" />
             <p style={{ fontSize: 13 }}>Save commands you type often, then put them into the open tab with a click.</p>
             <button className="btn btn-secondary btn-small" onClick={() => newSnippet()}>
               <i className="ph-duotone ph-plus" />

@@ -3,7 +3,8 @@
 // added to them. The keyframes and transitions are in motion.css.
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
-import { readoutCells, rollDirection } from '../motion';
+import { type PeriodStep, readoutCells, rollDirection } from '../motion';
+import { leavePeriod, markAcross } from '../periodMotion';
 
 /** The longest an exit may take before its element goes anyway (a page that isn't being drawn never finishes one). */
 const EXIT_CAP_MS = 450;
@@ -137,6 +138,54 @@ export function Glide({ on, selector }: { on: unknown; selector?: string }) {
   });
   useGlide(row, on, selector);
   return <span ref={self} className="glide" aria-hidden="true" />;
+}
+
+/** How long a new period is marked as coming in: past the end of its longest animation (Mission's cells lighting up). */
+const ARRIVING_MS = 1600;
+
+/**
+ * A period with arrows (a month, a year, a week) that moves the way you went when it changes (periodMotion.ts has the
+ * parts and their classes). Put `ref` and `data-arrive={arrive}` on the host, which has the class `lp-scan`, and call
+ * `go(step)` just before the period changes: the old grid is copied, and `arrive` says which way the new one comes in
+ * for as long as it does. Only a change made with `go` moves: a period opened from elsewhere just shows.
+ */
+export function usePeriodScan<T extends HTMLElement = HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [arrive, setArrive] = useState<{ step: PeriodStep; n: number } | null>(null);
+  const go = (step: PeriodStep | null) => {
+    if (!step) return;
+    leavePeriod(ref.current, step);
+    setArrive((a) => ({ step, n: (a?.n ?? 0) + 1 }));
+  };
+  useLayoutEffect(() => {
+    if (arrive) markAcross(ref.current);
+  }, [arrive]);
+  useEffect(() => {
+    if (!arrive) return;
+    const t = window.setTimeout(() => setArrive(null), ARRIVING_MS);
+    return () => window.clearTimeout(t);
+  }, [arrive]);
+  return { ref, arrive: arrive?.step, go };
+}
+
+/**
+ * A period's name with each letter its own, so a design can light them one after another (Mission relights them like
+ * the launch clock's dots, from the side the period came in). Screen readers get the text as it is. Key it by the
+ * period, so a new name comes in whole.
+ */
+export function Glyphs({ text }: { text: string }) {
+  return (
+    <>
+      <span className="lp-sr">{text}</span>
+      <span className="lp-glyphs" aria-hidden="true">
+        {[...text].map((ch, i, all) => (
+          <span key={i} style={{ '--i': i, '--n': all.length } as CSSProperties}>
+            {ch}
+          </span>
+        ))}
+      </span>
+    </>
+  );
 }
 
 /**

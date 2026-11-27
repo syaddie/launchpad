@@ -3,6 +3,7 @@ import type { DiskHealth, DisksReport } from '../../../shared/types';
 import { api } from '../api';
 import { ago, fmtBytes } from '../util';
 import { Copyable } from './Copyable';
+import { EmptyArt } from './mission/EmptyArt';
 
 /** Checked against visudo before it goes in, since a broken file in sudoers.d stops sudo working at all. */
 export const SUDOERS_LINE =
@@ -72,6 +73,7 @@ function Setup({ r }: { r: DisksReport }) {
   if (r.status === 'no-ssh') {
     return (
       <div className="empty" style={{ gap: 8 }}>
+        <EmptyArt kind="away" />
         <p style={{ fontSize: 13 }}>Disk health is read over SSH, like the terminal, which isn’t set up yet. See docs/setup.md, steps 9 and 10.</p>
       </div>
     );
@@ -79,6 +81,7 @@ function Setup({ r }: { r: DisksReport }) {
   if (r.status === 'error') {
     return (
       <div className="empty" style={{ gap: 8 }}>
+        <EmptyArt kind="scrubbed" />
         <p style={{ fontSize: 13 }}>Couldn’t read the disks: {r.message}</p>
       </div>
     );

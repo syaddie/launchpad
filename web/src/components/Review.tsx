@@ -7,8 +7,9 @@ import { MOOD_WORDS, smokeCountMap } from '../../../shared/trackers';
 import { fmtKg, fmtMinutes, weekStart } from '../../../shared/training';
 import type { AppState, ViewKey } from '../../../shared/types';
 import { ago } from '../util';
+import { periodStep } from '../motion';
 import { VIEWS } from './Rail';
-import { Readout } from './Motion';
+import { Glyphs, Readout, usePeriodScan } from './Motion';
 
 const VIEW_NAMES = Object.fromEntries(VIEWS.map((v) => [v.key, v.name])) as Record<ViewKey, string>;
 
@@ -35,6 +36,12 @@ const plural = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? o
 /** The Review view: one week's numbers from every part of Launchpad, with Claude's recap. */
 export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
   const [offset, setOffset] = useState(0);
+  // The arrows move the week the way you went (periodMotion.ts): its tiles are scanned in, and their figures roll.
+  const scan = usePeriodScan();
+  const toOffset = (o: number) => {
+    scan.go(periodStep(offset, o));
+    setOffset(o);
+  };
   const today = startOfDay(now);
   const mon = addDays(weekStart(today), 7 * offset);
   const week = ymd(mon);
@@ -69,23 +76,23 @@ export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
   });
 
   return (
-    <main className="you review" aria-label="Review">
+    <main ref={scan.ref} className="you review lp-scan" aria-label="Review" data-arrive={scan.arrive}>
       <div className="tr-head">
-        <h2 className="panel-title" style={{ margin: 0 }}>
-          {weekName(offset)}
+        <h2 key={offset} className="panel-title lp-period-label" style={{ margin: 0 }}>
+          <Glyphs text={weekName(offset)} />
         </h2>
         <span className="mood-month">
-          <button className="icon-btn" aria-label="Previous week" disabled={offset <= OLDEST} onClick={() => setOffset(offset - 1)}>
+          <button className="icon-btn lp-step prev" aria-label="Previous week" disabled={offset <= OLDEST} onClick={() => toOffset(offset - 1)}>
             <i className="ph-duotone ph-caret-left" />
           </button>
-          <span className="meta" style={{ minWidth: 118, textAlign: 'center' }}>
-            {range}
+          <span key={offset} className="meta lp-period-label" style={{ minWidth: 118, textAlign: 'center' }}>
+            <Glyphs text={range} />
           </span>
-          <button className="icon-btn" aria-label="Next week" disabled={offset >= 0} onClick={() => setOffset(offset + 1)}>
+          <button className="icon-btn lp-step next" aria-label="Next week" disabled={offset >= 0} onClick={() => toOffset(offset + 1)}>
             <i className="ph-duotone ph-caret-right" />
           </button>
           {offset < 0 && (
-            <button className="btn-link meta" style={{ marginLeft: 8 }} onClick={() => setOffset(0)}>
+            <button className="btn-link meta month-now" style={{ marginLeft: 8 }} onClick={() => toOffset(0)}>
               This week
             </button>
           )}
@@ -123,20 +130,21 @@ export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
         </section>
       )}
 
-      <div className="rv-grid">
+      {/* A new grid for each week, so it comes in whole. */}
+      <div key={week} className="rv-grid lp-scan-grid">
         <Tile title="Training" icon="ph-barbell" view="training" onView={onView}>
-          <Big n={t.sessions} unit={t.sessions === 1 ? 'session' : 'sessions'} />
+          <Big id="training" n={t.sessions} unit={t.sessions === 1 ? 'session' : 'sessions'} />
           {t.sessions > 0 && <span className="rv-line tnum">{fmtMinutes(t.minutes)} · {t.sets} working sets · {kg(t.volume)}</span>}
           <span className="meta tnum">Week before: {plural(t.prevSessions, 'session')}{t.prevVolume ? `, ${kg(t.prevVolume)}` : ''}</span>
         </Tile>
 
         <Tile title="Body weight" icon="ph-scales" view="training" onView={onView}>
-          {r.weight.avg !== null ? <Big n={fmtKg(Math.round(r.weight.avg * 10) / 10)} unit="kg, 7-day average" /> : <Big n="–" unit="not logged" />}
+          {r.weight.avg !== null ? <Big id="weight" n={fmtKg(Math.round(r.weight.avg * 10) / 10)} unit="kg, 7-day average" /> : <Big id="weight" n="–" unit="not logged" />}
           <span className="rv-line tnum">{r.weight.change !== null ? `${signed(Math.round(r.weight.change * 10) / 10, (x) => `${fmtKg(x)} kg`)} on the week before` : r.weight.avg !== null ? 'Nothing logged the week before to compare' : 'Log it in Training or type “weight 72.4” in ⌘K'}</span>
         </Tile>
 
         <Tile title="Cigarettes" icon="ph-cigarette" view="you" onView={onView}>
-          <Big n={c.count} unit={c.limit ? `of ${c.limit * r.daysIn} at your limit` : c.count === 1 ? 'cigarette' : 'cigarettes'} warn={c.limit > 0 && c.count > c.limit * r.daysIn} />
+          <Big id="cigarettes" n={c.count} unit={c.limit ? `of ${c.limit * r.daysIn} at your limit` : c.count === 1 ? 'cigarette' : 'cigarettes'} warn={c.limit > 0 && c.count > c.limit * r.daysIn} />
           <span className="rv-line tnum">
             {c.perDay} a day
             {c.limit > 0 && ` · over the limit on ${plural(c.daysOver, 'day')}`}
@@ -146,7 +154,7 @@ export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
         </Tile>
 
         <Tile title="Mood" icon="ph-smiley" view="you" onView={onView}>
-          {r.mood.avg !== null ? <Big n={r.mood.avg.toFixed(1)} unit={`of 5, ${MOOD_WORDS[Math.round(r.mood.avg) - 1].toLowerCase()} on average`} /> : <Big n="–" unit="not rated" />}
+          {r.mood.avg !== null ? <Big id="mood" n={r.mood.avg.toFixed(1)} unit={`of 5, ${MOOD_WORDS[Math.round(r.mood.avg) - 1].toLowerCase()} on average`} /> : <Big id="mood" n="–" unit="not rated" />}
           <div className="rv-week" aria-hidden="true">
             {moodDays.map(({ d, m, ahead }) => (
               <span key={d.getTime()} className={'rv-day' + (ahead ? ' ahead' : '') + (m?.note ? ' written' : '')} title={`${DOW[d.getDay()]} ${d.getDate()}${m && m.level ? ` · ${MOOD_WORDS[m.level - 1]}` : ''}`} style={m && m.level ? { background: moodColor(m.level), color: m.level >= 4 ? 'var(--on)' : undefined } : undefined}>
@@ -160,7 +168,7 @@ export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
         </Tile>
 
         <Tile title="Study" icon="ph-graduation-cap" view="learn" onView={onView}>
-          <Big n={fmtStudy(s.minutes)} unit="studied" />
+          <Big id="study" n={fmtStudy(s.minutes)} unit="studied" />
           {s.courses.length > 0 && (
             <div className="rv-list">
               {s.courses.slice(0, 4).map((x) => (
@@ -184,7 +192,7 @@ export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
         <Tile title="Money" icon="ph-wallet" view="money" onView={onView}>
           {r.money ? (
             <>
-              <Big n={fmtMoney(r.money.closing)} unit={offset === 0 ? 'in the bank so far' : 'at the end of the week'} warn={r.money.closing < 0} />
+              <Big id="money" n={fmtMoney(r.money.closing)} unit={offset === 0 ? 'in the bank so far' : 'at the end of the week'} warn={r.money.closing < 0} />
               <span className="rv-line tnum">
                 {fmtMoney(r.money.in)} in · {fmtMoney(r.money.out)} out
               </span>
@@ -195,7 +203,7 @@ export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
             </>
           ) : (
             <>
-              <Big n="–" unit="not tracked" />
+              <Big id="money" n="–" unit="not tracked" />
               <span className="rv-line">Plan the month in Money to see the week here</span>
             </>
           )}
@@ -208,7 +216,7 @@ export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
 
 function Tile({ title, icon, view, onView, children }: { title: string; icon: string; view: ViewKey; onView: (v: ViewKey) => void; children: ReactNode }) {
   return (
-    <section className="panel you-panel rv-tile" aria-label={title}>
+    <section className="panel you-panel rv-tile lp-scan-cell" aria-label={title}>
       <div className="panel-head">
         <span className="sec-label rv-title">
           <i className={'ph-duotone ' + icon} aria-hidden="true" />
@@ -223,11 +231,11 @@ function Tile({ title, icon, view, onView, children }: { title: string; icon: st
   );
 }
 
-function Big({ n, unit, warn }: { n: number | string; unit: string; warn?: boolean }) {
+function Big({ id, n, unit, warn }: { id: string; n: number | string; unit: string; warn?: boolean }) {
   return (
     <span className="rv-big">
       <span className="serif tnum" style={warn ? { color: 'var(--wn)' } : undefined}>
-        <Readout text={String(n)} />
+        <Readout text={String(n)} id={`review-${id}`} />
       </span>
       <span>{unit}</span>
     </span>

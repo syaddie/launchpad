@@ -6,6 +6,7 @@ import { billLine, gmailUrl, liveEmails } from '../inboxActions';
 import { ago } from '../util';
 import { Glide } from './Motion';
 import { copyText, menuProps, type MenuItem } from './ContextMenu';
+import { EmptyArt } from './mission/EmptyArt';
 
 export { gmailUrl };
 
@@ -66,6 +67,7 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, a
       <main className="news inbox" aria-label="Inbox">
         <div className="panel">
           <div className="empty">
+            <EmptyArt kind="away" />
             <p>
               {google.connected
                 ? 'Gmail is switched off in Settings, so the inbox digest is too.'

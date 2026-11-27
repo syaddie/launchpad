@@ -9,7 +9,9 @@ import type { AppState, ExerciseMuscles, Training, Workout, WorkoutSet } from '.
 import { localGet, localSet } from '../api';
 import { ago, fmtDay, hm, niceMax } from '../util';
 import { copyText, menuProps } from './ContextMenu';
-import { Glide, Readout } from './Motion';
+import { periodStep } from '../motion';
+import { Glide, Glyphs, Readout, usePeriodScan } from './Motion';
+import { EmptyArt } from './mission/EmptyArt';
 
 type Muscles = Record<string, ExerciseMuscles>;
 
@@ -150,6 +152,7 @@ export function TrainingView({ data, now, onImport, onSync, onOpenExercise, onOp
       ) : (
         <section className="panel you-panel" {...menu}>
           <div className="empty">
+            <EmptyArt kind={!live ? 'away' : lastError ? 'scrubbed' : lastSuccess ? 'clear' : 'away'} />
             <h2 className="panel-title">{live ? 'Your workouts from Hevy' : 'Bring in your workouts from Hevy'}</h2>
             {live ? (
               <>
@@ -192,6 +195,12 @@ const weekName = (offset: number) => (offset === 0 ? 'This week' : offset === -1
 function ThisWeek({ workouts, today, muscles, gymMonthly, onOpenSettings }: { workouts: Workout[]; today: Date; muscles: Muscles; gymMonthly: number; onOpenSettings: () => void }) {
   /** Weeks back from this one: 0 is this week, -1 last week. */
   const [offset, setOffset] = useState(0);
+  // The arrows and the columns move the week the way you went (periodMotion.ts).
+  const scan = usePeriodScan();
+  const toOffset = (o: number) => {
+    scan.go(periodStep(offset, o));
+    setOffset(o);
+  };
   const week = useMemo(() => weekSummary(workouts, addDays(today, 7 * offset)), [workouts, today, offset]);
   const weeks = useMemo(() => weeklyCounts(workouts, today, 12), [workouts, today]);
   const streak = useMemo(() => weekStreak(workouts, today), [workouts, today]);
@@ -202,29 +211,31 @@ function ThisWeek({ workouts, today, muscles, gymMonthly, onOpenSettings }: { wo
   const oldest = -dayDiff(weekStart(new Date(workouts[workouts.length - 1].start)), weekStart(today)) / 7;
 
   return (
-    <section className="panel you-panel tr-week" aria-label={weekName(offset)}>
+    <section ref={scan.ref} className="panel you-panel tr-week lp-scan" aria-label={weekName(offset)} data-arrive={scan.arrive}>
       <div className="panel-head">
-        <h2 className="panel-title">{weekName(offset)}</h2>
+        <h2 key={offset} className="panel-title lp-period-label">
+          <Glyphs text={weekName(offset)} />
+        </h2>
         <span className="mood-month">
-          <button className="icon-btn" aria-label="Previous week" disabled={offset <= oldest} onClick={() => setOffset(offset - 1)}>
+          <button className="icon-btn lp-step prev" aria-label="Previous week" disabled={offset <= oldest} onClick={() => toOffset(offset - 1)}>
             <i className="ph-duotone ph-caret-left" />
           </button>
-          <span className="meta" style={{ minWidth: 108, textAlign: 'center' }}>
-            {mon.getDate()} {MON[mon.getMonth()]} – {sun.getDate()} {MON[sun.getMonth()]}
-            {sun.getFullYear() !== today.getFullYear() && ` ${sun.getFullYear()}`}
+          <span key={offset} className="meta lp-period-label" style={{ minWidth: 108, textAlign: 'center' }}>
+            <Glyphs text={`${mon.getDate()} ${MON[mon.getMonth()]} – ${sun.getDate()} ${MON[sun.getMonth()]}${sun.getFullYear() !== today.getFullYear() ? ` ${sun.getFullYear()}` : ''}`} />
           </span>
-          <button className="icon-btn" aria-label="Next week" disabled={offset >= 0} onClick={() => setOffset(offset + 1)}>
+          <button className="icon-btn lp-step next" aria-label="Next week" disabled={offset >= 0} onClick={() => toOffset(offset + 1)}>
             <i className="ph-duotone ph-caret-right" />
           </button>
         </span>
       </div>
 
-      <div className="tr-days">
+      {/* A new row of days for each week, so it comes in whole. */}
+      <div key={offset} className="tr-days lp-scan-grid">
         {week.days.map(({ date, workouts: day }) => {
           const d = dayDiff(today, date);
           const w = day[0];
           return (
-            <div key={date.getTime()} className={'tr-day' + (w ? ' done' : '') + (d === 0 ? ' today' : '') + (d > 0 ? ' ahead' : '')} title={day.map((x) => `${x.title} · ${hm(new Date(x.start))}`).join('\n') || undefined}>
+            <div key={date.getTime()} className={'tr-day lp-scan-cell' + (w ? ' done' : '') + (d === 0 ? ' today' : '') + (d > 0 ? ' ahead' : '')} title={day.map((x) => `${x.title} · ${hm(new Date(x.start))}`).join('\n') || undefined}>
               <span className="tr-dn">{d === 0 ? 'Today' : DOW[date.getDay()]}</span>
               {w ? (
                 <>
@@ -245,10 +256,10 @@ function ThisWeek({ workouts, today, muscles, gymMonthly, onOpenSettings }: { wo
       </div>
 
       <div className="tr-totals">
-        <div><b className="serif tnum">{week.sessions}</b>session{week.sessions === 1 ? '' : 's'}</div>
-        <div><b className="serif tnum">{fmtMinutes(week.minutes)}</b>training</div>
-        <div><b className="serif tnum">{week.sets}</b>working sets</div>
-        <div><b className="serif tnum">{kg(week.volume)}</b>lifted</div>
+        <div><b className="serif tnum"><Readout text={String(week.sessions)} id="tr-week-sessions" /></b>session{week.sessions === 1 ? '' : 's'}</div>
+        <div><b className="serif tnum"><Readout text={fmtMinutes(week.minutes)} id="tr-week-minutes" /></b>training</div>
+        <div><b className="serif tnum"><Readout text={String(week.sets)} id="tr-week-sets" /></b>working sets</div>
+        <div><b className="serif tnum"><Readout text={kg(week.volume)} id="tr-week-volume" /></b>lifted</div>
       </div>
 
       <div className="tr-weeks-wrap">
@@ -267,7 +278,7 @@ function ThisWeek({ workouts, today, muscles, gymMonthly, onOpenSettings }: { wo
                 aria-label={`${weekName(o)}: ${w.count} session${w.count === 1 ? '' : 's'}`}
                 aria-pressed={o === offset}
                 disabled={o < oldest}
-                onClick={() => setOffset(o)}
+                onClick={() => toOffset(o)}
               >
                 <span className="tr-wn tnum">{w.count || ''}</span>
                 <span className={'tr-wbar' + (o === offset ? ' now' : '')} style={{ height: `${(w.count / top) * 100}%` }} />

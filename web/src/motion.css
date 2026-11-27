@@ -446,7 +446,7 @@ html[data-design='poster']::view-transition-old(lp-title) { animation: none; opa
    at the first change of view). Panels come in one after another.
    ===================================================================== */
 
-.lp-opening .lp-inner > :is(.topbar, .server-banner) { animation: lpOpenTop calc(var(--m-view) * 1.2) var(--e-out) both; }
+.lp-opening .lp-inner > :is(.topbar, .server-banner), .lp-opening .lp-inner > .lp-presence > .server-banner { animation: lpOpenTop calc(var(--m-view) * 1.2) var(--e-out) both; }
 @keyframes lpOpenTop { from { opacity: 0; translate: 0 calc(var(--m-rise) * -0.75); } }
 /* What comes in, in turn: the view's panels, or its rows of panels. */
 .lp-opening :is(.lp-grid, .fx-side, .fx-work, .lp-inner > main:not(.lp-grid):not(.fx-home)) > * {

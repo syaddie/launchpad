@@ -11,6 +11,7 @@ import { authorizeLine, Copyable, keyRefused } from './Copyable';
 import { FilesTrash } from './FilesTrash';
 import { FileViewer } from './FileViewer';
 import { Glide } from './Motion';
+import { EmptyArt } from './mission/EmptyArt';
 
 const join = (dir: string, name: string) => (dir === '/' ? '' : dir) + '/' + name;
 const parentOf = (p: string) => p.replace(/\/[^/]*$/, '') || '/';
@@ -519,6 +520,7 @@ export function FilesPanel({ publicKey, hidden, now, open, pins, onPins, onOpenT
     return (
       <section className="panel srv-panel files-panel" aria-label="Files" style={style}>
         <div className="empty">
+          <EmptyArt kind={!!error && (keyRefused(error) ? 'away' : 'scrubbed')} />
           <p>{error ? `Couldn’t open the server’s files: ${error}` : 'Opening the server’s files…'}</p>
           {keyRefused(error) && <Copyable text={authorizeLine(publicKey)} />}
           {error && (
@@ -1010,6 +1012,7 @@ export function FilesPanel({ publicKey, hidden, now, open, pins, onPins, onOpenT
             ))}
             {search.end && !search.hits.length && !search.error && (
               <div className="empty">
+                <EmptyArt kind="clear" />
                 <p>
                   Nothing {search.mode === 'name' ? 'with a name like' : 'containing'} “{search.query}” in {search.dir}.
                 </p>
@@ -1163,6 +1166,7 @@ export function FilesPanel({ publicKey, hidden, now, open, pins, onPins, onOpenT
             })}
             {!entries.length && !creating && (
               <div className="empty">
+                <EmptyArt kind="clear" />
                 <p>{hiddenCount ? `Only hidden files here (${hiddenCount}).` : 'This folder is empty. Drop files here to upload them.'}</p>
               </div>
             )}

@@ -43,6 +43,7 @@ import { markTicks } from './tickMarks';
 import { send } from './outbox';
 import { paletteAsk, paletteItems, paletteSearches, type AskHandlers, type PaletteContext } from './paletteItems';
 import { hm, inboxBadge, inMinutes } from './util';
+import { EmptyArt } from './components/mission/EmptyArt';
 
 // The views off the home page load the first time they're opened, so a new tab downloads
 // and starts only what home needs. They're fetched in the background once the page is up
@@ -594,6 +595,7 @@ export function App({ cached }: { cached: AppState | null }) {
   const noPanels = (
     <div className="panel" style={{ gridColumn: '1 / -1' }}>
       <div className="empty">
+        <EmptyArt kind="away" />
         <p>Every home panel is switched off.</p>
         <button className="btn btn-secondary" onClick={() => setDrawer({ type: 'settings' })}>
           Open Settings
@@ -760,8 +762,9 @@ export function App({ cached }: { cached: AppState | null }) {
         }
       />
       <div className="lp-inner">
-        <TopBar data={data} now={now} title={view === 'home' ? undefined : VIEWS.find((v) => v.key === view)?.name} subline={subline} search={search} onSearch={setSearch} searchRef={searchRef} smokesToday={smokesToday} onLogSmoke={logSmoke} onOpenTraining={() => setView('training')} onOpenLearn={() => setView('learn')} lead={design === 'mission' && view === 'home' ? <MissionHero data={data} now={now} extras={extras.join(' · ')} /> : undefined} />
-        {serverIssue && <ServerBanner issue={serverIssue} waiting={waiting} onRetry={() => refresh()} />}
+        <TopBar data={data} now={now} title={view === 'home' ? undefined : VIEWS.find((v) => v.key === view)?.name} subline={subline} search={search} onSearch={setSearch} searchRef={searchRef} smokesToday={smokesToday} onLogSmoke={logSmoke} onOpenTraining={() => setView('training')} onOpenLearn={() => setView('learn')} lost={!!serverIssue} lead={design === 'mission' && view === 'home' ? <MissionHero data={data} now={now} extras={extras.join(' · ')} /> : undefined} />
+        {/* Mission brings it down and takes it back up (mission.css, LOSS OF SIGNAL); the others show and hide it. */}
+        <Presence show={!!serverIssue}>{serverIssue && <ServerBanner issue={serverIssue} waiting={waiting} onRetry={() => refresh()} />}</Presence>
         <ErrorBoundary resetKey={view}>
         <Suspense fallback={<main className="view-loading" aria-busy="true" />}>
         {view === 'digest' ? (

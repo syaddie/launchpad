@@ -316,6 +316,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 
 .sync { position: relative; width: 30px; height: 34px; display: grid; place-items: center; z-index: 14; }
 .sync-dot { width: 7px; height: 7px; border-radius: 50%; transition: background 0.3s; }
+/* Mission's word for losing the server (mission.css, LOSS OF SIGNAL). */
+.sync-los { display: none; }
 /* Anchored to the dot's right edge, so it never runs past the window (the dot is at the right of every top bar). */
 .sync-tip { position: absolute; top: 38px; right: 0; width: 300px; max-width: calc(100vw - 24px); padding: 10px 15px; display: flex; flex-direction: column; gap: 5px; transform-origin: top right; }
 .sync-line { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; }
@@ -1233,6 +1235,9 @@ button.pix-cell:hover { box-shadow: inset 0 0 0 1px var(--t3); }
 .disk-setup ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; }
 .disk-setup li .copy-block { margin-top: 6px; }
 .sync-row { padding: 4px 10px; font-size: 13px; }
+.sync-row-name { display: inline-flex; align-items: center; gap: 8px; min-width: 0; color: var(--t2); }
+/* Mission's go/no-go poll (mission.css, SERVER; more specific than .ms-mark, which shows it). */
+.services .svc-mark, .svc-poll { display: none; }
 [data-layout='narrow'] .server-row > .services { max-height: none; }
 
 /* Terminal and files: tabs over the view, and a panel that fills the rest of it. */
@@ -1449,7 +1454,7 @@ i.file-pinned { color: var(--ac); }
 
 .tr-head:not(:has(> :not(:empty))) { display: none; }
 .tr-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 20px; min-height: 26px; }
-.tr-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.tr-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; max-width: 100%; }
 .you-row > .tr-week { flex: 1.6 1 520px; min-width: 0; }
 .you-row > .tr-musc { flex: 1 1 320px; min-width: 0; }
 .you-row > .tr-lifts { flex: 1 1 400px; min-width: 0; }
@@ -1819,7 +1824,9 @@ i.file-pinned { color: var(--ac); }
 /* Overview: the accounts and where the money sits. */
 .accts-head { align-items: flex-start; flex-wrap: wrap; }
 .accts-head .meta { display: block; margin-top: 2px; }
-.acct-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+.acct-grid { position: relative; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+/* Mission's transfer orbit between two cards (mission.css, MONEY › ACCOUNTS). */
+.acct-orbit { display: none; }
 .acct-card { display: flex; flex-direction: column; gap: 8px; padding: 14px; border: none; border-radius: var(--r-m); background: var(--rz); box-shadow: 0 0 0 1px var(--ln); color: var(--tx); font: inherit; text-align: left; cursor: pointer; }
 .acct-card:hover { box-shadow: 0 0 0 1px var(--t3); }
 .acct-card.archived { opacity: 0.65; }
@@ -2020,43 +2027,44 @@ i.file-pinned { color: var(--ac); }
 [data-layout='narrow'] .cal-r { display: inline; }
 [data-layout='narrow'] .cal-low i { font-size: 11px; }
 
-/* Changing month (MonthTab.tsx, monthMotion.ts): the way you went, the new month's calendar wipes in behind a line
-   crossing it, over a copy of the old one going ahead of the line; its title and its days in the list come in from
-   that side, and its four figures roll one after another. --sweep is how long the line takes to cross. Each design
-   does it its own way (designs.css, mission.css). */
-.month-tab { --sweep: calc(var(--m-view) * 1.5); --sweep-ease: var(--e-io); }
+/* Changing a period with arrows (periodMotion.ts, usePeriodScan in Motion.tsx): Money › Month, Mood's month, Year in
+   pixels' year, Review's week, Training's week. The way you went, the new period's grid wipes in behind a line crossing
+   it, over a copy of the old one going ahead of the line, and its name comes in from that side. --sweep is how long the
+   line takes to cross. Each design does it its own way (designs.css, mission.css). */
+.lp-scan { position: relative; --sweep: calc(var(--m-view) * 1.5); --sweep-ease: var(--e-io); }
 .cal { position: relative; }
 .cal-sweep { position: absolute; z-index: 1; overflow: hidden; pointer-events: none; }
-.cal-sweep > .cal-copy { width: 100%; height: 100%; animation: calWipeOut var(--sweep) var(--sweep-ease) forwards; }
+.cal-sweep > .cal-copy { width: 100%; height: 100%; margin: 0; animation: calWipeOut var(--sweep) var(--sweep-ease) forwards; }
 .cal-sweep[data-step='prev'] > .cal-copy { animation-name: calWipeOutBack; }
-.month-tab[data-arrive='next'] .cal > .cal-grid { animation: calWipeIn var(--sweep) var(--sweep-ease) backwards; }
-.month-tab[data-arrive='prev'] .cal > .cal-grid { animation: calWipeInBack var(--sweep) var(--sweep-ease) backwards; }
+[data-arrive='next'] .lp-scan-grid:not(.cal-copy) { animation: calWipeIn var(--sweep) var(--sweep-ease) backwards; }
+[data-arrive='prev'] .lp-scan-grid:not(.cal-copy) { animation: calWipeInBack var(--sweep) var(--sweep-ease) backwards; }
 @keyframes calWipeIn { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
 @keyframes calWipeInBack { from { clip-path: inset(0 0 0 100%); } to { clip-path: inset(0 0 0 0); } }
 @keyframes calWipeOut { from { clip-path: inset(0 0 0 0); } to { clip-path: inset(0 0 0 100%); } }
 @keyframes calWipeOutBack { from { clip-path: inset(0 0 0 0); } to { clip-path: inset(0 100% 0 0); } }
-/* The line: the leading edge of a box as wide as the calendar, moved across it in step with the wipe. */
+/* The line: the leading edge of a box as wide as the grid, moved across it in step with the wipe. */
 .cal-scan { position: absolute; inset: 0; animation: calScan var(--sweep) var(--sweep-ease) both; }
 .cal-scan::after { content: ''; position: absolute; top: 0; bottom: 0; right: -1px; width: 2px; border-radius: 1px; background: var(--ac); }
 .cal-sweep[data-step='prev'] > .cal-scan { animation-name: calScanBack; }
 .cal-sweep[data-step='prev'] > .cal-scan::after { right: auto; left: -1px; }
 @keyframes calScan { from { translate: -100% 0; } 90% { opacity: 1; } to { translate: 0 0; opacity: 0; } }
 @keyframes calScanBack { from { translate: 100% 0; } 90% { opacity: 1; } to { translate: 0 0; opacity: 0; } }
-/* The title, the line under it and the list come in from the side you went. */
-.month-tab[data-arrive='next'] :is(.month-title, .days-scroll > :not(.lp-found)) { animation: monthIn var(--m-view) var(--e-out) both; }
-.month-tab[data-arrive='prev'] :is(.month-title, .days-scroll > :not(.lp-found)) { animation: monthInBack var(--m-view) var(--e-out) both; }
+/* The period's name comes in from the side you went; in Money › Month, so do the line under it and the list. */
+[data-arrive='next'] .lp-period-label, .month-tab[data-arrive='next'] .days-scroll > :not(.lp-found) { animation: monthIn var(--m-view) var(--e-out) both; }
+[data-arrive='prev'] .lp-period-label, .month-tab[data-arrive='prev'] .days-scroll > :not(.lp-found) { animation: monthInBack var(--m-view) var(--e-out) both; }
+.lp-period-label { display: inline-block; }
 .month-tab[data-arrive] .month-foot { animation: lpFadeIn var(--m-view) var(--e-out) both; }
 @keyframes monthIn { from { opacity: 0; translate: calc(var(--m-travel) * 0.6) 0; } }
 @keyframes monthInBack { from { opacity: 0; translate: calc(var(--m-travel) * -0.6) 0; } }
 /* The figures roll in turn, from the side you went (each .m-stat has its place as --i). */
 .month-tab[data-arrive='next'] .month-sum .digit.rolling > * { animation-delay: calc(var(--i, 0) * 45ms); }
 .month-tab[data-arrive='prev'] .month-sum .digit.rolling > * { animation-delay: calc((3 - var(--i, 0)) * 45ms); }
-/* "This month" pops up once you've left it, and the arrows give a little push the way they go. */
+/* "This month" (and "This week") pops up once you've left it, and the arrows give a little push the way they go. */
 .month-now { animation: monthNowIn var(--m-move) var(--e-settle) both; }
 @keyframes monthNowIn { from { opacity: 0; scale: 0.88; } }
-.month-step > i { transition: translate var(--m-move) var(--e-settle); }
-.month-step.prev:active:not(:disabled) > i { translate: calc(var(--m-travel) * -0.14) 0; transition-duration: var(--m-press); }
-.month-step.next:active:not(:disabled) > i { translate: calc(var(--m-travel) * 0.14) 0; transition-duration: var(--m-press); }
+.lp-step > i { transition: translate var(--m-move) var(--e-settle); }
+.lp-step.prev:active:not(:disabled) > i { translate: calc(var(--m-travel) * -0.14) 0; transition-duration: var(--m-press); }
+.lp-step.next:active:not(:disabled) > i { translate: calc(var(--m-travel) * 0.14) 0; transition-duration: var(--m-press); }
 @media (prefers-reduced-motion: reduce) {
   @keyframes calWipeIn { from { opacity: 0; } }
   @keyframes calWipeInBack { from { opacity: 0; } }
@@ -2191,7 +2199,13 @@ button.m-stat { cursor: default; }
 .ln-rule { height: 1px; background: var(--ln); }
 .ln-track { position: relative; display: block; height: 6px; border-radius: var(--r-s); background: var(--hv); overflow: hidden; }
 .ln-track > span { position: absolute; inset: 0 auto 0 0; border-radius: var(--r-s); }
-.ln-timer { display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 0 4px 0 12px; border-radius: var(--r); background: var(--act); color: var(--acd); font-size: 13px; }
+.ln-timer { display: flex; align-items: center; gap: 10px; min-width: 0; max-width: 100%; min-height: 34px; padding: 0 4px 0 12px; border-radius: var(--r); background: var(--act); color: var(--acd); font-size: 13px; }
+.ln-timer .ln-dot { flex: none; background: var(--ac); }
+.ln-timer .ln-clock { flex: none; }
+.ln-timer-what { min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ln-timer > .btn { flex: none; }
+/* Mission's face for the time (mission.css, LEARN; more specific than .ms-matrix, which shows it). */
+.ln-timer .ln-met { display: none; }
 .learn .tr-actions .input.sm { width: auto; max-width: 220px; }
 .ln-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; padding: 12px; border-radius: var(--r); background: var(--bg); }
 .ln-form .input { width: 100%; }

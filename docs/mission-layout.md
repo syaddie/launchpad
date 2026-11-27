@@ -60,12 +60,42 @@ that only Mission shows.
   spent stage. It's pushed off the tail, then falls toward the ground, tumbling, its engine's ember going out, and
   fades. Only the last one when several ended at once (the page asleep), none while on another view or with the page
   hidden, and none with less motion.
+- The study timer is mission elapsed time (idea 15; `Learn.tsx`, `mission.css` LEARN): Learn's running timer reads
+  "T+00:24:10" in the launch clock's dot-matrix face, its digits relighting as they change, in the colour of now (it's
+  what's happening this minute, as the top bar's study button already said), its dot a beacon. Starting it is an
+  ignition: as the timer takes Start studying's place it flares hot and sends out one ring (only when it starts while
+  Learn is open, not for one already running). Its row has a menu with Stop and log.
+- Server › Services is a go/no-go poll (idea 16; `markOf` in `Containers.tsx`, `ServicesPanel` in `Server.tsx`,
+  `mission.css` SERVER): each container, sync and health check has a light with the source lights' marks. Up and
+  healthy is go; starting or restarting holds; unhealthy or dead is scrubbed; stopped, made or paused stands by. A sync
+  failing with a reason is scrubbed, a sync that hasn't run stands by. They report in one after another as the panel
+  opens, and the panel's head counts them ("9 GO · 1 HOLD").
+- Moving money is a transfer orbit (idea 17; `TransferOrbit` in `Accounts.tsx`, `mission.css` MONEY › ACCOUNTS):
+  once Move money's drawer has gone, the account the money leaves gives a short burn, a point of light climbs off its
+  balance and travels on an arc over a faint trace to the other account's, which flares as it lands; then both
+  balances roll. Only for a move done by today (a planned one changes nothing yet). The balances are `Readout`s now, so
+  they roll in every layout; only Mission waits for the light.
+- Losing the server is loss of signal (idea 18; `TopBar.tsx`, `App.tsx`, `mission.css` LOSS OF SIGNAL): as the
+  banner comes down, the source lights go out one at a time and a small "LOS" lights beside them; when the server
+  answers again the banner goes back up and the lights report back in, in turn, as they do when the app opens.
+- The three empty-state drawings (idea 19; `mission/EmptyArt.tsx`, `mission.css` EMPTY STATES): a small line drawing of
+  the site over an empty state's words, at 38 places. Pad clear (the pad and tower, a few stars) for nothing to do:
+  nothing due, no countdowns, an empty folder, trash, month or search. Vehicle away (the vehicle's outline dashed on the
+  pad) for what isn't set up yet: Google, SSH, the API key, Docker, Hevy, a source switched off. Launch scrubbed (the
+  vehicle on the pad with its engine out, venting, beside the scrub mark) for what failed to load and a view that hit a
+  problem. Loading states have none. Only the mast's lamp moves, blinking with the site's.
+- Changing a period with arrows is the Month scan everywhere (idea 20; `periodMotion.ts`, `usePeriodScan` and
+  `Glyphs` in `Motion.tsx`, `mission.css` CHANGING A PERIOD): Mood's month, Year in pixels' year, Review's week and
+  Training's week (and its columns) scan like Money › Month, each cell lighting as the beam passes it (measured across
+  the grid, so any layout works) and the period's name relighting from the side you went. Review's and Training's
+  figures roll from the week before. Every layout has its own version (docs/motion.md, "Changing a period"). Music's
+  slot calendar has no arrows (it shows every day that's known at once), so there's no period to change there; Check
+  now's scan across it (idea 57) can use the same pieces.
 - Reduced motion: the sky still shows the hour; nothing moves and nothing launches.
 
 ## Not built yet (in the design system, not in the app)
 
 - **Telemetry**: the stepping strip chart for live readings on Server.
-- **The three empty-state drawings** (pad clear, vehicle away, launch scrubbed).
 - **A panel's one big figure in the matrix face**, and the beacon and burn on a panel with something running in it.
 - **A short sky with the view's title on it** is there on other views, but those views' own panels are only reskinned
   by the tokens, not redesigned.
@@ -105,22 +135,6 @@ aerospace quirks. Most are Mission's own; those marked *(every design)* are moti
 way (docs/motion.md). **S** is small, mostly reusing what's there (the Month scan and lock-on corners in `mission.css`,
 `msReport`, `msLiftoff`, `Readout`, `useGlide`); **M** is a new piece. Aerospace words ("T+", "LOS", "go") stay in the
 small mono labels; the messages themselves stay plain.
-
-**The ones worth doing first**
-
-15. **The study timer as mission elapsed time.** Learn's running timer reads "T+00:24:10" in the matrix face, and
-    Start studying is an ignition: the button flares as it starts. **M**
-16. **Server › Services as a go/no-go poll.** Each service shows the go/hold/scrub/standby marks the source lights use,
-    reporting in one after another as the panel opens. **S**
-17. **Moving money is a transfer orbit.** A point of light travels on an arc from one account card to the other, then
-    both balances roll. **M**
-18. **Losing the server is loss of signal.** The source lights go out one at a time as the banner comes down, and
-    report back in, in turn, when it's reached again. **S**
-19. **The three empty-state drawings** (pad clear, vehicle away, launch scrubbed; in the design system, not built):
-    pad clear for nothing to do (nothing due, an empty trash or inbox), vehicle away for what isn't set up yet (Google,
-    SSH, the API key), launch scrubbed for what failed to load and a view that hit a problem. About 30 places. **M**
-20. **The Month scan on every calendar or period with arrows:** Mood's month, Year in pixels' year, Review's week,
-    Music's slots. **S** *(every design)*
 
 **Everywhere**
 

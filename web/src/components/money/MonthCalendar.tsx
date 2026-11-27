@@ -1,4 +1,4 @@
-import { type CSSProperties, useEffect, useRef, type KeyboardEvent } from 'react';
+import { useEffect, useRef, type KeyboardEvent } from 'react';
 import { accountBalance, balanceOn, effectOn, fmtMoney, type MonthCalc, monthName } from '../../../../shared/money';
 import type { Money, MoneyAccount, MoneyEntry } from '../../../../shared/types';
 import { parseYmd } from '../../util';
@@ -83,8 +83,8 @@ export function MonthCalendar({ month, money, entries, calc, today, picked, onPi
 
   return (
     <section className="panel you-panel cal" aria-label={`${monthName(month)} as a calendar`}>
-      {/* A new grid for each month, so it comes in as a whole (monthMotion.ts and styles.css, "Changing month"). */}
-      <div key={month} className="cal-grid" role="grid" aria-label={`${monthName(month)}, a day at a time`} ref={grid} onKeyDown={onKey}>
+      {/* A new grid for each month, so it comes in as a whole (periodMotion.ts and styles.css, "Changing a period"). */}
+      <div key={month} className="cal-grid lp-scan-grid" role="grid" aria-label={`${monthName(month)}, a day at a time`} ref={grid} onKeyDown={onKey}>
         <div className="cal-row" role="row">
           {HEAD.map((d) => (
             <span key={d} className="cal-dow" role="columnheader">
@@ -118,14 +118,14 @@ export function MonthCalendar({ month, money, entries, calc, today, picked, onPi
                 .filter(Boolean)
                 .join(', ');
               return (
-                <span key={date} className="cal-cell" role="gridcell" aria-selected={picked === date} style={{ '--c': di } as CSSProperties}>
+                <span key={date} className="cal-cell" role="gridcell" aria-selected={picked === date}>
                   <button
                     type="button"
                     data-date={date}
                     tabIndex={date === focusable ? 0 : -1}
                     aria-label={label}
                     aria-current={date === today ? 'date' : undefined}
-                    className={'cal-day' + (inn > 0 && out > 0 ? ' both' : '') + (date === today ? ' today' : '') + (date < today ? ' past' : '') + (list.length && planned.length === list.length ? ' planned' : '') + (list.length ? ' has' : '') + (picked === date ? ' on' : '')}
+                    className={'cal-day lp-scan-cell' + (inn > 0 && out > 0 ? ' both' : '') + (date === today ? ' today' : '') + (date < today ? ' past' : '') + (list.length && planned.length === list.length ? ' planned' : '') + (list.length ? ' has' : '') + (picked === date ? ' on' : '')}
                     title={`${summary}\nClick to see it in the list`}
                     onClick={() => onPick(date, 'click')}
                     {...menuProps(

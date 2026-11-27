@@ -8,6 +8,7 @@ import type { Notify } from '../hooks/useToast';
 import { ago } from '../util';
 import { Formula, Tex } from './Tex';
 import { Glide } from './Motion';
+import { EmptyArt } from './mission/EmptyArt';
 
 interface Props {
   data: AppState;
@@ -181,6 +182,7 @@ function Today({ data, now, busy, error, act, onMerge, onSubjects, onArchive }: 
     return (
       <div className="panel">
         <div className="empty">
+          <EmptyArt kind="away" />
           <p>Claude writes the daily digest: a short lesson every day on each thing you want to learn about. Set ANTHROPIC_API_KEY in the server’s .env and restart Launchpad to start it.</p>
           {data.digest.total > 0 && (
             <button className="btn btn-secondary" onClick={onArchive}>
@@ -197,6 +199,7 @@ function Today({ data, now, busy, error, act, onMerge, onSubjects, onArchive }: 
     return (
       <div className="panel">
         <div className="empty">
+          <EmptyArt kind="away" />
           <p>Pick what you’d like to learn a little of every day, and Claude writes a bite-sized lesson on each one each morning: the idea in a sentence or two and a quick question, with more when you want it. A few days later it asks about it again, to help it stick.</p>
           <div className="dg-ideas">
             {ideas.map((s) => (

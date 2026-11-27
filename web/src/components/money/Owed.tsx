@@ -9,6 +9,7 @@ import { Readout } from '../Motion';
 import { menuProps, type MenuItem } from '../ContextMenu';
 import { InvoiceDrawer } from './InvoiceDrawer';
 import { printInvoice } from './InvoicePage';
+import { EmptyArt } from '../mission/EmptyArt';
 
 /** `num` null means the suggested next number. */
 type InvoiceDraft = { num: string | null; event: string; amount: number | null; due: string; account: string };
@@ -303,6 +304,7 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
               </tbody>
             )}
           </table>
+          {(!rows.length || !open.length) && <EmptyArt kind="clear" />}
           {!rows.length && <p className="month-empty">Nobody owes you anything yet. Add an invoice above when you send one, or make one with New invoice: it goes into Month as planned money in on its due date.</p>}
           {rows.length > 0 && !open.length && <p className="month-empty">All paid up.</p>}
         </div>

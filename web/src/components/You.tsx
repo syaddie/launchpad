@@ -7,8 +7,10 @@ import {
 } from '../../../shared/trackers';
 import type { AppState, Countdown, Mood, Prefs } from '../../../shared/types';
 import { fmtDay, hm, newId } from '../util';
+import { periodStep } from '../motion';
 import { NoteLines, toggleLine } from './Notes';
-import { Readout } from './Motion';
+import { Glyphs, Readout, usePeriodScan } from './Motion';
+import { EmptyArt } from './mission/EmptyArt';
 
 interface Props {
   data: AppState;
@@ -132,6 +134,7 @@ function Countdowns({ list, now, addSignal, onChange }: { list: Countdown[]; now
         })}
         {!list.length && !draft && (
           <div className="empty" style={{ padding: 0 }}>
+            <EmptyArt kind="clear" />
             <p>Count down to trips, birthdays and deadlines. The nearest one also shows under the greeting.</p>
           </div>
         )}
@@ -377,7 +380,7 @@ export const moodColor = (level: number) => `color-mix(in srgb, var(--mood, var(
 const moodInk = (level: number) => (level >= 4 ? 'var(--on)' : 'var(--tx)');
 
 function MoodPanel({ ref, moods, now, picked, onPick, onMood }: {
-  ref: React.Ref<HTMLElement>;
+  ref: React.RefObject<HTMLElement | null>;
   moods: Record<string, Mood>;
   now: Date;
   picked: string | null;
@@ -391,6 +394,12 @@ function MoodPanel({ ref, moods, now, picked, onPick, onMood }: {
   const mine = moods[selKey];
   const level = mine?.level ?? 0;
   const [offset, setOffset] = useState(0);
+  // The arrows move the month the way you went (periodMotion.ts); a day picked elsewhere just shows its month.
+  const scan = usePeriodScan();
+  const toOffset = (o: number) => {
+    scan.go(periodStep(offset, o));
+    setOffset(o);
+  };
   // A day picked elsewhere (the year in pixels, a search) brings its month into view.
   useEffect(() => {
     setOffset((selDay.getFullYear() - now.getFullYear()) * 12 + selDay.getMonth() - now.getMonth());
@@ -413,17 +422,25 @@ function MoodPanel({ ref, moods, now, picked, onPick, onMood }: {
   };
 
   return (
-    <section ref={ref} className="panel you-panel mood" aria-label="Mood and journal">
+    <section
+      ref={(el) => {
+        ref.current = el;
+        scan.ref.current = el;
+      }}
+      className="panel you-panel mood lp-scan"
+      aria-label="Mood and journal"
+      data-arrive={scan.arrive}
+    >
       <div className="panel-head">
         <h2 className="panel-title">Mood</h2>
         <span className="mood-month">
-          <button className="icon-btn" aria-label="Previous month" onClick={() => setOffset(offset - 1)}>
+          <button className="icon-btn lp-step prev" aria-label="Previous month" onClick={() => toOffset(offset - 1)}>
             <i className="ph-duotone ph-caret-left" />
           </button>
-          <span className="meta" style={{ minWidth: 64, textAlign: 'center' }}>
-            {MON[m]} {y}
+          <span key={`${y}-${m}`} className="meta lp-period-label" style={{ minWidth: 64, textAlign: 'center' }}>
+            <Glyphs text={`${MON[m]} ${y}`} />
           </span>
-          <button className="icon-btn" aria-label="Next month" disabled={offset >= 0} onClick={() => setOffset(offset + 1)}>
+          <button className="icon-btn lp-step next" aria-label="Next month" disabled={offset >= 0} onClick={() => toOffset(offset + 1)}>
             <i className="ph-duotone ph-caret-right" />
           </button>
         </span>
@@ -453,7 +470,8 @@ function MoodPanel({ ref, moods, now, picked, onPick, onMood }: {
         <Journal key={selKey} date={selKey} mood={mine} isToday={isToday} onSave={(note) => onMood(selKey, level || note.trim() ? { level, note } : null)} />
       </div>
 
-      <div className="mood-grid">
+      {/* A new grid for each month, so it comes in whole. */}
+      <div key={`${y}-${m}`} className="mood-grid lp-scan-grid">
         {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
           <span key={i} className="mood-dow">
             {d}
@@ -470,7 +488,7 @@ function MoodPanel({ ref, moods, now, picked, onPick, onMood }: {
           const diff = dayDiff(now, day);
           const title = `${DOW[day.getDay()]} ${i + 1} ${MON[m]}${rated ? ` · ${MOOD_WORDS[v.level - 1]}` : ''}${v?.note ? ` · ${firstLine(v.note)}` : ''}`;
           const cls =
-            'mood-cell tnum' + (diff === 0 ? ' today' : '') + (diff > 0 ? ' future' : '') + (!rated && diff < 0 ? ' missed' : '') + (key === selKey && !isToday ? ' sel' : '') + (v?.note ? ' written' : '');
+            'mood-cell lp-scan-cell tnum' + (diff === 0 ? ' today' : '') + (diff > 0 ? ' future' : '') + (!rated && diff < 0 ? ' missed' : '') + (key === selKey && !isToday ? ' sel' : '') + (v?.note ? ' written' : '');
           const style = rated ? { background: moodColor(v.level), color: moodInk(v.level) } : undefined;
           // Today and earlier days can be picked to log or change their mood; future days can't.
           return diff > 0 ? (
@@ -608,29 +626,36 @@ function YearPixels({ moods, now, selected, onOpen }: { moods: Record<string, Mo
   const thisYear = now.getFullYear();
   const first = Object.keys(moods).reduce((a, d) => Math.min(a, Number(d.slice(0, 4)) || a), thisYear);
   const [year, setYear] = useState(thisYear);
+  // The arrows move the year the way you went (periodMotion.ts).
+  const scan = usePeriodScan();
+  const toYear = (to: number) => {
+    scan.go(periodStep(year, to));
+    setYear(to);
+  };
   const [q, setQ] = useState('');
   const stats = moodYear(moods, year);
   const found = useMemo(() => (q.trim() ? searchJournal(moods, q) : []), [moods, q]);
   const todayKey = ymd(now);
 
   return (
-    <section className="panel you-panel pix" aria-label="Year in pixels">
+    <section ref={scan.ref} className="panel you-panel pix lp-scan" aria-label="Year in pixels" data-arrive={scan.arrive}>
       <div className="panel-head">
         <h2 className="panel-title">Year in pixels</h2>
         <span className="mood-month">
-          <button className="icon-btn" aria-label="Previous year" disabled={year <= first} onClick={() => setYear(year - 1)}>
+          <button className="icon-btn lp-step prev" aria-label="Previous year" disabled={year <= first} onClick={() => toYear(year - 1)}>
             <i className="ph-duotone ph-caret-left" />
           </button>
-          <span className="meta tnum" style={{ minWidth: 40, textAlign: 'center' }}>
-            {year}
+          <span key={year} className="meta tnum lp-period-label" style={{ minWidth: 40, textAlign: 'center' }}>
+            <Glyphs text={String(year)} />
           </span>
-          <button className="icon-btn" aria-label="Next year" disabled={year >= thisYear} onClick={() => setYear(year + 1)}>
+          <button className="icon-btn lp-step next" aria-label="Next year" disabled={year >= thisYear} onClick={() => toYear(year + 1)}>
             <i className="ph-duotone ph-caret-right" />
           </button>
         </span>
       </div>
 
-      <div className="pix-grid" role="grid" aria-label={`Moods in ${year}`}>
+      {/* A new grid for each year, so it comes in whole. */}
+      <div key={year} className="pix-grid lp-scan-grid" role="grid" aria-label={`Moods in ${year}`}>
         <span />
         {Array.from({ length: 31 }, (_, d) => (
           <span key={d} className={'pix-num tnum' + ((d + 1) % 10 === 5 ? ' mid' : '')} aria-hidden="true">
@@ -650,7 +675,7 @@ function YearPixels({ moods, now, selected, onOpen }: { moods: Record<string, Mo
               const rated = !!v && v.level >= 1;
               const future = key > todayKey;
               const title = `${DOW[day.getDay()]} ${d + 1} ${MON[mi]} ${year}${rated ? ` · ${MOOD_WORDS[v.level - 1]}` : ''}${v?.note ? ` · ${firstLine(v.note)}` : ''}`;
-              const cls = 'pix-cell' + (rated ? '' : ' empty') + (future ? ' future' : '') + (v?.note ? ' written' : '') + (key === selected ? ' sel' : '') + (key === todayKey ? ' today' : '');
+              const cls = 'pix-cell lp-scan-cell' + (rated ? '' : ' empty') + (future ? ' future' : '') + (v?.note ? ' written' : '') + (key === selected ? ' sel' : '') + (key === todayKey ? ' today' : '');
               return future ? (
                 <span key={d} className={cls} aria-hidden="true" />
               ) : (

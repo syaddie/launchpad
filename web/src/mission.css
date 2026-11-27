@@ -6,7 +6,7 @@
 
 /* ---------- pieces only Mission shows ---------- */
 
-.sync-lights, .ms-brand { display: none; }
+.sync-lights, .ms-brand, .ms-empty-art { display: none; }
 
 /* ---------- Settings › Layout ---------- */
 
@@ -501,30 +501,31 @@
 :root[data-design='mission'][data-entering] .lp-inner > main :is(.panel, .photo-panel):not(.panel .panel) { animation: msRiseUp var(--m-view) var(--e-out) both; }
 
 /* =====================================================================
-   MONEY › MONTH
+   CHANGING A PERIOD, AND MONEY › MONTH
    ===================================================================== */
 
-/* Changing month is a scan (styles.css has the wipe it rides on). The line is a beam with an afterglow behind it,
-   crossing at a steady rate like a radar's, and each day lights as the beam passes it, then cools. The month's name
+/* Changing a period with arrows is a scan (styles.css has the wipe it rides on): Money › Month, Mood's month, Year in
+   pixels, Review's week, Training's week. The line is a beam with an afterglow behind it, crossing at a steady rate
+   like a radar's, and each day (each cell, `lp-scan-cell`) lights as the beam passes it, then cools. The period's name
    relights letter by letter from the same side, the way the launch clock's dots do. */
 @media (prefers-reduced-motion: no-preference) {
-  [data-design='mission'] .month-tab { --sweep-ease: linear; }
+  [data-design='mission'] .lp-scan { --sweep-ease: linear; }
   [data-design='mission'] .cal-scan::after { width: 2px; background: linear-gradient(180deg, transparent, var(--ac) 10%, var(--ac) 90%, transparent); box-shadow: 0 0 10px 1px color-mix(in srgb, var(--ac) 70%, transparent), 0 0 30px 5px color-mix(in srgb, var(--ac) 26%, transparent); }
   [data-design='mission'] .cal-scan::before { content: ''; position: absolute; top: 0; bottom: 0; right: 0; width: min(160px, 34%); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--ac) 16%, transparent)); }
   [data-design='mission'] .cal-sweep[data-step='prev'] > .cal-scan::before { right: auto; left: 0; background: linear-gradient(270deg, transparent, color-mix(in srgb, var(--ac) 16%, transparent)); }
-  /* --c is the day's column: it lights as the beam reaches the middle of it. */
-  [data-design='mission'] .month-tab[data-arrive] .cal > .cal-grid .cal-day { animation: msDayLit calc(var(--sweep) * 1.5) var(--e-out) both; animation-delay: calc(var(--sweep) * (var(--c, 0) + 0.5) / 7); }
-  [data-design='mission'] .month-tab[data-arrive='prev'] .cal > .cal-grid .cal-day { animation-delay: calc(var(--sweep) * (6.5 - var(--c, 0)) / 7); }
-  /* --i is each letter's place and --n how many there are (MonthTab.tsx). */
-  [data-design='mission'] .month-tab[data-arrive] .month-title { animation: none; }
-  [data-design='mission'] .month-tab[data-arrive] .month-glyphs > span { animation: msRelight 260ms steps(3, end) both, msGlyphGlow 720ms var(--e-out) both; animation-delay: calc(var(--i) * 26ms); }
-  [data-design='mission'] .month-tab[data-arrive='prev'] .month-glyphs > span { animation-delay: calc((var(--n) - 1 - var(--i)) * 26ms); }
+  /* --x is where the cell's middle is across the grid (periodMotion.ts): it lights as the beam reaches it. */
+  [data-design='mission'] [data-arrive] .lp-scan-grid:not(.cal-copy) .lp-scan-cell { animation: msDayLit calc(var(--sweep) * 1.5) var(--e-out) both; animation-delay: calc(var(--sweep) * var(--x, 0)); }
+  [data-design='mission'] [data-arrive='prev'] .lp-scan-grid:not(.cal-copy) .lp-scan-cell { animation-delay: calc(var(--sweep) * (1 - var(--x, 0))); }
+  /* --i is each letter's place and --n how many there are (Glyphs in Motion.tsx). */
+  [data-design='mission'] [data-arrive] .lp-period-label { animation: none; }
+  [data-design='mission'] [data-arrive] .lp-glyphs > span { animation: msRelight 260ms steps(3, end) both, msGlyphGlow 720ms var(--e-out) both; animation-delay: calc(var(--i) * 26ms); }
+  [data-design='mission'] [data-arrive='prev'] .lp-glyphs > span { animation-delay: calc((var(--n) - 1 - var(--i)) * 26ms); }
 }
 @keyframes msDayLit { from { background-color: color-mix(in srgb, var(--ac) 24%, var(--bg)); box-shadow: inset 0 0 0 1px var(--ac), 0 0 18px -4px var(--ac); } }
 @keyframes msGlyphGlow { from { text-shadow: 0 0 12px var(--ac), 0 0 2px var(--ac); } }
 
 /* The day you pick is locked on to: four corners close in on it and fade, leaving its ring. Not the copy of the old
-   month leaving (monthMotion.ts), only the real calendar. */
+   month leaving (periodMotion.ts), only the real calendar. */
 [data-design='mission'] .cal-day { position: relative; }
 [data-design='mission'] .cal > .cal-grid .cal-day.on::after {
   content: '';
@@ -551,13 +552,122 @@
 [data-design='mission'] .ent-check.ticked .ent-tick.on { animation: msTickFlare 700ms var(--e-out); }
 
 /* =====================================================================
+   MONEY › ACCOUNTS
+   ===================================================================== */
+
+/* Moving money is a transfer orbit (Accounts.tsx): once the drawer has gone, the account it leaves gives a short burn,
+   a point of light climbs off it and travels on an arc over a faint trace to the account it goes to, which flares as it
+   lands; then both balances roll. */
+[data-design='mission'] .acct-orbit { display: block; position: absolute; inset: 0; z-index: 2; pointer-events: none; --orbit-at: var(--m-exit); --orbit-for: calc(var(--m-sweep) * 1.1); }
+[data-design='mission'] .acct-orbit svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+[data-design='mission'] .acct-orbit-trace { fill: none; stroke: var(--ac); stroke-width: 1.5; stroke-linecap: round; stroke-dasharray: 1 6; opacity: 0; animation: msOrbitTrace calc(var(--orbit-for) * 1.6) var(--e-out) var(--orbit-at) both; }
+[data-design='mission'] .acct-orbit-dot {
+  position: absolute; left: 0; top: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--ac); offset-anchor: center; offset-rotate: 0deg;
+  box-shadow: 0 0 8px 2px color-mix(in srgb, var(--ac) 65%, transparent), 0 0 22px 6px color-mix(in srgb, var(--ac) 24%, transparent);
+  animation: msOrbit var(--orbit-for) var(--e-io) var(--orbit-at) both;
+}
+@keyframes msOrbit { 0% { offset-distance: 0%; opacity: 0; scale: 0.4; } 12% { opacity: 1; scale: 1; } 88% { opacity: 1; scale: 1; } 100% { offset-distance: 100%; opacity: 0; scale: 0.6; } }
+@keyframes msOrbitTrace { 0% { opacity: 0; } 20%, 60% { opacity: 0.55; } 100% { opacity: 0; } }
+[data-design='mission'] .acct-card[data-orbit='from'] { animation: msOrbitBurn var(--m-move) var(--e-out) var(--m-exit); }
+[data-design='mission'] .acct-card[data-orbit='to'] { animation: msTickFlare calc(var(--m-sweep) * 0.8) var(--e-out) calc(var(--m-exit) + var(--m-sweep) * 1.05); }
+@keyframes msOrbitBurn { from { box-shadow: 0 0 0 1px var(--ac), 0 0 18px -2px color-mix(in srgb, var(--ac) 55%, transparent); } }
+/* Both balances hold until it has landed, then roll. */
+[data-design='mission'] .acct-card[data-orbit] .acct-bal .digit.rolling > * { animation-delay: calc(var(--m-exit) + var(--m-sweep) * 1.05); }
+
+/* =====================================================================
+   EMPTY STATES
+   ===================================================================== */
+
+/* Over an empty state's words, one of three line drawings of the site (EmptyArt.tsx): the pad clear (nothing to do),
+   the vehicle away (nothing set up yet: its outline dashed on the pad), the launch scrubbed (something failed: the
+   vehicle on the pad with its engine out, venting, beside the poll's scrub mark). Drawn in the faint ink of the
+   horizon; only the mast's lamp moves, blinking with the site's. */
+[data-design='mission'] .ms-empty-art { display: block; flex: none; width: 132px; height: 66px; overflow: visible; color: var(--t3); }
+[data-design='mission'] :not(.empty, .nac-empty, .mc-empty) > .ms-empty-art { margin: 16px 10px 0; }
+[data-design='mission'] .nac-empty > .ms-empty-art, [data-design='mission'] .mc-empty > .ms-empty-art { margin-bottom: 6px; }
+.ms-ea-line { fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.ms-ea-thin { stroke-width: 1; }
+.ms-ea-ground { opacity: 0.6; }
+.ms-ea-star { fill: currentColor; opacity: 0.7; }
+.ms-empty-art .ms-lamp { opacity: 0.9; }
+/* Its outline only, dashed, where it will stand. */
+.ms-ea-ghost :is(.ms-flames, .ms-hull-shade, .ms-band, .ms-port) { display: none; }
+.ms-ea-ghost :is(.ms-hull, .ms-fin) { fill: none; stroke: currentColor; stroke-width: 7; stroke-dasharray: 18 14; }
+.ms-ea-vehicle .ms-flames { display: none; }
+.ms-ea-vent { opacity: 0.75; }
+.ms-ea-scrub { fill: var(--wn); }
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .ms-empty-art { animation: lpFadeIn var(--m-view) var(--e-out) both; }
+}
+
+/* =====================================================================
+   LEARN
+   ===================================================================== */
+
+/* The running study timer is mission elapsed time: "T+00:24:10" in the launch clock's dot-matrix face, in the colour of
+   now (it's what's happening this minute, as the top bar's study button says), its dot a beacon. Its digits relight as
+   they change, as the clock's do. Starting it is an ignition: as it takes Start studying's place it flares, hot, and
+   sends out one ring. */
+[data-design='mission'] .ln-timer { background: var(--ms-ignition-soft); color: var(--ms-ignition-ink); }
+[data-design='mission'] .ln-timer .ln-dot { position: relative; background: var(--ms-ignition); box-shadow: var(--ms-glow-now); }
+[data-design='mission'] .ln-timer .ln-dot::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: var(--ms-ignition-glow); animation: msBeacon 2.4s var(--e-out) infinite; }
+[data-design='mission'] .ln-timer .btn { color: var(--ms-ignition-ink) !important; }
+[data-design='mission'] .ln-timer .ln-clock { display: none; }
+[data-design='mission'] .ln-timer .ln-met { display: inline-block; flex: none; font-size: 21px; color: var(--ms-ignition-ink); text-shadow: 0 0 10px var(--ms-ignition-glow); }
+[data-layout='narrow'][data-design='mission'] .ln-timer .ln-met { font-size: 18px; }
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .ln-timer[data-ignite] { animation: msIgnite calc(var(--m-sweep) * 1.2) var(--e-out); }
+  [data-design='mission'] .ln-timer[data-ignite] .ln-met { animation: msIgniteFace calc(var(--m-sweep) * 1.2) var(--e-out); }
+}
+@keyframes msIgnite {
+  0% { background-color: color-mix(in srgb, var(--ms-ignition) 42%, var(--ms-ignition-soft)); box-shadow: 0 0 0 0 var(--ms-ignition-glow), 0 0 30px 6px var(--ms-ignition-glow); }
+  100% { box-shadow: 0 0 0 14px transparent, 0 0 0 0 transparent; }
+}
+@keyframes msIgniteFace { from { text-shadow: 0 0 22px var(--ms-ignition), 0 0 3px var(--ms-ignition); } }
+
+/* =====================================================================
+   SERVER
+   ===================================================================== */
+
+/* Services is a go/no-go poll: each container, sync and health check has a light with the source lights' marks (go,
+   hold, scrub, standby; Containers.tsx and Server.tsx decide which), and they report in one after another as the panel
+   opens, as the sources do when the app opens. The head counts them in the poll's words. */
+[data-design='mission'] .services .svc-mark { display: block; animation: msReport var(--m-move) var(--e-settle) both; animation-delay: calc(var(--m-state) + var(--m-stagger) * var(--i, 0)); }
+[data-design='mission'] .container-row { grid-template-columns: 10px minmax(0, 1fr) auto auto; }
+[data-design='mission'] .container-row > .dot { display: none; }
+[data-design='mission'] .svc-poll { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 12px; margin-left: auto; font: 500 11px/14px var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--t3); }
+[data-design='mission'] .svc-poll > span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+[data-design='mission'] .svc-poll .ms-mark { width: 8px; height: 8px; border-width: 1.5px; }
+[data-design='mission'] .services > .panel-head { flex-wrap: wrap; row-gap: 4px; }
+
+/* =====================================================================
+   LOSS OF SIGNAL
+   ===================================================================== */
+
+/* Losing the server: as its banner comes down, the source lights go out one at a time, left to right, and a small LOS
+   lights beside them. When it's reached again the banner goes back up and the lights report back in, in turn, as they
+   do when the app opens. (TopBar.tsx marks the lights data-los, then data-aos for a moment.) The other layouts show
+   and hide the banner as they always have. */
+:root[data-design='mission'] .sync-lights[data-los] > i { animation: msLightOut var(--m-move) var(--e-in) forwards; animation-delay: calc(var(--m-stagger) * 2 * var(--i, 0)); }
+:root[data-design='mission'] .sync-lights[data-aos] > i { animation: msReport var(--m-move) var(--e-settle) both; animation-delay: calc(var(--m-state) + var(--m-stagger) * 2 * var(--i, 0)); }
+@keyframes msLightOut { to { opacity: 0.2; scale: 0.6; filter: grayscale(1); } }
+[data-design='mission'] .sync { grid-auto-flow: column; gap: 6px; }
+[data-design='mission'] .sync-los { display: block; font: 600 10px/12px var(--f-mono); letter-spacing: 0.1em; color: var(--wn); animation: msRelight var(--m-state) steps(3, end) both; animation-delay: calc(var(--m-stagger) * 2 * var(--n, 6)); }
+[data-design='mission'] .lp-presence > .server-banner { animation: msBannerDown var(--m-move) var(--e-settle) both; }
+[data-design='mission'] .lp-presence[data-leaving] > .server-banner { animation: msBannerUp var(--m-exit) var(--e-in) both; }
+@keyframes msBannerDown { from { opacity: 0; translate: 0 -14px; clip-path: inset(0 0 100% 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes msBannerUp { from { clip-path: inset(0 0 0 0); } to { opacity: 0; translate: 0 -10px; clip-path: inset(0 0 100% 0); } }
+/* Only Mission takes the banner away slowly: elsewhere it goes at once, as it always has. */
+:root:not([data-design='mission']) .lp-presence[data-leaving] > .server-banner { animation: none; }
+
+/* =====================================================================
    LESS MOTION
    Nothing breathes, burns, drifts, blinks, falls or crosses the sky, and nothing launches (Scene.tsx checks too).
    The sky still shows the hour and the weather's cloud, standing still.
    ===================================================================== */
 
 @media (prefers-reduced-motion: reduce) {
-  .ms-clouds i, .ms-twinkles i, .ms-lamp, .ms-flames, .ms-flame-core, .ms-ring, .ms-beacon::after, .ms-cell, .ms-logo--liftoff :is(.ms-vehicle, .ms-flames), .ms-rollout .ms-lift, .cal-day.today .cal-n::after, .cal-day.on::after { animation: none !important; }
+  .ms-clouds i, .ms-twinkles i, .ms-lamp, .ms-flames, .ms-flame-core, .ms-ring, .ms-beacon::after, .ms-cell, .ms-logo--liftoff :is(.ms-vehicle, .ms-flames), .ms-rollout .ms-lift, .cal-day.today .cal-n::after, .cal-day.on::after, .ln-timer .ln-dot::after { animation: none !important; }
   .ms-sat, .ms-trace, .ms-fx, .ms-ring, .ms-pulse, .ms-stage { display: none; }
   .ms-scene[data-wx='rain'] .ms-rain { animation: none; }
   .ms-orb, .ms-clouds { transition: none; transform: translate(var(--orb-x, 70vw), var(--orb-y, 12vh)); }
@@ -569,4 +679,12 @@
   @keyframes msDrawOn { from { opacity: 0; } }
   @keyframes msArrive { from { opacity: 0; } }
   @keyframes msTickFlare { from { opacity: 1; } }
+  [data-design='mission'] .ln-timer[data-ignite] { animation: lpFadeIn var(--m-state) var(--e-out); }
+  @keyframes msLightOut { to { opacity: 0.2; } }
+  .acct-orbit { display: none !important; }
+  @keyframes msOrbitBurn { from { opacity: 1; } }
+  [data-design='mission'] .acct-card[data-orbit] .acct-bal .digit.rolling > * { animation-delay: 0s; }
+  @keyframes msBannerDown { from { opacity: 0; } }
+  @keyframes msBannerUp { to { opacity: 0; } }
+  [data-design='mission'] .sync-los { animation: none; }
 }
