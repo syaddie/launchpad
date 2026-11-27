@@ -6,7 +6,7 @@
 
 /* ---------- pieces only Mission shows ---------- */
 
-.sync-lights, .ms-brand, .ms-empty-art, .sync-line--ms { display: none; }
+.sync-lights, .ms-brand, .ms-empty-art, .sync-line--ms, .toast-count { display: none; }
 
 /* ---------- Settings › Layout ---------- */
 
@@ -459,6 +459,15 @@
 [data-design='mission'] .drawer-title { font-weight: 700; letter-spacing: -0.01em; }
 [data-design='mission'] .toast { border-radius: 23px; background: var(--tx); color: var(--bg); backdrop-filter: none; }
 [data-design='mission'] .toast .btn-link { color: var(--bg) !important; }
+/* A message with an Undo counts down: the line along its foot is a row of five dots, going out one by one from the right
+   like lights losing signal, the last as the message goes (T-5 to T-0). Pointing at it holds them, as it holds the
+   message (useToast). */
+[data-design='mission'] .toast[data-life]::after { display: none; }
+[data-design='mission'] .toast-count { position: absolute; left: 50%; bottom: 4px; display: flex; gap: 5px; translate: -50% 0; pointer-events: none; }
+[data-design='mission'] .toast-count > i { width: 4px; height: 4px; border-radius: 50%; background: currentColor; opacity: 0.8; animation: msLightOut var(--m-state) var(--e-in) both; animation-delay: calc(var(--toast-life, 6s) * (5 - var(--i, 0)) / 5 - var(--m-state)); }
+[data-design='mission'] .toast[data-life]:hover .toast-count > i { animation-play-state: paused; }
+/* Gone early (Undo, or another message): the dots go with it rather than keep it waiting for their count. */
+[data-design='mission'] [data-leaving] .toast-count { display: none; }
 
 /* Controls. One primary action is blue with a highlight along its top, and lights under the pointer. */
 [data-design='mission'] :is(.btn, .join) { border-radius: var(--r); }

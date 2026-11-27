@@ -937,6 +937,14 @@ export function App({ cached }: { cached: AppState | null }) {
                 {toast.action.label}
               </button>
             )}
+            {/* Mission's count: the line along its foot as five dots going out one by one (mission.css). */}
+            {toast.action && (
+              <span className="toast-count" aria-hidden="true">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <i key={i} style={{ '--i': i } as CSSProperties} />
+                ))}
+              </span>
+            )}
           </div>
         )}
       </Presence>
