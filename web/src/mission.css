@@ -6,7 +6,7 @@
 
 /* ---------- pieces only Mission shows ---------- */
 
-.sync-lights, .ms-brand { display: none; }
+.sync-lights, .ms-brand, .ms-empty-art { display: none; }
 
 /* ---------- Settings › Layout ---------- */
 
@@ -573,6 +573,32 @@
 @keyframes msOrbitBurn { from { box-shadow: 0 0 0 1px var(--ac), 0 0 18px -2px color-mix(in srgb, var(--ac) 55%, transparent); } }
 /* Both balances hold until it has landed, then roll. */
 [data-design='mission'] .acct-card[data-orbit] .acct-bal .digit.rolling > * { animation-delay: calc(var(--m-exit) + var(--m-sweep) * 1.05); }
+
+/* =====================================================================
+   EMPTY STATES
+   ===================================================================== */
+
+/* Over an empty state's words, one of three line drawings of the site (EmptyArt.tsx): the pad clear (nothing to do),
+   the vehicle away (nothing set up yet: its outline dashed on the pad), the launch scrubbed (something failed: the
+   vehicle on the pad with its engine out, venting, beside the poll's scrub mark). Drawn in the faint ink of the
+   horizon; only the mast's lamp moves, blinking with the site's. */
+[data-design='mission'] .ms-empty-art { display: block; flex: none; width: 132px; height: 66px; overflow: visible; color: var(--t3); }
+[data-design='mission'] :not(.empty, .nac-empty, .mc-empty) > .ms-empty-art { margin: 16px 10px 0; }
+[data-design='mission'] .nac-empty > .ms-empty-art, [data-design='mission'] .mc-empty > .ms-empty-art { margin-bottom: 6px; }
+.ms-ea-line { fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.ms-ea-thin { stroke-width: 1; }
+.ms-ea-ground { opacity: 0.6; }
+.ms-ea-star { fill: currentColor; opacity: 0.7; }
+.ms-empty-art .ms-lamp { opacity: 0.9; }
+/* Its outline only, dashed, where it will stand. */
+.ms-ea-ghost :is(.ms-flames, .ms-hull-shade, .ms-band, .ms-port) { display: none; }
+.ms-ea-ghost :is(.ms-hull, .ms-fin) { fill: none; stroke: currentColor; stroke-width: 7; stroke-dasharray: 18 14; }
+.ms-ea-vehicle .ms-flames { display: none; }
+.ms-ea-vent { opacity: 0.75; }
+.ms-ea-scrub { fill: var(--wn); }
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .ms-empty-art { animation: lpFadeIn var(--m-view) var(--e-out) both; }
+}
 
 /* =====================================================================
    LEARN

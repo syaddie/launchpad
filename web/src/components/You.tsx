@@ -10,6 +10,7 @@ import { fmtDay, hm, newId } from '../util';
 import { periodStep } from '../motion';
 import { NoteLines, toggleLine } from './Notes';
 import { Glyphs, Readout, usePeriodScan } from './Motion';
+import { EmptyArt } from './mission/EmptyArt';
 
 interface Props {
   data: AppState;
@@ -133,6 +134,7 @@ function Countdowns({ list, now, addSignal, onChange }: { list: Countdown[]; now
         })}
         {!list.length && !draft && (
           <div className="empty" style={{ padding: 0 }}>
+            <EmptyArt kind="clear" />
             <p>Count down to trips, birthdays and deadlines. The nearest one also shows under the greeting.</p>
           </div>
         )}

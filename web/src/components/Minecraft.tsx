@@ -9,6 +9,7 @@ import { McCommandSheet } from './McCommandSheet';
 import { McCrashesView, savedOf } from './McCrashes';
 import { McPlayersView } from './McPlayers';
 import { Glide } from './Motion';
+import { EmptyArt } from './mission/EmptyArt';
 
 const LOG_EVERY = 1500;
 const LIST_EVERY = 10_000;
@@ -158,6 +159,7 @@ export function MinecraftPanel({ onFailed }: { onFailed: () => void }) {
             <p className="meta">{error ? '' : 'Looking for servers…'}</p>
           ) : !list.length ? (
             <div className="mc-empty meta">
+              <EmptyArt kind="clear" />
               <p>No Minecraft servers running, and none saved.</p>
               <p>Launchpad finds a server by its Java process with a server.properties beside it. Start one in tmux or screen, or add it with + so it can be started from here.</p>
             </div>

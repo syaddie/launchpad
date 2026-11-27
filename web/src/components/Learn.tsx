@@ -7,6 +7,7 @@ import {
 import type { AppState, Assessment, AssessmentKind, AssessmentStatus, Course, Learn, SideLearning } from '../../../shared/types';
 import { ago, fmtDay, hm, inMinutes, newId, shortDay } from '../util';
 import { menuProps } from './ContextMenu';
+import { EmptyArt } from './mission/EmptyArt';
 
 type Notify = (msg: string, action?: { label: string; run: () => void }) => void;
 
@@ -387,6 +388,7 @@ function DuePanel({ learn, today, adding, setAdding, onChange, onOpen, notify }:
         ))}
         {!groups.length && !adding && (
           <div className="empty" style={{ padding: 0 }}>
+            <EmptyArt kind="clear" />
             <p>{filter === 'all' ? 'Nothing due. Add assignments, quizzes and exams here or in each course.' : 'Nothing due in this course.'}</p>
             <button className="btn btn-secondary btn-small" onClick={() => setAdding(true)}>
               <i className="ph-duotone ph-plus" />

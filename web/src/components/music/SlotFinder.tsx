@@ -6,6 +6,7 @@ import { NacPlaces } from './NacPlaces';
 import { SlotCalendar } from './SlotCalendar';
 import { menuProps } from '../ContextMenu';
 import { rowMenu, WatchForm, WatchLines, WatchList, type WatchProps } from './SlotWatch';
+import { EmptyArt } from '../mission/EmptyArt';
 
 /** The server checks NAC every 10 minutes; this only reads what it found, so asking often costs nothing. */
 const POLL = 60_000;
@@ -177,7 +178,10 @@ export function SlotFinder({ now, notify, guest }: { now: Date; notify: (msg: st
       {s && editing && !guest && <NacPlaces s={s} codes={codes} now={now} onSaved={saved} onClose={() => setEditing(false)} />}
 
       {!s ? (
-        <p className="meta nac-empty">{loadError ? `Couldn’t load the slots: ${loadError}` : 'Loading…'}</p>
+        <>
+          {loadError && <EmptyArt kind="scrubbed" />}
+          <p className="meta nac-empty">{loadError ? `Couldn’t load the slots: ${loadError}` : 'Loading…'}</p>
+        </>
       ) : (
         <>
           {!s.ok && (
@@ -201,10 +205,12 @@ export function SlotFinder({ now, notify, guest }: { now: Date; notify: (msg: st
           {!s.watching.length ? (
             guest ? (
               <div className="nac-empty">
+                <EmptyArt kind="away" />
                 <p>No locations are being checked at the moment.</p>
               </div>
             ) : !editing && (
               <div className="nac-empty">
+                <EmptyArt kind="away" />
                 <p>No locations on the list, so nothing is checked.</p>
                 <p>
                   <button type="button" className="btn btn-secondary btn-small" onClick={() => setEditing(true)}>
@@ -216,6 +222,7 @@ export function SlotFinder({ now, notify, guest }: { now: Date; notify: (msg: st
             )
           ) : !s.locations.length ? (
             <div className="nac-empty">
+              <EmptyArt kind={s.ok ? 'away' : 'scrubbed'} />
               <p>{s.ok ? `No slot data yet. The ${s.checked_at ? 'next' : 'first'} check is ${s.next_check ? atClock(s.next_check, now) : 'within 10 minutes'}, then every 10 minutes.` : 'Nothing to show until a check works.'}</p>
               {watching && <p className="meta">Watching {watching}.</p>}
             </div>
@@ -239,7 +246,10 @@ export function SlotFinder({ now, notify, guest }: { now: Date; notify: (msg: st
               {view!.days.length ? (
                 <SlotCalendar view={view!} today={today} codes={codes} places={s.locations} watched={watched} jump={jump} mine={s.mine_on} detail={(d) => <Day day={d} today={today} w={watchOf(d.date)} />} />
               ) : (
-                <p className="nac-empty">The last good data doesn’t reach today, so there’s nothing to show until a check works.</p>
+                <>
+                  <EmptyArt kind="scrubbed" />
+                  <p className="nac-empty">The last good data doesn’t reach today, so there’s nothing to show until a check works.</p>
+                </>
               )}
             </>
           )}

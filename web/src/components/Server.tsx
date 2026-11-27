@@ -14,6 +14,7 @@ import { DownloadsPanel } from './Downloads';
 import { FilesPanel } from './Files';
 import { MinecraftPanel } from './Minecraft';
 import { Glide, Readout } from './Motion';
+import { EmptyArt } from './mission/EmptyArt';
 
 const POLL = 5_000;
 
@@ -181,6 +182,7 @@ function ShellSetup({ info, error, onRetry, onTrusted }: { info: ShellInfo | nul
     return (
       <section className="panel srv-panel">
         <div className="empty">
+          <EmptyArt kind={!!error && 'scrubbed'} />
           <p>{error ? `Couldn’t reach the server: ${error}` : 'Checking the SSH setup…'}</p>
           {error && (
             <button className="btn btn-secondary btn-small" onClick={onRetry}>
@@ -286,6 +288,7 @@ function Overview({ data, now, onOpenSettings }: { data: AppState; now: Date; on
     return (
       <div className="panel">
         <div className="empty">
+          <EmptyArt kind={!!error && 'scrubbed'} />
           <p>{error ? `Couldn’t reach the server: ${error}` : 'Reading the server’s health…'}</p>
         </div>
       </div>
@@ -411,6 +414,7 @@ function StoragePanel({ s }: { s: ServerStats }) {
         </div>
       ) : (
         <div className="empty">
+          <EmptyArt kind="scrubbed" />
           <p>Couldn’t read the disk size here.</p>
         </div>
       )}
@@ -502,6 +506,7 @@ function NetworkPanel({ s, onIface }: { s: ServerStats; onIface: (v: string) => 
         </>
       ) : (
         <div className="empty">
+          <EmptyArt kind={!n && 'away'} />
           <p>{n ? 'Measuring… the chart fills in over the next minute.' : 'No network counters visible here.'}</p>
         </div>
       )}
@@ -641,6 +646,7 @@ function SpeedPanel({ speed, plan, every, now, lastError, onTest, onOpenSettings
         </div>
       ) : (
         <div className="empty">
+          <EmptyArt kind={every ? 'clear' : 'away'} />
           <p>
             {every
               ? `No tests in the last ${r.name} yet. They run every ${every} hours, or press Test now.`
@@ -729,6 +735,7 @@ function ServicesPanel({ s, data, now, onChanged }: { s: ServerStats; data: AppS
           s.containers.map((c, i) => <ContainerRow key={c.id || c.name} c={c} order={i} canRestart={s.canRestart} onLogs={() => setLogsOf(c.id)} onRestarted={restarted(c.name)} notify={(text) => setNote({ text, failed: false })} />)
         ) : (
           <div className="empty" style={{ gap: 6 }}>
+            <EmptyArt kind={s.containersError ? 'scrubbed' : 'away'} />
             <p style={{ fontSize: 13 }}>
               {s.containersError
                 ? `Couldn’t list containers: ${s.containersError}`

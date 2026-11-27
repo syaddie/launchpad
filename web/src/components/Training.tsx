@@ -11,6 +11,7 @@ import { ago, fmtDay, hm, niceMax } from '../util';
 import { copyText, menuProps } from './ContextMenu';
 import { periodStep } from '../motion';
 import { Glide, Glyphs, Readout, usePeriodScan } from './Motion';
+import { EmptyArt } from './mission/EmptyArt';
 
 type Muscles = Record<string, ExerciseMuscles>;
 
@@ -151,6 +152,7 @@ export function TrainingView({ data, now, onImport, onSync, onOpenExercise, onOp
       ) : (
         <section className="panel you-panel" {...menu}>
           <div className="empty">
+            <EmptyArt kind={!live ? 'away' : lastError ? 'scrubbed' : lastSuccess ? 'clear' : 'away'} />
             <h2 className="panel-title">{live ? 'Your workouts from Hevy' : 'Bring in your workouts from Hevy'}</h2>
             {live ? (
               <>

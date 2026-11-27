@@ -12,6 +12,7 @@ import { MonthCalendar, type PickHow, TodayLine } from './MonthCalendar';
 import { dayGroups, dayName, dayTitle, scrollFor } from './monthList';
 import { WhatIf } from './WhatIf';
 import { AccountSelect, Calc, CategoryCell, entryTitle, type Kind, KindSwitch, lastAccount, namesOf, type Notify, NumCell, otherAccount, shortDate, signed } from './shared';
+import { EmptyArt } from '../mission/EmptyArt';
 
 export const REPEATS: { key: Repeat; name: string }[] = [
   { key: 'once', name: 'Once' },
@@ -490,6 +491,7 @@ export function MonthTab({ money, today, month, onMonth, onChange, onOpenOwed, t
             );
           })}
           {todayAt === -1 && <TodayLine money={money} today={today} account={shown} now={days[days.length - 1]?.date === today} />}
+          {!entries.length && <EmptyArt kind="clear" />}
           {!entries.length && (
             <p className="month-empty">
               {shown

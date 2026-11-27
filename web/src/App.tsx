@@ -43,6 +43,7 @@ import { markTicks } from './tickMarks';
 import { send } from './outbox';
 import { paletteAsk, paletteItems, paletteSearches, type AskHandlers, type PaletteContext } from './paletteItems';
 import { hm, inboxBadge, inMinutes } from './util';
+import { EmptyArt } from './components/mission/EmptyArt';
 
 // The views off the home page load the first time they're opened, so a new tab downloads
 // and starts only what home needs. They're fetched in the background once the page is up
@@ -594,6 +595,7 @@ export function App({ cached }: { cached: AppState | null }) {
   const noPanels = (
     <div className="panel" style={{ gridColumn: '1 / -1' }}>
       <div className="empty">
+        <EmptyArt kind="away" />
         <p>Every home panel is switched off.</p>
         <button className="btn btn-secondary" onClick={() => setDrawer({ type: 'settings' })}>
           Open Settings

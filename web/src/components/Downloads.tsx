@@ -7,6 +7,7 @@ import { fmtBytes, hm } from '../util';
 import { menuProps } from './ContextMenu';
 import { Copyable } from './Copyable';
 import { Glide } from './Motion';
+import { EmptyArt } from './mission/EmptyArt';
 
 const POLL = 2000;
 
@@ -638,10 +639,12 @@ function DownloadList({ info, error, shellReady, onChanged, onOpenFolder }: {
       {(error || actError) && <div className="status-line" style={{ margin: 0 }}>{actError || error}</div>}
       {shellReady === false ? (
         <div className="empty">
+          <EmptyArt kind="away" />
           <p>Links download over the terminal’s SSH login. Open the Terminal tab to set it up.</p>
         </div>
       ) : !jobs.length ? (
         <div className="empty">
+          <EmptyArt kind={!!info && 'clear'} />
           <p>{info ? 'Nothing downloaded since Launchpad last started.' : error ? '' : 'Loading…'}</p>
         </div>
       ) : (
@@ -1003,6 +1006,7 @@ function Torrents({ info, error, onInfo, onOpenFolder }: { info: TorrentsInfo | 
         <TorrentSetup />
       ) : !list.length ? (
         <div className="empty">
+          <EmptyArt kind={!!info && !info.error && 'clear'} />
           <p>{info ? (info.error ? '' : 'No torrents. Paste a magnet link above.') : error ? '' : 'Loading…'}</p>
         </div>
       ) : (

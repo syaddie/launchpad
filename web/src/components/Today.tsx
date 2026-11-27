@@ -6,6 +6,7 @@ import { ago, fmtDay, hm, inMinutes } from '../util';
 import { copyText, menuProps, type MenuItem } from './ContextMenu';
 import { KeyFigures } from './KeyFigures';
 import { Readout } from './Motion';
+import { EmptyArt } from './mission/EmptyArt';
 
 interface Props {
   data: AppState;
@@ -245,10 +246,12 @@ export function Today({ data, now, wide, compact, onConnect, onRetry, addEvent, 
         </div>
       ) : connected ? (
         <div className="empty">
+          <EmptyArt kind="away" />
           <p>Calendar sync is off. Turn it on in Settings.</p>
         </div>
       ) : (
         <div className="empty">
+          <EmptyArt kind="away" />
           <p>Connect your Google account to see today’s agenda here.</p>
           <button className="btn btn-primary" onClick={onConnect}>
             <i className="ph-duotone ph-google-logo" style={{ fontSize: 16 }} />

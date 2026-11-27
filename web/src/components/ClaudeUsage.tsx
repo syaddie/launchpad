@@ -6,6 +6,7 @@ import type { AppState } from '../../../shared/types';
 import { api } from '../api';
 import { fmtDay, niceMax } from '../util';
 import { Glide } from './Motion';
+import { EmptyArt } from './mission/EmptyArt';
 
 /**
  * Server › Claude usage: what each feature's Claude calls used this month and last month,
@@ -49,6 +50,7 @@ export function ClaudeUsagePanel({ data, onOpenSettings }: { data: AppState; onO
       <section className="panel srv-panel cu" aria-label="Claude usage">
         {head}
         <div className="empty">
+          <EmptyArt kind={!!error && 'scrubbed'} />
           <p>{error ? `Couldn’t load the usage: ${error}` : 'Adding up Claude’s usage…'}</p>
         </div>
       </section>
@@ -95,6 +97,7 @@ export function ClaudeUsagePanel({ data, onOpenSettings }: { data: AppState; onO
 
       {nothing ? (
         <div className="empty">
+          <EmptyArt kind="clear" />
           <p>No Claude calls yet. Each summary, note and ⌘K question is counted here once it runs.</p>
         </div>
       ) : (

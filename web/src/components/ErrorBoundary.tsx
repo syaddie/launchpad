@@ -1,3 +1,4 @@
+import { EmptyArt } from './mission/EmptyArt';
 import { Component, type ReactNode } from 'react';
 
 /**
@@ -36,6 +37,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode; resetKey?: s
     return (
       <section className="panel srv-panel">
         <div className="empty" role="alert">
+          <EmptyArt kind={!stale && 'scrubbed'} />
           <p>{stale ? 'Launchpad was updated since this tab opened.' : `${this.props.label ?? 'This view'} hit a problem: ${error.message}`}</p>
           <button className="btn btn-primary btn-small" onClick={() => location.reload()}>
             Reload

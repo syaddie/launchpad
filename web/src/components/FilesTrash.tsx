@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { TRASH_DAYS, type FileJob, type TrashItem, type TrashListing } from '../../../shared/files';
 import { filesApi } from '../filesApi';
 import { ago, fmtBytes } from '../util';
+import { EmptyArt } from './mission/EmptyArt';
 
 const nameOf = (p: string) => p.split('/').pop() || p;
 const parentOf = (p: string) => p.replace(/\/[^/]*$/, '') || '/';
@@ -115,6 +116,7 @@ export function FilesTrash({ now, jobs, onJob, onClose }: {
         {!listing && !error && <div className="empty"><p>Looking in the trash…</p></div>}
         {listing && !items.length && (
           <div className="empty">
+            <EmptyArt kind="clear" />
             <p>The trash is empty.</p>
           </div>
         )}

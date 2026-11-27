@@ -3,6 +3,7 @@ import { cancelSub, EVERY_NAMES, extendSub, markSub, patchSub, perMonth, perYear
 import type { Money } from '../../../../shared/types';
 import { newId } from '../../util';
 import { namesOf, type Notify, shortDate } from './shared';
+import { EmptyArt } from '../mission/EmptyArt';
 
 /**
  * Repeating money out marked as subscriptions: what each costs a month and a year, the
@@ -140,6 +141,7 @@ export function Subscriptions({ money, today, onChange, onOpenMonth, notify }: {
               </tbody>
             </table>
           )}
+          {!rows.length && <EmptyArt kind="clear" />}
           {!rows.length && (
             <p className="month-empty">
               No subscriptions yet. Add the charge in Month as money out that repeats every week, 2 weeks or month and tick “Subscription”, or mark a repeat below.

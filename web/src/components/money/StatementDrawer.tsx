@@ -8,6 +8,7 @@ import { newId } from '../../util';
 import { copyText, menuProps, type MenuItem } from '../ContextMenu';
 import { Drawer } from '../Drawers';
 import { AccountSelect, CategoryCell, namesOf, shortDate, type Notify } from './shared';
+import { EmptyArt } from '../mission/EmptyArt';
 
 type Filter = 'all' | 'check' | 'busking' | 'matched';
 const FILTERS: { key: Filter; name: string }[] = [
@@ -231,6 +232,7 @@ export function StatementDrawer({ statement, money, bills, notify, onApply, onCl
             ))}
           </div>
         </div>
+        {!ps.length && <EmptyArt kind="clear" />}
         {!ps.length && <p className="month-empty">Everything on this statement is already in Money.</p>}
         {ps.length > 0 && !shown.length && <p className="month-empty">Nothing here.</p>}
         {months.map((key) => {
