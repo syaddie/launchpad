@@ -9,7 +9,7 @@
 // The browser's own menu is kept on fields, on selected text, with Shift held, and on plain links,
 // so copy, paste and "Open in new tab" still work. On a touch screen a long press opens the same menu;
 // text there isn't selectable, except fields and what's marked to copy from (styles.css, `selectable`).
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 
 export interface MenuAction {
@@ -419,6 +419,8 @@ function Menu({ open }: { open: OpenMenu }) {
   // Hovering an item focuses it, so the arrow keys carry on from there.
   const hover = (e: ReactPointerEvent<HTMLElement>) => e.pointerType === 'mouse' && e.currentTarget.focus({ preventScroll: true });
 
+  // Each item's place among the items, so a design can light them one after another as the menu opens (Mission).
+  let order = 0;
   // On the page itself: a design whose panels blur what's behind them (Vista) would otherwise pin it to the panel.
   return createPortal(
     <div
@@ -440,6 +442,7 @@ function Menu({ open }: { open: OpenMenu }) {
             role="menuitem"
             tabIndex={-1}
             className={it.danger ? 'danger' : undefined}
+            style={{ '--i': order++ } as CSSProperties}
             href={it.href}
             target={it.newTab ? '_blank' : undefined}
             rel={it.newTab ? 'noopener' : undefined}
@@ -451,7 +454,7 @@ function Menu({ open }: { open: OpenMenu }) {
             {it.label}
           </a>
         ) : (
-          <button key={i} type="button" role="menuitem" tabIndex={-1} className={it.danger ? 'danger' : undefined} disabled={it.disabled} onClick={() => choose(it)} onPointerMove={hover}>
+          <button key={i} type="button" role="menuitem" tabIndex={-1} className={it.danger ? 'danger' : undefined} style={{ '--i': order++ } as CSSProperties} disabled={it.disabled} onClick={() => choose(it)} onPointerMove={hover}>
             <i className={'ph-duotone ' + (it.icon ?? '')} aria-hidden="true" />
             {it.label}
           </button>

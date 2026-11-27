@@ -625,6 +625,19 @@
 @keyframes msSatellite { to { rotate: 360deg; } }
 
 /* =====================================================================
+   MENUS
+   ===================================================================== */
+
+/* A right-click menu's items relight in turn as it opens, top to bottom, like a period's name: each in three steps with
+   a moment's glow, a sixth of the panels' stagger apart, so even a long menu is lit within half a second. It's only
+   light: every item can be pointed at, pressed or reached by the keys from the start, and the one that has focus or
+   the pointer is lit at once. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .ctx-menu > [role='menuitem'] { animation: msRelight var(--m-state) steps(3, end) both, msGlyphGlow var(--m-sweep) var(--e-out) both; animation-delay: calc(var(--m-stagger) * 0.3 * var(--i, 0)); }
+  [data-design='mission'] .ctx-menu > [role='menuitem']:is(:focus, :hover) { animation: none; }
+}
+
+/* =====================================================================
    LEARN
    ===================================================================== */
 
