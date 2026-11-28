@@ -427,5 +427,8 @@ describe('the server as the site’s power', () => {
     expect(powerText(['jellyfin'])).toBe('jellyfin down');
     expect(powerText(['jellyfin', 'sonarr'])).toBe('jellyfin and sonarr down');
     expect(powerText(['jellyfin', 'sonarr', 'radarr'])).toBe('3 containers down');
+    expect(powerText(['jellyfin', 'qbittorrent'], 20)).toBe('2 containers down');
+    expect(powerText(['a-very-long-container-name'], 20)).toBe('1 container down');
+    expect(powerText(['jellyfin'], 20)).toBe('jellyfin down');
   });
 });

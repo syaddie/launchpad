@@ -320,7 +320,7 @@
   --ms-apron-flash-glow: rgba(204, 58, 48, 0.32);
 }
 :root[data-mode='dark'] .lp-root:has(> .ms-scene[data-watch]) {
-  --ms-flood: rgba(255, 72, 56, 0.045);
+  --ms-flood: rgba(255, 72, 56, 0.09);
   --ms-lamp: #b8303a;
   --ms-apron-fixture: rgba(255, 110, 96, 0.2);
   --ms-apron-taxi: #b5372e;

@@ -22,6 +22,8 @@ const RECOVERY_SHOW_MS = 16_000;
 
 /** How often the site reads the server's power while Home is in view (idea 8). */
 const POWER_MS = 60_000;
+/** How wide a letter of the power's label is (mission.css's .ms-power-text: 10.5px mono, spaced), a little over. */
+const POWER_LETTER = 7.2;
 
 /**
  * The server as the site's power (idea 8): the containers that are down, read once a minute while `on` (Home is in
@@ -108,7 +110,7 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
  * the vehicle on the pad lifts off, and the next rolls out. It is drawn for the eye only (aria-hidden): every event on
  * it is a row in Today too. docs/mission-layout.md; the look is mission.css.
  */
-export function MissionScene({ now, dark, narrow, home, events, wx, launch, power }: {
+export function MissionScene({ now, dark, narrow, home, events, wx, launch, power = false }: {
   now: Date;
   dark: boolean;
   /** A phone: the scene scrolls with the page instead of standing behind it. */
@@ -117,8 +119,8 @@ export function MissionScene({ now, dark, narrow, home, events, wx, launch, powe
   events: SkyEvent[];
   wx: SkyWeather;
   launch: number;
-  /** Whether the site shows the server's power (Server isn't hidden). */
-  power: boolean;
+  /** Whether the site shows the server's power (Server isn't hidden); not in a preview. */
+  power?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const starsRef = useRef<HTMLCanvasElement>(null);
@@ -664,10 +666,11 @@ export function MissionScene({ now, dark, narrow, home, events, wx, launch, powe
           )}
           {geo.site && down.length > 0 && (
             // Why its lights are out, in a small label by the site, with the poll's scrub mark.
-            <g className="ms-power" transform={`translate(${Math.round(geo.padX + (narrow ? 126 : 142) * s)} ${geo.hz - 8})`}>
+            // It stands on the horizon; names that wouldn't fit in the sky's width are counted instead.
+            <g className="ms-power" transform={`translate(${Math.round(geo.padX + (narrow ? 126 : 142) * s)} ${geo.hz - 4})`}>
               <rect className="ms-power-mark" x={0} y={-7} width={6} height={6} rx={1} transform="rotate(45 3 -4)" />
               <text className="ms-power-text" x={12} y={0}>
-                {powerText(down)}
+                {powerText(down, Math.floor((geo.w - geo.padX - (narrow ? 126 : 142) * s - 20) / POWER_LETTER))}
               </text>
             </g>
           )}

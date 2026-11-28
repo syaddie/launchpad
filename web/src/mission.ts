@@ -323,11 +323,15 @@ export function powerDown(list: Pick<ContainerInfo, 'name' | 'state' | 'status' 
   return (list ?? []).filter((c) => !c.self && markOf(c) === 'scrub').map((c) => c.name);
 }
 
-/** What the site says about its lights being out: "jellyfin down", "jellyfin and sonarr down", "3 containers down". */
-export function powerText(down: string[]): string {
+/**
+ * What the site says about its lights being out: "jellyfin down", "jellyfin and sonarr down", "3 containers down"; the
+ * count too when the names would run past `max` letters.
+ */
+export function powerText(down: string[], max = Infinity): string {
   if (!down.length) return '';
-  if (down.length > 2) return `${down.length} containers down`;
-  return `${down.join(' and ')} down`;
+  const named = `${down.join(' and ')} down`;
+  if (down.length <= 2 && named.length <= max) return named;
+  return `${down.length} container${down.length === 1 ? '' : 's'} down`;
 }
 
 const two = (n: number) => String(n).padStart(2, '0');

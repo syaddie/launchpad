@@ -53,7 +53,11 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
   its shadow tightening as it lands. The rail's highlight glides to the view you picked.
 - **Mission** starts from the default and adds its own (in `mission.css`): the strip and the dock come in, the sources
   report in, the day's ascent draws on, and ticking off the last task launches the rocket. Its sun and moon keep their
-  real times for Singapore, the moon at its real phase, fading out as it sets and back in as it rises. In Money › Month, changing
+  real times for Singapore, the moon at its real phase, fading out as it sets and back in as it rises. Dawn and dusk
+  have skies of their own, indigo into rose into orange, cross-faded in over the half hour either side of sunrise and
+  sunset; minutes after a launch a far point of light comes back down to the horizon and lands; a container down on the
+  server puts one of the site's floodlights out and turns a mast's lamp steady, with a small label saying which; and
+  from 23:00 to sunrise the site's lights dim to red. In Money › Month, changing
   month is a radar-like scan, the day you pick is locked on to, today breathes a ring and a ticked entry flares. A box
   ticked by hand sends out a ring of light. With no photos, Home's ground is a lit apron whose runway lights flash in
   sequence toward the horizon. In the launch clock's last ten seconds a soft ring goes out from it each second and the
@@ -231,7 +235,7 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
 
 Little moves by itself, and each thing that does is slow or stepped, so a page left open all day costs next to
 nothing: the clock's minutes, Vista's photo drifting (it steps once a second, so the glass over it is redrawn once a
-second rather than every frame), Mission's sky and the ring today's date breathes on Money's calendar (scaled, so
+second rather than every frame), Mission's sky (its dawn and dusk change once a minute at most, faded) and the ring today's date breathes on Money's calendar (scaled, so
 nothing is repainted for it), and the runway lights on Mission's apron when Home has no photos (each dot on or off, a
 run every few seconds). In Mission, a running study timer's digits relight as they change and its dot breathes a
 beacon (scaled); in the other layouts its clock rolls a digit a second (moved, not redrawn); and an empty state's drawing has its mast lamp blinking with the site's (stepped). The time since the
