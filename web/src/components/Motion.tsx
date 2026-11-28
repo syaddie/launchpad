@@ -98,13 +98,14 @@ const NONE: ReadonlySet<string> = new Set();
  * localStorage under `store`; with no record yet (the first time this runs) nothing is new, since what's there was there
  * before. Worked out while rendering, so what's new is marked from the first frame it's drawn in, and only while the
  * page is in view: what arrives while the tab is in the background is still new when you come back to it. They stay
- * marked for `hold` ms, or as long as the view is open when it's left out.
+ * marked for `hold` ms, or as long as the view is open when it's left out. `keys` null: not known yet (still loading),
+ * so nothing is new and nothing is kept until they are.
  */
-export function useUnseen(store: string, keys: string[], hold?: number): ReadonlySet<string> {
-  const sig = keys.join('\n');
+export function useUnseen(store: string, keys: string[] | null, hold?: number): ReadonlySet<string> {
+  const sig = keys?.join('\n') ?? null;
   const visible = usePageVisible();
   const [state, setState] = useState(() => ({ sig: null as string | null, seen: localGet(store), fresh: NONE }));
-  if (visible && state.sig !== sig) {
+  if (visible && keys && state.sig !== sig) {
     const found = unseen(keys, state.seen);
     setState({ sig, seen: JSON.stringify(keys), fresh: found.length ? new Set(found) : state.fresh });
   }
@@ -295,9 +296,10 @@ const ARRIVING_MS = 1600;
  * A period with arrows (a month, a year, a week) that moves the way you went when it changes (periodMotion.ts has the
  * parts and their classes). Put `ref` and `data-arrive={arrive}` on the host, which has the class `lp-scan`, and call
  * `go(step)` just before the period changes: the old grid is copied, and `arrive` says which way the new one comes in
- * for as long as it does. Only a change made with `go` moves: a period opened from elsewhere just shows.
+ * for as long as it does (`ms`, past the end of its longest animation). Only a change made with `go` moves: a period
+ * opened from elsewhere just shows. (Music's slot calendar uses it for a check's result, with no period at all.)
  */
-export function usePeriodScan<T extends HTMLElement = HTMLElement>() {
+export function usePeriodScan<T extends HTMLElement = HTMLElement>(ms = ARRIVING_MS) {
   const ref = useRef<T>(null);
   const [arrive, setArrive] = useState<{ step: PeriodStep; n: number } | null>(null);
   const go = (step: PeriodStep | null) => {
@@ -310,9 +312,9 @@ export function usePeriodScan<T extends HTMLElement = HTMLElement>() {
   }, [arrive]);
   useEffect(() => {
     if (!arrive) return;
-    const t = window.setTimeout(() => setArrive(null), ARRIVING_MS);
+    const t = window.setTimeout(() => setArrive(null), ms);
     return () => window.clearTimeout(t);
-  }, [arrive]);
+  }, [arrive, ms]);
   return { ref, arrive: arrive?.step, go };
 }
 

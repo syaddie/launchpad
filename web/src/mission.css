@@ -957,6 +957,76 @@
 @keyframes msDotOut { 0% { box-shadow: 0 0 6px var(--ac); } 40% { opacity: 0.35; scale: 0.6; filter: grayscale(1); width: 6px; margin-right: 5px; } 100% { opacity: 0; scale: 0.6; filter: grayscale(1); width: 0; margin-right: 0; } }
 
 /* =====================================================================
+   REVIEW
+   ===================================================================== */
+
+/* The week is a debrief (Review.tsx). As the view opens, its cards report in one after another, each rising in its
+   turn as its icon lights and its figure relights the way the launch clock's dots do; and Claude's recap is printed a
+   line at a time, the headline first, each wiping on with a glow. A new recap for the week showing (refresh, or
+   Sunday evening's while it's open) prints afresh. Not on a change of week (the period scan has that), nor on any other
+   change. --rv-at waits for the view to arrive, by how it came (data-debrief: open, enter or here). */
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .review { --rv-at: 0ms; --rv-gap: calc(var(--m-stagger) * 2.5); --rv-line: calc(var(--m-stagger) * 6); }
+  [data-design='mission'] .review[data-debrief='enter'] { --rv-at: calc(var(--m-view) * 0.4); }
+  [data-design='mission'] .review[data-debrief='open'] { --rv-at: calc(260ms + var(--m-view)); }
+  /* (Outranking the way a new view's panels come in, which it stands in for.) */
+  :root[data-design='mission'] .lp-inner > main.review[data-debrief]:not([data-arrive]) > .rv-grid > .rv-tile.panel { --rv-tile-at: calc(var(--rv-at) + var(--rv-gap) * var(--i, 0)); animation: msRiseUp var(--m-view) var(--e-out) var(--rv-tile-at) both; }
+  [data-design='mission'] .review[data-debrief]:not([data-arrive]) .rv-title > i { animation: msReport var(--m-move) var(--e-settle) calc(var(--rv-tile-at) + var(--m-state)) both; }
+  [data-design='mission'] .review[data-debrief]:not([data-arrive]) .rv-big > .serif { animation: msRelight var(--m-state) steps(3, end) calc(var(--rv-tile-at) + var(--m-move)) both, msGlyphGlow var(--m-sweep) var(--e-out) calc(var(--rv-tile-at) + var(--m-move)) both; }
+  [data-design='mission'] .review .tr-note[data-lines] :is(.tr-note-head, .tr-note-points > li) { --rv-line-at: calc(var(--rv-at) + var(--m-view) * 0.5 + var(--rv-line) * var(--i, 0)); animation: msPrintIn var(--m-sweep) linear var(--rv-line-at) backwards, msGlyphGlow calc(var(--m-sweep) * 1.6) var(--e-out) var(--rv-line-at) backwards; }
+}
+/* The line's bullet (outside its box) shows with it. */
+@keyframes msPrintIn { from { opacity: 0; clip-path: inset(0 100% 0 -2em); } 2% { opacity: 1; } to { clip-path: inset(0 0 0 -2em); } }
+
+/* =====================================================================
+   MUSIC
+   ===================================================================== */
+
+/* Check now searches the slot calendar (SlotFinder.tsx, usePeriodScan in Motion.tsx). While the check asked for runs, a
+   beam crosses the calendar again and again, like a radar's; when its result is in, the calendar as it was goes ahead
+   of the beam's last pass (periodMotion.ts), and each free window lights as the beam finds it, a new one's dot ringing.
+   Only Check now, not the checks every 10 minutes. The other designs show the result as they always have. */
+:root:not([data-design='mission']) .nac-cal-main > .cal-sweep, .nac-hunt { display: none; }
+[data-design='mission'] .nac-cal { position: relative; }
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .nac-cal-main { --sweep: calc(var(--m-sweep) * 1.5); }
+  [data-design='mission'] .nac-cal-main[data-searching] > .nac-cal:not(.cal-copy) > .nac-hunt { display: block; position: absolute; inset: 0; z-index: 2; overflow: hidden; pointer-events: none; border-radius: var(--r); }
+  [data-design='mission'] .nac-hunt > i { position: absolute; inset: 0; animation: msHunt calc(var(--m-sweep) * 2) linear infinite; }
+  [data-design='mission'] .nac-hunt > i::after { content: ''; position: absolute; top: 0; bottom: 0; right: -1px; width: 2px; border-radius: 1px; background: linear-gradient(180deg, transparent, var(--ac) 10%, var(--ac) 90%, transparent); box-shadow: 0 0 10px 1px color-mix(in srgb, var(--ac) 70%, transparent), 0 0 30px 5px color-mix(in srgb, var(--ac) 26%, transparent); }
+  [data-design='mission'] .nac-hunt > i::before { content: ''; position: absolute; top: 0; bottom: 0; right: 0; width: min(160px, 34%); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--ac) 14%, transparent)); }
+  [data-design='mission'] .nac-cal-main[data-found] > .nac-cal:not(.cal-copy) { animation: calWipeIn var(--sweep) var(--sweep-ease) backwards; }
+  /* --x is where the day's middle is across the calendar (periodMotion.ts): its windows light as the beam reaches it. */
+  [data-design='mission'] .nac-cal-main[data-found] > .nac-cal:not(.cal-copy) .nac-chip:not(.mine-only) { animation: msFound calc(var(--sweep) * 1.2) var(--e-out) calc(var(--sweep) * var(--x, 0)) backwards; }
+  [data-design='mission'] .nac-cal-main[data-found] > .nac-cal:not(.cal-copy) .nac-chip.new::after { animation: msDotPing calc(var(--m-sweep) * 1.2) var(--e-out) calc(var(--sweep) * var(--x, 0) + var(--m-state)) backwards; }
+}
+@keyframes msHunt { from { translate: -100% 0; } to { translate: 0 0; } }
+@keyframes msFound { from { background-color: var(--ac); color: var(--on); box-shadow: 0 0 12px -1px var(--ac); } }
+@keyframes msDotPing { from { box-shadow: 0 0 0 0 var(--ac); } to { box-shadow: 0 0 0 6px transparent; } }
+
+/* "Next check" is a small T- countdown (NextCheck in SlotFinder.tsx): its digits roll each second, as a Readout's do,
+   and inside its last minute it's in the colour of now. Screen readers, and the other designs, keep the time. */
+.nac-next-t { display: none; }
+[data-design='mission'] .nac-next-at { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+[data-design='mission'] .nac-next-t { display: inline-block; font: 600 11.5px/1 var(--f-mono); letter-spacing: 0.04em; color: var(--tx); }
+[data-design='mission'] .nac-next-t[data-soon] { color: var(--ms-ignition-ink); }
+
+/* A watched slot that's just freed up pings its day (SlotFinder.tsx, useUnseen): a beacon lights by the day's date in
+   the calendar and sends out two rings, and the day flares once; in the list of watched slots, its tick reports in.
+   Once for each slot freed, on this device (launchpad:freedSlots), and nothing the first time Music opens on one. */
+.nac-cell-ping { display: none; }
+[data-design='mission'] .nac-cell-ping { display: block; position: relative; flex: none; width: 6px; height: 6px; margin-left: 3px; border-radius: 50%; background: var(--ac); box-shadow: 0 0 6px var(--ac); }
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .nac { --ping-at: var(--m-state); }
+  :root[data-design='mission'].lp-opening .nac { --ping-at: calc(260ms + var(--m-view) * 1.6); }
+  [data-design='mission'] .nac-cell-ping { animation: msPingDot calc(var(--m-sweep) * 4.5) var(--e-io) var(--ping-at) both; }
+  [data-design='mission'] .nac-cell-ping::before, [data-design='mission'] .nac-cell-ping::after { content: ''; position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--ac); opacity: 0; animation: msRingOut calc(var(--m-sweep) * 1.4) var(--e-out) calc(var(--ping-at) + var(--m-state)) forwards; }
+  [data-design='mission'] .nac-cell-ping::after { animation-delay: calc(var(--ping-at) + var(--m-state) + var(--m-sweep) * 0.8); }
+  [data-design='mission'] .nac-cell[data-ping] { animation: msDayLit calc(var(--m-sweep) * 1.6) var(--e-out) var(--ping-at) backwards; }
+  [data-design='mission'] .nac-watch[data-ping] > .ph-check-circle { border-radius: 50%; animation: msReport var(--m-move) var(--e-settle) var(--ping-at) both, msTickFlare calc(var(--m-sweep) * 1.2) var(--e-out) calc(var(--ping-at) + var(--m-move)) backwards; }
+}
+@keyframes msPingDot { from { opacity: 0; scale: 0.4; } 8% { opacity: 1; scale: 1; } 80% { opacity: 1; } to { opacity: 0; } }
+
+/* =====================================================================
    SERVER
    ===================================================================== */
 
@@ -1063,4 +1133,7 @@
   [data-design='mission'] .dg-card[data-new] { animation: lpFadeIn var(--m-state) var(--e-out) both; }
   @keyframes msJettison { to { opacity: 0; } }
   @keyframes msDotOut { to { opacity: 0; } }
+  /* Review: the recap's lines fade in one after another; the cards come in with the view. Music: no beam searches and
+     nothing lights or rings (the calendar as it was fades off a check's result), and a freed slot's beacon stands lit. */
+  [data-design='mission'] .review .tr-note[data-lines] :is(.tr-note-head, .tr-note-points > li) { animation: lpFadeIn var(--m-state) var(--e-out) calc(var(--m-stagger) * 4 * var(--i, 0)) backwards; }
 }
