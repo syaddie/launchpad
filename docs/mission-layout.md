@@ -26,6 +26,24 @@ that only Mission shows (with Launchpad's own light and its line in the poll's l
 
 ## Built, against the design system
 
+- Server, built from the ideas below (ideas 48–55; `mission.css` SERVER): the CPU and memory rings are instruments, a
+  scale round each lit up to the reading, sweeping up from nothing as the panel opens, and above 90% a glow round the
+  ring rises and falls slowly for as long as it stays there (idea 48). Test now counts T-3, T-2, T-1 in the dot-matrix
+  face, in the colour of now, then T+ while the test runs (`mission/Count.tsx`, `countText`); when a result lands its
+  four figures sweep up in turn and a ring goes out from its point on the chart (idea 49). Network is the stepping
+  telemetry strip chart: each reading steps the paper on by one and it settles, the minutes are ruled across the paper
+  and move with it, and a pen at its edge writes the latest reading (idea 50). A container whose light changes between
+  readings (`useChanges` in `Motion.tsx`): restarting holds, its light blinking slowly while it does, and coming back
+  it's go with a flare and a band of light along its row; one that goes down is scrubbed, its light slammed in red and
+  its row flashing (idea 51; Restart from the row's menu shows the whole run). Minecraft: the server has a light (go,
+  hold while it starts, scrubbed, standby), Start counts T-3 then T+ until it's up, coming up is an ignition (the chip
+  flares hot, the light rings), stopping without being asked here (a crash, as far as the page can tell) or Launchpad
+  giving up restarting it is scrubbed, and a light for each player aboard, one boarding reporting in with a ring; the
+  servers list has the same lights in place of its dots (idea 52). Dragging files over Files, the lock-on corners close
+  in on the panel and hold there (idea 53). A download or torrent that's moving has a sheen running along its bar now
+  and then, and one that finishes flares its row (idea 54). A new Terminal tab's screen switches on like an old tube: a
+  point spreads into a line across it, the line opens into the screen, and its light fades off (idea 55). Nothing of
+  the terminal's or the files' access changed: these are looks only.
 - Money, built from the ideas below (ideas 44–47; `mission.css` MONEY › GOALS, MONEY › OVERVIEW, MONEY › OWED AND
   STATEMENTS): a savings goal's bar fills like propellant loading as it comes in, slowly while the lines chill, then
   fast, then topping off, a cold vent at its front, over a gauge marked in tenths (idea 44); a goal just reached launches
@@ -277,14 +295,7 @@ All built (ideas 44–47, see Built).
 
 **Server**
 
-48. The CPU and RAM rings are instruments: a tick scale, sweeping up as they open, a slow pulse above 90%. **S**
-49. The speed test counts T-3, then its result sweeps up. **S–M**
-50. Network is the stepping telemetry strip chart (in the design system, not built). **M**
-51. A container restarting goes hold, then go with a flare; one that's down is scrubbed. **S**
-52. Minecraft: a light for a player boarding, a countdown and ignition on start, scrubbed on a crash. **S–M**
-53. Files: dragging over, the lock-on corners close in on the drop zone. **S**
-54. Downloads: a sheen runs along a bar while it downloads, and the row flares when it's done. **S**
-55. A new Terminal tab switches on like a CRT: a line that opens into the screen. **S**
+All built (ideas 48–55, see Built).
 
 **Review and Music**
 

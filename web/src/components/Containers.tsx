@@ -65,9 +65,18 @@ export function markOf(c: ContainerInfo): PollMark {
 
 /**
  * One container in the Services panel, with its logs and, when the restart proxy is there, a restart. `order` is its
- * place in the panel, so Mission's lights report in one after another as it opens.
+ * place in the panel, so Mission's lights report in one after another as it opens; `change` is its light changing
+ * since the last reading, for a moment, so Mission can flare it (go after a hold) or scrub it (gone down).
  */
-export function ContainerRow({ c, order = 0, canRestart, onLogs, onRestarted, notify }: { c: ContainerInfo; order?: number; canRestart: boolean; onLogs: () => void; onRestarted: (error: string | null) => void; notify?: (msg: string) => void }) {
+export function ContainerRow({ c, order = 0, change, canRestart, onLogs, onRestarted, notify }: {
+  c: ContainerInfo;
+  order?: number;
+  change?: { from: PollMark; to: PollMark };
+  canRestart: boolean;
+  onLogs: () => void;
+  onRestarted: (error: string | null) => void;
+  notify?: (msg: string) => void;
+}) {
   const chip = chipOf(c);
   const restart = () =>
     api
@@ -84,7 +93,7 @@ export function ContainerRow({ c, order = 0, canRestart, onLogs, onRestarted, no
     c.name,
   );
   return (
-    <div className="container-row" {...menu}>
+    <div className="container-row" data-change={change?.to} data-from={change?.from} {...menu}>
       <span className="dot" style={{ width: 8, height: 8, background: chip.dot }} />
       <i className={'ms-mark svc-mark ms-mark--' + markOf(c)} style={{ '--i': order } as CSSProperties} aria-hidden="true" />
       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>

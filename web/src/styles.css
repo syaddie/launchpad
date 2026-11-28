@@ -1292,6 +1292,9 @@ button.pix-cell:hover { box-shadow: inset 0 0 0 1px var(--t3); }
 .sync-row-name { display: inline-flex; align-items: center; gap: 8px; min-width: 0; color: var(--t2); }
 /* Mission's go/no-go poll (mission.css, SERVER; more specific than .ms-mark, which shows it). */
 .services .svc-mark, .svc-poll { display: none; }
+/* Mission's instruments, pen, counts and lights on the Server's panels (mission.css, SERVER); more specific than
+   .ms-matrix and .ms-mark, which show them. Nothing of them anywhere else. */
+.gauge .gauge-scale, .gauge .gauge-pulse, .net-strip .net-minute, .net-strip .net-pen, .sc-plot .sc-new, .btn .ms-count, .mc-row .mc-mark, .mc-head .mc-light, .mc-where .mc-crew { display: none; }
 [data-layout='narrow'] .server-row > .services { max-height: none; }
 
 /* Terminal and files: tabs over the view, and a panel that fills the rest of it. */
