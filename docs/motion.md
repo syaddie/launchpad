@@ -183,7 +183,7 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
   one has risen it no longer plays the opening's sweep. Only when today's count went up by one: the server's answer
   gives the one just logged its own time, which isn't another.
 - **An invoice marked paid is stamped** (`Owed.tsx`; `owedStampIn`, `owedLeave` in `styles.css`): it stays in its row a
-  moment with "Paid" where its days left were, then fades and goes on to Paid (when its row's `owedLeave` ends; the
+  moment with "Paid" at the front of its row (where a phone shows it), then fades and goes on to Paid (when its row's `owedLeave` ends; the
   keyboard's place moves on to the next invoice's tick first). Poster stamps PAID across the row, coming down hard and
   squashing a touch; Vista's row blooms with a soft light and "Paid" floats up into focus; Focus snaps its tick on and
   slides "Paid" in; Mission flares the tick, runs a band of light along the row and "Paid" reports in. With less motion

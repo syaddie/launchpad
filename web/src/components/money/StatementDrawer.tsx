@@ -32,7 +32,7 @@ const NO_TICKS: ReadonlySet<string> = new Set();
 /** How many tick in; the rest are just there. */
 const TICKS_MAX = 16;
 /** How long they're marked: past the last one's tick in every design. */
-const TICKS_MS = 3200;
+const TICKS_MS = 4500;
 
 /** Lines from before Money starts are only listed once they're asked for. */
 const listed = (p: Proposal) => !(p.early && p.action === 'skip');

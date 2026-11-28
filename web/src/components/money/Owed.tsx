@@ -70,9 +70,10 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
   /** The waiting list as it's shown: with the one being stamped still in it. */
   const listed = rows.filter((r) => !r.paidOn || r.inv.id === stamped).sort(byDue);
   const paid = rows.filter((r) => r.paidOn && r.inv.id !== stamped).sort(byPaid);
+  const paidAll = rows.filter((r) => r.paidOn);
   const late = open.filter((r) => r.daysLeft < 0);
   const week = open.filter((r) => r.daysLeft >= 0 && r.daysLeft <= 7);
-  const recent = paid.filter((r) => dayDiff(parseYmd(r.paidOn), parseYmd(today)) <= 30);
+  const recent = paidAll.filter((r) => dayDiff(parseYmd(r.paidOn), parseYmd(today)) <= 30);
 
   const num = (draft.num ?? suggestInvoiceNum(money)).trim();
   const canAdd = !!num && !!draft.due && !!draft.amount && money.invoices.length < MAX_INVOICES && money.entries.length < MAX_ENTRIES;
@@ -242,7 +243,7 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
               {listed.map((row, r) => (
                 <tr
                   key={row.inv.id}
-                  className={row.paidOn ? 'paid-now' : row.daysLeft < 0 ? 'late' : undefined}
+                  className={!row.paidOn && row.daysLeft < 0 ? 'late' : undefined}
                   data-stamp={row.paidOn ? '' : undefined}
                   onAnimationEnd={(e) => row.paidOn && e.target === e.currentTarget && e.animationName === 'owedLeave' && unstamp()}
                   {...menuProps(() => rowMenu(row), `Actions for ${label(row)}`)}
@@ -263,9 +264,21 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
                   <td>
                     <TextCell value={row.inv.num} label="Invoice number" r={r} c={0} max={24} className="tnum owed-num-cell" onChange={(v) => patchInv(row.inv.id, { num: v })} />
                   </td>
-                  <td>
-                    <TextCell value={row.inv.event} label="Event" r={r} c={1} max={120} placeholder="What’s it for?" onChange={(v) => patchInv(row.inv.id, { event: v })} />
-                  </td>
+                  {row.paidOn ? (
+                    // Stamped at the front of the row, where it shows at any width (on a phone the table scrolls sideways).
+                    <td className="owed-stamped">
+                      <span className="owed-stamped-in">
+                        <span className="owed-stamp" role="status">
+                          Paid
+                        </span>
+                        <span className="owed-stamped-event">{row.inv.event || '—'}</span>
+                      </span>
+                    </td>
+                  ) : (
+                    <td>
+                      <TextCell value={row.inv.event} label="Event" r={r} c={1} max={120} placeholder="What’s it for?" onChange={(v) => patchInv(row.inv.id, { event: v })} />
+                    </td>
+                  )}
                   <td className="amt">
                     {row.inv.doc ? (
                       <button className="cell num tnum owed-doc-amt" title="Its rows add up to this: open the invoice to change them" aria-label={`${fmtMoney(row.inv.amount)}: open ${label(row)}’s invoice`} onClick={() => setEditor({ inv: row.inv })}>
@@ -279,13 +292,7 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
                     <DateCell value={row.inv.due} label="Payment due" r={r} c={3} onChange={(v) => patchInv(row.inv.id, { due: v })} />
                   </td>
                   <td className="days">
-                    {row.paidOn ? (
-                      <span className="owed-stamp" role="status">
-                        Paid
-                      </span>
-                    ) : (
-                      <DaysLeft d={row.daysLeft} />
-                    )}
+                    {!row.paidOn && <DaysLeft d={row.daysLeft} />}
                   </td>
                   <td>
                     <AccountSelect money={money} value={row.entry.account} label="Paid into" onChange={(account) => patchEntry(row.entry.id, { account })} />

@@ -1913,7 +1913,10 @@ i.file-pinned { color: var(--ac); }
 /* An invoice just marked paid (Owed.tsx) stays in its row a moment, stamped "Paid", then goes on to Paid: here the stamp
    comes in and the row fades as it leaves; each design stamps it its own way (designs.css, mission.css). The row goes
    when its owedLeave ends. */
-.owed-stamp { display: inline-flex; align-items: baseline; padding: 1px 10px; border-radius: 12px; background: var(--okt); color: var(--ok); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.sheet.owed-sheet td.owed-stamped { padding: 0 8px; }
+.owed-stamped-in { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.owed-stamped-event { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.owed-stamp { flex: none; display: inline-flex; align-items: baseline; padding: 1px 10px; border-radius: 12px; background: var(--okt); color: var(--ok); font-size: 13px; font-weight: 600; white-space: nowrap; }
 tr[data-stamp] { --stamp-for: calc(var(--m-sweep) * 1.5); animation: owedLeave var(--m-exit) var(--e-in) var(--stamp-for) forwards; }
 tr[data-stamp] .owed-stamp { animation: owedStampIn var(--m-state) var(--e-out) both; }
 @keyframes owedLeave { to { opacity: 0; } }
