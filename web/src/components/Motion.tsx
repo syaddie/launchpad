@@ -3,7 +3,8 @@
 // added to them. The keyframes and transitions are in motion.css.
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
-import { type PeriodStep, readoutCells, rollDirection } from '../motion';
+import { localGet, localSet } from '../api';
+import { type PeriodStep, type Shown, keepGone, readoutCells, rollDirection, unseen } from '../motion';
 import { leavePeriod, markAcross } from '../periodMotion';
 
 /** The longest an exit may take before its element goes anyway (a page that isn't being drawn never finishes one). */
@@ -12,9 +13,10 @@ const EXIT_CAP_MS = 450;
 /**
  * Keeps its children on the page for a moment after `show` turns false, marked `data-leaving` (and
  * inert, so nothing in them can be used or focused), while they animate out; then removes them.
- * The wrapper is `display: contents`, so it adds no box. Showing again while leaving brings them back.
+ * The wrapper is `display: contents`, so it adds no box (unless `className` gives it one, as FoldRow's does). Showing
+ * again while leaving brings them back. `cap` (ms): the longest the exit may take.
  */
-export function Presence({ show, children }: { show: boolean; children: ReactNode }) {
+export function Presence({ show, children, className, cap = EXIT_CAP_MS }: { show: boolean; children: ReactNode; className?: string; cap?: number }) {
   const last = useRef<ReactNode>(null);
   const [leaving, setLeaving] = useState(false);
   const [mounted, setMounted] = useState(show);
@@ -36,7 +38,7 @@ export function Presence({ show, children }: { show: boolean; children: ReactNod
       setLeaving(false);
       setMounted(false);
     };
-    const cap = window.setTimeout(finish, EXIT_CAP_MS);
+    const timer = window.setTimeout(finish, cap);
     // Wait for the exit animations motion.css started (not endless ones, such as a spinner inside).
     const exits = ref.current?.getAnimations({ subtree: true }).filter((a) => a.effect?.getComputedTiming().iterations !== Infinity) ?? [];
     if (!exits.length) finish();
@@ -44,13 +46,13 @@ export function Presence({ show, children }: { show: boolean; children: ReactNod
     return () => {
       // Shown again (or gone): this exit no longer decides anything.
       done = true;
-      window.clearTimeout(cap);
+      window.clearTimeout(timer);
     };
-  }, [leaving]);
+  }, [leaving, cap]);
 
   if (!mounted) return null;
   return (
-    <div ref={ref} className="lp-presence" data-leaving={leaving ? '' : undefined} inert={leaving || undefined}>
+    <div ref={ref} className={'lp-presence' + (className ? ' ' + className : '')} data-leaving={leaving ? '' : undefined} inert={leaving || undefined}>
       {show ? children : last.current}
     </div>
   );
@@ -75,6 +77,134 @@ export function useSettled(): boolean {
     };
   }, []);
   return settled;
+}
+
+/** Whether the page is in view (not a tab in the background), following it. */
+export function usePageVisible(): boolean {
+  const [visible, setVisible] = useState(() => !document.hidden);
+  useEffect(() => {
+    const on = () => setVisible(!document.hidden);
+    document.addEventListener('visibilitychange', on);
+    return () => document.removeEventListener('visibilitychange', on);
+  }, []);
+  return visible;
+}
+
+const NONE: ReadonlySet<string> = new Set();
+
+/**
+ * Which of `keys` are new since this device last showed them, so a design can light them once as they first appear
+ * (Training's new bests, the Digest's new lessons) rather than every time the view opens. What's been seen is kept in
+ * localStorage under `store`; with no record yet (the first time this runs) nothing is new, since what's there was there
+ * before. Worked out while rendering, so what's new is marked from the first frame it's drawn in, and only while the
+ * page is in view: what arrives while the tab is in the background is still new when you come back to it. They stay
+ * marked for `hold` ms, or as long as the view is open when it's left out.
+ */
+export function useUnseen(store: string, keys: string[], hold?: number): ReadonlySet<string> {
+  const sig = keys.join('\n');
+  const visible = usePageVisible();
+  const [state, setState] = useState(() => ({ sig: null as string | null, seen: localGet(store), fresh: NONE }));
+  if (visible && state.sig !== sig) {
+    const found = unseen(keys, state.seen);
+    setState({ sig, seen: JSON.stringify(keys), fresh: found.length ? new Set(found) : state.fresh });
+  }
+  useEffect(() => {
+    if (state.sig !== null) localSet(store, state.seen!);
+  }, [store, state.sig, state.seen]);
+  useEffect(() => {
+    if (!hold || !state.fresh.size) return;
+    const t = window.setTimeout(() => setState((s) => ({ ...s, fresh: NONE })), hold);
+    return () => window.clearTimeout(t);
+  }, [hold, state.fresh]);
+  return state.fresh;
+}
+
+/** How long rows that just arrived stay marked: past the end of the longest way a design brings them in. */
+const ARRIVED_MS = 2000;
+
+/**
+ * Which of `ids` just came into a list that's showing (new mail, an archived email brought back by Undo), so a design
+ * can bring them in: those that weren't there the render before, for a moment. What's there as the list appears, or
+ * comes in during its first frames, just shows (useSettled). Worked out while rendering, so a new row is marked from
+ * the first frame it's drawn in.
+ */
+export function useArrived(ids: string[]): ReadonlySet<string> {
+  const settled = useSettled();
+  const sig = ids.join('\n');
+  const [state, setState] = useState(() => ({ sig, ids: new Set(ids), fresh: NONE }));
+  if (state.sig !== sig) {
+    const came = settled ? ids.filter((id) => !state.ids.has(id)) : [];
+    setState({ sig, ids: new Set(ids), fresh: came.length ? new Set([...state.fresh, ...came]) : state.fresh });
+  }
+  useEffect(() => {
+    if (!state.fresh.size) return;
+    const t = window.setTimeout(() => setState((s) => ({ ...s, fresh: NONE })), ARRIVED_MS);
+    return () => window.clearTimeout(t);
+  }, [state.fresh]);
+  return state.fresh;
+}
+
+/** How long a row taken out of a list is kept, marked gone, for its FoldRow to see it go. */
+const GONE_MS = 3000;
+
+/**
+ * A list as it's shown, with what's been taken out of it kept in its place for a moment, marked `gone`, so a FoldRow can
+ * see it go (bills kept or dismissed are dropped from the list, not marked). What's added goes where the list has it.
+ */
+export function useWithGone<T>(items: T[], key: (item: T) => string): Shown<T>[] {
+  const [state, setState] = useState(() => ({ items, shown: keepGone([], items, key, 0, GONE_MS) }));
+  if (state.items !== items) setState({ items, shown: keepGone(state.shown, items, key, Date.now(), GONE_MS) });
+  return state.shown;
+}
+
+/** The longest a row may take to go: sliding out, then the rows after it closing up (motion.css, ROWS). */
+const FOLD_CAP_MS = 1200;
+
+/**
+ * A row in a list that can go (an email archived, a bill kept or dismissed) or arrive (new mail): while `show` is true
+ * it's there; when it turns false it slides out and the rows after it close up, kept on the page (inert) by Presence
+ * meanwhile. `arriving` brings a new one in, the list opening up for it; `i` orders several arriving at once (0 first).
+ * Rows that go while one has the keyboard's focus should call focusPastRow first.
+ */
+export function FoldRow({ show, arriving, i, children }: { show: boolean; arriving?: boolean; i?: number; children: ReactNode }) {
+  return (
+    <Presence show={show} className="lp-fold" cap={FOLD_CAP_MS}>
+      <div className="lp-fold-in" data-new={arriving ? '' : undefined} style={arriving && i ? ({ '--i': i } as CSSProperties) : undefined}>
+        {children}
+      </div>
+    </Presence>
+  );
+}
+
+const FOCUSABLE = 'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Before rows go (FoldRow), moves the keyboard's place out of one that has it to the next row in its list, or the one
+ * before when it was the last, so the keys carry on down the list instead of starting again from the top of the page.
+ * With no row left, to what's next to the list (a heading's button), or the panel itself. `going` says which rows go.
+ */
+export function focusPastRow(going: (row: Element) => boolean) {
+  const row = document.activeElement?.closest('.lp-fold');
+  if (!(row instanceof HTMLElement) || !going(row)) return;
+  const stays = (el: Element | null): el is HTMLElement => el instanceof HTMLElement && el.matches('.lp-fold:not([data-leaving])') && !going(el);
+  const walk = (dir: 'nextElementSibling' | 'previousElementSibling') => {
+    for (let el = row[dir]; el?.matches('.lp-fold'); el = el[dir]) if (stays(el)) return el;
+    return null;
+  };
+  const near = (dir: 'nextElementSibling' | 'previousElementSibling') => {
+    for (let el = row[dir]; el; el = el[dir]) if (!el.matches('.lp-fold')) return (el.matches(FOCUSABLE) ? el : el.querySelector(FOCUSABLE)) as HTMLElement | null;
+    return null;
+  };
+  const to = walk('nextElementSibling') ?? walk('previousElementSibling');
+  let target = (to?.querySelector(FOCUSABLE) as HTMLElement | null) ?? near('nextElementSibling') ?? near('previousElementSibling');
+  if (!target) {
+    const panel = row.closest('.panel');
+    if (panel instanceof HTMLElement) {
+      if (!panel.hasAttribute('tabindex')) panel.tabIndex = -1;
+      target = panel;
+    }
+  }
+  target?.focus();
 }
 
 /**

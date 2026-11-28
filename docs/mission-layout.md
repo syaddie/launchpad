@@ -148,6 +148,35 @@ that only Mission shows (with Launchpad's own light and its line in the poll's l
   Vista floats it down, Focus is quick with no bounce, Poster slams it down and it squashes as it hits; in Mission it's
   a landing: it comes down lit, slowing to a touchdown, a ring goes out as it touches, and it cools to the other days'
   grey before the line runs on at a steady rate.
+- New lessons come in on a downlink's sweep (idea 29; `useUnseen` in `Motion.tsx`, `Today` in `Digest.tsx`,
+  `mission.css` DIGEST AND INBOX): today's lessons that are new since this device last showed them (the morning's, or
+  one swapped in with Another one) are drawn in from the top behind a lit line, one after another, as if received line
+  by line, and each subject's placard relights as the line passes it; opening the Digest, once the view has arrived.
+  Not every time the Digest opens, and nothing on a device's first run (what's there was there before); what's been
+  seen is kept in `localStorage` (`launchpad:seenLessons`). Less motion: they fade in.
+- The day's quick checks are a row of lights (idea 30, every layout; `DayLights` and `useDayDone` in `Digest.tsx`): on
+  each of today's quick checks, a light for every lesson with one, this lesson's ringed: hollow until answered, lit once
+  it is, and once all are answered, all the colour of fine. Answering the last (here, or on another device) lights them
+  that way one after another; opening a day already done just shows them lit. Vista blooms each, Focus snaps them on,
+  Poster stamps square ones; in Mission they stand by dashed, then report in green, each sending out a ring, and a small
+  GO lights after the last. Only with two or more checks in the day. Less motion: they change colour in turn, without
+  growing.
+- Checking for new mail pings, and new mail slides in (idea 31, every layout; `Inbox.tsx`, `useArrived` in
+  `Motion.tsx`): while Check for new mail runs, rings go out from its button one after another (Mission's lit like
+  sonar, Vista's a soft halo, Focus's one thin ring, Poster's square, knocked out in steps) and the line says "Checking
+  for new mail…". Emails that come in while the Inbox shows (from the button, the hourly check or another device), and
+  the digest items they bring, slide in at the top as the list opens up for them, the oldest first; Mission lights them
+  as they report in. The counts in the head and the columns roll. Less motion: one still ring while it checks; what
+  arrives fades in.
+- An email archived folds away (idea 32, every layout; `FoldRow`, `focusPastRow` and `useWithGone` in `Motion.tsx`,
+  `motion.css` ROWS COMING AND GOING): an email or a digest item archived, from its button or its menu, slides out to
+  the side, then the rows after it close up; Undo brings it back, sliding in. The keyboard's place moves on to the next
+  row (or the one before, or the panel), so archiving with the keys carries on down the list. A bill kept or dismissed
+  goes the same way, and the bills panel after its last. Marking read doesn't take an email out of the list (it's still
+  in the inbox), so its unread dot goes out instead, like a light, and the words close over where it was. Vista drifts
+  it away, Poster wipes it off, Mission jettisons it like a spent stage, dimming and greying as it drops back. The
+  Inbox's source light still blinks for each change (idea 21). Less motion: the row fades, then the list closes up at
+  once.
 - Reduced motion: the sky still shows the hour; nothing moves and nothing launches.
 
 ## Not built yet (in the design system, not in the app)
@@ -190,13 +219,6 @@ aerospace quirks. Most are Mission's own; those marked *(every design)* are moti
 way (docs/motion.md). **S** is small, mostly reusing what's there (the Month scan and lock-on corners in `mission.css`,
 `msReport`, `msLiftoff`, `Readout`, `useGlide`); **M** is a new piece. Aerospace words ("T+", "LOS", "go") stay in the
 small mono labels; the messages themselves stay plain.
-
-**Digest and Inbox**
-
-29. The morning's new lessons arrive with a short sweep, like a downlink, the first time they're seen. **S**
-30. Answering every quick check of the day lights a row of lights green, one after another. **S** *(every design)*
-31. Checking for new mail sends a ping out from the button; new emails slide in. **S** *(every design)*
-32. An email archived or marked read slides out and the list closes up. **S–M** *(every design)*
 
 **You**
 

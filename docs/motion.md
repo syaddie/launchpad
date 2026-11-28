@@ -5,7 +5,8 @@ changed; very little moves by itself. Each design moves in its own character, fr
 
 The code: `web/src/motion.css` (the tokens, each design's character, and the shared motion: controls, highlights,
 figures, things that open and close, views, the opening, what's alive on its own, less motion);
-`web/src/components/Motion.tsx` (`Presence`, `Readout`, `useGlide`, `useSettled`, `usePeriodScan`, `Glyphs`);
+`web/src/components/Motion.tsx` (`Presence`, `Readout`, `useGlide`, `useSettled`, `usePeriodScan`, `Glyphs`, `useUnseen`,
+`useArrived`, `FoldRow`, `useWithGone`, `focusPastRow`, `usePageVisible`);
 `web/src/periodMotion.ts` (changing a period with arrows); `web/src/viewTransition.ts`
 (changing view); `web/src/motion.ts` (the pure parts, tested in `test/motion.test.ts`); `web/src/loadable.tsx` (views
 that render at once once their code is in). A part of the app's own motion (a task ticking off, a meter filling) is
@@ -66,7 +67,10 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
   in turn as it opens; an Undo message counts down in five dots going out one by one. In Training, a new best lands with
   a flare and its lift's line draws on to the new high, which sends out a ring; a sync is a downlink (DOWNLINK, signal
   bars, packets) and what it brings reports in, lit; a weight logged comes down to a touchdown on its day before the line
-  runs on to it. See [`mission-layout.md`](mission-layout.md).
+  runs on to it. In the Digest, the day's new lessons come in on a downlink's sweep the first time they're seen, and
+  the day's quick checks report in green, with a GO, as the last is answered; in the Inbox, checking for new mail is a
+  sonar ping, what it brings reports in lit, and an email archived drops back like a spent stage. See
+  [`mission-layout.md`](mission-layout.md).
 - **Vista** drifts like light on glass: long, soft arrivals and a 7% spring. Its photo drifts so slowly you only notice
   it has moved. Its views don't use the browser's transitions (`--m-view-mode: enter`): the glass blurs the photo
   behind it, which a part pictured on its own, or anything inside a fading container, can't see. So the new view's
@@ -142,18 +146,37 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
   marked `data-new` while it slides in.) Training's sessions are marked `data-new` for a moment instead
   (`useArrivals`, which waits for `useSettled` too), by when they started, since an import's ids and Hevy's differ for
   the same session: those after the newest one shown slide in at the top of Recent sessions, the oldest first, and their
-  day in the week brings them in (`trArrive` in `styles.css`; Vista drifts, Poster wipes, Mission lights them).
+  day in the week brings them in (`trArrive` in `styles.css`; Vista drifts, Poster wipes, Mission lights them). The
+  Inbox's emails, and the digest items they bring, are marked by `useArrived` (ids that weren't there the render
+  before, once the list has settled), so new mail and an email Undo brings back come in as rows do (below).
+- **Rows coming and going** (`FoldRow` in `Motion.tsx`; `motion.css`, ROWS COMING AND GOING): a row that goes from a
+  list (an email archived, a bill kept or dismissed) slides out to the side, then the rows after it close up (its box is
+  a grid of one row closing to nothing, and the gap after it closes too, `--fold-gap`); one that arrives has the list
+  open up for it and slides in, several the oldest first. `Presence` keeps the going row on the page, inert, while it
+  goes (`className` gives its wrapper a box, `cap` a longer limit). A list whose items are dropped rather than marked
+  keeps them for a moment with `useWithGone`. Before a row goes, `focusPastRow` moves the keyboard's place from inside it
+  to the next row (or the one before, or what's beside the list, or the panel), so the keys carry on down the list.
+  Vista drifts, Focus is quick, Poster wipes the row off and on, Mission jettisons it like a spent stage (dimming,
+  greying, dropping back). An email marked read stays in the list; its unread dot goes out like a light instead.
 - **Waiting on a sync.** Training's Sync now puts a downlink in place of the line about your workouts while it runs:
   the words, and a light running along under them in each design's way (`.tr-downlink`). It's the only thing there
-  that moves by itself, and only for as long as the sync takes.
+  that moves by itself, and only for as long as the sync takes. The Inbox's Check for new mail sends rings out from its
+  button, one after another, for as long as it checks (`.inbox-ping`; Mission's a lit sonar ring, Vista's a soft halo,
+  Focus's one thin ring, Poster's square, in steps).
+- **The day's quick checks** in the Digest are a row of lights on each (`DayLights`, `useDayDone` in `Digest.tsx`):
+  hollow until answered, then lit, and all the colour of fine once every one is. Answering the last lights them that
+  way one after another, each design in its way (Vista blooms, Focus snaps, Poster stamps, Mission reports in with a ring
+  each and a GO); opening a day already done just shows them.
 - **What you log lands.** A weight logged drops onto the body weight chart, on its day, from just above the chart (or
   from where it was, if that day's weight changed), and when it's the latest the 7-day line runs on to it and its end
   lights again (`useLanding`, `WeightChart`; `trDrop`, `trRunOn` in `styles.css`). Vista floats it down, Focus is quick,
   Poster slams it so it squashes as it hits, Mission brings it down to a touchdown with a ring. A removal, or many days
   changing at once (a restore), doesn't land anything.
-- **A new best** in Training's Your lifts lands once, the first time this device shows it (`useNewBests`, keeping
-  what's been seen in `localStorage`): Mission's flare and line drawing to the new high (`mission.css`, TRAINING); the
-  other designs show the chip as they always have.
+- **What's new lands once**, the first time this device shows it, not every time its view opens (`useUnseen` in
+  `Motion.tsx`, keeping what's been seen in `localStorage`; nothing is new on a device's first run): a new best in
+  Training's Your lifts (Mission's flare and line drawing to the new high, `mission.css` TRAINING; the other designs show
+  the chip as they always have), and the day's new lessons in the Digest (Mission draws each in behind a lit line, like
+  a downlink, `mission.css` DIGEST AND INBOX; the others show them as they always have).
 
 ## Alive on its own
 
@@ -163,9 +186,9 @@ second rather than every frame), Mission's sky and the ring today's date breathe
 nothing is repainted for it), and the runway lights on Mission's apron when Home has no photos (each dot on or off, a
 run every few seconds). In Mission, a running study timer's digits relight as they change and its dot breathes a
 beacon (scaled), and an empty state's drawing has its mast lamp blinking with the site's (stepped). Busy states
-(a spinner, a skeleton line, Mission's acquiring line and satellite, Training's downlink) move only while something is
-being waited for. The tab's title changes once a second only while it counts to an event inside the hour or a running
-study timer.
+(a spinner, a skeleton line, Mission's acquiring line and satellite, Training's downlink, the Inbox's ping) move only
+while something is being waited for. The tab's title changes once a second only while it counts to an event inside the
+hour or a running study timer.
 
 ## Less motion
 

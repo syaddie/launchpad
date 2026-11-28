@@ -96,3 +96,29 @@ export function landedDay(before: Record<string, number>, after: Record<string, 
   const changed = Object.keys(after).filter((d) => before[d] !== after[d]);
   return changed.length === 1 ? changed[0] : null;
 }
+
+/** An entry of a list as it's shown: `gone` once it's been taken out of the list, since `at` (ms). */
+export type Shown<T> = { item: T; gone: boolean; at: number };
+
+/**
+ * A list as it's shown, after it changed (useWithGone in Motion.tsx, for rows that fold away as they go): what's in it
+ * now, in its order, with what's just been taken out kept in its place (after what was before it, if that's still
+ * there) and marked gone, for `keepFor` ms from when it went. One taken out and put back is simply there again.
+ */
+export function keepGone<T>(shown: Shown<T>[], items: T[], key: (item: T) => string, now: number, keepFor: number): Shown<T>[] {
+  const keys = new Set(items.map(key));
+  const out: Shown<T>[] = items.map((item) => ({ item, gone: false, at: 0 }));
+  shown.forEach((p, n) => {
+    if (keys.has(key(p.item)) || (p.gone && now - p.at > keepFor)) return;
+    let at = 0;
+    for (let j = n - 1; j >= 0; j--) {
+      const found = out.findIndex((s) => key(s.item) === key(shown[j].item));
+      if (found >= 0) {
+        at = found + 1;
+        break;
+      }
+    }
+    out.splice(at, 0, { item: p.item, gone: true, at: p.gone ? p.at : now });
+  });
+  return out;
+}

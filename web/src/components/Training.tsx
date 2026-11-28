@@ -9,8 +9,8 @@ import type { AppState, ExerciseMuscles, Training, Workout, WorkoutSet } from '.
 import { localGet, localSet } from '../api';
 import { ago, fmtDay, hm, niceMax } from '../util';
 import { copyText, menuProps } from './ContextMenu';
-import { landedDay, periodStep, unseen } from '../motion';
-import { Glide, Glyphs, Readout, usePeriodScan, useSettled } from './Motion';
+import { landedDay, periodStep } from '../motion';
+import { Glide, Glyphs, Readout, usePeriodScan, useSettled, useUnseen } from './Motion';
 import { EmptyArt } from './mission/EmptyArt';
 
 type Muscles = Record<string, ExerciseMuscles>;
@@ -499,40 +499,10 @@ const LIFTS_SHOWN = 40;
 /** A best as the list shows it: the lift and its new high, so the same best is the same key however often it's drawn. */
 const bestKey = (l: { title: string; latest: number | null }) => `${l.title}|${l.latest}`;
 
-/**
- * The bests (`bestKey`) that are new since this device last showed Your lifts, so a design can light them once when
- * they land (Mission does) rather than every time Training opens. Worked out while rendering, so a new best's chip is
- * marked from the first frame it's drawn in, and only while the page is in view, so one that arrives with a sync while
- * the tab is in the background is still new when you come back to it.
- */
-function useNewBests(keys: string[]): ReadonlySet<string> {
-  const sig = keys.join('\n');
-  const visible = usePageVisible();
-  const [state, setState] = useState(() => ({ sig: null as string | null, seen: localGet('seenBests'), fresh: new Set<string>() as ReadonlySet<string> }));
-  if (visible && state.sig !== sig) {
-    const found = unseen(keys, state.seen);
-    setState({ sig, seen: JSON.stringify(keys), fresh: found.length ? new Set(found) : state.fresh });
-  }
-  useEffect(() => {
-    if (state.sig !== null) localSet('seenBests', state.seen!);
-  }, [state.sig, state.seen]);
-  return state.fresh;
-}
-
-/** Whether the page is in view (not a tab in the background), following it. */
-function usePageVisible(): boolean {
-  const [visible, setVisible] = useState(() => !document.hidden);
-  useEffect(() => {
-    const on = () => setVisible(!document.hidden);
-    document.addEventListener('visibilitychange', on);
-    return () => document.removeEventListener('visibilitychange', on);
-  }, []);
-  return visible;
-}
-
 function Lifts({ workouts, today, muscles, pinned, onOpen }: { workouts: Workout[]; today: Date; muscles: Muscles; pinned: string[]; onOpen: (title: string) => void }) {
   const lifts = useMemo(() => liftTrends(workouts, today, { pinned, muscles, n: LIFTS_SHOWN }), [workouts, today, pinned, muscles]);
-  const fresh = useNewBests(useMemo(() => lifts.filter((l) => l.pr).map(bestKey), [lifts]));
+  // New since this device last showed Your lifts, so a design can light them once when they land (Mission does).
+  const fresh = useUnseen('seenBests', useMemo(() => lifts.filter((l) => l.pr).map(bestKey), [lifts]));
   return (
     <section className="panel you-panel tr-lifts" aria-label="Your lifts">
       <div className="panel-head">

@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { AppState, BillSuggestion, InboxEmail, InboxItem, InboxRange } from '../../../shared/types';
 import { localGet, localSet } from '../api';
 import type { InboxAction } from '../hooks/useGoogleActions';
 import { billLine, gmailUrl, liveEmails } from '../inboxActions';
 import { ago } from '../util';
-import { Glide } from './Motion';
+import { FoldRow, Glide, Readout, focusPastRow, useArrived, useWithGone } from './Motion';
 import { copyText, menuProps, type MenuItem } from './ContextMenu';
 import { EmptyArt } from './mission/EmptyArt';
 
@@ -45,8 +45,9 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, a
   const r = RANGES.find((x) => x.key === range)!;
   const st = data.sync.inbox;
   const { inbox, google } = data;
-  // Archived from here: out of the list and the digest.
-  const emails = inbox.emails.filter((e) => !e.archived && now.getTime() - Date.parse(e.at) <= r.ms);
+  // The range's emails; those archived from here are out of the list and the digest (they fold away as they go).
+  const inRange = inbox.emails.filter((e) => now.getTime() - Date.parse(e.at) <= r.ms);
+  const emails = inRange.filter((e) => !e.archived);
   const byId = new Map(inbox.emails.map((e) => [e.id, e]));
   const digest = inbox.digests[range];
   const unread = emails.filter((e) => e.unread).length;
@@ -54,8 +55,29 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, a
   const showAll = allOpen || !digest;
   const ready = google.connected && data.prefs.sources.gmail;
   const canModify = !google.missingScopes?.includes('gmail.modify');
-  const acts = actions && { ...actions, canModify };
-  const bills = data.bills ?? [];
+  // New mail that comes in while the view shows (a check, the hourly one), and an email Undo brings back, slide in.
+  const arrived = useArrived(useMemo(() => inbox.emails.filter((e) => !e.archived).map((e) => e.id), [inbox.emails]));
+  const bills = useWithGone(data.bills ?? NO_BILLS, billKey);
+  const acts: Acts | undefined = actions && {
+    ...actions,
+    canModify,
+    // The keyboard's place moves on from a row that's about to go, to the next.
+    onAction: (mails, action) => {
+      if (action === 'archive') {
+        const ids = new Set(mails.map((m) => m.id));
+        focusPastRow((row) => rowMails(row).every((id) => ids.has(id)));
+      }
+      actions.onAction(mails, action);
+    },
+    onKeepBill: (b) => {
+      focusPastRow((row) => row.querySelector<HTMLElement>('[data-bill]')?.dataset.bill === b.id);
+      actions.onKeepBill(b);
+    },
+    onDismissBill: (b) => {
+      focusPastRow((row) => row.querySelector<HTMLElement>('[data-bill]')?.dataset.bill === b.id);
+      actions.onDismissBill(b);
+    },
+  };
 
   const pick = (k: InboxRange) => {
     setRange(k);
@@ -82,10 +104,14 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, a
     );
   }
 
+  // Several arriving at once come in the oldest first (the list is newest first).
+  const coming = inRange.filter((e) => arrived.has(e.id)).map((e) => e.id);
   const list = (
     <>
-      {emails.map((e) => (
-        <EmailRow key={e.id} e={e} now={now} account={google.email} acts={acts} notify={notify} />
+      {inRange.map((e) => (
+        <FoldRow key={e.id} show={!e.archived} arriving={arrived.has(e.id)} i={coming.length - 1 - coming.indexOf(e.id)}>
+          <EmailRow e={e} now={now} account={google.email} acts={acts} notify={notify} />
+        </FoldRow>
       ))}
     </>
   );
@@ -105,15 +131,25 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, a
           {!data.newsSummaries && <span>Emails only · set ANTHROPIC_API_KEY on the server for summaries</span>}
           {inbox.fetchedAt && (
             <span>
-              {emails.length} email{emails.length === 1 ? '' : 's'}
-              {unread ? ` · ${unread} unread` : ''}
+              <Readout text={String(emails.length)} id="inbox-emails" /> email{emails.length === 1 ? '' : 's'}
+              {unread ? (
+                <>
+                  {' · '}
+                  <Readout text={String(unread)} id="inbox-unread" /> unread
+                </>
+              ) : (
+                ''
+              )}
             </span>
           )}
           {st.lastError && <span style={{ color: 'var(--wn)' }} title={st.lastError}>Couldn’t update</span>}
-          <span>{busy ? 'Updating…' : st.lastSuccess ? `Updated ${ago(st.lastSuccess, now)}` : ''}</span>
-          <button className="icon-btn md" title="Check for new mail and summarise it now" aria-busy={busy} disabled={busy} onClick={onRefresh}>
-            <i className={'ph-duotone ph-arrow-clockwise' + (busy ? ' spin' : '')} />
-          </button>
+          <span>{busy ? 'Checking for new mail…' : st.lastSuccess ? `Updated ${ago(st.lastSuccess, now)}` : ''}</span>
+          {/* Checking sends a ping out from the button, again and again until the answer's in (idea 31). */}
+          <span className="inbox-ping" data-busy={busy || undefined}>
+            <button className="icon-btn md" title="Check for new mail and summarise it now" aria-label="Check for new mail" aria-busy={busy} disabled={busy} onClick={onRefresh}>
+              <i className={'ph-duotone ph-arrow-clockwise' + (busy ? ' spin' : '')} />
+            </button>
+          </span>
         </div>
       </div>
 
@@ -126,45 +162,50 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, a
         </div>
       )}
 
-      {actions && bills.length > 0 && (
-        <section className="panel inbox-bills" aria-label="Bills and receipts">
-          <div className="panel-head">
-            <h2 className="panel-title">Bills and receipts</h2>
-            <span className="meta">From your email · nothing goes into Money until you keep it</span>
-          </div>
-          <div className="scroll">
-            {bills.map((b) => (
-              <div
-                key={b.id}
-                className="bill-row"
-                {...menuProps(
-                  () => [
-                    { label: 'Add to Money', icon: 'ph-wallet', onSelect: () => actions.onKeepBill(b) },
-                    { label: 'Open the email', icon: 'ph-arrow-square-out', href: gmailUrl(google.email, b.threadId), newTab: true },
-                    'sep',
-                    { label: 'Dismiss', icon: 'ph-x', danger: true, confirm: `Dismiss “${b.subject}”? It won’t be suggested again.`, onSelect: () => actions.onDismissBill(b) },
-                  ],
-                  b.subject,
-                )}
-              >
-                <div className="bill-what">
-                  {billLine(b)}
-                  <a href={gmailUrl(google.email, b.threadId)} target="_blank" rel="noopener" title={b.source === 'claude' ? 'Read by Claude' : undefined}>
-                    {b.subject}
-                  </a>
-                </div>
-                <div className="pkg-new">
-                  <button className="keep" onClick={() => actions.onKeepBill(b)}>
-                    Keep
-                  </button>
-                  <button className="dismiss" onClick={() => actions.onDismissBill(b)}>
-                    Dismiss
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+      {acts && (
+        // The panel goes the way its last bill does, and the page closes up after it.
+        <FoldRow show={bills.some((x) => !x.gone)}>
+          <section className="panel inbox-bills" aria-label="Bills and receipts">
+            <div className="panel-head">
+              <h2 className="panel-title">Bills and receipts</h2>
+              <span className="meta">From your email · nothing goes into Money until you keep it</span>
+            </div>
+            <div className="scroll">
+              {bills.map(({ item: b, gone }) => (
+                <FoldRow key={b.id} show={!gone}>
+                  <div
+                    className="bill-row"
+                    data-bill={b.id}
+                    {...menuProps(
+                      () => [
+                        { label: 'Add to Money', icon: 'ph-wallet', onSelect: () => acts.onKeepBill(b) },
+                        { label: 'Open the email', icon: 'ph-arrow-square-out', href: gmailUrl(google.email, b.threadId), newTab: true },
+                        'sep',
+                        { label: 'Dismiss', icon: 'ph-x', danger: true, confirm: `Dismiss “${b.subject}”? It won’t be suggested again.`, onSelect: () => acts.onDismissBill(b) },
+                      ],
+                      b.subject,
+                    )}
+                  >
+                    <div className="bill-what">
+                      {billLine(b)}
+                      <a href={gmailUrl(google.email, b.threadId)} target="_blank" rel="noopener" title={b.source === 'claude' ? 'Read by Claude' : undefined}>
+                        {b.subject}
+                      </a>
+                    </div>
+                    <div className="pkg-new">
+                      <button className="keep" onClick={() => acts.onKeepBill(b)}>
+                        Keep
+                      </button>
+                      <button className="dismiss" onClick={() => acts.onDismissBill(b)}>
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                </FoldRow>
+              ))}
+            </div>
+          </section>
+        </FoldRow>
       )}
 
       {!inbox.fetchedAt ? (
@@ -203,18 +244,27 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, a
           </section>
           <div className="news-grid inbox-grid">
             {COLUMNS.map((c) => {
-              // An item whose emails were all archived here is done with.
-              const items = digest?.items.filter((i) => i.kind === c.kind && liveEmails(i, byId).length > 0) ?? [];
+              const all = digest?.items.filter((i) => i.kind === c.kind) ?? [];
+              // An item whose emails were all archived here is done with (it folds away as it goes).
+              const live = (i: InboxItem) => liveEmails(i, byId).length > 0;
+              const items = all.filter(live);
+              const fresh = items.filter((i) => i.emails.some((id) => arrived.has(id)));
               return (
                 <section key={c.kind} className="panel" aria-label={c.title}>
                   <div className="panel-head">
                     <h2 className="panel-title">{c.title}</h2>
-                    {items.length > 0 && <span className="meta">{items.length}</span>}
+                    {items.length > 0 && (
+                      <span className="meta">
+                        <Readout text={String(items.length)} id={`inbox-${c.kind}`} />
+                      </span>
+                    )}
                   </div>
-                  <div className="scroll" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <div className="scroll inbox-col">
                     {digest && !items.length && c.empty && <div className="news-note">{c.empty}</div>}
-                    {items.map((it) => (
-                      <Item key={it.emails.join(',') || it.headline} it={it} byId={byId} account={google.email} acts={acts} notify={notify} />
+                    {all.map((it) => (
+                      <FoldRow key={it.emails.join(',') || it.headline} show={live(it)} arriving={fresh.includes(it)} i={fresh.length - 1 - fresh.indexOf(it)}>
+                        <Item it={it} byId={byId} account={google.email} acts={acts} notify={notify} />
+                      </FoldRow>
                     ))}
                     {c.kind === 'fyi' && (
                       <>
@@ -239,6 +289,32 @@ export function Inbox({ data, now, busy, onRefresh, onConnect, onOpenSettings, a
 
 type Acts = InboxActions & { canModify: boolean };
 
+const billKey = (b: BillSuggestion) => b.id;
+const NO_BILLS: BillSuggestion[] = [];
+
+/** The emails a row in the view shows (its data-mail), to tell which rows go when emails are archived. */
+const rowMails = (row: Element) => row.querySelector<HTMLElement>('[data-mail]')?.dataset.mail?.split(' ').filter(Boolean) ?? [];
+
+/** How long the unread dot takes to go out once an email's read: past the end of the longest way a design does it. */
+const DOT_OUT_MS = 700;
+
+/** An unread email's dot. When it's read the dot goes out like a light rather than vanishing (styles.css, Inbox). */
+function UnreadDot({ on }: { on: boolean }) {
+  const [was, setWas] = useState(on);
+  const [out, setOut] = useState(false);
+  if (was !== on) {
+    setWas(on);
+    setOut(!on);
+  }
+  useEffect(() => {
+    if (!out) return;
+    const t = window.setTimeout(() => setOut(false), DOT_OUT_MS);
+    return () => window.clearTimeout(t);
+  }, [out]);
+  if (!on && !out) return null;
+  return on ? <span className="unread-dot" aria-label="Unread" /> : <span className="unread-dot" data-out="" aria-hidden="true" />;
+}
+
 /** Right-click on an email or a digest item: what its buttons do, plus opening it in Gmail. */
 /** `copy`: what the item says, to copy whole (on a phone its text can't be selected). */
 function mailMenu(mails: InboxEmail[], account: string | undefined, acts: Acts | undefined, copy: { label: string; text: string; notify?: (msg: string) => void }): MenuItem[] {
@@ -261,7 +337,7 @@ function Item({ it, byId, account, acts, notify }: { it: InboxItem; byId: Map<st
   const anyUnread = mails.some((m) => m.unread);
   const n = mails.length > 1 ? ` all ${mails.length}` : '';
   return (
-    <article className="story" {...menuProps(() => mailMenu(mails, account, acts, { label: 'Copy summary', text: [it.headline, it.summary].filter(Boolean).join('\n'), notify }), it.headline)}>
+    <article className="story" data-mail={mails.map((m) => m.id).join(' ')} {...menuProps(() => mailMenu(mails, account, acts, { label: 'Copy summary', text: [it.headline, it.summary].filter(Boolean).join('\n'), notify }), it.headline)}>
       <div className="story-headline">
         {it.headline}
         {it.due && <span className="chip chip-warn inbox-due">{it.due}</span>}
@@ -271,7 +347,7 @@ function Item({ it, byId, account, acts, notify }: { it: InboxItem; byId: Map<st
         <div className="story-links">
           {senders.map((m) => (
             <a key={m.id} href={gmailUrl(account, m.threadId)} target="_blank" rel="noopener" title={m.subject}>
-              {mails.some((x) => x.fromEmail === m.fromEmail && x.unread) && <span className="unread-dot" aria-label="Unread" />}
+              <UnreadDot on={mails.some((x) => x.fromEmail === m.fromEmail && x.unread)} />
               {m.from}
             </a>
           ))}
@@ -299,11 +375,11 @@ function Item({ it, byId, account, acts, notify }: { it: InboxItem; byId: Map<st
 
 function EmailRow({ e, now, account, acts, notify }: { e: InboxEmail; now: Date; account?: string; acts?: Acts; notify?: (msg: string) => void }) {
   return (
-    <div className="email-wrap" {...menuProps(() => mailMenu([e], account, acts, { label: 'Copy subject and preview', text: [e.subject, e.snippet].filter(Boolean).join('\n'), notify }), e.subject)}>
+    <div className="email-wrap" data-mail={e.id} {...menuProps(() => mailMenu([e], account, acts, { label: 'Copy subject and preview', text: [e.subject, e.snippet].filter(Boolean).join('\n'), notify }), e.subject)}>
       <a className={'headline email-row' + (e.unread ? ' unread' : '')} href={gmailUrl(account, e.threadId)} target="_blank" rel="noopener">
         <span className="split">
           <span className="email-from">
-            {e.unread && <span className="unread-dot" aria-label="Unread" />}
+            <UnreadDot on={e.unread} />
             {e.from}
           </span>
           <span className="headline-meta" style={{ flex: 'none' }}>

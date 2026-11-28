@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { DOW, MON, parseYmd, ymd } from '../../../shared/dates';
 import { DEFAULT_SUBJECTS, MAX_ASK_LEN, MAX_SUBJECTS, MAX_SUBJECT_LEN, deeperUrl, daysSince, sameSubject, type ArchiveCard } from '../../../shared/digest';
 import { parseNewsSource } from '../../../shared/news';
@@ -7,7 +7,7 @@ import { api } from '../api';
 import type { Notify } from '../hooks/useToast';
 import { ago } from '../util';
 import { Formula, Tex } from './Tex';
-import { Glide } from './Motion';
+import { Glide, useSettled, useUnseen } from './Motion';
 import { EmptyArt } from './mission/EmptyArt';
 
 interface Props {
@@ -162,6 +162,40 @@ function Subjects({ subjects, onSubjects, notify }: { subjects: string[]; onSubj
 
 // ---------- today ----------
 
+/** How long new lessons stay marked as coming in: past the end of the sweep for as many as there are subjects. */
+const SWEEP_MS = 4000;
+
+/** How long the day's quick checks are marked as lighting up in turn: past the end of the longest way a design does it. */
+const LIGHTS_MS = 3000;
+
+/** Today's quick checks, for the row of lights on each (idea 30). */
+interface DayChecks {
+  /** The lessons with a quick check, in order. */
+  ids: string[];
+  answered: ReadonlySet<string>;
+  /** All answered. */
+  done: boolean;
+  /** The last was just answered: they light one after another. */
+  go: boolean;
+}
+
+/**
+ * True for a moment when the day's last quick check is answered (here, or on another device), so its lights go green
+ * one after another. Not on opening a day whose checks are already done, nor when the day's lessons change (a new day,
+ * a lesson swapped).
+ */
+function useDayDone(day: string, done: boolean): boolean {
+  const settled = useSettled();
+  const [state, setState] = useState({ day, done, at: 0 });
+  if (state.day !== day || state.done !== done) setState({ day, done, at: settled && state.day === day && done ? Date.now() : 0 });
+  useEffect(() => {
+    if (!state.at) return;
+    const t = window.setTimeout(() => setState((s) => ({ ...s, at: 0 })), LIGHTS_MS);
+    return () => window.clearTimeout(t);
+  }, [state.at]);
+  return state.at > 0;
+}
+
 function Today({ data, now, busy, error, act, onMerge, onSubjects, onArchive }: {
   data: AppState;
   now: Date;
@@ -177,6 +211,19 @@ function Today({ data, now, busy, error, act, onMerge, onSubjects, onArchive }: 
   const today = ymd(now);
   const todayDay = days.find((d) => d.date === today);
   const [swapping, setSwapping] = useState<string[]>([]);
+  const followed = (c: DigestCard) => subjects.some((s) => sameSubject(s, c.subject));
+  const cards = todayDay?.cards.filter(followed) ?? [];
+  // Today's lessons new since this device last showed them (the morning's, or one swapped in) come in on a sweep, like a
+  // downlink (Mission; idea 29). The first time this runs, none are new.
+  const fresh = useUnseen('seenLessons', cards.map((c) => c.id), SWEEP_MS);
+  const sweeping = cards.filter((c) => fresh.has(c.id)).map((c) => c.id);
+  // The day's quick checks: answered here (at once, before the server has it) or anywhere (idea 30).
+  const [answers, setAnswers] = useState<Record<string, number>>({});
+  const checks = cards.filter((c) => c.check);
+  const answered = new Set(checks.filter((c) => c.checked >= 0 || answers[c.id] !== undefined).map((c) => c.id));
+  const done = checks.length > 0 && answered.size === checks.length;
+  const go = useDayDone(checks.map((c) => c.id).join(), done);
+  const day: DayChecks | undefined = checks.length > 1 ? { ids: checks.map((c) => c.id), answered, done, go } : undefined;
 
   if (!data.newsSummaries) {
     return (
@@ -214,8 +261,6 @@ function Today({ data, now, busy, error, act, onMerge, onSubjects, onArchive }: 
     );
   }
 
-  const followed = (c: DigestCard) => subjects.some((s) => sameSubject(s, c.subject));
-  const cards = todayDay?.cards.filter(followed) ?? [];
   const missing = subjects.filter((s) => !todayDay?.cards.some((c) => sameSubject(c.subject, s)));
   // While today's are on their way, the last day's lessons keep the page from being empty.
   const earlier = !cards.length ? days.find((d) => d.date !== today) : undefined;
@@ -236,7 +281,18 @@ function Today({ data, now, busy, error, act, onMerge, onSubjects, onArchive }: 
       )}
       <div className="dg-grid">
         {cards.map((c) => (
-          <LessonCard key={c.id} card={c} act={act} onMerge={onMerge} canAsk={data.newsSummaries} onSwap={() => swap(c)} swapping={swapping.includes(c.id)} />
+          <LessonCard
+            key={c.id}
+            card={c}
+            act={act}
+            onMerge={onMerge}
+            canAsk={data.newsSummaries}
+            onMark={(p) => p.checked !== undefined && setAnswers((a) => ({ ...a, [c.id]: p.checked! }))}
+            onSwap={() => swap(c)}
+            swapping={swapping.includes(c.id)}
+            sweep={fresh.has(c.id) ? sweeping.indexOf(c.id) : undefined}
+            day={day}
+          />
         ))}
         {missing.map((s) =>
           busy || !error ? (
@@ -337,7 +393,7 @@ const ASK_IDEAS = ['Explain it more simply', 'Another example, please', 'Why doe
 /** Typing straight into the question box makes sense only with a keyboard; on a phone it would bring the keyboard up over the ideas. */
 const hasKeyboard = () => typeof window !== 'undefined' && !!window.matchMedia?.('(hover: hover) and (pointer: fine)').matches;
 
-function LessonCard({ card: c, act, onMerge, canAsk, onMark, onSwap, swapping, date, now }: {
+function LessonCard({ card: c, act, onMerge, canAsk, onMark, onSwap, swapping, sweep, day, date, now }: {
   card: DigestCard;
   act: Act;
   onMerge: (s: Partial<AppState>) => void;
@@ -348,6 +404,10 @@ function LessonCard({ card: c, act, onMerge, canAsk, onMark, onSwap, swapping, d
   /** "Another one": only today's lessons. */
   onSwap?: () => void;
   swapping?: boolean;
+  /** New since this device last showed today's lessons: it comes in on a sweep, this many after the first (Mission). */
+  sweep?: number;
+  /** Today's quick checks, for the row of lights on this one's. */
+  day?: DayChecks;
   /** Shown in the archive: when it was written. */
   date?: string;
   now?: Date;
@@ -390,7 +450,15 @@ function LessonCard({ card: c, act, onMerge, canAsk, onMark, onSwap, swapping, d
   if (c.example) sections.push({ key: 'example', label: 'Example', icon: c.exampleCode ? 'ph-code' : 'ph-calculator' });
   if (canAsk || c.asks.length) sections.push({ key: 'ask', label: 'Ask', icon: 'ph-chat-circle-dots', count: c.asks.length });
   return (
-    <article className={'panel dg-card' + (swapping ? ' dg-swapping' : '')} aria-label={c.title} aria-busy={swapping || undefined}>
+    <article
+      className={'panel dg-card' + (swapping ? ' dg-swapping' : '')}
+      aria-label={c.title}
+      aria-busy={swapping || undefined}
+      data-new={sweep !== undefined ? '' : undefined}
+      style={sweep ? ({ '--i': sweep } as CSSProperties) : undefined}
+    >
+      {/* The line the lesson comes in behind (Mission's sweep, mission.css DIGEST). */}
+      {sweep !== undefined && <span className="dg-rx" aria-hidden="true" />}
       <div className="panel-head">
         <h2 className="panel-title">{c.subject}</h2>
         <span className="dg-head-end">
@@ -438,7 +506,7 @@ function LessonCard({ card: c, act, onMerge, canAsk, onMark, onSwap, swapping, d
             </span>
           </p>
         )}
-        {c.check && <Check card={c} onAnswer={(i) => mark({ checked: i })} />}
+        {c.check && <Check card={c} day={day} onAnswer={(i) => mark({ checked: i })} />}
         {sections.length > 0 && (
           <div className="dg-pills" role="group" aria-label="More on this">
             {sections.map((sec) => (
@@ -505,8 +573,24 @@ function LessonCard({ card: c, act, onMerge, canAsk, onMark, onSwap, swapping, d
   );
 }
 
+/**
+ * The day's quick checks as a row of lights, this lesson's ringed: lit as each is answered, and all green once every
+ * one is, lighting one after another as the last is answered (idea 30; styles.css, DIGEST).
+ */
+function DayLights({ day, self }: { day: DayChecks; self: string }) {
+  const n = day.ids.length;
+  const label = day.done ? `All ${n} of today’s quick checks answered` : `${day.answered.size} of today’s ${n} quick checks answered`;
+  return (
+    <span className="dg-lights" role="img" aria-label={label} title={label} data-done={day.done || undefined} data-go={day.go || undefined} style={{ '--n': n } as CSSProperties}>
+      {day.ids.map((id, i) => (
+        <i key={id} data-on={day.answered.has(id) || undefined} data-self={id === self || undefined} style={{ '--i': i } as CSSProperties} />
+      ))}
+    </span>
+  );
+}
+
 /** The quick question under the gist: answered there and then, and the first answer is kept. */
-function Check({ card: c, onAnswer }: { card: DigestCard; onAnswer: (i: number) => void }) {
+function Check({ card: c, day, onAnswer }: { card: DigestCard; day?: DayChecks; onAnswer: (i: number) => void }) {
   const q = c.check!;
   const [picked, setPicked] = useState(-1);
   const chosen = c.checked >= 0 ? c.checked : picked;
@@ -515,7 +599,10 @@ function Check({ card: c, onAnswer }: { card: DigestCard; onAnswer: (i: number) 
   return (
     <div className={'dg-check' + (done ? (right ? ' right' : ' wrong') : '')} role="group" aria-label="Quick check">
       <p className="dg-check-q">
-        <span className="dg-check-label">Quick check</span>
+        <span className="dg-check-head">
+          <span className="dg-check-label">Quick check</span>
+          {day && <DayLights day={day} self={c.id} />}
+        </span>
         <Tex text={q.question} />
       </p>
       <div className="dg-check-options">

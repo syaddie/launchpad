@@ -514,6 +514,35 @@
   @keyframes trSlam { from { opacity: 0; } }
 }
 
+/* ---------- Digest and Inbox: the day's quick checks lighting, the ping, a dot going out (styles.css has the base) ---------- */
+
+/* Vista drifts: the lights bloom in slowly, each glowing as it comes on and the glow fading off the glass; the ping is
+   a soft halo that spreads and thins. */
+[data-design='vista'] .dg-lights[data-go] > i { animation: dgLightBloom calc(var(--m-view) * 1.6) var(--e-out) backwards; animation-delay: calc(var(--m-stagger) * 4 * var(--i, 0)); }
+@keyframes dgLightBloom { 0% { background: var(--t3); box-shadow: 0 0 0 0 transparent; } 35% { box-shadow: 0 0 10px 3px color-mix(in srgb, var(--ok) 70%, transparent); } 100% { box-shadow: 0 0 0 0 transparent; } }
+[data-design='vista'] .inbox-ping::before, [data-design='vista'] .inbox-ping::after { box-shadow: 0 0 10px 2px color-mix(in srgb, var(--ac) 55%, transparent); }
+[data-design='vista'] .inbox-ping[data-busy]::before, [data-design='vista'] .inbox-ping[data-busy]::after { animation-duration: calc(var(--m-sweep) * 3); }
+[data-design='vista'] .inbox-ping[data-busy]::after { animation-delay: calc(var(--m-sweep) * 1.5); }
+/* Focus is quick and exact: the lights snap on in a quick run with no overshoot, and the ping is one thin ring. */
+[data-design='focus'] .dg-lights[data-go] > i { animation-name: dgLightSnap; animation-duration: var(--m-state); animation-timing-function: var(--e-out); animation-delay: calc(var(--m-stagger) * 2 * var(--i, 0)); }
+@keyframes dgLightSnap { from { background: var(--t3); scale: 1.4; } }
+[data-design='focus'] .inbox-ping::before { box-shadow: 0 0 0 1px var(--ac); }
+[data-design='focus'] .inbox-ping[data-busy]::before { animation-duration: calc(var(--m-sweep) * 1.4); }
+[data-design='focus'] .inbox-ping[data-busy]::after { animation: none; }
+/* Poster slams: square lights stamped on one after another, a square ping knocked out from the button in hard steps, and
+   an unread dot cut out rather than faded. */
+[data-design='poster'] .dg-lights > i { border-radius: 0; }
+[data-design='poster'] .dg-lights[data-go] > i { animation: dgLightStamp var(--m-move) var(--e-out) backwards; animation-delay: calc(var(--m-stagger) * 2 * var(--i, 0)); }
+@keyframes dgLightStamp { from { background: var(--t3); scale: 1.8; } }
+[data-design='poster'] .inbox-ping::before, [data-design='poster'] .inbox-ping::after { border-radius: 0; box-shadow: 0 0 0 2px var(--tx); }
+[data-design='poster'] .inbox-ping[data-busy]::before, [data-design='poster'] .inbox-ping[data-busy]::after { animation-timing-function: steps(4, jump-end); }
+[data-design='poster'] .unread-dot[data-out] { animation-timing-function: steps(2, jump-end); }
+@media (prefers-reduced-motion: reduce) {
+  @keyframes dgLightBloom { from { background: var(--t3); } }
+  @keyframes dgLightSnap { from { background: var(--t3); } }
+  @keyframes dgLightStamp { from { background: var(--t3); } }
+}
+
 /* ---------- Learn's rows in each design: they reach to the panel's edge, as far as its sides go ---------- */
 
 [data-design='poster'] :is(.ln-due-row, .ln-class) { margin-inline: -8px; padding-inline: 8px; }
