@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { landedDay, periodStep, readoutCells, rollDirection, unseen, viewStep } from '../web/src/motion';
+import { keepGone, landedDay, periodStep, readoutCells, rollDirection, unseen, viewStep } from '../web/src/motion';
 
 describe('periodStep', () => {
   it('goes next to a later period and prev to an earlier one', () => {
@@ -111,5 +111,34 @@ describe('landedDay', () => {
   it('is nothing when several days changed at once', () => {
     expect(landedDay(before, { ...before, '2026-11-28': 72.9, '2026-11-29': 72.8 })).toBeNull();
     expect(landedDay({}, before)).toBeNull();
+  });
+});
+
+describe('keepGone', () => {
+  const id = (s: string) => s;
+  const show = (items: string[]) => items.map((item) => ({ item, gone: false, at: 0 }));
+  it('keeps what was taken out in its place, marked gone from now', () => {
+    expect(keepGone(show(['a', 'b', 'c']), ['a', 'c'], id, 1000, 3000)).toEqual([
+      { item: 'a', gone: false, at: 0 },
+      { item: 'b', gone: true, at: 1000 },
+      { item: 'c', gone: false, at: 0 },
+    ]);
+    expect(keepGone(show(['a', 'b']), ['b'], id, 5, 3000).map((s) => [s.item, s.gone])).toEqual([['a', true], ['b', false]]);
+  });
+  it('puts what is new where the list has it', () => {
+    expect(keepGone(show(['b', 'c']), ['a', 'b', 'c'], id, 0, 3000).map((s) => s.item)).toEqual(['a', 'b', 'c']);
+  });
+  it('lets go of what has been gone long enough, and keeps when it went', () => {
+    const once = keepGone(show(['a', 'b', 'c']), ['a', 'c'], id, 1000, 3000);
+    expect(keepGone(once, ['c'], id, 2000, 3000)).toEqual([
+      { item: 'a', gone: true, at: 2000 },
+      { item: 'b', gone: true, at: 1000 },
+      { item: 'c', gone: false, at: 0 },
+    ]);
+    expect(keepGone(once, ['a', 'c'], id, 4500, 3000).map((s) => s.item)).toEqual(['a', 'c']);
+  });
+  it('brings back one put back in', () => {
+    const once = keepGone(show(['a', 'b']), ['a'], id, 1000, 3000);
+    expect(keepGone(once, ['a', 'b'], id, 1200, 3000)).toEqual(show(['a', 'b']));
   });
 });

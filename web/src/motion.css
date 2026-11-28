@@ -341,6 +341,33 @@
 :root[data-design='poster'] .toast { animation-name: lpStampIn; animation-timing-function: var(--e-out); }
 
 /* =====================================================================
+   ROWS COMING AND GOING
+   A row that goes from a list (an email archived, a bill kept or dismissed: FoldRow in components/Motion.tsx) slides
+   out, then the rows after it close up; one that arrives (new mail, an email Undo brings back) has the list open up for
+   it and slides in, several the oldest first. Its box is .lp-fold, a grid of one row that closes to nothing; .lp-fold-in
+   inside it is what slides. A list with a gap between its rows says so in --fold-gap, so that closes too.
+   ===================================================================== */
+
+.lp-presence.lp-fold { display: grid; grid-template-rows: 1fr; flex: none; min-width: 0; }
+:where(.lp-fold) { --fold-gap: 0px; }
+.lp-fold-in { min-width: 0; min-height: 0; }
+.lp-fold[data-leaving] { animation: lpFoldShut var(--m-move) var(--e-io) var(--m-exit) both; }
+.lp-fold[data-leaving] > .lp-fold-in { overflow: hidden; animation: lpSlideAway var(--m-exit) var(--e-in) both; }
+@keyframes lpFoldShut { to { grid-template-rows: 0fr; margin-bottom: calc(var(--fold-gap) * -1); } }
+@keyframes lpSlideAway { to { opacity: 0; translate: var(--m-travel) 0; } }
+.lp-fold:has(> .lp-fold-in[data-new]) { animation: lpFoldOpen var(--m-move) var(--e-io) both; }
+.lp-fold-in[data-new] { overflow: hidden; animation: trArrive var(--m-move) var(--e-settle) both; animation-delay: calc(var(--m-move) * 0.4 + var(--m-stagger) * 2 * var(--i, 0)); }
+@keyframes lpFoldOpen { from { grid-template-rows: 0fr; margin-bottom: calc(var(--fold-gap) * -1); } }
+/* Vista drifts: a row goes slowly and softly, and what arrives settles in at the glass's pace. */
+:root[data-design='vista'] .lp-fold[data-leaving] { animation-duration: calc(var(--m-move) * 1.2); animation-delay: calc(var(--m-exit) * 1.6); }
+:root[data-design='vista'] .lp-fold[data-leaving] > .lp-fold-in { animation-duration: calc(var(--m-exit) * 1.8); animation-timing-function: var(--e-io); }
+:root[data-design='vista'] .lp-fold-in[data-new] { animation-duration: calc(var(--m-view) * 1.4); animation-timing-function: var(--e-out); }
+/* Poster slams: a row is wiped off the sheet and the gap shuts hard; what arrives is wiped on. */
+:root[data-design='poster'] .lp-fold[data-leaving] > .lp-fold-in { animation-name: lpWipeAway; animation-timing-function: var(--e-out); }
+@keyframes lpWipeAway { from { clip-path: inset(0 0 0 0); } to { clip-path: inset(0 0 0 100%); } }
+:root[data-design='poster'] .lp-fold-in[data-new] { animation-name: lpWipeIn; animation-timing-function: var(--e-out); }
+
+/* =====================================================================
    METERS AND CHARTS
    A meter fills from empty as it appears, and slides to a new reading when it changes; a chart's
    line draws across. Each part of the app puts these on its own bars (styles.css, by the part):
@@ -542,6 +569,11 @@ html[data-design='poster']::view-transition-old(lp-title) { animation: none; opa
   @keyframes lpSweepX { from { opacity: 0; } }
   @keyframes lpSweepY { from { opacity: 0; } }
   @keyframes lpSinkOut { to { opacity: 0; } }
+  /* A row going fades, then the list closes up at once; one arriving fades in where it is. */
+  @keyframes lpSlideAway { to { opacity: 0; } }
+  @keyframes lpWipeAway { to { opacity: 0; } }
+  @keyframes lpFoldShut { from, to { grid-template-rows: 1fr; } }
+  @keyframes lpFoldOpen { from, to { grid-template-rows: 1fr; } }
   @keyframes lpWrong { from { opacity: 0.6; } }
   @keyframes lpRight { from { opacity: 0.6; } }
   @keyframes lpChosen { from { opacity: 0.7; } }

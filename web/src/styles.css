@@ -836,6 +836,24 @@ textarea.input { height: auto; padding-block: 8px; line-height: 1.45; }
 .dg-body p.dg-check-why { font-size: 13px; line-height: 1.5; }
 .dg-check.right .dg-check-why b { color: var(--acd); }
 .dg-check.wrong .dg-check-why b { color: var(--wn); }
+/* The day's quick checks as a row of lights on each (DayLights): hollow until answered, then lit, this lesson's ringed.
+   Once every one is answered they're all the colour of fine, and as the last is answered they light that way one
+   after another (idea 30). Each design lights them its own way (designs.css, DIGEST; mission.css, DIGEST). */
+.dg-check-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 2px; }
+.dg-check-head > .dg-check-label { margin-bottom: 0; }
+.dg-lights { display: inline-flex; align-items: center; gap: 6px; flex: none; padding: 0 2px; }
+.dg-lights > i { position: relative; width: 7px; height: 7px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--ln); }
+.dg-lights > i[data-on] { background: var(--t3); box-shadow: none; }
+.dg-lights > i[data-self] { outline: 1px solid color-mix(in srgb, var(--t3) 70%, transparent); outline-offset: 2px; }
+.dg-lights[data-done] > i { background: var(--ok); box-shadow: none; }
+.dg-lights[data-done] > i[data-self] { outline-color: color-mix(in srgb, var(--ok) 60%, transparent); }
+.dg-lights[data-go] > i { animation: dgLightGo var(--m-move) var(--e-settle) backwards; animation-delay: calc(var(--m-stagger) * 3 * var(--i, 0)); }
+@keyframes dgLightGo { 0% { background: var(--t3); scale: 1; } 45% { scale: 1.7; } 100% { scale: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  /* They still light in turn, quickly, without growing. */
+  .dg-lights[data-go] > i { animation-duration: var(--m-state); animation-delay: calc(80ms * var(--i, 0)); }
+  @keyframes dgLightGo { from { background: var(--t3); } }
+}
 
 /* More on a lesson, one part at a time: how it works, an example, follow-up questions. */
 .dg-pills { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -948,6 +966,28 @@ textarea.input { height: auto; padding-block: 8px; line-height: 1.45; }
 .inbox-skimmed { margin: 8px 0 0; padding: 0 10px; font-size: 12px; color: var(--t3); text-wrap: pretty; }
 .inbox-due { margin-left: 8px; vertical-align: 2px; }
 .unread-dot { display: inline-block; flex: none; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; background: var(--ac); vertical-align: 1px; }
+/* An email marked read: its dot goes out like a light, and the words close up over where it was. */
+.unread-dot[data-out] { animation: inDotOut var(--m-state) var(--e-in) both; }
+@keyframes inDotOut { to { opacity: 0; scale: 0; width: 0; margin-right: 0; } }
+/* A column's items and the list of emails: rows that go fold away (FoldRow), closing the gap after them too. */
+.scroll.inbox-col { display: flex; flex-direction: column; gap: 2px; }
+.inbox-col > .lp-fold { --fold-gap: 2px; }
+.inbox-col > .lp-fold + .lp-fold > .lp-fold-in > .story { border-top: 1px solid var(--ln); border-radius: 0; }
+.news > .lp-fold { --fold-gap: 15px; }
+/* Checking for new mail sends a ping out from the button, ring after ring until the answer's in (idea 31). */
+.inbox-ping { position: relative; z-index: 2; display: inline-flex; flex: none; }
+.inbox-ping::before, .inbox-ping::after { content: ''; position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--ac); opacity: 0; pointer-events: none; }
+.inbox-ping[data-busy]::before, .inbox-ping[data-busy]::after { animation: inPing calc(var(--m-sweep) * 2) linear infinite; }
+.inbox-ping[data-busy]::after { animation-delay: calc(var(--m-sweep) * 0.8); }
+@keyframes inPing { 0% { opacity: 0.85; scale: 0.9; } 100% { opacity: 0; scale: 1.8; } }
+/* The view scrolls in its own box on a desk, which would cut the rings off at its edge: they get room to go out in. */
+.lp-root:not([data-layout='narrow']) .inbox > .news-head { padding-right: 14px; }
+@media (prefers-reduced-motion: reduce) {
+  /* Still: one faint ring stands round the button while it checks, and the dot just fades. */
+  .inbox-ping[data-busy]::before { animation: none; opacity: 0.45; scale: 1.2; }
+  .inbox-ping[data-busy]::after { animation: none; }
+  @keyframes inDotOut { to { opacity: 0; } }
+}
 .email-row .split { align-items: baseline; }
 .email-from { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--t2); }
 .email-row.unread .email-from, .email-row.unread .headline-title { font-weight: 600; color: var(--tx); }
@@ -968,7 +1008,7 @@ textarea.input { height: auto; padding-block: 8px; line-height: 1.45; }
 /* Phones scroll the page, not the panel, so every bill shows rather than being cut off at the first few. */
 [data-layout='narrow'] .inbox-bills .scroll { max-height: none; }
 .bill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 7px 10px; border-radius: var(--r); font-size: 13px; }
-.bill-row + .bill-row { border-top: 1px solid var(--ln); border-radius: 0; }
+.lp-fold + .lp-fold > .lp-fold-in > .bill-row { border-top: 1px solid var(--ln); border-radius: 0; }
 .bill-row .bill-what { flex: 1 1 260px; min-width: 0; }
 .bill-row .bill-what a { display: block; font-size: 12px; color: var(--t3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bill-row .pkg-new { flex: none; }

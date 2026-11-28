@@ -517,8 +517,9 @@
 :root[data-design='mission'].lp-opening .ms-way { animation: lpFadeIn var(--m-state) var(--e-out) var(--at, 0ms) both; }
 :root[data-design='mission'].lp-opening .ms-craft { transform-box: fill-box; transform-origin: center; animation: msArrive 620ms var(--e-settle) 900ms both; }
 @keyframes msArrive { 0% { scale: 0; opacity: 0; } 40% { opacity: 1; } }
-/* A new view's panels rise the same way (viewTransition.ts marks the page while they do). */
-:root[data-design='mission'][data-entering] .lp-inner > main :is(.panel, .photo-panel):not(.panel .panel) { animation: msRiseUp var(--m-view) var(--e-out) both; }
+/* A new view's panels rise the same way (viewTransition.ts marks the page while they do). A new lesson comes in on its
+   own sweep instead (DIGEST AND INBOX). */
+:root[data-design='mission'][data-entering] .lp-inner > main :is(.panel, .photo-panel):not(.panel .panel, .dg-card[data-new]) { animation: msRiseUp var(--m-view) var(--e-out) both; }
 
 /* =====================================================================
    CHANGING A PERIOD, AND MONEY › MONTH
@@ -731,6 +732,69 @@
 @keyframes msCool { from { fill: var(--ac); opacity: 1; } }
 
 /* =====================================================================
+   DIGEST AND INBOX
+   ===================================================================== */
+
+/* The morning's new lessons come in on a downlink's sweep, the first time this device shows them (Digest.tsx,
+   useUnseen; not every time the Digest opens, and nothing on the first run): one after another, each card is drawn in
+   from the top behind a lit line, as if received line by line, and its subject's placard relights as the line passes
+   it. Opening the Digest, the sweep waits for the view to arrive. */
+.dg-rx { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .dg-card[data-new] { --rx-for: var(--m-sweep); --rx-gap: calc(var(--m-stagger) * 4); --rx-at: calc(var(--rx-gap) * var(--i, 0)); }
+  [data-design='mission'][data-entering] .dg-card[data-new] { --rx-at: calc(var(--m-view) * 0.7 + var(--rx-gap) * var(--i, 0)); }
+  :root[data-design='mission'].lp-opening .dg-card[data-new] { --rx-at: calc(260ms + var(--m-view) * 1.4 + var(--rx-gap) * var(--i, 0)); }
+  /* (Outranking the way a new view's panels come in, motion.css, which it stands in for.) */
+  :root[data-design='mission'] .digest .dg-grid > .dg-card[data-new] { animation: msRxIn var(--rx-for) var(--e-io) var(--rx-at) backwards; }
+  [data-design='mission'] .dg-card[data-new] > .dg-rx {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    background: linear-gradient(to bottom, transparent calc(100% - 72px), color-mix(in srgb, var(--ac) 16%, transparent) calc(100% - 2px), var(--ac) calc(100% - 2px));
+    box-shadow: 0 6px 14px -8px var(--ac);
+    animation: msRxBeam var(--rx-for) var(--e-io) var(--rx-at) forwards;
+  }
+  [data-design='mission'] .dg-card[data-new] > .panel-head .panel-title { animation: msRelight var(--m-state) steps(3, end) calc(var(--rx-at) + var(--rx-for) * 0.08) backwards, msGlyphGlow calc(var(--m-sweep) * 1.4) var(--e-out) calc(var(--rx-at) + var(--rx-for) * 0.08) backwards; }
+}
+/* The card is clipped to just above where the line is (room either side for its shadow), and the line leads it down. */
+@keyframes msRxIn { from { clip-path: inset(-40px -40px 100% -40px); } to { clip-path: inset(-40px -40px -40px -40px); } }
+@keyframes msRxBeam { 0% { opacity: 1; translate: 0 -100%; } 88% { opacity: 1; } 100% { opacity: 0; translate: 0 40px; } }
+
+/* The day's quick checks are a poll, as the sources are: standing by until answered, then lit, and once every one is
+   answered they report in green, one after another, each sending out a ring, and GO lights after the last. */
+[data-design='mission'] .dg-lights { gap: 5px; }
+[data-design='mission'] .dg-lights > i { width: 8px; height: 8px; box-shadow: none; border: 1.5px dashed var(--t3); background: none; }
+[data-design='mission'] .dg-lights > i[data-on] { border-style: solid; border-color: var(--t2); background: color-mix(in srgb, var(--t2) 55%, transparent); }
+[data-design='mission'] .dg-lights[data-done] > i { border: 1.5px solid var(--ok); background: var(--ok); box-shadow: 0 0 6px color-mix(in srgb, var(--ok) 60%, transparent); }
+[data-design='mission'] .dg-lights > i[data-self] { outline-offset: 2.5px; }
+[data-design='mission'] .dg-lights[data-done]::after { content: 'GO' / ''; margin-left: 1px; font: 600 9px/10px var(--f-mono); letter-spacing: 0.12em; color: var(--ok); }
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .dg-lights[data-go] > i { animation: msReport var(--m-move) var(--e-settle) backwards; animation-delay: calc(var(--m-stagger) * 3 * var(--i, 0)); }
+  [data-design='mission'] .dg-lights[data-go] > i::after { content: ''; position: absolute; inset: -1.5px; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--ok); opacity: 0; animation: msRingOut var(--m-sweep) var(--e-out) calc(var(--m-stagger) * 3 * var(--i, 0) + var(--m-move) * 0.3) forwards; }
+  [data-design='mission'] .dg-lights[data-go]::after { animation: msRelight var(--m-state) steps(3, end) calc(var(--m-stagger) * 3 * var(--n, 4) + var(--m-move) * 0.4) backwards; }
+}
+
+/* Checking for new mail is a sonar ping: a lit ring goes out from the button, then another, until the answer's in. */
+[data-design='mission'] .inbox-ping::before, [data-design='mission'] .inbox-ping::after { box-shadow: 0 0 0 1.5px var(--ac), 0 0 10px color-mix(in srgb, var(--ac) 55%, transparent); }
+[data-design='mission'] .inbox-ping[data-busy]::before, [data-design='mission'] .inbox-ping[data-busy]::after { animation-name: msPing; }
+@keyframes msPing { 0% { opacity: 0; scale: 0.9; } 8% { opacity: 1; } 100% { opacity: 0; scale: 1.9; } }
+/* What the ping brought reports in: new mail slides in lit and cools, as Training's new sessions do. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .lp-fold-in[data-new] > :is(.email-wrap, .story) { animation: msDayLit calc(var(--m-sweep) * 1.6) var(--e-out) calc(var(--m-move) * 0.4 + var(--m-stagger) * 2 * var(--i, 0)) both; }
+}
+/* An email archived (or a bill kept or dismissed) separates like a spent stage: it drops back, dimming and greying,
+   and the list closes up on the docking spring. A read email's dot goes out like a source light losing signal. */
+[data-design='mission'] .lp-fold[data-leaving] > .lp-fold-in { animation-name: msJettison; animation-duration: calc(var(--m-exit) * 1.4); }
+[data-design='mission'] .lp-fold[data-leaving] { animation-delay: calc(var(--m-exit) * 1.2); }
+@keyframes msJettison { 0% { filter: none; } 30% { opacity: 0.7; filter: grayscale(1); } 100% { opacity: 0; translate: calc(var(--m-travel) * 1.2) calc(var(--m-rise) * 0.5); filter: grayscale(1); } }
+[data-design='mission'] .unread-dot[data-out] { animation: msDotOut var(--m-move) var(--e-in) both; }
+@keyframes msDotOut { 0% { box-shadow: 0 0 6px var(--ac); } 40% { opacity: 0.35; scale: 0.6; filter: grayscale(1); width: 6px; margin-right: 5px; } 100% { opacity: 0; scale: 0.6; filter: grayscale(1); width: 0; margin-right: 0; } }
+
+/* =====================================================================
    SERVER
    ===================================================================== */
 
@@ -829,4 +893,8 @@
   [data-design='mission'] :is(.lp-loading, .view-loading)::after { display: none; }
   [data-design='mission'] .ph-duotone.ph-circle-notch.spin { animation: none; }
   [data-design='mission'] .ms-up::after { display: none; }
+  /* Digest and Inbox: a new lesson fades in, a row going and a read email's dot just fade, and the ping stands still. */
+  [data-design='mission'] .dg-card[data-new] { animation: lpFadeIn var(--m-state) var(--e-out) both; }
+  @keyframes msJettison { to { opacity: 0; } }
+  @keyframes msDotOut { to { opacity: 0; } }
 }
