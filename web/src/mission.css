@@ -781,7 +781,7 @@
 /* Checking for new mail is a sonar ping: a lit ring goes out from the button, then another, until the answer's in. */
 [data-design='mission'] .inbox-ping::before, [data-design='mission'] .inbox-ping::after { box-shadow: 0 0 0 1.5px var(--ac), 0 0 10px color-mix(in srgb, var(--ac) 55%, transparent); }
 [data-design='mission'] .inbox-ping[data-busy]::before, [data-design='mission'] .inbox-ping[data-busy]::after { animation-name: msPing; }
-@keyframes msPing { 0% { opacity: 0; scale: 0.9; } 8% { opacity: 1; } 100% { opacity: 0; scale: 2.6; } }
+@keyframes msPing { 0% { opacity: 0; scale: 0.9; } 8% { opacity: 1; } 100% { opacity: 0; scale: 1.9; } }
 /* What the ping brought reports in: new mail slides in lit and cools, as Training's new sessions do. */
 @media (prefers-reduced-motion: no-preference) {
   [data-design='mission'] .lp-fold-in[data-new] > :is(.email-wrap, .story) { animation: msDayLit calc(var(--m-sweep) * 1.6) var(--e-out) calc(var(--m-move) * 0.4 + var(--m-stagger) * 2 * var(--i, 0)) both; }

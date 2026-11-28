@@ -979,7 +979,9 @@ textarea.input { height: auto; padding-block: 8px; line-height: 1.45; }
 .inbox-ping::before, .inbox-ping::after { content: ''; position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--ac); opacity: 0; pointer-events: none; }
 .inbox-ping[data-busy]::before, .inbox-ping[data-busy]::after { animation: inPing calc(var(--m-sweep) * 2) linear infinite; }
 .inbox-ping[data-busy]::after { animation-delay: calc(var(--m-sweep) * 0.8); }
-@keyframes inPing { 0% { opacity: 0.85; scale: 0.9; } 100% { opacity: 0; scale: 2.3; } }
+@keyframes inPing { 0% { opacity: 0.85; scale: 0.9; } 100% { opacity: 0; scale: 1.8; } }
+/* The view scrolls in its own box on a desk, which would cut the rings off at its edge: they get room to go out in. */
+.lp-root:not([data-layout='narrow']) .inbox > .news-head { padding-right: 14px; }
 @media (prefers-reduced-motion: reduce) {
   /* Still: one faint ring stands round the button while it checks, and the dot just fades. */
   .inbox-ping[data-busy]::before { animation: none; opacity: 0.45; scale: 1.2; }
