@@ -26,6 +26,17 @@ that only Mission shows (with Launchpad's own light and its line in the poll's l
 
 ## Built, against the design system
 
+- Money, built from the ideas below (ideas 44–47; `mission.css` MONEY › GOALS, MONEY › OVERVIEW, MONEY › OWED AND
+  STATEMENTS): a savings goal's bar fills like propellant loading as it comes in, slowly while the lines chill, then
+  fast, then topping off, a cold vent at its front, over a gauge marked in tenths (idea 44); a goal just reached launches
+  its card once, the way a countdown lifts off on its day: an account's card after the transfer that filled it has
+  landed, a goal's progress in Goals as a short hop out of its cell (idea 44, `useUnseen`, once per goal on this device,
+  when it's on the screen). Overview's balance is flown like Home's ascent: solid behind with its glow, dotted ahead, and
+  Home's own vehicle at today, burning, with the beacon's ring, heading the way the balance goes over the days around
+  today (40° at most), arriving as the line draws on to it (idea 45). An invoice marked paid flares its row: its tick
+  rings, a band of light runs along the row and "Paid" reports in, before it goes on to Paid; the other designs stamp it
+  their own way (idea 46). Importing a statement, the lock-on corners close on each matched line in turn and its tick
+  reports in and flares; the other designs tick them in their way (idea 47).
 - The sky by theme, the sun or moon on its arc by the clock, the horizon's glow near rising and setting, stars and
   twinklers, clouds, a satellite or a contrail now and then, cloud and rain from the forecast.
 - Real sunrise and sunset, and the real moon (idea 1; `sunTimes`, `moonTimes`, `moonPhase`, `orbPlace` in `mission.ts`,
@@ -262,10 +273,7 @@ small mono labels; the messages themselves stay plain.
 
 **Money**
 
-44. A savings goal's bar fills like propellant loading; reaching the goal launches the card once. **S–M**
-45. Overview's balance chart has the vehicle at today, flown solid and ahead dotted, like Home's ascent. **M**
-46. An invoice marked paid is stamped, or flares its row. **S** *(every design)*
-47. Importing a statement, the matched lines tick in one after another. **S** *(every design)*
+All built (ideas 44–47, see Built).
 
 **Server**
 

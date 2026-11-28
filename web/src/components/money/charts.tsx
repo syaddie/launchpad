@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react';
+import { type CSSProperties, useLayoutEffect, useRef, useState } from 'react';
 import { fmtMoney, type MonthCalc, monthName } from '../../../../shared/money';
 import { niceMax } from '../../util';
 import { shortDate } from './shared';
+import { Vehicle } from '../mission/Mark';
 
 /** Axis labels: "$4k", "$1.5k", "−$500". */
 function fmtAxis(v: number): string {
@@ -47,7 +48,15 @@ function MonthAxis({ months, weights }: { months: MonthCalc[]; weights: number[]
   );
 }
 
-/** The end-of-day balance across every month: solid up to today, dashed for the forecast. */
+/** How many days either side of today the vehicle's heading is taken over, so one big day doesn't tip it over. */
+const HEADING_DAYS = 3;
+/** The steepest it climbs or dives, in degrees from level. */
+const HEADING_MAX = 40;
+
+/**
+ * The end-of-day balance across every month: solid up to today, dashed for the forecast. In Mission it's flown like Home's
+ * ascent: solid behind, dotted ahead, with the vehicle at today heading the way the balance goes (mission.css).
+ */
 export function BalanceChart({ months, today }: { months: MonthCalc[]; today: string }) {
   const [hover, setHover] = useState<number | null>(null);
   const plotRef = useRef<HTMLDivElement>(null);
@@ -62,6 +71,23 @@ export function BalanceChart({ months, today }: { months: MonthCalc[]; today: st
   const line = (from: number, to: number) => pts.slice(from, to + 1).map((p, i) => `${x(from + i).toFixed(1)},${y(p.b).toFixed(2)}`).join(' ');
   const h = hover !== null ? pts[hover] : null;
   const starts = months.slice(0, -1).reduce<number[]>((a, m) => [...a, (a[a.length - 1] ?? 0) + m.balances.length], []);
+  // The plot's size on the screen, for the vehicle's heading (the line itself is stretched to fit).
+  const [box, setBox] = useState<{ w: number; h: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = plotRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const measure = () => setBox((b) => (b && b.w === el.clientWidth && b.h === el.clientHeight ? b : { w: el.clientWidth, h: el.clientHeight }));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const lo = Math.max(0, t - HEADING_DAYS);
+  const hi = Math.min(n - 1, t + HEADING_DAYS);
+  const heading =
+    t >= 0 && box && hi > lo
+      ? Math.max(-HEADING_MAX, Math.min(HEADING_MAX, (Math.atan2(((y(pts[hi].b) - y(pts[lo].b)) / 100) * box.h, ((x(hi) - x(lo)) / 1000) * box.w) * 180) / Math.PI))
+      : 0;
 
   const onMove = (e: React.PointerEvent) => {
     const r = plotRef.current?.getBoundingClientRect();
@@ -93,9 +119,22 @@ export function BalanceChart({ months, today }: { months: MonthCalc[]; today: st
             </span>
           )}
           <svg viewBox="0 0 1000 100" preserveAspectRatio="none" role="img" aria-label={`Balance from ${fmtMoney(pts[0]?.b ?? 0)} to ${fmtMoney(pts[n - 1]?.b ?? 0)}`}>
-            <polyline points={line(0, cut)} fill="none" stroke="var(--ac)" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-            {cut < n - 1 && <polyline points={line(cut, n - 1)} fill="none" stroke="var(--ac)" strokeWidth="2" strokeDasharray="5 4" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />}
+            <polyline className="bal-flown" points={line(0, cut)} fill="none" stroke="var(--ac)" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+            {cut < n - 1 && <polyline className="bal-ahead" points={line(cut, n - 1)} fill="none" stroke="var(--ac)" strokeWidth="2" strokeDasharray="5 4" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />}
           </svg>
+          {t >= 0 && (
+            // Mission's vehicle at today, for the eye only: the hover's dot and the label say the same.
+            <span className="bal-craft" aria-hidden="true" style={{ left: pct(t), top: `${y(pts[t].b)}%`, '--at': n > 1 ? t / (n - 1) : 0 } as CSSProperties}>
+              <svg viewBox="-20 -20 40 40">
+                <circle className="ms-ring" r={6} />
+                <g className="ms-craft">
+                  <g transform={`rotate(${Math.round(heading + 90)}) scale(0.12) translate(-128 -110)`}>
+                    <Vehicle small />
+                  </g>
+                </g>
+              </svg>
+            </span>
+          )}
           {h && (
             <>
               <span className="bal-cross" style={{ left: pct(hover!) }} />

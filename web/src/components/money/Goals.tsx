@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { type CSSProperties, useRef, useState } from 'react';
 import { calcMonths, fmtMoney, goalRows, type GoalRow, MAX_GOALS, monthKeys, monthName } from '../../../../shared/money';
 import type { Money, SavingsGoal } from '../../../../shared/types';
 import { newId } from '../../util';
 import { Calc, cellKeys, NumCell, shortDate, TextCell } from './shared';
+import { useSeenOnScreen, useUnseen } from '../Motion';
 
 const blankGoal = (id: string): SavingsGoal => ({ id, name: '', target: null, by: '', account: '', saved: 0 });
 
@@ -21,6 +22,8 @@ export function Goals({ money, today, onChange }: { money: Money; today: string;
   const pots = calc.filter((r) => r.fromAccount);
   const rows = list.length < MAX_GOALS ? [...list, blankGoal(ghostId)] : list;
   const accounts = money.accounts.filter((a) => !a.archived);
+  // A goal that has just been reached launches its progress, once (Mission, mission.css).
+  const lifting = useUnseen('moneyGoalsReached', calc.filter((r) => r.how === 'done').map((r) => r.goal.id));
 
   const set = (g: SavingsGoal, patch: Partial<SavingsGoal>) => {
     const next = { ...g, ...patch };
@@ -96,7 +99,7 @@ export function Goals({ money, today, onChange }: { money: Money; today: string;
                       <NumCell value={ghost ? null : g.saved} label="Set aside so far" r={r} c={4} onChange={(v) => set(g, { saved: Math.abs(v ?? 0) })} />
                     )}
                   </td>
-                  <td>{row && <Progress row={row} />}</td>
+                  <td>{row && <Progress row={row} lift={lifting.has(g.id)} />}</td>
                   <td className="fits">{row && <Reach row={row} lastKey={lastKey} today={today} />}</td>
                   <td className="fits r tnum">{row?.perMonth ? fmtMoney(row.perMonth) : ''}</td>
                   <td className="c">
@@ -121,7 +124,7 @@ export function Goals({ money, today, onChange }: { money: Money; today: string;
                   <Calc v={row.have} title="What’s in the account now, from what’s done" />
                 </td>
                 <td>
-                  <Progress row={row} />
+                  <Progress row={row} lift={lifting.has(row.goal.id)} />
                 </td>
                 <td className="fits">
                   <Reach row={row} lastKey={lastKey} today={today} />
@@ -137,12 +140,15 @@ export function Goals({ money, today, onChange }: { money: Money; today: string;
   );
 }
 
-function Progress({ row }: { row: GoalRow }) {
+/** `lift`: the goal has just been reached, so its progress launches once it's on the screen. */
+function Progress({ row, lift }: { row: GoalRow; lift?: boolean }) {
   const pct = Math.min(100, Math.max(0, (row.have / row.goal.target!) * 100));
+  const ref = useRef<HTMLSpanElement>(null);
+  const launch = useSeenOnScreen(ref, !!lift);
   return (
-    <span className="goal-progress" title={`${fmtMoney(row.have)} of ${fmtMoney(row.goal.target!)}`}>
+    <span ref={ref} className="goal-progress" title={`${fmtMoney(row.have)} of ${fmtMoney(row.goal.target!)}`} data-liftoff={launch ? '' : undefined}>
       <span className="acct-bar" role="img" aria-label={`${Math.round(pct)}% of the goal`}>
-        <span style={{ width: `${pct}%` }} />
+        <span style={{ width: `${pct}%`, '--fill': `${pct}%` } as CSSProperties} />
       </span>
       <span className="meta tnum">{row.left ? `${fmtMoney(row.left)} to go` : 'There'}</span>
     </span>

@@ -119,6 +119,24 @@ export function useUnseen(store: string, keys: string[], hold?: number): Readonl
   return state.fresh;
 }
 
+/**
+ * Whether `ref`'s element has been on the screen (at least `share` of it) since `on` turned true, so something that
+ * happens once (a savings goal's liftoff) isn't spent while it's out of sight, far down the page on a phone. Once seen
+ * it stays seen.
+ */
+export function useSeenOnScreen(ref: RefObject<Element | null>, on: boolean, share = 0.6): boolean {
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!on || seen || !el) return;
+    if (typeof IntersectionObserver === 'undefined') return void setSeen(true);
+    const io = new IntersectionObserver((list) => list.some((e) => e.intersectionRatio >= share) && setSeen(true), { threshold: [share, 1] });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [ref, on, seen, share]);
+  return on && seen;
+}
+
 /** How long rows that just arrived stay marked: past the end of the longest way a design brings them in. */
 const ARRIVED_MS = 2000;
 
