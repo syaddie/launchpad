@@ -520,13 +520,13 @@
    a soft halo that spreads and thins. */
 [data-design='vista'] .dg-lights[data-go] > i { animation: dgLightBloom calc(var(--m-view) * 1.6) var(--e-out) backwards; animation-delay: calc(var(--m-stagger) * 4 * var(--i, 0)); }
 @keyframes dgLightBloom { 0% { background: var(--t3); box-shadow: 0 0 0 0 transparent; } 35% { box-shadow: 0 0 10px 3px color-mix(in srgb, var(--ok) 70%, transparent); } 100% { box-shadow: 0 0 0 0 transparent; } }
-[data-design='vista'] .inbox-ping::before, [data-design='vista'] .inbox-ping::after { box-shadow: 0 0 10px 2px color-mix(in srgb, var(--ac) 55%, transparent); }
+[data-design='vista'] .inbox-ping::before, [data-design='vista'] .inbox-ping::after { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--ac) 75%, transparent), 0 0 12px 3px color-mix(in srgb, var(--ac) 40%, transparent); }
 [data-design='vista'] .inbox-ping[data-busy]::before, [data-design='vista'] .inbox-ping[data-busy]::after { animation-duration: calc(var(--m-sweep) * 3); }
 [data-design='vista'] .inbox-ping[data-busy]::after { animation-delay: calc(var(--m-sweep) * 1.5); }
 /* Focus is quick and exact: the lights snap on in a quick run with no overshoot, and the ping is one thin ring. */
 [data-design='focus'] .dg-lights[data-go] > i { animation-name: dgLightSnap; animation-duration: var(--m-state); animation-timing-function: var(--e-out); animation-delay: calc(var(--m-stagger) * 2 * var(--i, 0)); }
 @keyframes dgLightSnap { from { background: var(--t3); scale: 1.4; } }
-[data-design='focus'] .inbox-ping::before { box-shadow: 0 0 0 1px var(--ac); }
+[data-design='focus'] .inbox-ping::before { box-shadow: 0 0 0 1.5px var(--ac); }
 [data-design='focus'] .inbox-ping[data-busy]::before { animation-duration: calc(var(--m-sweep) * 1.4); }
 [data-design='focus'] .inbox-ping[data-busy]::after { animation: none; }
 /* Poster slams: square lights stamped on one after another, a square ping knocked out from the button in hard steps, and
