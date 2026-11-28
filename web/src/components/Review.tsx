@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { DOW, MON, addDays, startOfDay, ymd } from '../../../shared/dates';
 import { fmtStudy } from '../../../shared/learn';
 import { fmtMoney } from '../../../shared/money';
@@ -32,6 +32,46 @@ const signed = (n: number, fmt: (x: number) => string) => `${n > 0 ? '+' : n < 0
 // A mood is drawn in --mood: the accent, except where the accent means alarm (Poster, designs.css).
 const moodColor = (level: number) => `color-mix(in srgb, var(--mood, var(--ac)) ${[18, 36, 56, 78, 100][level - 1]}%, var(--sf))`;
 const plural = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? one : many}`;
+
+/** Past the end of the longest debrief: the last recap line printing as the view opens (mission.css REVIEW). */
+const DEBRIEF_MS = 3600;
+
+/**
+ * Whether the week's recap comes in now, line by line, as a debrief (Mission; mission.css REVIEW): as the view opens,
+ * and when a new recap arrives for the week showing (from refresh, or Sunday evening's while the view is open). Not
+ * for another week picked with the arrows, nor when anything else changes. `n` changes with each arrival, so its lines
+ * come in afresh.
+ */
+function useDebrief(week: string, at: string | null) {
+  const [st, setSt] = useState({ week, at, n: 0, on: true });
+  if (st.week !== week || st.at !== at) {
+    const arrived = st.week === week && !!at;
+    setSt({ week, at, n: st.n + (arrived ? 1 : 0), on: arrived || (st.on && st.week === week) });
+  }
+  useEffect(() => {
+    if (!st.on) return;
+    const t = window.setTimeout(() => setSt((x) => ({ ...x, on: false })), DEBRIEF_MS);
+    return () => window.clearTimeout(t);
+  }, [st.on, st.n]);
+  return st;
+}
+
+/**
+ * As the view opens, how it came, for its cards to report in one after another once it's there (Mission): `open` with
+ * the app opening on it, `enter` from another view (viewTransition.ts), `here` otherwise; then null. Read once, so
+ * the debrief keeps its timing when those marks come off.
+ */
+function useOpening(ms: number): 'open' | 'enter' | 'here' | null {
+  const [how, setHow] = useState<'open' | 'enter' | 'here' | null>(() => {
+    const root = document.documentElement;
+    return root.classList.contains('lp-opening') ? 'open' : root.dataset.entering ? 'enter' : 'here';
+  });
+  useEffect(() => {
+    const t = window.setTimeout(() => setHow(null), ms);
+    return () => window.clearTimeout(t);
+  }, [ms]);
+  return how;
+}
 
 /** The Review view: one week's numbers from every part of Launchpad, with Claude's recap. */
 export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
@@ -68,6 +108,10 @@ export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
   );
 
   const note = data.reviewNotes.notes[week] ?? null;
+  const opening = useOpening(DEBRIEF_MS);
+  const recap = useDebrief(week, note?.writtenAt ?? null);
+  let tile = 0;
+  const at = () => ({ '--i': tile++ }) as CSSProperties;
   const { cigarettes: c, training: t, study: s } = r;
   const range = `${mon.getDate()} ${MON[mon.getMonth()]} – ${sun.getDate()} ${MON[sun.getMonth()]}${sun.getFullYear() !== today.getFullYear() ? ` ${sun.getFullYear()}` : ''}`;
   const moodDays = Array.from({ length: 7 }, (_, i) => {
@@ -76,7 +120,7 @@ export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
   });
 
   return (
-    <main ref={scan.ref} className="you review lp-scan" aria-label="Review" data-arrive={scan.arrive}>
+    <main ref={scan.ref} className="you review lp-scan" aria-label="Review" data-arrive={scan.arrive} data-debrief={opening ?? undefined}>
       <div className="tr-head">
         <h2 key={offset} className="panel-title lp-period-label" style={{ margin: 0 }}>
           <Glyphs text={weekName(offset)} />
@@ -100,7 +144,7 @@ export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
       </div>
 
       {data.newsSummaries && (
-        <section className="panel you-panel tr-note" aria-label="Claude’s recap of the week" aria-busy={busy}>
+        <section className="panel you-panel tr-note" aria-label="Claude’s recap of the week" aria-busy={busy} data-lines={recap.on ? '' : undefined}>
           <div className="panel-head">
             <span className="sec-label">Claude’s recap</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -111,16 +155,21 @@ export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
             </div>
           </div>
           {note ? (
-            <>
-              <p className="serif tr-note-head">{note.headline}</p>
+            // Its lines are printed one after another (Mission), headline first.
+            <Fragment key={recap.n}>
+              <p className="serif tr-note-head" style={{ '--i': 0 } as CSSProperties}>
+                {note.headline}
+              </p>
               {note.points.length > 0 && (
                 <ul className="tr-note-points">
-                  {note.points.map((p) => (
-                    <li key={p}>{p}</li>
+                  {note.points.map((p, i) => (
+                    <li key={p} style={{ '--i': i + 1 } as CSSProperties}>
+                      {p}
+                    </li>
                   ))}
                 </ul>
               )}
-            </>
+            </Fragment>
           ) : (
             <p className={'meta' + (busy ? ' lp-loading' : '')} style={{ margin: 0 }}>
               {busy ? 'Reading the week and writing a recap…' : offset === 0 ? 'Claude writes a short recap of the week on Sunday evening. Press refresh to have one now.' : 'No recap for this week. Press refresh to write one.'}
@@ -132,18 +181,18 @@ export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
 
       {/* A new grid for each week, so it comes in whole. */}
       <div key={week} className="rv-grid lp-scan-grid">
-        <Tile title="Training" icon="ph-barbell" view="training" onView={onView}>
+        <Tile title="Training" style={at()} icon="ph-barbell" view="training" onView={onView}>
           <Big id="training" n={t.sessions} unit={t.sessions === 1 ? 'session' : 'sessions'} />
           {t.sessions > 0 && <span className="rv-line tnum">{fmtMinutes(t.minutes)} · {t.sets} working sets · {kg(t.volume)}</span>}
           <span className="meta tnum">Week before: {plural(t.prevSessions, 'session')}{t.prevVolume ? `, ${kg(t.prevVolume)}` : ''}</span>
         </Tile>
 
-        <Tile title="Body weight" icon="ph-scales" view="training" onView={onView}>
+        <Tile title="Body weight" style={at()} icon="ph-scales" view="training" onView={onView}>
           {r.weight.avg !== null ? <Big id="weight" n={fmtKg(Math.round(r.weight.avg * 10) / 10)} unit="kg, 7-day average" /> : <Big id="weight" n="–" unit="not logged" />}
           <span className="rv-line tnum">{r.weight.change !== null ? `${signed(Math.round(r.weight.change * 10) / 10, (x) => `${fmtKg(x)} kg`)} on the week before` : r.weight.avg !== null ? 'Nothing logged the week before to compare' : 'Log it in Training or type “weight 72.4” in ⌘K'}</span>
         </Tile>
 
-        <Tile title="Cigarettes" icon="ph-cigarette" view="you" onView={onView}>
+        <Tile title="Cigarettes" style={at()} icon="ph-cigarette" view="you" onView={onView}>
           <Big id="cigarettes" n={c.count} unit={c.limit ? `of ${c.limit * r.daysIn} at your limit` : c.count === 1 ? 'cigarette' : 'cigarettes'} warn={c.limit > 0 && c.count > c.limit * r.daysIn} />
           <span className="rv-line tnum">
             {c.perDay} a day
@@ -153,7 +202,7 @@ export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
           <span className="meta tnum">Week before: {c.prevCount}</span>
         </Tile>
 
-        <Tile title="Mood" icon="ph-smiley" view="you" onView={onView}>
+        <Tile title="Mood" style={at()} icon="ph-smiley" view="you" onView={onView}>
           {r.mood.avg !== null ? <Big id="mood" n={r.mood.avg.toFixed(1)} unit={`of 5, ${MOOD_WORDS[Math.round(r.mood.avg) - 1].toLowerCase()} on average`} /> : <Big id="mood" n="–" unit="not rated" />}
           <div className="rv-week" aria-hidden="true">
             {moodDays.map(({ d, m, ahead }) => (
@@ -167,7 +216,7 @@ export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
           </span>
         </Tile>
 
-        <Tile title="Study" icon="ph-graduation-cap" view="learn" onView={onView}>
+        <Tile title="Study" style={at()} icon="ph-graduation-cap" view="learn" onView={onView}>
           <Big id="study" n={fmtStudy(s.minutes)} unit="studied" />
           {s.courses.length > 0 && (
             <div className="rv-list">
@@ -189,7 +238,7 @@ export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
           {s.late.length > 0 && <span className="meta" style={{ color: 'var(--wn)' }}>Not handed in: {s.late.join(', ')}</span>}
         </Tile>
 
-        <Tile title="Money" icon="ph-wallet" view="money" onView={onView}>
+        <Tile title="Money" style={at()} icon="ph-wallet" view="money" onView={onView}>
           {r.money ? (
             <>
               <Big id="money" n={fmtMoney(r.money.closing)} unit={offset === 0 ? 'in the bank so far' : 'at the end of the week'} warn={r.money.closing < 0} />
@@ -214,9 +263,10 @@ export function ReviewView({ data, now, busy, onRefresh, onView }: Props) {
   );
 }
 
-function Tile({ title, icon, view, onView, children }: { title: string; icon: string; view: ViewKey; onView: (v: ViewKey) => void; children: ReactNode }) {
+/** A week's figures from one part of Launchpad. `style` gives its place among them as --i, for the order they report in. */
+function Tile({ title, icon, view, onView, style, children }: { title: string; icon: string; view: ViewKey; onView: (v: ViewKey) => void; style: CSSProperties; children: ReactNode }) {
   return (
-    <section className="panel you-panel rv-tile lp-scan-cell" aria-label={title}>
+    <section className="panel you-panel rv-tile lp-scan-cell" aria-label={title} style={style}>
       <div className="panel-head">
         <span className="sec-label rv-title">
           <i className={'ph-duotone ' + icon} aria-hidden="true" />

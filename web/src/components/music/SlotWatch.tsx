@@ -176,9 +176,9 @@ export function WatchLines({ row, w }: { row: SlotRow; w: WatchProps }) {
 
 /**
  * Every slot watched, soonest first, above the calendar: what's watched where, and any that
- * have freed up. Picking one shows its day.
+ * have freed up. Picking one shows its day. `pinged`: the ones that have just freed up (Mission lights their tick).
  */
-export function WatchList({ s, now, onPick, onAdd, onRemove }: { s: NacStatus; now: Date; onPick: (date: string) => void; onAdd: (w: Slot) => Promise<boolean>; onRemove: (id: string) => Promise<void> }) {
+export function WatchList({ s, now, pinged, onPick, onAdd, onRemove }: { s: NacStatus; now: Date; pinged?: ReadonlySet<string>; onPick: (date: string) => void; onAdd: (w: Slot) => Promise<boolean>; onRemove: (id: string) => Promise<void> }) {
   const byKey = new Map(s.watching.map((p) => [p.key, p]));
   const loc = new Map(s.locations.map((l) => [l.key, l]));
   const list = [...s.watches].sort((a, b) => (a.freed ? 0 : 1) - (b.freed ? 0 : 1) || a.date.localeCompare(b.date) || a.start.localeCompare(b.start));
@@ -196,7 +196,7 @@ export function WatchList({ s, now, onPick, onAdd, onRemove }: { s: NacStatus; n
           const p = byKey.get(x.place);
           const l = loc.get(x.place);
           return (
-            <li key={x.id} className={'nac-watch' + (x.freed ? ' freed' : '')} {...menuProps(() => watchMenu(x, { url: p?.url, onAdd, onRemove, onPick }), `Watched slot at ${p?.short ?? x.place}`)}>
+            <li key={x.id} className={'nac-watch' + (x.freed ? ' freed' : '')} data-ping={pinged?.has(x.id) ? '' : undefined} {...menuProps(() => watchMenu(x, { url: p?.url, onAdd, onRemove, onPick }), `Watched slot at ${p?.short ?? x.place}`)}>
               {x.freed && <i className="ph-duotone ph-check-circle" aria-hidden="true" />}
               <button type="button" className="btn-link nac-watch-go" onClick={() => onPick(x.date)}>
                 {p?.short ?? x.place} · {fmtNacDay(x.date)} · {x.freed ? x.found.map(fmtRange).join(', ') : fmtWatch(x, l?.open, l?.close)}

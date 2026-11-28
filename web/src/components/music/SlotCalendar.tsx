@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { addDaysYmd, calendarWeeks, DOW3, fmtNacDay, freeHours, MONTH_NAMES, monthsLabel, type SlotDay, type SlotView } from '../../../../shared/nac';
 
 /** Monday first, as the weeks are laid out. */
@@ -23,6 +23,9 @@ function dayLabel(d: SlotDay, rel: string): string {
  * Music › Busking slots as a month calendar, Monday first: each day lists the locations with
  * free time (code and hours) and your own bookings (★), and picking a day shows its times in
  * `detail` beside or below. Days before today and past the last one known are greyed out.
+ *
+ * `scan` carries a check's motion (Mission, mission.css MUSIC): `searching` while one asked for runs, a line sweeps
+ * the calendar; `found` while its result comes in (periodMotion.ts), the free windows lighting as the line finds them.
  */
 export function SlotCalendar({
   view,
@@ -30,6 +33,8 @@ export function SlotCalendar({
   codes,
   places,
   watched,
+  pinged,
+  scan,
   jump,
   mine = true,
   detail,
@@ -40,6 +45,9 @@ export function SlotCalendar({
   places: { key: string; short: string }[];
   /** Days with a slot being watched, for a bell by the date. */
   watched?: Set<string>;
+  /** Days where a watched slot has just freed up, pinged once. */
+  pinged?: Set<string>;
+  scan?: { ref: RefObject<HTMLDivElement | null>; found: boolean; searching: boolean };
   /** A day to show, picked elsewhere (the list of watched slots); n changes each time. */
   jump?: { date: string; n: number } | null;
   /** Bookings can be yours (NAC_BUSKER_ID is set, and this isn't the Music-only page), so the legend says what ★ means. */
@@ -94,9 +102,14 @@ export function SlotCalendar({
   return (
     <div className="nac-cal-wrap">
       <div className="nac-cal-split">
-        <div className="nac-cal-main">
+        <div ref={scan?.ref} className="nac-cal-main lp-scan" data-found={scan?.found ? '' : undefined} data-searching={scan?.searching ? '' : undefined}>
           <h3 className="nac-cal-title">{monthsLabel(first, last)}</h3>
-          <div className="nac-cal" role="grid" aria-label="Busking slots by day" ref={grid} onKeyDown={onKey}>
+          <div className="nac-cal lp-scan-grid" role="grid" aria-label="Busking slots by day" ref={grid} onKeyDown={onKey}>
+            {scan?.searching && (
+              <span className="nac-hunt" aria-hidden="true">
+                <i />
+              </span>
+            )}
             <div className="nac-cal-row nac-cal-head" role="row">
               {HEAD.map((d, i) => (
                 <span key={d} className={'nac-cal-dow' + (i > 4 ? ' wkend' : '')} role="columnheader" aria-label={d}>
@@ -110,7 +123,7 @@ export function SlotCalendar({
             {weeks.map((w) => (
               <div key={w[0]} className="nac-cal-row" role="row">
                 {w.map((date) => (
-                  <Cell key={date} date={date} day={byDate.get(date)} today={today} first={date === weeks[0][0]} on={picked?.date === date} watched={!!watched?.has(date)} codes={codes} onPick={() => pick(date, 'click')} />
+                  <Cell key={date} date={date} day={byDate.get(date)} today={today} first={date === weeks[0][0]} on={picked?.date === date} watched={!!watched?.has(date)} ping={!!pinged?.has(date)} codes={codes} onPick={() => pick(date, 'click')} />
                 ))}
               </div>
             ))}
@@ -125,7 +138,7 @@ export function SlotCalendar({
   );
 }
 
-function Cell({ date, day, today, first, on, watched, codes, onPick }: { date: string; day: SlotDay | undefined; today: string; first: boolean; on: boolean; watched: boolean; codes: Record<string, string>; onPick: () => void }) {
+function Cell({ date, day, today, first, on, watched, ping, codes, onPick }: { date: string; day: SlotDay | undefined; today: string; first: boolean; on: boolean; watched: boolean; ping: boolean; codes: Record<string, string>; onPick: () => void }) {
   const n = Number(date.slice(8, 10));
   // The month goes by the 1st, and by the first day of all, so each month is named once.
   const num = (
@@ -146,10 +159,12 @@ function Cell({ date, day, today, first, on, watched, codes, onPick }: { date: s
   const chips = day.rows.filter((r) => r.kind === 'open' || r.mine.length);
   const none = !chips.length;
   return (
-    <div className="nac-cell-at" role="gridcell" aria-selected={on}>
-      <button type="button" className={cls + (on ? ' on' : '') + (none ? ' none' : '')} data-date={date} tabIndex={on ? 0 : -1} onClick={onPick} aria-label={dayLabel(day, rel) + (watched ? '; a slot is watched' : '')}>
+    <div className="nac-cell-at lp-scan-cell" role="gridcell" aria-selected={on}>
+      <button type="button" className={cls + (on ? ' on' : '') + (none ? ' none' : '')} data-date={date} data-ping={ping ? '' : undefined} tabIndex={on ? 0 : -1} onClick={onPick} aria-label={dayLabel(day, rel) + (watched ? '; a slot is watched' : '')}>
         <span className="nac-cell-top">
           {num}
+          {/* A watched slot here has just freed up: a beacon by the date (Mission). */}
+          {ping && <i className="nac-cell-ping" aria-hidden="true" />}
           {/* Cells too narrow for "★PLQ" put the star by the date instead (styles.css). */}
           {chips.some((r) => r.mine.length) && (
             <span className="nac-cell-star" aria-hidden="true">

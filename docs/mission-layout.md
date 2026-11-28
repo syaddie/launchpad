@@ -26,6 +26,22 @@ that only Mission shows (with Launchpad's own light and its line in the poll's l
 
 ## Built, against the design system
 
+- Review and Music, built from the ideas below (ideas 56–59; `mission.css` REVIEW and MUSIC). Review's week is a
+  debrief: as the view opens, its cards report in one after another, each rising in its turn as its icon lights and its
+  figure relights like the launch clock's dots, and Claude's recap is printed a line at a time, the headline first, each
+  wiping on with a glow; a new recap for the week showing (refresh, or Sunday evening's while it's open) prints afresh.
+  Not on a change of week (the period scan keeps that) or any other change (idea 56; `useOpening`, `useDebrief` in
+  `Review.tsx`). Music's Check now searches the slot calendar: while the check runs a beam crosses it again and again,
+  like a radar's, and when the result is in the calendar as it was goes ahead of the beam's last pass and each free
+  window lights as the beam finds it, a new one's dot ringing (idea 57; `usePeriodScan` and `periodMotion.ts`, the
+  calendar marked `data-found` rather than `data-arrive` so the other layouts don't move; only Check now, not the checks
+  every 10 minutes). "Next check" is a small T- countdown ("T-04:12") whose digits roll each second while the page is in
+  view, in the colour of now inside its last minute; screen readers keep the time, and once it's due the page looks again
+  a few seconds later so the check shows as it starts (idea 58; `NextCheck` in `SlotFinder.tsx`, `minusText` in
+  `mission.ts`). A watched slot that's just freed up pings its day: a beacon by the date sends out two rings and the day
+  flares, and its tick in the list of watched slots reports in; once per slot freed, on this device (idea 59;
+  `useUnseen` with `launchpad:freedSlots`; nothing the first time Music opens on a device). Less motion: the recap's
+  lines fade in one after another, no beam searches and nothing lights or rings, and a freed slot's beacon stands lit a moment.
 - Server, built from the ideas below (ideas 48–55; `mission.css` SERVER): the CPU and memory rings are instruments, a
   scale round each lit up to the reading, sweeping up from nothing as the panel opens, and above 90% a glow round the
   ring rises and falls slowly for as long as it stays there (idea 48). Test now counts T-3, T-2, T-1 in the dot-matrix
@@ -144,7 +160,7 @@ that only Mission shows (with Launchpad's own light and its line in the poll's l
   the grid, so any layout works) and the period's name relighting from the side you went. Review's and Training's
   figures roll from the week before. Every layout has its own version (docs/motion.md, "Changing a period"). Music's
   slot calendar has no arrows (it shows every day that's known at once), so there's no period to change there; Check
-  now's scan across it (idea 57) can use the same pieces.
+  now's scan across it (idea 57, above) uses the same pieces.
 - A save blinks its source's light, like a packet going up (idea 21; `uplink.ts`, `TopBar.tsx`, `mission.css` SAVES
   GOING UP): the API layer notes every save the server takes, and the light it belongs to blinks once, a ring pulsing
   off it as a packet streaks up. An event added is the calendar's, an email archived or a bill dropped the inbox's, a
@@ -299,10 +315,7 @@ All built (ideas 48–55, see Built).
 
 **Review and Music**
 
-56. Review's cards report in one after another, like a debrief, and Claude's recap appears a line at a time. **S**
-57. Music's Check now sends the scan across the slot calendar, and free windows light as they're found. **S–M**
-58. "Next check 08:55" is a small T- countdown that rolls. **S**
-59. A watched slot coming free pings its day with a beacon ring. **S**
+All built (ideas 56–59, see Built).
 
 **Settings and phones**
 

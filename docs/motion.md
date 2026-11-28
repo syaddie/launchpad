@@ -148,6 +148,16 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
   first, then the new one arrives); Poster slams a bar of ink across and stamps the name; Mission makes it a scan (in
   `mission.css`), each cell lighting as the beam reaches it (`--x`, where the cell is across the grid). Opening a
   period from elsewhere (a day picked in the year, Money's Month from Overview) just shows it.
+- **A check's result comes in across the slot calendar** (Music, Mission only; `SlotFinder.tsx`, `mission.css` MUSIC):
+  while a check asked for with Check now runs, a beam crosses the calendar again and again (`.nac-hunt`, moved, not
+  redrawn); when its result is in, `usePeriodScan` copies the calendar as it was and the beam's last pass carries the
+  new one in, each free window lighting as the beam reaches its day (`--x`), a new one's dot ringing. The calendar is
+  marked `data-found`, not `data-arrive`, so the period rules (and the other designs) leave it alone, and the copy is
+  hidden outside Mission. Not for the checks every 10 minutes.
+- **Review reports in** (Mission; `Review.tsx`, `mission.css` REVIEW): as the view opens (`data-debrief`: `open` with
+  the app, `enter` from another view, read once so the timing holds), its cards rise one after another, each icon
+  lighting and figure relighting in turn, and Claude's recap prints a line at a time (`data-lines`, each line's place
+  `--i`); a new recap for the week showing prints afresh (`useDebrief`). Changing the week is the period scan's, not this.
 - **The tab says what's coming** (`tabTitle.ts`, `hooks/useTabTitle.ts`, every design): inside the hour before the
   day's next event its title counts down ("T-08:12 · Gym: push day"), and while studying it counts up ("T+24:10 ·
   Studying ASE 301"); inside the launch clock's ten minutes, and while studying, its icon lifts off on a flame. Written
@@ -213,7 +223,9 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
   a downlink, `mission.css` DIGEST AND INBOX; the others show them as they always have), and a savings goal just
   reached (`moneyPotsReached` for an account's own goal, `moneyGoalsReached` for Goals: Mission launches its card, or
   its progress in its row, once it's on the screen, `useSeenOnScreen`; after a move into it, once the transfer has
-  landed).
+  landed), and a watched busking slot that's freed up (`freedSlots`: Mission pings its day on the slot calendar with a
+  beacon and two rings, and lights its tick in the list). `useUnseen` takes `null` while what it's given isn't loaded,
+  so a device's first reading is what's there, not news.
 
 ## Alive on its own
 
@@ -229,7 +241,8 @@ today's pixel in the year twinkles (faded and scaled). On Server in Mission, a r
 now and then (moved across, not redrawn), and Network's paper steps on once a reading (moved). Busy states
 (a spinner, a skeleton line, Mission's acquiring line and satellite, Training's downlink, the Inbox's ping) move only
 while something is being waited for. The tab's title changes once a second only while it counts to an event inside the
-hour or a running study timer.
+hour or a running study timer. Music's next check counts down in Mission ("T-04:12"), a step a second while the page is
+in view, rolling only the digits that change (moved, not redrawn), and stopping at zero.
 
 ## Less motion
 

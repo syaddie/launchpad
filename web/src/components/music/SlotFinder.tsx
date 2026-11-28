@@ -7,12 +7,20 @@ import { SlotCalendar } from './SlotCalendar';
 import { menuProps } from '../ContextMenu';
 import { rowMenu, WatchForm, WatchLines, WatchList, type WatchProps } from './SlotWatch';
 import { EmptyArt } from '../mission/EmptyArt';
+import { Readout, usePageVisible, usePeriodScan, useUnseen } from '../Motion';
+import { minusText } from '../../mission';
 
 /** The server checks NAC every 10 minutes; this only reads what it found, so asking often costs nothing. */
 const POLL = 60_000;
 /** While a check is running or about to, so its result shows as soon as it's in. */
 const POLL_BUSY = 3_000;
 const PORTAL = 'https://eservices.nac.gov.sg/Busking';
+/** How long the calendar is marked while a check's result comes in across it: past the last free window lighting (mission.css MUSIC). */
+const FOUND_MS = 2800;
+/** How long a watched slot that's just freed up pings its day: past the end of its rings. */
+const PING_MS = 4000;
+/** Looking again once the next check is due, when it's no further off than this. */
+const DUE_LOOK_MS = 15 * 60_000;
 
 const list = (names: string[]) => (names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
 const plural = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? one : many}`;
@@ -61,11 +69,24 @@ export function SlotFinder({ now, notify, guest }: { now: Date; notify: (msg: st
   const [jump, setJump] = useState<{ date: string; n: number } | null>(null);
   /** The check asked for here, by when the one before it was made, so its result can be told when it's in. */
   const askedAfter = useRef<string | null | undefined>(undefined);
+  /** A check asked for here is on its way (Mission searches the calendar meanwhile). */
+  const [hunting, setHunting] = useState(false);
+  // Its result comes in across the calendar (Mission): the calendar as it was, copied (periodMotion.ts), goes ahead of a
+  // line crossing it, and the free windows light as the line finds them.
+  const scan = usePeriodScan<HTMLDivElement>(FOUND_MS);
+  const sweep = useRef(scan.go);
+  sweep.current = scan.go;
+  const swept = useRef<string | null>(null);
 
   const load = useCallback(() => {
     source
       .load()
       .then((r) => {
+        const asked = askedAfter.current;
+        if (asked !== undefined && r.ok && !r.running && !r.queued_at && r.checked_at && r.checked_at !== asked && r.checked_at !== swept.current) {
+          swept.current = r.checked_at;
+          sweep.current('next');
+        }
         setS(r);
         setLoadError('');
       })
@@ -84,10 +105,19 @@ export function SlotFinder({ now, notify, guest }: { now: Date; notify: (msg: st
     };
   }, [load, busy]);
 
+  // When the next check is due, look again just after, so it shows as it starts (and the countdown doesn't sit at zero).
+  useEffect(() => {
+    const due = Date.parse(s?.next_check ?? '') - Date.now();
+    if (!(due > 0) || due > DUE_LOOK_MS) return;
+    const t = window.setTimeout(() => document.visibilityState === 'visible' && load(), due + 3000);
+    return () => window.clearTimeout(t);
+  }, [s?.next_check, load]);
+
   // The check asked for has finished: say how it went.
   useEffect(() => {
     if (!s || busy || askedAfter.current === undefined || s.checked_at === askedAfter.current) return;
     askedAfter.current = undefined;
+    setHunting(false);
     const free = slotView(s, new Date()).freeWindows;
     notify(s.ok ? `Checked NAC: ${plural(free, 'free window')}.` : `The check failed: ${sentence(s.error)}`);
   }, [s, busy, notify]);
@@ -96,12 +126,14 @@ export function SlotFinder({ now, notify, guest }: { now: Date; notify: (msg: st
     if (!s || busy) return;
     if (s.can_check) return notify(s.can_check);
     setAsking(true);
+    setHunting(true);
     askedAfter.current = s.checked_at;
     source
       .check()
       .then((r) => setS((x) => (x ? { ...x, queued_at: r.at } : x)))
       .catch((e) => {
         askedAfter.current = undefined;
+        setHunting(false);
         notify((e as Error).message);
       })
       .finally(() => {
@@ -137,6 +169,10 @@ export function SlotFinder({ now, notify, guest }: { now: Date; notify: (msg: st
   const watchOf = (date: string): WatchProps | null =>
     s && !guest ? { date, fromMin: date === today ? sgtMinutes(now) : null, watches: (s.watches ?? []).filter((x) => x.date === date), alerts: s.watch_alerts ?? 'ok', busy: watchBusy, now, onAdd: addWatch, onRemove: removeWatch } : null;
   const watched = useMemo(() => new Set((s?.watches ?? []).filter((x) => !x.freed).map((x) => x.date)), [s?.watches]);
+  // A watched slot that's just freed up pings its day (Mission), once: new since this device last showed it.
+  const freedIds = useMemo(() => (s ? (s.watches ?? []).filter((x) => x.freed).map((x) => x.id) : null), [s]);
+  const fresh = useUnseen('freedSlots', freedIds, PING_MS);
+  const pinged = useMemo(() => new Set((s?.watches ?? []).filter((x) => fresh.has(x.id)).map((x) => x.date)), [s?.watches, fresh]);
 
   return (
     <section className={'panel you-panel nac' + (s && !s.ok ? ' stale' : '')} aria-label="Busking slots">
@@ -150,7 +186,17 @@ export function SlotFinder({ now, notify, guest }: { now: Date; notify: (msg: st
                 ? 'Checking NAC now…'
                 : waiting
                   ? `Checking at ${waiting}, once schedule-sync is done`
-                  : `${s.checked_at ? `Last checked ${fmtClock(s.checked_at, now)}` : 'Not checked yet'}${s.next_check ? ` · ${s.checked_at ? 'next check' : 'first check'} ${fmtClock(s.next_check, now)}` : ''}`}
+                  : (
+                      <>
+                        {s.checked_at ? `Last checked ${fmtClock(s.checked_at, now)}` : 'Not checked yet'}
+                        {s.next_check && (
+                          <>
+                            {` · ${s.checked_at ? 'next check' : 'first check'} `}
+                            <NextCheck at={s.next_check} now={now} />
+                          </>
+                        )}
+                      </>
+                    )}
             </span>
           )}
           {s && (
@@ -229,7 +275,7 @@ export function SlotFinder({ now, notify, guest }: { now: Date; notify: (msg: st
           ) : (
             <>
               <Notes s={s} noBookings={view!.noBookings} guest={!!guest} />
-              {!guest && <WatchList s={{ ...s, watches: s.watches ?? [] }} now={now} onPick={(date) => setJump((j) => ({ date, n: (j?.n ?? 0) + 1 }))} onAdd={addWatch} onRemove={removeWatch} />}
+              {!guest && <WatchList s={{ ...s, watches: s.watches ?? [] }} now={now} pinged={fresh} onPick={(date) => setJump((j) => ({ date, n: (j?.n ?? 0) + 1 }))} onAdd={addWatch} onRemove={removeWatch} />}
               {view!.days.length > 0 && (
                 <p className="nac-sum">
                   {view!.freeWindows ? (
@@ -244,7 +290,18 @@ export function SlotFinder({ now, notify, guest }: { now: Date; notify: (msg: st
                 </p>
               )}
               {view!.days.length ? (
-                <SlotCalendar view={view!} today={today} codes={codes} places={s.locations} watched={watched} jump={jump} mine={s.mine_on} detail={(d) => <Day day={d} today={today} w={watchOf(d.date)} />} />
+                <SlotCalendar
+                  view={view!}
+                  today={today}
+                  codes={codes}
+                  places={s.locations}
+                  watched={watched}
+                  pinged={pinged}
+                  scan={{ ref: scan.ref, found: !!scan.arrive, searching: hunting && busy && !waiting }}
+                  jump={jump}
+                  mine={s.mine_on}
+                  detail={(d) => <Day day={d} today={today} w={watchOf(d.date)} />}
+                />
               ) : (
                 <>
                   <EmptyArt kind="scrubbed" />
@@ -263,6 +320,37 @@ export function SlotFinder({ now, notify, guest }: { now: Date; notify: (msg: st
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * When the next check is: its time, and in Mission a small T- countdown whose digits roll (mission.css MUSIC), stepping
+ * once a second while the page is in view and stopping at zero. Screen readers, and the other designs, get the time.
+ */
+function NextCheck({ at, now }: { at: string; now: Date }) {
+  const visible = usePageVisible();
+  const due = Date.parse(at);
+  const [t, setT] = useState(() => Date.now());
+  useEffect(() => {
+    if (!visible) return;
+    let timer = 0;
+    const tick = () => {
+      const n = Date.now();
+      setT(n);
+      // Each time the seconds left change, until it's due.
+      if (n < due) timer = window.setTimeout(tick, ((due - n) % 1000 || 1000) + 5);
+    };
+    tick();
+    return () => window.clearTimeout(timer);
+  }, [visible, due]);
+  const clock = fmtClock(at, now);
+  return (
+    <>
+      <span className="nac-next-at">{clock}</span>
+      <span className="nac-next-t" aria-hidden="true" title={`At ${clock}`} data-soon={due - t <= 60_000 ? '' : undefined}>
+        <Readout text={minusText(due - t)} />
+      </span>
+    </>
   );
 }
 

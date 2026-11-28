@@ -440,6 +440,13 @@ export function countText(ms: number, from = 3): string {
   return `T+${two(Math.floor(up / 60))}:${two(up % 60)}`;
 }
 
+/** Time to go in a small label, by the second: "T-04:12" inside an hour, "T-1:04:12" past one, "T-00:00" once due. */
+export function minusText(ms: number): string {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(s / 3600);
+  return `T-${h ? `${h}:` : ''}${two(Math.floor(s / 60) % 60)}:${two(s % 60)}`;
+}
+
 /** A countdown's days left for the dot-matrix face: "T-05", "T-27", "T-124". */
 export function daysText(days: number): string {
   return `T-${two(Math.max(0, days))}`;

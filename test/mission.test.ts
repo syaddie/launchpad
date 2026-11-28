@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { along, apron, APRON_ROWS, ascentCurve, clearOf, clockText, countdown, countText, daysText, elapsedText, dayFraction, finalCount, hoursOf, moonPath, moonPhase, moonTimes, moonTurn, orbPlace, pathTable, seeded, skyPoint, skyWeather, stagesShed, sunTimes } from '../web/src/mission';
+import { along, apron, APRON_ROWS, ascentCurve, clearOf, clockText, countdown, countText, daysText, elapsedText, dayFraction, finalCount, hoursOf, minusText, moonPath, moonPhase, moonTimes, moonTurn, orbPlace, pathTable, seeded, skyPoint, skyWeather, stagesShed, sunTimes } from '../web/src/mission';
 
 const at = (h: number, m = 0, s = 0) => new Date(2026, 10, 25, h, m, s);
 
@@ -336,5 +336,16 @@ describe('mission elapsed time and days left', () => {
     expect(countText((3 + 90) * 1000)).toBe('T+01:30');
     expect(countText(-2000)).toBe('T-3');
     expect(countText(1500, 5)).toBe('T-4');
+  });
+  it('writes the time to go as T-, by the second', () => {
+    expect(minusText(252_000)).toBe('T-04:12');
+    // A part of a second left still shows it, so it reads T-00:00 only once it's due.
+    expect(minusText(251_400)).toBe('T-04:12');
+    expect(minusText(400)).toBe('T-00:01');
+    expect(minusText(0)).toBe('T-00:00');
+    expect(minusText(-9000)).toBe('T-00:00');
+    expect(minusText(3_599_000)).toBe('T-59:59');
+    expect(minusText(3_600_000)).toBe('T-1:00:00');
+    expect(minusText((2 * 3600 + 4 * 60 + 5) * 1000)).toBe('T-2:04:05');
   });
 });
