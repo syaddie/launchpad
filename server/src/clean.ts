@@ -6,7 +6,7 @@ import { MAX_JOURNAL } from '../../shared/trackers';
 import { cleanSubjects } from '../../shared/digest';
 import { parseNewsSource } from '../../shared/news';
 import { cleanKg } from '../../shared/training';
-import { ALERT_KINDS, DESIGN_KEYS, HOME_AREAS, knownDesign } from '../../shared/types';
+import { ALERT_KINDS, DESIGN_KEYS, HOME_AREAS, knownDesign, THEME_MODES, type ThemeMode } from '../../shared/types';
 import type { BookmarkGroup, Countdown, DesignKey, HomeArea, HomeLayouts, Mood, Note, Package, Prefs, SearchEngine, Snippet } from '../../shared/types';
 
 export const isStr = (v: unknown): v is string => typeof v === 'string';
@@ -67,7 +67,7 @@ export function cleanEngines(v: unknown[]): SearchEngine[] {
 export function cleanPrefs(body: Partial<Prefs>, prev: Prefs): Prefs {
   const next: Prefs = {
     name: isStr(body.name) ? body.name.slice(0, 40) : prev.name,
-    theme: ['system', 'light', 'dark'].includes(body.theme as string) ? body.theme! : prev.theme,
+    theme: THEME_MODES.includes(body.theme as ThemeMode) ? body.theme! : prev.theme,
     accent: ['sage', 'slate', 'terracotta'].includes(body.accent as string) ? body.accent! : prev.accent,
     design: DESIGN_KEYS.includes(body.design as DesignKey) ? body.design! : knownDesign(prev.design),
     hiddenCalendars: Array.isArray(body.hiddenCalendars) ? body.hiddenCalendars.filter(isStr) : prev.hiddenCalendars,

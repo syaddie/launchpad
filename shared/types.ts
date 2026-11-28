@@ -60,7 +60,12 @@ export interface NoteVersion {
   text: string;
 }
 
-export type ThemeMode = 'system' | 'light' | 'dark';
+/** Settings › Theme. `sun` follows the sun: light from sunrise, dark from sunset (Singapore's times, web/src/theme.ts). */
+export type ThemeMode = 'system' | 'light' | 'dark' | 'sun';
+/** Every theme, for checking a saved or sent one is known. */
+export const THEME_MODES: ThemeMode[] = ['system', 'light', 'dark', 'sun'];
+/** A theme this version doesn't know (one from a newer version, or nothing saved) follows the device, like a new install. */
+export const knownTheme = (t: unknown): ThemeMode => (THEME_MODES.includes(t as ThemeMode) ? (t as ThemeMode) : 'system');
 export type AccentKey = 'sage' | 'slate' | 'terracotta';
 /** The whole-page design picked in Settings › Layout. Every design shows every view; only the arrangement and look change. */
 export type DesignKey = 'mission' | 'vista' | 'focus' | 'poster';

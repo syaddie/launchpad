@@ -26,7 +26,12 @@
         // A layout that's since been retired shows the default (shared/types.ts, DESIGN_KEYS).
         if (['mission', 'vista', 'focus', 'poster'].indexOf(d) < 0) d = 'mission';
         var t = l.theme || 'system';
-        var dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+        // Follow the sun: dark from about 19:10 to 07:00 in Singapore (within a quarter of an hour all year). Only for this
+        // first paint; the page then uses the day's own sunrise and sunset (web/src/theme.ts). A theme this page doesn't
+        // know follows the device.
+        if (['system', 'light', 'dark', 'sun'].indexOf(t) < 0) t = 'system';
+        var sg = (Date.now() / 60000 + 480) % 1440;
+        var dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches) || (t === 'sun' && (sg < 420 || sg >= 1150));
         document.documentElement.dataset.mode = dark ? 'dark' : 'light';
         document.documentElement.dataset.accent = l.accent || 'sage';
         document.documentElement.dataset.design = d;

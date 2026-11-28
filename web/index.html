@@ -32,7 +32,13 @@
         try { d = localStorage.getItem('launchpad:design') || p.design || d; } catch (e) {}
         // A layout that's since been retired shows the default (shared/types.ts, DESIGN_KEYS).
         if (['mission', 'vista', 'focus', 'poster'].indexOf(d) < 0) d = 'mission';
-        var dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+        // Follow the sun: dark from sunset to sunrise, in minutes of Singapore's day as the app last saved them (they move a
+        // minute or so a day), or about 19:10 and 07:00. Only for this first paint; the app then uses the day's own times
+        // (web/src/theme.ts). A theme this page doesn't know follows the device.
+        if (['system', 'light', 'dark', 'sun'].indexOf(t) < 0) t = 'system';
+        var sun = p.sun && p.sun.length === 2 ? p.sun : [420, 1150];
+        var sg = (Date.now() / 60000 + 480) % 1440;
+        var dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches) || (t === 'sun' && (sg < sun[0] || sg >= sun[1]));
         document.documentElement.dataset.mode = dark ? 'dark' : 'light';
         document.documentElement.dataset.accent = p.accent || 'sage';
         document.documentElement.dataset.design = d;

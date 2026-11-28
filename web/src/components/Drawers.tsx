@@ -3,13 +3,16 @@ import { createPortal } from 'react-dom';
 import { DEFAULT_ENGINES } from '../../../shared/defaults';
 import { fmtUsd } from '../../../shared/claudeUsage';
 import type { AccentKey, AppState, Backup, BackupSnapshot, DesignKey, DriveStatus, GoogleSource, Photo, Prefs, SearchEngine, ThemeMode } from '../../../shared/types';
-import { knownDesign } from '../../../shared/types';
+import { knownDesign, knownTheme, THEME_MODES } from '../../../shared/types';
+import { sunTimes } from '../mission';
 import { api, BACKUP_URL, DB_BACKUP_URL, snapshotUrl, ZIP_BACKUP_URL } from '../api';
 import { PhotoSettings } from './Photos';
 import { AlertSettings } from './AlertSettings';
 import { HomeArrangement } from './HomeArrangement';
 import { ago, fmtStamp, hm } from '../util';
 import { Glide } from './Motion';
+import { Vehicle } from './mission/Mark';
+import { buzz, canVibrate, setVibrateOn, vibrateOn } from '../buzz';
 
 /**
  * A panel from the right over a dimmed page. Drawn at the end of the page, outside the view that
@@ -48,6 +51,18 @@ const ACCENTS: { key: AccentKey; name: string; light: string; dark: string }[] =
   { key: 'terracotta', name: 'Terracotta', light: '#ad603f', dark: '#dd9b7b' },
 ];
 
+const THEME_NAMES: Record<ThemeMode, string> = { system: 'System', light: 'Light', dark: 'Dark', sun: 'Follow the sun' };
+
+/** Under Theme when it follows the sun: today's times, so it's clear when it will change. */
+function SunNote({ now }: { now: Date }) {
+  const { rise, set } = sunTimes(now);
+  return (
+    <span className="meta">
+      Light from sunrise ({hm(rise)}) and dark from sunset ({hm(set)}), by Singapore’s times. It changes by itself.
+    </span>
+  );
+}
+
 export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconnect, onRestore, onRestoreSnapshot, onAddPhotos, onRemovePhoto, onPhotoFocus, localDesign, onLocalDesign, startTab }: {
   data: AppState;
   /** The tab it opens on (a photo's "Manage photos…" opens Photos); General when not given. */
@@ -72,6 +87,7 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
   const [restoring, setRestoring] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const p = data.prefs;
+  const theme = knownTheme(p.theme);
   const g = data.google;
   const [name, setName] = useState(p.name);
   // A name changed on another device, or put back by a restore, shows here too.
@@ -266,13 +282,14 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
       <div className="drawer-section">
         <div className="drawer-label">Theme</div>
         <div className="segmented">
-          <Glide on={p.theme} />
-          {(['system', 'light', 'dark'] as ThemeMode[]).map((t) => (
-            <button key={t} className={p.theme === t ? 'on' : ''} onClick={() => onPrefs({ ...p, theme: t })}>
-              {t[0].toUpperCase() + t.slice(1)}
+          <Glide on={theme} />
+          {THEME_MODES.map((t) => (
+            <button key={t} className={theme === t ? 'on' : ''} onClick={() => onPrefs({ ...p, theme: t })}>
+              {THEME_NAMES[t]}
             </button>
           ))}
         </div>
+        {theme === 'sun' && <SunNote now={now} />}
       </div>
 
       <div className="drawer-section">
@@ -298,6 +315,8 @@ export function SettingsDrawer({ data, now, dark, onPrefs, onConnect, onDisconne
           ))}
         </div>
       </div>
+
+      {canVibrate() && <VibrateSetting />}
 
       <div className="drawer-section">
         <div className="drawer-label">Weather</div>
@@ -527,6 +546,15 @@ export const DESIGNS: { key: DesignKey; name: string; blurb: string }[] = [
 
 function LayoutSettings({ prefs, onPrefs, local, onLocal }: { prefs: Prefs; onPrefs: (p: Prefs) => void; local: DesignKey | ''; onLocal: (d: DesignKey | '') => void }) {
   const current = local || knownDesign(prefs.design);
+  // Picking Mission here launches the rocket in its preview, once per pick (mission.css, SETTINGS › LAYOUT), with a buzz
+  // on a phone that can (buzz.ts; after the page has turned to Mission, since a launch is Mission's).
+  const [lifts, setLifts] = useState(0);
+  const picking = (d: DesignKey | '') => {
+    if ((d || knownDesign(prefs.design)) === 'mission' && current !== 'mission') setLifts((n) => n + 1);
+  };
+  useEffect(() => {
+    if (lifts) buzz('launch');
+  }, [lifts]);
   return (
     <>
       <div className="drawer-section">
@@ -541,13 +569,20 @@ function LayoutSettings({ prefs, onPrefs, local, onLocal }: { prefs: Prefs; onPr
               role="radio"
               aria-checked={current === d.key}
               className={'design-pick' + (current === d.key ? ' on' : '')}
-              onClick={() => (local ? onLocal(d.key) : onPrefs({ ...prefs, design: d.key }))}
+              onClick={() => (picking(d.key), local ? onLocal(d.key) : onPrefs({ ...prefs, design: d.key }))}
             >
-              <span className={'design-mini mini-' + d.key} aria-hidden="true">
+              <span className={'design-mini mini-' + d.key} aria-hidden="true" data-lift={d.key === 'mission' && lifts ? '' : undefined}>
                 <i />
                 <i />
                 <i />
                 <i />
+                {/* Keyed by the count, so they go again for each pick. */}
+                {d.key === 'mission' && lifts > 0 && <span key={'plume' + lifts} className="mini-plume" />}
+                {d.key === 'mission' && (
+                  <svg key={'rocket' + lifts} className="mini-rocket" viewBox="0 0 256 256">
+                    <Vehicle small />
+                  </svg>
+                )}
               </span>
               <span className="design-name">
                 {d.name}
@@ -565,7 +600,7 @@ function LayoutSettings({ prefs, onPrefs, local, onLocal }: { prefs: Prefs; onPr
           style={{ maxWidth: 280 }}
           aria-label="Layout on this device"
           value={local}
-          onChange={(e) => onLocal(e.target.value as DesignKey | '')}
+          onChange={(e) => (picking(e.target.value as DesignKey | ''), onLocal(e.target.value as DesignKey | ''))}
         >
           <option value="">Same as everywhere ({DESIGNS.find((d) => d.key === knownDesign(prefs.design))?.name})</option>
           {DESIGNS.map((d) => (
@@ -578,6 +613,31 @@ function LayoutSettings({ prefs, onPrefs, local, onLocal }: { prefs: Prefs; onPr
       </div>
       <HomeArrangement prefs={prefs} onPrefs={onPrefs} design={current} designName={DESIGNS.find((d) => d.key === current)?.name ?? ''} />
     </>
+  );
+}
+
+/** Settings › General on a phone that can vibrate (buzz.ts): on unless switched off, for this device only. */
+function VibrateSetting() {
+  const [on, setOn] = useState(vibrateOn);
+  return (
+    <div className="drawer-section">
+      <div className="setting-row" style={{ borderTop: 'none' }}>
+        <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <span className="drawer-label">Vibration</span>
+          <span className="meta">A short buzz when you tick something off, and in Mission at a launch or as a day locks on. Not with less motion. This phone only.</span>
+        </span>
+        <Switch
+          on={on}
+          label="Vibrate"
+          onChange={(v) => {
+            setVibrateOn(v);
+            setOn(v);
+            // Turned on, it buzzes once, so you know what it feels like.
+            if (v) buzz('tick');
+          }}
+        />
+      </div>
+    </div>
   );
 }
 

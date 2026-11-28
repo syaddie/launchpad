@@ -68,7 +68,7 @@ import { claudeEnabled } from './claude';
 import { shellAskRequest, shellAskStatus } from './shellask';
 import { summariseUsage } from '../../shared/claudeUsage';
 import type { DownloadsInfo, GuestMusic, Mood, NewsLists, Package, Photo, Prefs, SavedDoc, SourceKey } from '../../shared/types';
-import { knownDesign } from '../../shared/types';
+import { knownDesign, knownTheme } from '../../shared/types';
 
 const app = new Hono();
 
@@ -1377,7 +1377,7 @@ app.delete('/api/nac/watches/:id', (c) => (removeWatch(c.req.param('id')), c.jso
 // sign-in can use them too, for the preview at /guest.
 app.get('/api/guest/nac', (c) => {
   const p = store.prefs();
-  const look: GuestMusic['look'] = { design: knownDesign(p.design), accent: p.accent || 'sage', theme: p.theme || 'system' };
+  const look: GuestMusic['look'] = { design: knownDesign(p.design), accent: p.accent || 'sage', theme: knownTheme(p.theme) };
   return c.json({ nac: guestNacStatus(rawNacStatus()), look } satisfies GuestMusic);
 });
 

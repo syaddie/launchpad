@@ -26,6 +26,20 @@ that only Mission shows (with Launchpad's own light and its line in the poll's l
 
 ## Built, against the design system
 
+- Settings and phones, built from the ideas below (ideas 60–61), and "Follow the sun". Picking Mission in Settings ›
+  Layout launches the vehicle that now stands on its little preview's horizon: a glow from the pad, a climb out of the
+  top, slowly then faster, and the next one rolling up into place, once per pick (not when Mission is picked while it's
+  already on, nor with less motion; idea 60; `mission.css` SETTINGS › LAYOUT, `LayoutSettings` in `Drawers.tsx`). On a
+  phone that can vibrate (Android's browsers; Safari on an iPhone can't, so nothing happens there), a tick by hand gives
+  a 10 ms tap in every layout, and in Mission a day locked on to in Money › Month gives two taps and a launch a tap and a
+  rumble: Home's launch, and every ignition as it starts (a countdown's or a goal's liftoff, the study timer, a
+  Minecraft server coming up, all `msIgnite`). Never while the page is hidden or with less motion; several at once are
+  felt as one; Settings › General has a switch for it on phones that can, on by default, for that phone only (idea 61;
+  `buzz.ts`, hooked in `tickMarks.ts`, `EntryRow.tsx`, `MonthCalendar.tsx`, `Scene.tsx` and one listener in `App.tsx`).
+  Theme has a fourth choice, Follow the sun: light from sunrise and dark from sunset by Singapore's real times
+  (`sunTimes`), changing at that moment without a reload, with the day's times under it; a new tab paints right first
+  from the times the app last saved (`index.html`), and a theme a page doesn't know follows the device (`theme.ts`,
+  `useSunDown`; also in ⌘K).
 - Review and Music, built from the ideas below (ideas 56–59; `mission.css` REVIEW and MUSIC). Review's week is a
   debrief: as the view opens, its cards report in one after another, each rising in its turn as its icon lights and its
   figure relights like the launch clock's dots, and Claude's recap is printed a line at a time, the headline first, each
@@ -292,11 +306,9 @@ that only Mission shows (with Launchpad's own light and its line in the poll's l
 
 ## Not built yet (in the design system, not in the app)
 
-- **Telemetry**: the stepping strip chart for live readings on Server.
 - **A panel's one big figure in the matrix face**, and the beacon and burn on a panel with something running in it.
 - **A short sky with the view's title on it** is there on other views, but those views' own panels are only reskinned
   by the tokens, not redesigned.
-- **"Follow the sun"** as a Theme choice (Day from sunrise, Night from sunset).
 - **The new mark as the app's icon**: `web/public/favicon.svg` and the PNGs in `web/public/icons` are still the old
   rocket. The files are in the design system's Logos group.
 
@@ -339,6 +351,4 @@ All built (ideas 56–59, see Built).
 
 **Settings and phones**
 
-60. Picking Mission in Settings › Layout launches the rocket in its little preview. **S**
-61. A short vibration on a tick, a launch or a lock-on, where the phone allows it (Android; not Safari on an
-    iPhone). **S** *(every design)*
+All built (ideas 60–61, see Built).

@@ -166,6 +166,12 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
   day's next event its title counts down ("T-08:12 · Gym: push day"), and while studying it counts up ("T+24:10 ·
   Studying ASE 301"); inside the launch clock's ten minutes, and while studying, its icon lifts off on a flame. Written
   at most once a second and only while counting; the icon only when it changes.
+- **Picking Mission launches its preview** (Settings › Layout; `mission.css` SETTINGS › LAYOUT): the vehicle on the
+  little Mission preview lifts off once per pick, on a glow from its pad, and the next one rolls up into its place.
+- **Felt, on a phone** (`buzz.ts`): where the device can vibrate (Android; not an iPhone), a box or an entry ticked by
+  hand taps once in every layout, and in Mission a day locked on to taps twice and a launch or an ignition taps and
+  rumbles as it starts. Only in answer to something you did or a liftoff on the screen, never while the page is hidden,
+  several at once felt as one, and off with a switch in Settings › General on that phone.
 - **Lists animate what's added to them**, not what was there when they appeared (that comes in with its view):
   `useSettled` marks a list `data-settled` two frames after it's drawn, and the list's items have an
   `@starting-style` under that mark. (Tasks do it more simply: a task still saving has the page's own id, so it's
@@ -254,7 +260,7 @@ When the device asks for less motion (`prefers-reduced-motion`), the tokens take
 `--m-travel`, `--m-press-y` 0, `--m-press-s` 1, no overshoot, sweeps instant), and the keyframes that move without
 travelling (wipes, scans, pops, stamps, the photo settling) are defined again as quick fades. So nothing travels,
 rolls, sweeps, springs or drifts, but what appears or changes still fades, quickly, so no change is missed. Nothing
-moves by itself: no drift, no blinking. (The tab's title still counts: it's words, not motion.)
+moves by itself: no drift, no blinking, and nothing vibrates. (The tab's title still counts: it's words, not motion.)
 
 ## Adding motion to something
 

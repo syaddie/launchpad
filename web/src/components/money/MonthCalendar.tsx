@@ -2,6 +2,7 @@ import { useEffect, useRef, type KeyboardEvent } from 'react';
 import { accountBalance, balanceOn, effectOn, fmtMoney, type MonthCalc, monthName } from '../../../../shared/money';
 import type { Money, MoneyAccount, MoneyEntry } from '../../../../shared/types';
 import { parseYmd } from '../../util';
+import { buzz } from '../../buzz';
 import { copyText, menuProps } from '../ContextMenu';
 import { dayName, stepDay } from './monthList';
 import { entryTitle, namesOf, type Notify, shortDate, signed } from './shared';
@@ -32,7 +33,7 @@ const MOVES = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End']
  * (a click, or the arrow keys once one has focus) shows it in the list and makes it the add
  * row's day; `picked` is that day, ringed.
  */
-export function MonthCalendar({ month, money, entries, calc, today, picked, onPick, onAdd, onDone, notify }: {
+export function MonthCalendar({ month, money, entries, calc, today, picked, onPick: pickDay, onAdd, onDone, notify }: {
   month: string;
   money: Money;
   entries: MoneyEntry[];
@@ -58,6 +59,11 @@ export function MonthCalendar({ month, money, entries, calc, today, picked, onPi
   const focusable = picked && dates.includes(picked) ? picked : dates.includes(today) ? today : dates[0];
   const grid = useRef<HTMLDivElement>(null);
   const keyed = useRef(false);
+  // Mission locks on to a day you pick (mission.css); on a phone that can, that's a short buzz too (buzz.ts).
+  const onPick = (date: string, how: PickHow) => {
+    if (date !== picked) buzz('lock');
+    pickDay(date, how);
+  };
 
   useEffect(() => {
     if (!keyed.current) return;

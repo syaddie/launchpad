@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { fmtMoney } from '../../../../shared/money';
 import { EVERY_NAMES, type Series } from '../../../../shared/subscriptions';
 import type { Money, MoneyEntry } from '../../../../shared/types';
+import { buzz } from '../../buzz';
 import { copyText, menuProps } from '../ContextMenu';
 import { AccountSelect, CategoryCell, DateCell, entryTitle, type Kind, KindSwitch, namesOf, type Notify, NumCell, otherAccount, shortDate, signed, TextCell } from './shared';
 
@@ -65,6 +66,7 @@ export function EntryRow({ e, series, isSub, onSub, money, today, open, onOpen, 
   const [ticked, setTicked] = useState(false);
   const toggle = () => {
     setTicked(e.planned);
+    if (e.planned) buzz('tick');
     onPatch({ planned: !e.planned });
   };
 

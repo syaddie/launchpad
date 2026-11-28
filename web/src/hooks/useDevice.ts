@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import type { ViewKey } from '../../../shared/types';
 import type { Layout } from '../layout';
+import { nextSunChange, sunDown } from '../theme';
 import { hashFor, viewFromHash } from '../util';
 
 /** The time, ticking on the minute. */
@@ -30,6 +31,35 @@ export function useSystemDark(): boolean {
     return () => mq.removeEventListener('change', h);
   }, []);
   return dark;
+}
+
+/** The longest Follow the sun waits before looking again, in case a sleeping device let its timer run late. */
+const SUN_RECHECK_MS = 5 * 60_000;
+
+/**
+ * Whether the sun is down, for Follow the sun (theme.ts): it changes at sunrise and sunset themselves, without a reload,
+ * and looks again whenever the page comes back into view. `on` is false when the theme doesn't follow the sun, and then
+ * nothing runs.
+ */
+export function useSunDown(on: boolean): boolean {
+  const [down, setDown] = useState(() => sunDown(new Date()));
+  useEffect(() => {
+    if (!on) return;
+    let t = 0;
+    const check = () => {
+      const now = new Date();
+      setDown(sunDown(now));
+      window.clearTimeout(t);
+      t = window.setTimeout(check, Math.min(SUN_RECHECK_MS, nextSunChange(now).getTime() - now.getTime() + 50));
+    };
+    check();
+    document.addEventListener('visibilitychange', check);
+    return () => {
+      window.clearTimeout(t);
+      document.removeEventListener('visibilitychange', check);
+    };
+  }, [on]);
+  return down;
 }
 
 /** Narrow, desktop or wide, from the width of `ref`'s element. */

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { along, ascentCurve, clearOf, dayFraction, hoursOf, moonPath, moonTurn, orbPlace, pathTable, seeded, skyPoint, stagesShed, type PathTable, type SkyWeather } from '../../mission';
+import { buzz } from '../../buzz';
 import { hm } from '../../util';
 import { api } from '../../api';
 import { nightWatch, powerDown, powerText, twilight } from '../../mission';
@@ -459,6 +460,7 @@ export function MissionScene({ now, dark, narrow, home, events, wx, launch, powe
         readColours();
         L = { t: 0, y: 0, dx: 0, rot: 0 };
         el.classList.add('ms-ignited');
+        buzz('launch');
         kick();
       },
     };

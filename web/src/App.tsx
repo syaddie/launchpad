@@ -6,7 +6,7 @@ import { fmtKg, workoutLabel } from '../../shared/training';
 import { fmtUsd } from '../../shared/claudeUsage';
 import { fmtMoney, sortEntries } from '../../shared/money';
 import { MOOD_WORDS, nearestCountdown, smokesOn } from '../../shared/trackers';
-import { knownDesign, type AppState, type Backup, type DesignKey, type Countdown, Learn, Money, Mood, Note, Photo, Prefs, Training, ViewKey } from '../../shared/types';
+import { knownDesign, knownTheme, type AppState, type Backup, type DesignKey, type Countdown, Learn, Money, Mood, Note, Photo, Prefs, Training, ViewKey } from '../../shared/types';
 import { api, localGet, localSet, type RestoreResult } from './api';
 import { AddEvent } from './components/AddEvent';
 import { closeMenu, ContextMenuHost, copyText, menuProps, placeOf } from './components/ContextMenu';
@@ -28,7 +28,8 @@ import { Today, todayAgenda } from './components/Today';
 import { TopBar } from './components/TopBar';
 import { useAppData } from './hooks/useAppData';
 import { useGoogleActions } from './hooks/useGoogleActions';
-import { useHashView, useLayout, useMinuteNow, useSystemDark } from './hooks/useDevice';
+import { useHashView, useLayout, useMinuteNow, useSunDown, useSystemDark } from './hooks/useDevice';
+import { themeDark } from './theme';
 import { useTabTitle } from './hooks/useTabTitle';
 import { useShortcuts } from './hooks/useShortcuts';
 import { useSidewaysWheel } from './hooks/useSidewaysWheel';
@@ -41,6 +42,7 @@ import { loadable } from './loadable';
 import { viewStep } from './motion';
 import { endOpening, viewTransition } from './viewTransition';
 import { markTicks } from './tickMarks';
+import { buzzLaunches } from './buzz';
 import { send } from './outbox';
 import { paletteAsk, paletteItems, paletteSearches, type AskHandlers, type PaletteContext } from './paletteItems';
 import { hm, inboxBadge, inMinutes } from './util';
@@ -164,6 +166,8 @@ export function App({ cached }: { cached: AppState | null }) {
 
   // A box ticked by hand is marked, so a design can make that tick land with some light (tickMarks.ts).
   useEffect(() => markTicks(), []);
+  // Mission's ignitions buzz on a phone that can, as each one starts (buzz.ts).
+  useEffect(() => buzzLaunches(), []);
 
   useEffect(() => {
     const idle = window.requestIdleCallback ?? ((f: () => void) => window.setTimeout(f, 1500));
@@ -179,7 +183,9 @@ export function App({ cached }: { cached: AppState | null }) {
 
   // A design that's since been retired (saved before 2026-11-25) shows the default.
   const design: DesignKey = localDesign || knownDesign(data.prefs.design);
-  const dark = data.prefs.theme === 'dark' || (data.prefs.theme === 'system' && systemDark);
+  // A theme from a newer version follows the device; Follow the sun changes at sunrise and sunset (theme.ts).
+  const theme = knownTheme(data.prefs.theme);
+  const dark = themeDark(theme, systemDark, useSunDown(theme === 'sun'));
   useLayoutEffect(() => {
     document.documentElement.dataset.mode = dark ? 'dark' : 'light';
     document.documentElement.dataset.accent = data.prefs.accent;

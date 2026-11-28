@@ -13,6 +13,16 @@
 .mini-mission { grid-template-columns: repeat(3, 1fr); grid-template-rows: 26px 1fr; background: linear-gradient(180deg, #0a1128, #16224a 46%, #070b16 48%); }
 .mini-mission i { border-radius: 4px; background: rgba(150, 180, 255, 0.16); box-shadow: inset 0 0 0 1px rgba(150, 180, 255, 0.2); }
 .mini-mission i:nth-child(1) { grid-column: 1 / -1; justify-self: center; align-self: center; width: 46%; height: 9px; border-radius: 2px; background: repeating-linear-gradient(90deg, #e8edf6 0 3px, transparent 3px 5px); box-shadow: 0 0 8px rgba(127, 178, 255, 0.6); }
+/* The vehicle on the preview's horizon, its engine lit like the mark's; its own colours, since every layout shows it. */
+.mini-mission { position: relative; overflow: hidden; isolation: isolate; }
+.mini-plume { display: none; }
+.mini-rocket { position: absolute; top: 15px; right: 9%; width: 20px; height: 20px; overflow: visible; --ms-hull: #ffffff; --ms-hull-shade: #c5cfdf; --ms-hull-line: #4b566c; --ms-band: #3d8bff; --ms-ignition: #ff8b3d; --ms-flame-core: #ffe7c2; }
+/* Picking Mission launches it, once per pick (Drawers.tsx): it climbs out of the top of the preview on a glow from the
+   pad, slowly then faster, and the next one rolls up into its place, the way the mark leaves its tile. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .mini-mission[data-lift] .mini-rocket :is(.ms-vehicle, .ms-flames) { --lift-y: -640px; --lift-back: 70px; animation: msLiftoff calc(var(--m-sweep) * 1.6) var(--m-state) both; }
+  [data-design='mission'] .mini-mission[data-lift] .mini-plume { display: block; position: absolute; z-index: -1; right: calc(9% - 14px); top: 18px; width: 48px; height: 24px; pointer-events: none; background: radial-gradient(50% 50% at 50% 60%, rgba(255, 139, 61, 0.75), transparent 72%); opacity: 0; animation: msPlume calc(var(--m-sweep) * 1.4) var(--e-out) var(--m-state) both; }
+}
 
 /* =====================================================================
    TOKENS
