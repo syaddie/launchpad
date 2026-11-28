@@ -8,6 +8,7 @@ import type { AlertsInfo, GuestMusic, NacLookup, NacStatus } from '../../shared/
 import type { AskResult } from '../../shared/ask';
 import type { ShellAskResult, ShellAskStatus } from '../../shared/shellAsk';
 import type { UsageReport } from '../../shared/claudeUsage';
+import { sunMinutes } from './theme';
 import { kvGet, kvSet } from './idb';
 import { noteSent } from './uplink';
 
@@ -90,7 +91,8 @@ function writeLocal(s: AppState): void {
 /** Keep a copy of the state. Typing changes it on every key, so the write waits for a pause. */
 export function cacheState(s: AppState): void {
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: s.prefs.theme, accent: s.prefs.accent, design: s.prefs.design }));
+    // With today's sunrise and sunset in minutes of Singapore's day, so a new tab following the sun paints right first (index.html).
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: s.prefs.theme, accent: s.prefs.accent, design: s.prefs.design, sun: sunMinutes(new Date()) }));
   } catch {
     // ignore
   }

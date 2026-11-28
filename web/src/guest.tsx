@@ -8,7 +8,7 @@ import './styles.css';
 import './designs.css';
 import './motion.css';
 import './mission.css';
-import { knownDesign, type GuestMusic } from '../../shared/types';
+import { knownDesign, knownTheme, type GuestMusic } from '../../shared/types';
 import { api, cachedGuest, cacheGuest } from './api';
 import { ContextMenuHost, copyText, menuProps, placeOf } from './components/ContextMenu';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -16,8 +16,9 @@ import { Presence } from './components/Motion';
 import { GuestGuide } from './components/music/GuestGuide';
 import { MusicView } from './components/music/MusicView';
 import type { SlotSource } from './components/music/SlotFinder';
-import { useLayout, useMinuteNow, useSystemDark } from './hooks/useDevice';
+import { useLayout, useMinuteNow, useSunDown, useSystemDark } from './hooks/useDevice';
 import { useToast } from './hooks/useToast';
+import { themeDark } from './theme';
 
 const PORTAL = 'https://eservices.nac.gov.sg/Busking';
 
@@ -74,8 +75,8 @@ function GuestApp() {
   }, [guide]);
 
   const design = knownDesign(l?.design);
-  const theme = l?.theme ?? 'system';
-  const dark = theme === 'dark' || (theme === 'system' && systemDark);
+  const theme = knownTheme(l?.theme);
+  const dark = themeDark(theme, systemDark, useSunDown(theme === 'sun'));
   useLayoutEffect(() => {
     const root = document.documentElement;
     root.dataset.mode = dark ? 'dark' : 'light';

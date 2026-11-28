@@ -117,6 +117,9 @@ export function paletteItems(c: PaletteContext): PaletteItem[] {
       run: () => (setView('inbox'), c.refreshInbox()),
     },
     { id: 'a:theme', group: 'Actions', label: dark ? 'Switch to the light theme' : 'Switch to the dark theme', icon: dark ? 'ph-sun' : 'ph-moon', run: () => setPrefs({ ...data.prefs, theme: dark ? 'light' : 'dark' }) },
+    ...(data.prefs.theme === 'sun'
+      ? []
+      : [{ id: 'a:theme-sun', group: 'Actions', label: 'Follow the sun', sub: 'Light from sunrise, dark from sunset', icon: 'ph-sun-horizon', words: 'theme sunrise sunset day night automatic', run: () => setPrefs({ ...data.prefs, theme: 'sun' }) }]),
     ...DESIGNS.filter((d) => d.key !== design).map((d) => ({
       id: 'l:' + d.key, group: 'Actions', label: `Layout: ${d.name}`, icon: 'ph-layout', words: 'design look theme switch view',
       sub: localDesign ? 'This browser only' : 'Every device',
