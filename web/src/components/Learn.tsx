@@ -359,7 +359,8 @@ function DuePanel({ learn, today, adding, setAdding, onChange, onOpen, notify }:
         {groups.map(({ g, items }) => (
           <div key={g}>
             <div className={'ln-group' + (g === 'Overdue' ? ' warn' : '')}>
-              {g} <span><Readout text={String(items.length)} id={`ln-group-${g}`} /></span>
+              {/* By course too: the course picked is forgotten when Learn closes, so coming back to All shows All as it was. */}
+              {g} <span><Readout text={String(items.length)} id={`ln-group-${filter}-${g}`} /></span>
             </div>
             {items.map((a) => {
               const done = a.status === 'done';
