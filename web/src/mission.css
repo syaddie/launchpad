@@ -1000,7 +1000,8 @@
   [data-design='mission'] .nac-cal-main[data-found] > .nac-cal:not(.cal-copy) .nac-chip.new::after { animation: msDotPing calc(var(--m-sweep) * 1.2) var(--e-out) calc(var(--sweep) * var(--x, 0) + var(--m-state)) backwards; }
 }
 @keyframes msHunt { from { translate: -100% 0; } to { translate: 0 0; } }
-@keyframes msFound { from { background-color: var(--ac); color: var(--on); box-shadow: 0 0 12px -1px var(--ac); } }
+/* (Its words keep their colour, so they never pass through the background's on the way.) */
+@keyframes msFound { from { background-color: color-mix(in srgb, var(--ac) 38%, var(--act)); box-shadow: inset 0 0 0 1px var(--ac), 0 0 12px -2px var(--ac); } }
 @keyframes msDotPing { from { box-shadow: 0 0 0 0 var(--ac); } to { box-shadow: 0 0 0 6px transparent; } }
 
 /* "Next check" is a small T- countdown (NextCheck in SlotFinder.tsx): its digits roll each second, as a Readout's do,
