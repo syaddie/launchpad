@@ -59,7 +59,8 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
   sequence toward the horizon. In the launch clock's last ten seconds a soft ring goes out from it each second and the
   vehicle on the ascent brightens; as each event ends, that vehicle sheds a spent stage that falls away. Every period
   with arrows changes with Money › Month's scan. Learn's study timer is T+ in the dot-matrix face and starting it is an
-  ignition; Server › Services is a go/no-go poll that reports in; moving money sends a point of light on an arc between
+  ignition; while it runs its block in today's column is propellant loading, lit at its head, and stopping it burns the
+  colour up through it; an exam inside a week is in the colour of now; Server › Services is a go/no-go poll that reports in; moving money sends a point of light on an arc between
   the two accounts before their balances roll; losing the server puts the source lights out one at a time, and they
   report back in when it's back; empty states have a drawing of the site (pad clear, vehicle away, launch scrubbed).
   Anything saved blinks its source's light in the strip, like a packet going up (`uplink.ts`); "Loading…" is a scan line
@@ -178,7 +179,9 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
   `trDrop`), and once it's down today's bar rises from where it was (`cigRise`, a scale from `--from`; Poster's
   `cigSlamUp`), its count coming in. Today's column is drawn afresh for each one, so it rises from the start, and once
   one has risen it no longer plays the opening's sweep. Only when today's count went up by one: the server's answer
-  gives the one just logged its own time, which isn't another.
+  gives the one just logged its own time, which isn't another. Stopping Learn's study timer, or logging time, fills the
+  new session's block in its day's column from its foot (`useStudyRise`; `cigRise` on the block's `::before`, Poster's
+  `cigSlamUp`), up through the pale block the running timer had there; only when exactly one session was added.
 - **What's new lands once**, the first time this device shows it, not every time its view opens (`useUnseen` in
   `Motion.tsx`, keeping what's been seen in `localStorage`; nothing is new on a device's first run): a new best in
   Training's Your lifts (Mission's flare and line drawing to the new high, `mission.css` TRAINING; the other designs show
@@ -192,7 +195,7 @@ nothing: the clock's minutes, Vista's photo drifting (it steps once a second, so
 second rather than every frame), Mission's sky and the ring today's date breathes on Money's calendar (scaled, so
 nothing is repainted for it), and the runway lights on Mission's apron when Home has no photos (each dot on or off, a
 run every few seconds). In Mission, a running study timer's digits relight as they change and its dot breathes a
-beacon (scaled), and an empty state's drawing has its mast lamp blinking with the site's (stepped). The time since the
+beacon (scaled); in the other layouts its clock rolls a digit a second (moved, not redrawn); and an empty state's drawing has its mast lamp blinking with the site's (stepped). The time since the
 last cigarette steps once a second (only the digits that changed are redrawn, and only while the page is in view), and
 today's pixel in the year twinkles (faded and scaled). Busy states
 (a spinner, a skeleton line, Mission's acquiring line and satellite, Training's downlink, the Inbox's ping) move only

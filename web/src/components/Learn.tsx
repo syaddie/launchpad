@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { DOW, addDays, dayDiff, parseYmd, startOfDay, ymd } from '../../../shared/dates';
 import {
   COURSE_COLORS, DUE_GROUPS, GRADES, KINDS, SIDE_STALE_DAYS, STATUS_NAMES, classesOn, courseGrade, dueGroup, fmtStudy, letterOf, neededFor, nextUp, openWork,
@@ -7,6 +7,7 @@ import {
 import type { AppState, Assessment, AssessmentKind, AssessmentStatus, Course, Learn, SideLearning } from '../../../shared/types';
 import { ago, fmtDay, hm, inMinutes, newId, shortDay } from '../util';
 import { menuProps } from './ContextMenu';
+import { Readout, useSettled } from './Motion';
 import { EmptyArt } from './mission/EmptyArt';
 
 type Notify = (msg: string, action?: { label: string; run: () => void }) => void;
@@ -128,7 +129,7 @@ export function LearnView({ data, now: minuteNow, noteBusy, addSignal, onChange,
               <span className="ln-timer-what" title={`Studying ${timerCourseObj?.name ?? 'general'}`}>Studying {timerCourseObj?.name ?? 'general'}</span>
               {/* Mission shows it as mission elapsed time, in the launch clock's dot-matrix face (mission.css, LEARN); a
                   digit that changed relights (its key is its place and value). */}
-              <span className="mono tnum ln-clock">{clock(studied)}</span>
+              <span className="mono tnum ln-clock"><Readout text={clock(studied)} id="ln-timer" /></span>
               <span className="ms-matrix ln-met" data-ghost={met(studied).replace(/\d/g, '8')} aria-hidden="true">
                 {[...met(studied)].map((ch, i) => (
                   <span key={`${i}${ch}`} className="ms-cell">
@@ -358,7 +359,8 @@ function DuePanel({ learn, today, adding, setAdding, onChange, onOpen, notify }:
         {groups.map(({ g, items }) => (
           <div key={g}>
             <div className={'ln-group' + (g === 'Overdue' ? ' warn' : '')}>
-              {g} <span>{items.length}</span>
+              {/* By course too: the course picked is forgotten when Learn closes, so coming back to All shows All as it was. */}
+              {g} <span><Readout text={String(items.length)} id={`ln-group-${filter}-${g}`} /></span>
             </div>
             {items.map((a) => {
               const done = a.status === 'done';
@@ -542,7 +544,7 @@ function TodayPanel({ data, now, onChange }: { data: AppState; now: Date; onChan
       {exams.length ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {exams.slice(0, 6).map((x) => (
-            <div key={x.id} className="ln-exam">
+            <div key={x.id} className="ln-exam" data-soon={x.days < EXAM_SOON_DAYS ? '' : undefined}>
               <span className="ln-dot" style={{ background: byId.get(x.courseId)?.color }} />
               <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                 <span style={{ fontWeight: 500 }}>{x.title}</span>
@@ -555,11 +557,11 @@ function TodayPanel({ data, now, onChange }: { data: AppState; now: Date; onChan
               <span className="ln-exam-days">
                 {x.days > 1 ? (
                   <>
-                    <span className="serif tnum">{x.days}</span>
+                    <span className="serif tnum"><Readout text={String(x.days)} id={`ln-exam-${x.id}`} /></span>
                     <span className="meta">days</span>
                   </>
                 ) : (
-                  <span className="serif" style={{ fontSize: 18, color: 'var(--acd)' }}>{x.days ? 'Tomorrow' : 'Today'}</span>
+                  <span className="serif ln-exam-word">{x.days ? 'Tomorrow' : 'Today'}</span>
                 )}
               </span>
             </div>
@@ -607,7 +609,7 @@ function CoursesPanel({ learn, now, today, onChange, onOpen }: { learn: Learn; n
               <span className="serif ln-card-name">{c.name}</span>
               {g.pct !== null ? (
                 <span className="ln-card-grade">
-                  <span className="serif tnum">{g.pct}%</span>
+                  <span className="serif tnum"><Readout text={`${g.pct}%`} id={`ln-grade-${c.id}`} /></span>
                   <span className="chip chip-neutral">{letterOf(g.pct)}</span>
                   {c.target > 0 && (
                     <span className={'ln-vs' + (under ? ' warn' : '')}>
@@ -628,7 +630,7 @@ function CoursesPanel({ learn, now, today, onChange, onOpen }: { learn: Learn; n
                 <span className="ln-track">
                   <span style={{ width: `${c.goalMin ? Math.min(100, (mins / c.goalMin) * 100) : 0}%`, background: c.color }} />
                 </span>
-                <span className="meta tnum">{fmtStudy(mins)}{c.goalMin ? ` of ${fmtStudy(c.goalMin)}` : ''} study this week</span>
+                <span className="meta tnum"><Readout text={fmtStudy(mins)} id={`ln-card-study-${c.id}`} />{c.goalMin ? ` of ${fmtStudy(c.goalMin)}` : ''} study this week</span>
               </span>
               <span className="ln-card-next">Next: {next ? `${next.title} · ${dueLabel(next, today)}` : 'nothing due'}</span>
             </button>
@@ -641,9 +643,46 @@ function CoursesPanel({ learn, now, today, onChange, onOpen }: { learn: Learn; n
 
 // ---------- study time ----------
 
+/** Inside this many days an exam is close: Mission shows it in the colour of now. */
+const EXAM_SOON_DAYS = 7;
+
+/** How long a day that has just risen stays marked: past the end of its rise in every design. */
+const RISE_MS = 2200;
+
+/** The session that just went into its day's column, and whether it was the running timer (it was there, pale). */
+type StudyRise = { id: string; timer: boolean };
+
+/**
+ * Stopping the timer, or logging time, raises that day's column by what was studied: the new session's block fills
+ * from its foot (useStudyRise; styles.css, LEARN). Only when exactly one session was added (an Undo, a restore or a
+ * sync of several isn't one), and only this week's. Worked out while rendering, so the block is empty from the first
+ * frame it's drawn in, and not on the panel's first frames (useSettled): those were there.
+ */
+function useStudyRise(learn: Learn, now: Date): StudyRise | null {
+  const settled = useSettled();
+  const [before, setBefore] = useState(learn);
+  const [rise, setRise] = useState<StudyRise | null>(null);
+  if (learn !== before) {
+    setBefore(learn);
+    const had = new Set(before.sessions.map((s) => s.id));
+    const added = learn.sessions.filter((s) => !had.has(s.id));
+    const s = added[0];
+    if (settled && added.length === 1 && learn.sessions.length === before.sessions.length + 1 && studyWeek(learn, now).some((d) => d.blocks.includes(s))) {
+      setRise({ id: s.id, timer: before.timer?.start === s.start && before.timer.courseId === s.courseId });
+    }
+  }
+  useEffect(() => {
+    if (!rise) return;
+    const t = window.setTimeout(() => setRise(null), RISE_MS);
+    return () => window.clearTimeout(t);
+  }, [rise]);
+  return rise;
+}
+
 function StudyPanel({ learn, now, onChange, notify }: { learn: Learn; now: Date; onChange: (l: Learn) => void; notify: Notify }) {
   const [logging, setLogging] = useState(false);
   const days = studyWeek(learn, now);
+  const rise = useStudyRise(learn, now);
   const weeks = weeklyStudy(learn, now, 12);
   const streak = studyStreak(learn, now);
   const today = startOfDay(now);
@@ -676,15 +715,15 @@ function StudyPanel({ learn, now, onChange, notify }: { learn: Learn; now: Date;
       {logging && <LogTime learn={learn} today={today} onChange={onChange} onClose={() => setLogging(false)} />}
       <div className="tr-totals">
         <span>
-          <b className="tnum">{fmtStudy(total)}</b>
+          <b className="tnum"><Readout text={fmtStudy(total)} id="ln-week-total" /></b>
           {goal ? `of ${fmtStudy(goal)} this week` : 'this week'}
         </span>
         <span>
-          <b className="tnum">{streak} day{streak === 1 ? '' : 's'}</b>
+          <b className="tnum"><Readout text={String(streak)} id="ln-streak" /> day{streak === 1 ? '' : 's'}</b>
           in a row
         </span>
         <span>
-          <b className="tnum">{fmtStudy(todayMin)}</b>
+          <b className="tnum"><Readout text={fmtStudy(todayMin)} id="ln-today" /></b>
           today
         </span>
       </div>
@@ -693,10 +732,19 @@ function StudyPanel({ learn, now, onChange, notify }: { learn: Learn; now: Date;
           const o = dayDiff(today, d.date);
           return (
             <div key={d.date.getTime()} className={'ln-day' + (o === 0 ? ' today' : o > 0 ? ' ahead' : '')}>
-              <span className="meta tnum">{d.total ? fmtStudy(d.total) : ''}</span>
+              <span className="meta tnum"><Readout text={d.total ? fmtStudy(d.total) : ''} id={`ln-day-${ymd(d.date)}`} /></span>
+              {/* Its sessions stacked in the order they were studied, so the running timer's (pale, as it isn't logged
+                  yet) is where the session it becomes will be, and stopping it fills it in place. Each is 2px less, for
+                  the gap under it, so the busiest day fits whole. */}
               <span className="ln-day-col">
-                {order.filter((k) => d.byCourse[k]).map((k) => (
-                  <span key={k} style={{ height: `${(d.byCourse[k] / top) * 100}%`, background: colorOf(learn, k) }} />
+                {d.blocks.map((s) => (
+                  <span
+                    key={s.id}
+                    className={s.id === 'timer' ? 'ln-day-run' : undefined}
+                    title={s.id === 'timer' ? 'Studying now: logged when you stop' : undefined}
+                    data-rise={rise?.id === s.id ? (rise.timer ? 'timer' : 'log') : undefined}
+                    style={{ height: `calc(${(s.minutes / top) * 100}% - 2px)`, '--c': colorOf(learn, s.courseId) } as CSSProperties}
+                  />
                 ))}
               </span>
               <span className="ln-day-label">{o === 0 ? 'Today' : DOW[d.date.getDay()]}</span>
@@ -845,7 +893,7 @@ function SidePanel({ learn, now, onChange }: { learn: Learn; now: Date; onChange
                   <span style={{ width: `${(s.done / s.total) * 100}%`, background: s.done >= s.total ? 'var(--acd)' : 'var(--ac)' }} />
                 </span>
                 <span className="meta tnum">
-                  {s.done} of {s.total} {s.unit} · <SideSince s={s} today={today} />
+                  <Readout text={String(s.done)} id={`ln-side-${s.id}`} /> of {s.total} {s.unit} · <SideSince s={s} today={today} />
                 </span>
               </button>
               <button className="btn btn-secondary btn-small" disabled={s.done >= s.total} aria-label={`One more of ${s.title}`} onClick={() => bump(s)}>
@@ -958,13 +1006,13 @@ function WhatIfGrades({ course, items, all, scores, onScores, onKeep, onClose }:
         <span className="meta">Final grade</span>
         {w.final !== null ? (
           <>
-            <span className="serif tnum" style={{ fontSize: 30 }}>{w.final}%</span>
+            <span className="serif tnum" style={{ fontSize: 30 }}><Readout text={`${w.final}%`} /></span>
             <span className={'chip ' + (course.target && w.final >= course.target ? 'chip-accent' : 'chip-neutral')}>{letterOf(w.final)}</span>
           </>
         ) : (
           <>
             <span className="serif tnum" style={{ fontSize: 26 }}>
-              {w.worst}–{w.best}%
+              <Readout text={`${w.worst}–${w.best}%`} />
             </span>
             <span className="chip chip-neutral">
               {letterOf(w.worst)}
@@ -1130,7 +1178,7 @@ export function CourseDrawer({ learn, courseId, focusItem, now, onChange, onClos
       <div className="drawer-section">
         <span className="drawer-label">Grade</span>
         <div className="ln-card-grade">
-          <span className="serif tnum" style={{ fontSize: 40 }}>{g.pct !== null ? `${g.pct}%` : '–'}</span>
+          <span className="serif tnum" style={{ fontSize: 40 }}><Readout text={g.pct !== null ? `${g.pct}%` : '–'} id={`ln-drawer-grade-${course.id}`} /></span>
           {g.pct !== null && <span className="chip chip-neutral">{letterOf(g.pct)}</span>}
           <span className="meta">{g.pct !== null ? `from the ${g.marked}% marked so far` : 'Nothing marked yet'}</span>
         </div>
@@ -1266,7 +1314,7 @@ export function CourseDrawer({ learn, courseId, focusItem, now, onChange, onClos
           </label>
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-          <span className="serif tnum" style={{ fontSize: 24 }}>{fmtStudy(studied)}</span>
+          <span className="serif tnum" style={{ fontSize: 24 }}><Readout text={fmtStudy(studied)} id={`ln-drawer-study-${course.id}`} /></span>
           <span style={{ fontSize: 13, color: 'var(--t2)' }}>this week · {fmtStudy(termMin)} logged in all</span>
         </div>
         <div className="ln-weeks tall" role="img" aria-label={`Hours a week for the last 8 weeks, oldest first: ${weeks.map((w) => Math.round(w.minutes / 6) / 10).join(', ')}`}>

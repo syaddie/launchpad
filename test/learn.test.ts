@@ -81,6 +81,10 @@ describe('study time', () => {
     const week = studyWeek(learn, NOW);
     expect(week.map((d) => Math.round(d.total))).toEqual([60, 20, 50, 40, 110, 0, 0]);
     expect(week[4].byCourse).toEqual({ cs: 80, ma: 30 });
+    // Its sessions in the order they were studied, the running timer last.
+    expect(week[4].blocks.map((s) => s.id).at(-1)).toBe('timer');
+    expect(week[4].blocks.map((s) => Date.parse(s.start))).toEqual(week[4].blocks.map((s) => Date.parse(s.start)).sort((a, b) => a - b));
+    expect(week[4].blocks.reduce((n, s) => n + s.minutes, 0)).toBe(week[4].total);
     expect(weekByCourse(sample(), NOW)).toEqual({ cs: 190, ma: 20, '': 40 });
   });
   it('totals each of the last weeks, oldest first', () => {

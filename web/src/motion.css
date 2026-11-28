@@ -393,7 +393,8 @@
   animation: lpSweepY var(--m-sweep) var(--e-out) both;
   transition: height var(--m-sweep) var(--e-out), opacity var(--m-hover) var(--e-out);
 }
-.ln-day-col { animation: lpSweepY var(--m-sweep) var(--e-out) both; }
+/* Study by day lets go of its clip once risen, so today's outline (drawn outside it) shows. */
+.ln-day-col { animation: lpSweepY var(--m-sweep) var(--e-out) backwards; }
 :is(.cig-col, .tr-wcol, .cu-col, .ln-day, .io-col) { --rise: calc((sibling-index() - 1) * 22ms); }
 :is(.cig-col, .tr-wcol, .cu-col, .ln-day, .io-col) :is(.cig-bar, .tr-wbar, .cu-bar, .ln-day-col, .io-bar) { animation-delay: var(--rise, 0ms); }
 .ln-weeks > span:not(.ln-goal) { animation-delay: calc((sibling-index() - 1) * 22ms); }

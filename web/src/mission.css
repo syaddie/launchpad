@@ -297,8 +297,9 @@
 .ms-stage-body { fill: var(--ms-hull); stroke: var(--ms-hull-line); stroke-width: 6; stroke-linejoin: round; }
 .ms-stage-bell { fill: var(--ms-hull-shade); stroke: var(--ms-hull-line); stroke-width: 6; stroke-linejoin: round; }
 .ms-stage-ember { fill: var(--ms-ignition); animation: msStageEmber calc(var(--m-sweep) * 1.5) var(--e-out) both; }
-/* A push apart first (slowing), then the fall (quickening). */
-@keyframes msStageFall { 0% { translate: 0 0; rotate: 0deg; animation-timing-function: var(--e-out); } 14% { translate: 0 70px; rotate: calc(var(--spin) * 0.1); animation-timing-function: var(--e-in); } 100% { translate: var(--fx) var(--fy); rotate: var(--spin); } }
+/* A push apart first (slowing), then the fall (quickening): --e-out then --e-in, written out, since a keyframe's own
+   timing function doesn't take var(). */
+@keyframes msStageFall { 0% { translate: 0 0; rotate: 0deg; animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); } 14% { translate: 0 70px; rotate: calc(var(--spin) * 0.1); animation-timing-function: cubic-bezier(0.55, 0, 0.75, 0.2); } 100% { translate: var(--fx) var(--fy); rotate: var(--spin); } }
 @keyframes msStageFade { 0%, 45% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes msStageEmber { from { opacity: 1; } to { opacity: 0; } }
 
@@ -683,6 +684,15 @@
   100% { box-shadow: 0 0 0 14px transparent, 0 0 0 0 transparent; }
 }
 @keyframes msIgniteFace { from { text-shadow: 0 0 22px var(--ms-ignition), 0 0 3px var(--ms-ignition); } }
+/* While it runs, its block in today's column is propellant loading: pale, its head lit in the colour of now. Stopping
+   it, the colour burns up through it at a steady rate, lit at its head (as You's cigarette bar does). */
+[data-design='mission'] .ln-day-col > :is(.ln-day-run, [data-rise='timer']) { box-shadow: inset 0 2px 0 var(--ms-ignition); }
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .ln-day-col > [data-rise]::before { animation: cigRise var(--rise-for) linear both, msBarBurn calc(var(--rise-for) + var(--m-sweep)) var(--e-in) both; }
+}
+/* An exam inside a week takes the colour of now, as the launch clock does inside ten minutes. Nothing flashes. */
+[data-design='mission'] .ln-exam[data-soon] .ln-exam-days > * { color: var(--ms-ignition-ink); }
+[data-design='mission'] .ln-exam[data-soon] .ln-exam-days .serif { text-shadow: 0 0 14px var(--ms-ignition-glow); }
 
 /* =====================================================================
    YOU

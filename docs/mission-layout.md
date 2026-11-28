@@ -75,6 +75,21 @@ that only Mission shows (with Launchpad's own light and its line in the poll's l
   what's happening this minute, as the top bar's study button already said), its dot a beacon. Starting it is an
   ignition: as the timer takes Start studying's place it flares hot and sends out one ring (only when it starts while
   Learn is open, not for one already running). Its row has a menu with Stop and log.
+- Learn's figures roll (idea 41, every layout; `Readout` in `Learn.tsx`): the week's study, the days in a row and today's,
+  each day's total over its column, an exam's days to go, a course's grade and its study this week, the counts in Due
+  soon's groups (they roll as you pick a course), how far through something on the side is (+1 rolls it), and in a
+  course's drawer its grade, its study this week and the what-if grade as you type scores. The timer's clock rolls too
+  in the other layouts (Mission shows its T+ face). Each keeps an `id`, so coming back to Learn shows them as they were.
+- Stopping the timer raises its day's column by what was studied (idea 42, every layout; `useStudyRise` in
+  `Learn.tsx`, `blocks` in `studyWeek`): a day's sessions are stacked in the order they were studied, and the running
+  timer's block is on top, pale, as it isn't logged yet (Mission: propellant loading, its head lit in the colour of
+  now). Stop and log, from anywhere (the timer, the top bar, ⌘K), fills that block with its course's colour from its
+  foot: Vista slowly, Focus quick, Poster driven up a touch over, Mission burning up at a steady rate, lit at its head.
+  Logging time by hand raises its day the same way. Under a minute (nothing logged), an Undo or a restore raises
+  nothing. Less motion: the colour fades in.
+- An exam inside a week is in the colour of now (idea 43; `mission.css` LEARN): in Today's Exams its days to go (or
+  Tomorrow, Today) take the ignition colour with a faint glow, as the launch clock does inside ten minutes. Nothing
+  flashes.
 - Server › Services is a go/no-go poll (idea 16; `markOf` in `Containers.tsx`, `ServicesPanel` in `Server.tsx`,
   `mission.css` SERVER): each container, sync and health check has a light with the source lights' marks. Up and
   healthy is go; starting or restarting holds; unhealthy or dead is scrubbed; stopped, made or paused stands by. A sync
@@ -244,12 +259,6 @@ aerospace quirks. Most are Mission's own; those marked *(every design)* are moti
 way (docs/motion.md). **S** is small, mostly reusing what's there (the Month scan and lock-on corners in `mission.css`,
 `msReport`, `msLiftoff`, `Readout`, `useGlide`); **M** is a new piece. Aerospace words ("T+", "LOS", "go") stay in the
 small mono labels; the messages themselves stay plain.
-
-**Learn**
-
-41. Learn's figures don't roll yet: give them `Readout`. **S** *(every design)*
-42. Stopping the timer raises today's column by what was studied. **S** *(every design)*
-43. An exam inside a week takes the colour of now, as the launch clock does inside ten minutes. **S**
 
 **Money**
 
