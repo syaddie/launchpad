@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { along, ascentCurve, clearOf, dayFraction, hoursOf, moonPath, moonTurn, orbPlace, pathTable, seeded, skyPoint, stagesShed, type PathTable, type SkyWeather } from '../../mission';
+import { api } from '../../api';
+import { along, ascentCurve, clearOf, dayFraction, hoursOf, moonPath, moonTurn, nightWatch, orbPlace, pathTable, powerDown, powerText, seeded, skyPoint, stagesShed, twilight, type PathTable, type SkyWeather } from '../../mission';
 import { hm } from '../../util';
 import { Vehicle } from './Mark';
 
@@ -11,6 +12,65 @@ type Stage = { key: string; x: number; y: number; deg: number; k: number; fx: nu
 /** How long a spent stage falls and fades (mission.css's msStageFall, three of Mission's 900ms sweeps), and a little
  * more before it's taken away. */
 const STAGE_MS = 2800;
+
+/** A recovery (idea 6): this long after a launch, a far point of light comes back down to the horizon and lands... */
+const RECOVERY_MS = 3 * 60_000;
+/** ...or as soon after as Home is in view, up to this much later; past that it's missed. */
+const RECOVERY_KEEP_MS = 15 * 60_000;
+/** How long it's on the sky (mission.css's msRecoveryFall, sixteen of Mission's 900ms sweeps), and a little more. */
+const RECOVERY_SHOW_MS = 16_000;
+
+/** How often the site reads the server's power while Home is in view (idea 8). */
+const POWER_MS = 60_000;
+
+/**
+ * The server as the site's power (idea 8): the containers that are down, read once a minute while `on` (Home is in
+ * view, in Mission, and Server isn't hidden) and the page is. Nothing while Docker can't be reached (not known isn't
+ * down), and no more asking once the server says Docker isn't connected at all.
+ */
+function useSitePower(on: boolean): string[] {
+  const [down, setDown] = useState<string[]>([]);
+  const none = useRef(false);
+  useEffect(() => {
+    if (!on || none.current) return;
+    let live = true;
+    let busy = false;
+    let timer = 0;
+    const read = () => {
+      window.clearTimeout(timer);
+      if (busy || document.hidden) return;
+      busy = true;
+      api
+        .server()
+        .then((st) => {
+          if (!live) return;
+          if (!st.containers && !st.containersError) {
+            none.current = true;
+            setDown([]);
+            return;
+          }
+          const next = powerDown(st.containers);
+          setDown((was) => (was.join(',') === next.join(',') ? was : next));
+          timer = window.setTimeout(read, POWER_MS);
+        })
+        .catch(() => {
+          if (live) timer = window.setTimeout(read, POWER_MS);
+        })
+        .finally(() => {
+          busy = false;
+        });
+    };
+    read();
+    const seen = () => !document.hidden && read();
+    document.addEventListener('visibilitychange', seen);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', seen);
+    };
+  }, [on]);
+  return on ? down : [];
+}
 
 /** Everything the scene draws from, measured off the page (the strip, the top bar, where the panels start). */
 type Geo = {
@@ -48,7 +108,7 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
  * the vehicle on the pad lifts off, and the next rolls out. It is drawn for the eye only (aria-hidden): every event on
  * it is a row in Today too. docs/mission-layout.md; the look is mission.css.
  */
-export function MissionScene({ now, dark, narrow, home, events, wx, launch }: {
+export function MissionScene({ now, dark, narrow, home, events, wx, launch, power }: {
   now: Date;
   dark: boolean;
   /** A phone: the scene scrolls with the page instead of standing behind it. */
@@ -57,6 +117,8 @@ export function MissionScene({ now, dark, narrow, home, events, wx, launch }: {
   events: SkyEvent[];
   wx: SkyWeather;
   launch: number;
+  /** Whether the site shows the server's power (Server isn't hidden). */
+  power: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const starsRef = useRef<HTMLCanvasElement>(null);
@@ -65,6 +127,11 @@ export function MissionScene({ now, dark, narrow, home, events, wx, launch }: {
   const [geo, setGeo] = useState<Geo | null>(null);
   const live = useRef<{ geo: Geo | null; here: { x: number; y: number; a: number } | null }>({ geo: null, here: null });
   const hour = hoursOf(now);
+  // Dawn's and dusk's own skies, cross-faded over the theme's by the clock, and the night watch from 23:00 to sunrise.
+  const minute = Math.floor(now.getTime() / 60_000);
+  const tw = useMemo(() => twilight(now), [minute]); // eslint-disable-line react-hooks/exhaustive-deps
+  const watch = useMemo(() => nightWatch(now), [minute]); // eslint-disable-line react-hooks/exhaustive-deps
+  const down = useSitePower(home && power);
 
   // ---------- measuring ----------
 
@@ -243,7 +310,7 @@ export function MissionScene({ now, dark, narrow, home, events, wx, launch }: {
 
   // ---------- particles and the launch ----------
 
-  const engine = useRef<{ launch: () => void } | null>(null);
+  const engine = useRef<{ launch: () => boolean } | null>(null);
   useEffect(() => {
     const el = ref.current;
     const canvas = fxRef.current;
@@ -385,11 +452,12 @@ export function MissionScene({ now, dark, narrow, home, events, wx, launch }: {
     engine.current = {
       launch: () => {
         const g = live.current.geo;
-        if (L || !g?.site || calm() || el.classList.contains('ms-away') || el.classList.contains('ms-rollout')) return;
+        if (L || !g?.site || calm() || el.classList.contains('ms-away') || el.classList.contains('ms-rollout')) return false;
         readColours();
         L = { t: 0, y: 0, dx: 0, rot: 0 };
         el.classList.add('ms-ignited');
         kick();
+        return true;
       },
     };
     readColours();
@@ -415,13 +483,43 @@ export function MissionScene({ now, dark, narrow, home, events, wx, launch }: {
     };
   }, []);
 
-  // The count going up is a launch; the first value is only where it started.
+  // The count going up is a launch; the first value is only where it started. Minutes after one that went up, the
+  // recovery: a far point of light comes back down to the horizon and lands (only where it can be seen: on Home, with
+  // the page in view; a launch's recovery that can't be seen within a quarter of an hour is missed).
   const launched = useRef(launch);
+  const [recovery, setRecovery] = useState(0);
+  const recoverTimer = useRef(0);
+  const recoverEnd = useRef(0);
   useEffect(() => {
     if (launch === launched.current) return;
     launched.current = launch;
-    engine.current?.launch();
+    if (!engine.current?.launch()) return;
+    const from = Date.now();
+    const due = () => {
+      window.clearTimeout(recoverTimer.current);
+      const wait = from + RECOVERY_MS - Date.now();
+      if (wait > 0) {
+        recoverTimer.current = window.setTimeout(due, wait);
+        return;
+      }
+      if (-wait > RECOVERY_KEEP_MS) return;
+      if (!live.current.geo?.site || document.hidden || calm()) {
+        recoverTimer.current = window.setTimeout(due, 15_000);
+        return;
+      }
+      setRecovery((n) => n + 1);
+      window.clearTimeout(recoverEnd.current);
+      recoverEnd.current = window.setTimeout(() => setRecovery(0), RECOVERY_SHOW_MS);
+    };
+    due();
   }, [launch]);
+  useEffect(
+    () => () => {
+      window.clearTimeout(recoverTimer.current);
+      window.clearTimeout(recoverEnd.current);
+    },
+    [],
+  );
 
   // ---------- the pointer: the sky's layers part, and it throws light on the glass under it ----------
 
@@ -455,14 +553,26 @@ export function MissionScene({ now, dark, narrow, home, events, wx, launch }: {
   }, []);
 
   const style = geo
-    ? ({ '--hz': `${geo.hz}px`, '--orb-x': `${geo.orbX}px`, '--orb-y': `${geo.orbY}px`, '--glow': geo.glow, '--pad-x': `${geo.padX}px`, height: narrow ? geo.h : undefined } as CSSProperties)
+    ? ({
+        '--hz': `${geo.hz}px`,
+        '--orb-x': `${geo.orbX}px`,
+        '--orb-y': `${geo.orbY}px`,
+        '--glow': geo.glow,
+        '--pad-x': `${geo.padX}px`,
+        '--dawn': tw.dawn,
+        '--dusk': tw.dusk,
+        '--tw': Math.max(tw.dawn, tw.dusk),
+        height: narrow ? geo.h : undefined,
+      } as CSSProperties)
     : undefined;
   const s = geo ? geo.k / 0.3 : 1;
   const here = arc?.here;
 
   return (
-    <div ref={ref} className={'ms-scene' + (narrow ? ' ms-scene--page' : '')} data-wx={wx} aria-hidden="true" style={style}>
+    <div ref={ref} className={'ms-scene' + (narrow ? ' ms-scene--page' : '')} data-wx={wx} data-watch={watch ? '' : undefined} aria-hidden="true" style={style}>
       <div className="ms-sky" />
+      <div className="ms-dawn" />
+      <div className="ms-dusk" />
       <canvas ref={starsRef} className="ms-stars" />
       <div className="ms-glow" />
       <i
@@ -493,6 +603,13 @@ export function MissionScene({ now, dark, narrow, home, events, wx, launch }: {
       <i className="ms-trace" />
       <div className="ms-rain" />
       <div className="ms-ground" />
+      {recovery > 0 && geo?.site && (
+        // Downrange, far off: the point of light coming back down, and its touchdown on the horizon.
+        <div key={recovery} className="ms-recovery" style={{ '--land-x': `${Math.round(geo.padX + (geo.w - geo.padX) * (narrow ? 0.72 : 0.66))}px` } as CSSProperties}>
+          <i className="ms-recovery-craft" />
+          <i className="ms-recovery-touch" />
+        </div>
+      )}
       {geo && (
         <svg className="ms-svg" viewBox={`0 0 ${geo.w} ${geo.h}`}>
           {arc && here && (
@@ -545,11 +662,21 @@ export function MissionScene({ now, dark, narrow, home, events, wx, launch }: {
               </g>
             </g>
           )}
+          {geo.site && down.length > 0 && (
+            // Why its lights are out, in a small label by the site, with the poll's scrub mark.
+            <g className="ms-power" transform={`translate(${Math.round(geo.padX + (narrow ? 126 : 142) * s)} ${geo.hz - 8})`}>
+              <rect className="ms-power-mark" x={0} y={-7} width={6} height={6} rx={1} transform="rotate(45 3 -4)" />
+              <text className="ms-power-text" x={12} y={0}>
+                {powerText(down)}
+              </text>
+            </g>
+          )}
           {geo.site && (
             // The site, built round the pad at (0, 0) with up as negative.
             <g className="ms-site" transform={`translate(${geo.padX} ${geo.hz}) scale(${r2(s)})`}>
-              <path className="ms-flood" d="M-104 -3 L-7 -58 L-7 -24 Z" />
-              <path className="ms-flood" d="M108 -3 L7 -58 L7 -24 Z" />
+              {/* The server's power (idea 8): a container down puts a floodlight out and turns its mast's lamp steady. */}
+              <path className="ms-flood" data-out={down.length > 1 ? '' : undefined} d="M-104 -3 L-7 -58 L-7 -24 Z" />
+              <path className="ms-flood" data-out={down.length > 0 ? '' : undefined} d="M108 -3 L7 -58 L7 -24 Z" />
               <path className="ms-land" d="M-120 0 Q-60 -9 0 -9 Q60 -9 130 0 Z" />
               <path className="ms-land" d="M-16 -9 h32 v-6 h-32 z" />
               <path
@@ -557,9 +684,9 @@ export function MissionScene({ now, dark, narrow, home, events, wx, launch }: {
                 d="M-40 -9 V-104 M-30 -9 V-104 M-40 -104 H-30 M-40 -84 L-30 -64 M-30 -84 L-40 -64 M-40 -64 L-30 -44 M-30 -64 L-40 -44 M-40 -44 L-30 -24 M-30 -44 L-40 -24 M-40 -84 H-30 M-40 -64 H-30 M-40 -44 H-30 M-40 -24 H-30 M-30 -58 H-12 M-30 -30 H-12"
               />
               <path className="ms-land-line ms-land-thin" d="M-66 -7 V-128 M30 -9 V-128 M56 -7 V-128" />
-              <circle className="ms-lamp" cx={-66} cy={-130} r={2.2} />
-              <circle className="ms-lamp" style={{ '--d': '-0.8s' } as CSSProperties} cx={30} cy={-130} r={2.2} />
-              <circle className="ms-lamp" style={{ '--d': '-1.6s' } as CSSProperties} cx={56} cy={-130} r={2.2} />
+              <circle className="ms-lamp" data-steady={down.length > 1 ? '' : undefined} cx={-66} cy={-130} r={2.2} />
+              <circle className="ms-lamp" data-steady={down.length > 2 ? '' : undefined} style={{ '--d': '-0.8s' } as CSSProperties} cx={30} cy={-130} r={2.2} />
+              <circle className="ms-lamp" data-steady={down.length > 0 ? '' : undefined} style={{ '--d': '-1.6s' } as CSSProperties} cx={56} cy={-130} r={2.2} />
               <circle className="ms-lamp" style={{ '--d': '-0.4s' } as CSSProperties} cx={-35} cy={-107} r={2} />
               {!narrow && (
                 <>

@@ -728,6 +728,7 @@ export function App({ cached }: { cached: AppState | null }) {
           events={data.google.connected && data.prefs.sources.calendar ? todayAgenda(data, now).todays.map((e) => ({ id: e.id, at: e.s, end: e.e, name: e.title })) : []}
           wx={skyWeather(weatherOn ? data.weather.now?.forecast : null)}
           launch={launches}
+          power={!data.prefs.hidden.includes('view:server')}
         />
       )}
       <div className="lp-shell">

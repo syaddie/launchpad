@@ -67,6 +67,13 @@
   --ms-sky-top: #bcd6f6;
   --ms-sky-mid: #dbe8f8;
   --ms-sky-low: #f1f4f9;
+  /* Dawn's and dusk's own skies (idea 2): indigo into rose into orange, light enough for the sky's words. */
+  --ms-dawn-top: #b7bde8;
+  --ms-dawn-mid: #efc6d3;
+  --ms-dawn-low: #fcdcbc;
+  --ms-dusk-top: #a7a9dc;
+  --ms-dusk-mid: #e6b4c6;
+  --ms-dusk-low: #f7c49c;
   --ms-horizon-glow: rgba(255, 170, 110, 0.55);
   --ms-sea: #c7d7ec;
   --ms-ground: #dfe5ee;
@@ -131,6 +138,12 @@
   --ms-sky-top: #04060f;
   --ms-sky-mid: #0a1128;
   --ms-sky-low: #16224a;
+  --ms-dawn-top: #0d1236;
+  --ms-dawn-mid: #3d2550;
+  --ms-dawn-low: #763b2b;
+  --ms-dusk-top: #0b0c2a;
+  --ms-dusk-mid: #3a1c44;
+  --ms-dusk-low: #6e3022;
   --ms-horizon-glow: rgba(255, 139, 61, 0.3);
   --ms-sea: #0c1634;
   --ms-ground: #070b16;
@@ -192,6 +205,14 @@
 .ms-scene > * { position: absolute; }
 .ms-sky { inset: 0 0 auto 0; height: var(--hz, 38vh); background: linear-gradient(180deg, var(--ms-sky-top), var(--ms-sky-mid) 52%, var(--ms-sky-low)); }
 .ms-stars { left: 0; top: 0; width: 100%; height: var(--hz, 38vh); }
+/* Dawn and dusk as their own skies (idea 2; mission.ts's twilight, Scene.tsx): for the half hour either side of sunrise
+   and sunset, indigo into rose into orange, cross-faded over the theme's own sky by the clock (--dawn, --dusk: 1 from
+   eight minutes either side of the moment, none half an hour off), the stars and their twinkle paling with it. Opacity
+   only, once a minute at most. */
+.ms-dawn, .ms-dusk { inset: 0 0 auto 0; height: var(--hz, 38vh); transition: opacity var(--m-sweep) var(--e-out); }
+.ms-dawn { background: linear-gradient(180deg, var(--ms-dawn-top), var(--ms-dawn-mid) 55%, var(--ms-dawn-low)); opacity: var(--dawn, 0); }
+.ms-dusk { background: linear-gradient(180deg, var(--ms-dusk-top), var(--ms-dusk-mid) 55%, var(--ms-dusk-low)); opacity: var(--dusk, 0); }
+.ms-stars, .ms-twinkles { opacity: calc(1 - var(--tw, 0) * 0.7); transition: opacity var(--m-sweep) var(--e-out); }
 .ms-fx { inset: 0; width: 100%; height: 100%; }
 /* Warm light on the horizon under the sun or moon: --glow is 1 as it rises and sets, 0 when it's high. */
 .ms-glow { inset: 0 0 auto 0; height: var(--hz, 38vh); background: radial-gradient(58% 80% at var(--orb-x, 70%) 100%, var(--ms-horizon-glow), transparent 72%); opacity: var(--glow, 0); transition: opacity 1.2s var(--e-out); }
@@ -244,6 +265,29 @@
 /* A launch lights the horizon. */
 .ms-flash { inset: 0 0 auto 0; height: var(--hz, 38vh); background: radial-gradient(50% 90% at var(--pad-x, 10%) 100%, var(--ms-horizon-glow), transparent 70%); opacity: 0; transition: opacity 2.4s var(--e-out); }
 .ms-ignited .ms-flash { opacity: 1; transition-duration: 0.5s; }
+/* A recovery (idea 6; Scene.tsx): minutes after a launch, far downrange, a point of light comes back down. It lights as
+   it comes in, dims as it falls, lights again for its landing burn as it slows, and touches down on the horizon with a
+   small flare along the ground. Transform and opacity only. The eases are written out (a keyframe's own timing function
+   doesn't take var()): falling faster and faster, then --e-out's quick braking. */
+.ms-recovery { left: var(--land-x, 70%); top: var(--hz, 38vh); width: 0; height: 0; }
+.ms-recovery > i { position: absolute; left: 0; top: 0; }
+.ms-recovery-craft { width: 4px; height: 4px; margin: -4px 0 0 -2px; border-radius: 50%; background: var(--ms-flame-core); box-shadow: 0 0 5px 2px var(--ms-ignition), 0 0 14px 4px var(--ms-ignition-glow); animation: msRecoveryFall calc(var(--m-sweep) * 16) both, msRecoveryBurn calc(var(--m-sweep) * 16) linear both; }
+.ms-recovery-touch { width: 46px; height: 8px; margin: -5px 0 0 -23px; border-radius: 50%; background: radial-gradient(closest-side, var(--ms-ignition), var(--ms-ignition-glow) 55%, transparent); opacity: 0; animation: msRecoveryTouch calc(var(--m-sweep) * 16) linear both; }
+@keyframes msRecoveryFall {
+  0% { translate: 0 calc(var(--hz, 38vh) * -0.6); animation-timing-function: cubic-bezier(0.45, 0, 0.85, 0.5); }
+  64% { translate: 0 calc(var(--hz, 38vh) * -0.17); animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); }
+  90%, 100% { translate: 0 0; }
+}
+@keyframes msRecoveryBurn {
+  0% { opacity: 0; scale: 1; }
+  4% { opacity: 1; scale: 1.7; }
+  14%, 62% { opacity: 0.42; scale: 1; }
+  66% { opacity: 1; scale: 1.6; }
+  88% { opacity: 1; scale: 1.3; }
+  91% { opacity: 0.8; scale: 0.9; }
+  100% { opacity: 0; scale: 0.5; }
+}
+@keyframes msRecoveryTouch { 0%, 89% { opacity: 0; scale: 0.3 1; } 92% { opacity: 1; scale: 1 1; } 100% { opacity: 0; scale: 1.7 1; } }
 /* The Music-only page has no site: the sky stands still behind it. */
 .ms-scene--plain { --hz: 190px; }
 
@@ -252,10 +296,39 @@
 .ms-land { fill: var(--ms-land); }
 .ms-land-line { fill: none; stroke: var(--ms-land); stroke-width: 1.8; stroke-linecap: round; }
 .ms-land-thin { stroke-width: 1.2; }
-.ms-flood { fill: var(--ms-flood); }
+.ms-flood { fill: var(--ms-flood); transition: fill var(--m-sweep) var(--e-out); }
 /* The masts' red lamps blink out of step, a third of the time lit. */
-.ms-lamp { fill: var(--ms-lamp); animation: msLamp 2.4s steps(1, end) var(--d, 0s) infinite; }
+.ms-lamp { fill: var(--ms-lamp); animation: msLamp 2.4s steps(1, end) var(--d, 0s) infinite; transition: fill var(--m-sweep) var(--e-out); }
 @keyframes msLamp { 0% { opacity: 1; } 34%, 100% { opacity: 0.16; } }
+/* The server as the site's power (idea 8; Scene.tsx, mission.ts's powerDown): a container down puts a floodlight out
+   (it flickers and goes dark) and turns its mast's lamp steady; a second puts the other out, a third the last mast's
+   lamp. A small label by the site says why, with the poll's scrub mark. */
+.ms-flood[data-out] { opacity: 0; animation: msFloodOut calc(var(--m-sweep) * 1.2) steps(1, end) both; }
+@keyframes msFloodOut { 0% { opacity: 1; } 18% { opacity: 0.2; } 30% { opacity: 1; } 44% { opacity: 0; } 58% { opacity: 0.6; } 66%, 100% { opacity: 0; } }
+.ms-lamp[data-steady] { animation: none; opacity: 1; }
+.ms-power { animation: lpFadeIn var(--m-state) var(--e-out) both; }
+.ms-power-mark { fill: var(--wn); }
+.ms-power-text { font: 600 10.5px var(--f-mono); letter-spacing: 0.06em; text-transform: uppercase; fill: var(--t2); }
+/* The night watch (idea 13; mission.ts's nightWatch): from 23:00 until sunrise the site's lights dim to red, like a
+   darkened control room: the floodlights, the masts' lamps and, with no photos, the apron's lights (mission-home.css). */
+.lp-root:has(> .ms-scene[data-watch]) {
+  --ms-flood: rgba(255, 72, 56, 0);
+  --ms-lamp: #c22d38;
+  --ms-apron-fixture: rgba(160, 60, 60, 0.36);
+  --ms-apron-taxi: color-mix(in srgb, #c23a32 46%, transparent);
+  --ms-apron-flash: #cc3a30;
+  --ms-apron-flash-glow: rgba(204, 58, 48, 0.32);
+}
+:root[data-mode='dark'] .lp-root:has(> .ms-scene[data-watch]) {
+  --ms-flood: rgba(255, 72, 56, 0.045);
+  --ms-lamp: #b8303a;
+  --ms-apron-fixture: rgba(255, 110, 96, 0.2);
+  --ms-apron-taxi: #b5372e;
+  --ms-apron-taxi-glow: rgba(190, 50, 40, 0.38);
+  --ms-apron-flash: #ff6a58;
+  --ms-apron-flash-glow: rgba(255, 74, 58, 0.42);
+}
+.ms-scene[data-watch] .ms-lamp { opacity: 0.85; }
 .ms-pad-vehicle .ms-flames { opacity: 0; }
 .ms-ignited .ms-pad-vehicle .ms-flames { opacity: 1; animation: msFlicker 0.24s linear infinite; }
 .ms-lift { transform-box: view-box; transform-origin: 0 -40px; }
@@ -1217,7 +1290,10 @@
 
 @media (prefers-reduced-motion: reduce) {
   .ms-clouds i, .ms-twinkles i, .ms-lamp, .ms-flames, .ms-flame-core, .ms-ring, .ms-beacon::after, .ms-cell, .ms-logo--liftoff :is(.ms-vehicle, .ms-flames), .ms-rollout .ms-lift, .cal-day.today .cal-n::after, .cal-day.on::after, .ln-timer .ln-dot::after { animation: none !important; }
-  .ms-sat, .ms-trace, .ms-fx, .ms-ring, .ms-pulse, .ms-stage { display: none; }
+  .ms-sat, .ms-trace, .ms-fx, .ms-ring, .ms-pulse, .ms-stage, .ms-recovery { display: none; }
+  /* The sky still shows dawn and dusk, the power and the night watch, without fading or flickering into them. */
+  .ms-dawn, .ms-dusk, .ms-stars, .ms-twinkles, .ms-flood, .ms-lamp { transition: none; }
+  .ms-flood[data-out] { animation: none; }
   .ms-scene[data-wx='rain'] .ms-rain { animation: none; }
   .ms-orb, .ms-clouds { transition: none; transform: translate(var(--orb-x, 70vw), var(--orb-y, 12vh)); }
   .ms-clouds { transform: none; }
