@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { along, apron, APRON_ROWS, ascentCurve, clearOf, clockText, countdown, dayFraction, finalCount, hoursOf, moonPath, moonPhase, moonTimes, moonTurn, orbPlace, pathTable, seeded, skyPoint, skyWeather, stagesShed, sunTimes } from '../web/src/mission';
+import { along, apron, APRON_ROWS, ascentCurve, clearOf, clockText, countdown, daysText, elapsedText, dayFraction, finalCount, hoursOf, moonPath, moonPhase, moonTimes, moonTurn, orbPlace, pathTable, seeded, skyPoint, skyWeather, stagesShed, sunTimes } from '../web/src/mission';
 
 const at = (h: number, m = 0, s = 0) => new Date(2026, 10, 25, h, m, s);
 
@@ -308,5 +308,22 @@ describe('staging', () => {
     expect(stagesShed(day, at(7), at(15)).map((e) => e.id)).toEqual(['lunch']);
     expect(stagesShed(day, at(14), at(14))).toEqual([]);
     expect(stagesShed(day, at(15), at(13))).toEqual([]);
+  });
+});
+
+describe('mission elapsed time and days left', () => {
+  it('writes how long since as T+, with days once past one', () => {
+    expect(elapsedText(0)).toBe('T+00:00:00');
+    expect(elapsedText((2 * 3600 + 13 * 60 + 45) * 1000 + 999)).toBe('T+02:13:45');
+    expect(elapsedText(86_399_000)).toBe('T+23:59:59');
+    expect(elapsedText(86_400_000)).toBe('T+1:00:00:00');
+    expect(elapsedText((3 * 86_400 + 4 * 3600 + 5) * 1000)).toBe('T+3:04:00:05');
+    expect(elapsedText(-5000)).toBe('T+00:00:00');
+  });
+  it('writes the days left as T-', () => {
+    expect(daysText(5)).toBe('T-05');
+    expect(daysText(27)).toBe('T-27');
+    expect(daysText(124)).toBe('T-124');
+    expect(daysText(-3)).toBe('T-00');
   });
 });

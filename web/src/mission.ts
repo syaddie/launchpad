@@ -418,3 +418,18 @@ export function stagesShed<E extends { id: string; end: Date }>(events: E[], bef
   const ended = events.filter((e) => e.end > before && e.end <= now).sort((a, b) => a.end.getTime() - b.end.getTime());
   return ended.slice(-1);
 }
+
+/**
+ * How long since something, as mission elapsed time for the dot-matrix face: "T+02:13:45", and past a day
+ * "T+1:02:13:45" (days, then the clock). Never below zero.
+ */
+export function elapsedText(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const days = Math.floor(s / 86_400);
+  return `T+${days ? `${days}:` : ''}${clockText((s % 86_400) * 1000)}`;
+}
+
+/** A countdown's days left for the dot-matrix face: "T-05", "T-27", "T-124". */
+export function daysText(days: number): string {
+  return `T-${two(Math.max(0, days))}`;
+}

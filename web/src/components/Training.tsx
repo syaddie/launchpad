@@ -12,6 +12,7 @@ import { copyText, menuProps } from './ContextMenu';
 import { landedDay, periodStep, unseen } from '../motion';
 import { Glide, Glyphs, Readout, usePeriodScan, useSettled } from './Motion';
 import { EmptyArt } from './mission/EmptyArt';
+import { usePageVisible } from '../hooks/usePageVisible';
 
 type Muscles = Record<string, ExerciseMuscles>;
 
@@ -517,17 +518,6 @@ function useNewBests(keys: string[]): ReadonlySet<string> {
     if (state.sig !== null) localSet('seenBests', state.seen!);
   }, [state.sig, state.seen]);
   return state.fresh;
-}
-
-/** Whether the page is in view (not a tab in the background), following it. */
-function usePageVisible(): boolean {
-  const [visible, setVisible] = useState(() => !document.hidden);
-  useEffect(() => {
-    const on = () => setVisible(!document.hidden);
-    document.addEventListener('visibilitychange', on);
-    return () => document.removeEventListener('visibilitychange', on);
-  }, []);
-  return visible;
 }
 
 function Lifts({ workouts, today, muscles, pinned, onOpen }: { workouts: Workout[]; today: Date; muscles: Muscles; pinned: string[]; onOpen: (title: string) => void }) {

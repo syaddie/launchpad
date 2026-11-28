@@ -66,7 +66,10 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
   in turn as it opens; an Undo message counts down in five dots going out one by one. In Training, a new best lands with
   a flare and its lift's line draws on to the new high, which sends out a ring; a sync is a downlink (DOWNLINK, signal
   bars, packets) and what it brings reports in, lit; a weight logged comes down to a touchdown on its day before the line
-  runs on to it. See [`mission-layout.md`](mission-layout.md).
+  runs on to it. In You, the time since the last cigarette is T+ in the dot-matrix face, ticking; a cigarette logged
+  touches down on the day's line before today's bar burns up; a mood picked lights its day in the month and the year;
+  today's pixel twinkles; the nearest countdown counts down in the dot-matrix face and lifts off on its day, once, and
+  past ones are spent stages. See [`mission-layout.md`](mission-layout.md).
 - **Vista** drifts like light on glass: long, soft arrivals and a 7% spring. Its photo drifts so slowly you only notice
   it has moved. Its views don't use the browser's transitions (`--m-view-mode: enter`): the glass blurs the photo
   behind it, which a part pictured on its own, or anything inside a fading container, can't see. So the new view's
@@ -150,7 +153,11 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
   from where it was, if that day's weight changed), and when it's the latest the 7-day line runs on to it and its end
   lights again (`useLanding`, `WeightChart`; `trDrop`, `trRunOn` in `styles.css`). Vista floats it down, Focus is quick,
   Poster slams it so it squashes as it hits, Mission brings it down to a touchdown with a ring. A removal, or many days
-  changing at once (a restore), doesn't land anything.
+  changing at once (a restore), doesn't land anything. A cigarette logged does the same on You's day line (`useLogged`,
+  `trDrop`), and once it's down today's bar rises from where it was (`cigRise`, a scale from `--from`; Poster's
+  `cigSlamUp`), its count coming in. Today's column is drawn afresh for each one, so it rises from the start, and once
+  one has risen it no longer plays the opening's sweep. Only when today's count went up by one: the server's answer
+  gives the one just logged its own time, which isn't another.
 - **A new best** in Training's Your lifts lands once, the first time this device shows it (`useNewBests`, keeping
   what's been seen in `localStorage`): Mission's flare and line drawing to the new high (`mission.css`, TRAINING); the
   other designs show the chip as they always have.
@@ -162,7 +169,9 @@ nothing: the clock's minutes, Vista's photo drifting (it steps once a second, so
 second rather than every frame), Mission's sky and the ring today's date breathes on Money's calendar (scaled, so
 nothing is repainted for it), and the runway lights on Mission's apron when Home has no photos (each dot on or off, a
 run every few seconds). In Mission, a running study timer's digits relight as they change and its dot breathes a
-beacon (scaled), and an empty state's drawing has its mast lamp blinking with the site's (stepped). Busy states
+beacon (scaled), and an empty state's drawing has its mast lamp blinking with the site's (stepped). The time since the
+last cigarette steps once a second (only the digits that changed are redrawn, and only while the page is in view), and
+today's pixel in the year twinkles (faded and scaled). Busy states
 (a spinner, a skeleton line, Mission's acquiring line and satellite, Training's downlink) move only while something is
 being waited for. The tab's title changes once a second only while it counts to an event inside the hour or a running
 study timer.

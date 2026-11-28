@@ -503,15 +503,38 @@
 @keyframes trStreamBlock { from { translate: 0 0; } to { translate: 300% 0; } }
 [data-design='poster'] :is(.tr-ses[data-new], .tr-day[data-new] > :not(.tr-dn)) { animation-name: lpWipeIn; animation-timing-function: var(--e-out); }
 [data-design='poster'] .tr-wt-drop { animation: trSlam var(--land-for) linear both; }
+/* The eases are Poster's --e-in and --e-out written out: a keyframe's own timing function doesn't take var(). */
 @keyframes trSlam {
-  0% { translate: 0 var(--drop, 0px); animation-timing-function: var(--e-in); }
-  60% { translate: 0 0; scale: 1; animation-timing-function: var(--e-out); }
+  0% { translate: 0 var(--drop, 0px); animation-timing-function: cubic-bezier(0.55, 0, 0.75, 0.2); }
+  60% { translate: 0 0; scale: 1; animation-timing-function: cubic-bezier(0.83, 0, 0.17, 1); }
   72% { scale: 1.8 0.45; }
   100% { translate: 0 0; scale: 1; }
 }
 [data-design='poster'] .tr-wt-run { animation-timing-function: var(--e-out); }
 @media (prefers-reduced-motion: reduce) {
   @keyframes trSlam { from { opacity: 0; } }
+}
+
+/* ---------- You: a cigarette logged drops onto the day's line, and today's bar rises (styles.css has the base) ---------- */
+
+/* Vista drifts: the mark floats down onto the line and the bar rises slowly to its new height. */
+[data-design='vista'] .cig { --land-for: calc(var(--m-view) * 1.4); --rise-for: calc(var(--m-sweep) * 1.4); }
+[data-design='vista'] :is(.day-line-dot[data-drop], .cig-col[data-rise='on'] > .cig-bar) { animation-timing-function: var(--e-out); }
+/* Focus is quick and exact: down and up without a bounce. */
+[data-design='focus'] .cig { --rise-for: var(--m-move); }
+[data-design='focus'] :is(.day-line-dot[data-drop], .cig-col[data-rise='on'] > .cig-bar) { animation-timing-function: var(--e-out); }
+/* Poster slams: the mark is slammed onto the line and squashes as it hits, and the bar is driven up hard and stops dead,
+   a touch over before it sits; its count is stamped. */
+[data-design='poster'] .day-line-dot[data-drop] { animation: trSlam var(--land-for) linear both; }
+[data-design='poster'] .cig-col[data-rise='on'] > .cig-bar { animation: cigSlamUp var(--rise-for) linear var(--rise-at) both; }
+@keyframes cigSlamUp {
+  0% { scale: 1 var(--from, 0); animation-timing-function: cubic-bezier(0.55, 0, 0.75, 0.2); }
+  55% { scale: 1 1.07; animation-timing-function: cubic-bezier(0.83, 0, 0.17, 1); }
+  100% { scale: 1 1; }
+}
+[data-design='poster'] .cig-col[data-rise='on'] > .cig-n { animation: lpStampIn var(--m-state) var(--e-out) calc(var(--rise-at) + var(--rise-for) * 0.55) both; }
+@media (prefers-reduced-motion: reduce) {
+  @keyframes cigSlamUp { from { opacity: 0.35; } }
 }
 
 /* ---------- Learn's rows in each design: they reach to the panel's edge, as far as its sides go ---------- */

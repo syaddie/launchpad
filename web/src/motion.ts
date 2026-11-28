@@ -96,3 +96,33 @@ export function landedDay(before: Record<string, number>, after: Record<string, 
   const changed = Object.keys(after).filter((d) => before[d] !== after[d]);
   return changed.length === 1 ? changed[0] : null;
 }
+
+/**
+ * The one item just added to a list, comparing it before and after (a cigarette logged drops onto the day's line). Null
+ * when nothing was added, or when several were at once (a restore, or a sync bringing a day's worth). What was taken
+ * away at the same time (an old day falling out of the log) doesn't matter.
+ */
+export function addedOne(before: readonly string[], after: readonly string[]): string | null {
+  const was = new Set(before);
+  const added = after.filter((x) => !was.has(x));
+  return added.length === 1 ? added[0] : null;
+}
+
+/**
+ * Which countdowns due today still have to lift off (once a day each, remembered across reloads), and the record to
+ * keep. `record` is what was saved last (`{ day, ids }` as JSON): a record from another day, or one that can't be read,
+ * counts as none, so a countdown due today lifts off the first time it's seen even on the day this first runs.
+ */
+export function liftoffs(due: readonly string[], record: string | null, today: string): { lift: string[]; record: string } {
+  let done: string[] = [];
+  try {
+    const was = record === null ? null : (JSON.parse(record) as unknown);
+    if (was && typeof was === 'object' && (was as { day?: unknown }).day === today && Array.isArray((was as { ids?: unknown }).ids)) {
+      done = ((was as { ids: unknown[] }).ids).filter((x): x is string => typeof x === 'string');
+    }
+  } catch {
+    // Nothing usable: as if there were no record.
+  }
+  const lift = due.filter((id) => !done.includes(id));
+  return { lift, record: JSON.stringify({ day: today, ids: [...done, ...lift] }) };
+}

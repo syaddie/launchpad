@@ -1098,6 +1098,18 @@ textarea.input { height: auto; padding-block: 8px; line-height: 1.45; }
 .cig-bar { width: 100%; max-width: 26px; min-height: 2px; border-radius: 3px 3px 0 0; transition: height 0.3s ease-out; }
 .cig-days { display: flex; gap: 6px; }
 .cig-days span { flex: 1; min-width: 0; text-align: center; font-size: 11px; color: var(--t3); }
+/* What you log lands (docs/motion.md): a cigarette logged drops onto the day's line, and once it's down today's bar rises
+   from where it was, its count coming in (useLogged in You.tsx). Each design's own way is in designs.css (YOU); Mission's
+   in mission.css (YOU). Once one has risen, today's bar keeps still (no opening sweep again, as the design changes). */
+.cig { --land-for: var(--m-move); --rise-at: calc(var(--land-for) * 0.55); --rise-for: var(--m-sweep); }
+.day-line-dot[data-drop] { --drop: calc(var(--m-rise) * -2.5); transform-origin: 50% 100%; animation: trDrop var(--land-for) var(--e-settle) both; }
+.cig-col[data-rise] > .cig-bar { animation: none; }
+.cig-col[data-rise='on'] > .cig-bar { transform-origin: 50% 100%; animation: cigRise var(--rise-for) var(--e-settle) var(--rise-at) both; }
+@keyframes cigRise { from { scale: 1 var(--from, 0); } }
+.cig-col[data-rise='on'] > .cig-n { animation: lpFadeIn var(--m-state) var(--e-out) calc(var(--rise-at) + var(--rise-for) * 0.5) both; }
+@media (prefers-reduced-motion: reduce) {
+  @keyframes cigRise { from { opacity: 0.35; } }
+}
 
 .mood-month { display: inline-flex; align-items: center; gap: 2px; }
 .mood-pick { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
@@ -1163,6 +1175,8 @@ button.pix-cell:hover { box-shadow: inset 0 0 0 1px var(--t3); }
 .pix-hit { display: flex; align-items: center; gap: 10px; padding: 6px 2px; border: 0; border-bottom: 1px solid var(--ln); background: none; font: inherit; font-size: 13px; color: var(--t2); text-align: left; cursor: pointer; }
 .pix-hit:hover { color: var(--tx); }
 .pix-hit-day { flex: none; min-width: 84px; font-size: 12px; color: var(--t3); }
+/* A day's light as its mood is picked (Flare in You.tsx): Mission's only (mission.css, YOU). */
+.lp-flare { display: none; }
 .pix-hit-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---------- server ---------- */
