@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { MON } from '../../../shared/dates';
 import type { ContainerInfo, LogLine } from '../../../shared/types';
 import { api, localGet, localSet } from '../api';
+import { markOf, type PollMark } from '../mission';
 import { copyText, menuProps } from './ContextMenu';
 import { ExplainBox, ExplainButton, useExplain, useExplainStatus } from './Explain';
 
@@ -53,15 +54,9 @@ const chipOf = (c: ContainerInfo) => {
   };
 };
 
-/** A light's state in Mission's go/no-go poll (the marks the source lights use, mission.css). */
-export type PollMark = 'go' | 'hold' | 'scrub' | 'standby';
-
-/** Up and healthy is go; starting or restarting holds; unhealthy or dead is scrubbed; stopped, made or paused stands by. */
-export function markOf(c: ContainerInfo): PollMark {
-  if (c.state === 'restarting' || /health: starting/i.test(c.status)) return 'hold';
-  if (/unhealthy/i.test(c.status) || c.state === 'dead') return 'scrub';
-  return c.state === 'running' ? 'go' : 'standby';
-}
+// A light's state in Mission's go/no-go poll, and a container's: in mission.ts, so the launch site can read the
+// server's power without this file (idea 8).
+export { markOf, type PollMark };
 
 /**
  * One container in the Services panel, with its logs and, when the restart proxy is there, a restart. `order` is its

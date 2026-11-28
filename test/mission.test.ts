@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { along, apron, APRON_ROWS, ascentCurve, clearOf, clockText, countdown, countText, daysText, elapsedText, dayFraction, finalCount, hoursOf, minusText, moonPath, moonPhase, moonTimes, moonTurn, orbPlace, pathTable, seeded, skyPoint, skyWeather, stagesShed, sunTimes } from '../web/src/mission';
+import { along, apron, APRON_ROWS, ascentCurve, clearOf, clockText, countdown, countText, daysText, elapsedText, dayFraction, finalCount, hoursOf, markOf, minusText, moonPath, moonPhase, moonTimes, moonTurn, nightWatch, orbPlace, pathTable, powerDown, powerText, seeded, skyPoint, skyWeather, stagesShed, sunTimes, twilight, TWILIGHT_MS } from '../web/src/mission';
 
 const at = (h: number, m = 0, s = 0) => new Date(2026, 10, 25, h, m, s);
 
@@ -347,5 +347,88 @@ describe('mission elapsed time and days left', () => {
     expect(minusText(3_599_000)).toBe('T-59:59');
     expect(minusText(3_600_000)).toBe('T-1:00:00');
     expect(minusText((2 * 3600 + 4 * 60 + 5) * 1000)).toBe('T-2:04:05');
+  });
+});
+
+describe('dawn and dusk, and the night watch', () => {
+  const day = (h: number, m = 0) => new Date(2026, 10, 28, h, m);
+  const { rise, set } = sunTimes(day(12));
+  const off = (d: Date, min: number) => new Date(d.getTime() + min * 60_000);
+
+  it('dawn’s sky is all there at sunrise and for eight minutes either side, fading out by half an hour off', () => {
+    expect(twilight(rise)).toEqual({ dawn: 1, dusk: 0 });
+    expect(twilight(off(rise, -8)).dawn).toBe(1);
+    expect(twilight(off(rise, 8)).dawn).toBe(1);
+    const mid = twilight(off(rise, 19)).dawn;
+    expect(mid).toBeGreaterThan(0.3);
+    expect(mid).toBeLessThan(0.7);
+    expect(twilight(off(rise, 25)).dawn).toBeLessThan(mid);
+    expect(twilight(new Date(rise.getTime() + TWILIGHT_MS)).dawn).toBe(0);
+    expect(twilight(off(rise, -45)).dawn).toBe(0);
+  });
+
+  it('dusk’s is all there at sunset, and neither shows by day or by night', () => {
+    expect(twilight(set)).toEqual({ dawn: 0, dusk: 1 });
+    expect(twilight(off(set, -20)).dusk).toBeGreaterThan(0);
+    expect(twilight(off(set, 20)).dusk).toBeGreaterThan(0);
+    expect(twilight(day(12))).toEqual({ dawn: 0, dusk: 0 });
+    expect(twilight(day(22))).toEqual({ dawn: 0, dusk: 0 });
+    expect(twilight(day(3))).toEqual({ dawn: 0, dusk: 0 });
+  });
+
+  it('changes in hundredths, so the sky changes once a minute at most', () => {
+    for (let m = -30; m <= 30; m++) {
+      const k = twilight(off(set, m)).dusk;
+      expect(Math.round(k * 100) / 100).toBe(k);
+    }
+  });
+
+  it('the site keeps its night watch from 23:00 until sunrise', () => {
+    expect(nightWatch(day(22, 59))).toBe(false);
+    expect(nightWatch(day(23))).toBe(true);
+    expect(nightWatch(day(23, 59))).toBe(true);
+    expect(nightWatch(day(0, 30))).toBe(true);
+    expect(nightWatch(day(5))).toBe(true);
+    expect(nightWatch(off(rise, -1))).toBe(true);
+    expect(nightWatch(off(rise, 1))).toBe(false);
+    expect(nightWatch(day(12))).toBe(false);
+    expect(nightWatch(day(20))).toBe(false);
+  });
+});
+
+describe('the server as the site’s power', () => {
+  const c = (name: string, state: string, status: string, self = false) => ({ name, state, status, self });
+
+  it('marks a container as Services’ poll does', () => {
+    expect(markOf(c('a', 'running', 'Up 3 days (healthy)'))).toBe('go');
+    expect(markOf(c('a', 'running', 'Up 5 seconds (health: starting)'))).toBe('hold');
+    expect(markOf(c('a', 'restarting', 'Restarting (1) 2 seconds ago'))).toBe('hold');
+    expect(markOf(c('a', 'running', 'Up 2 hours (unhealthy)'))).toBe('scrub');
+    expect(markOf(c('a', 'dead', 'Dead'))).toBe('scrub');
+    expect(markOf(c('a', 'exited', 'Exited (0) 9 hours ago'))).toBe('standby');
+  });
+
+  it('counts only what’s scrubbed as down, never Launchpad’s own, in Docker’s order', () => {
+    const list = [
+      c('launchpad', 'running', 'Up 2 hours (unhealthy)', true),
+      c('jellyfin', 'running', 'Up 2 hours (unhealthy)'),
+      c('cloudflared', 'running', 'Up 3 days'),
+      c('backup', 'exited', 'Exited (0) 9 hours ago'),
+      c('sonarr', 'dead', 'Dead'),
+      c('radarr', 'restarting', 'Restarting (1) 2 seconds ago'),
+    ];
+    expect(powerDown(list)).toEqual(['jellyfin', 'sonarr']);
+    expect(powerDown(null)).toEqual([]);
+    expect(powerDown([])).toEqual([]);
+  });
+
+  it('says why its lights are out, in a few words', () => {
+    expect(powerText([])).toBe('');
+    expect(powerText(['jellyfin'])).toBe('jellyfin down');
+    expect(powerText(['jellyfin', 'sonarr'])).toBe('jellyfin and sonarr down');
+    expect(powerText(['jellyfin', 'sonarr', 'radarr'])).toBe('3 containers down');
+    expect(powerText(['jellyfin', 'qbittorrent'], 20)).toBe('2 containers down');
+    expect(powerText(['a-very-long-container-name'], 20)).toBe('1 container down');
+    expect(powerText(['jellyfin'], 20)).toBe('jellyfin down');
   });
 });

@@ -82,6 +82,32 @@ that only Mission shows (with Launchpad's own light and its line in the poll's l
   it sets and comes back up on the left, behind the pad, when it rises. When the theme and the clock disagree (Night at
   noon), it still sits low and late. A thin moon lights the horizon less.
 - The site: tower, masts with blinking lamps, water tower, floodlights at night, the vehicle venting.
+- Dawn and dusk as their own skies (idea 2; `twilight` in `mission.ts`, `.ms-dawn` and `.ms-dusk` in `mission.css`):
+  for the half hour either side of sunrise and sunset (Singapore's real times, `sunTimes`) the sky takes a palette of
+  its own, indigo into rose into orange, a lighter one in the Day theme and a deeper one at Night, cross-faded over the
+  theme's sky by the clock: all of it from eight minutes before to eight after, none half an hour off, in hundredths so
+  it changes once a minute at most. Dawn's is warmer and lighter at the horizon than dusk's. The stars pale with it.
+  Opacity only; with less motion it's the same sky, changing without the fade.
+- A recovery (idea 6; `Scene.tsx`, `msRecoveryFall` in `mission.css`): three minutes after the rocket goes up, far
+  downrange, a point of light comes back down. It lights as it comes in, dims as it falls, lights again for its landing
+  burn as it brakes, and touches down on the horizon with a small flare along the ground. Only where it can be seen: if
+  Home isn't showing or the page isn't in view when it falls due, it waits for them, and a quarter of an hour on it's
+  missed. Phones have no launch (the mark that launches is the strip's), so no recovery either. Less motion: nothing
+  launches, so nothing comes back.
+- The server as the site's power (idea 8; `powerDown`, `powerText` and `markOf` in `mission.ts`, `useSitePower` in
+  `Scene.tsx`): while Home is showing in Mission (and Server isn't hidden), the site reads the server once a minute. A
+  container down, as Services' poll scrubs it (unhealthy or dead; one stopped on purpose stands by and one restarting
+  holds, so neither counts; Launchpad's own never does), puts the right floodlight out, with a flicker, and turns the
+  right mast's lamp steady instead of blinking; a second puts the left floodlight out and its mast's lamp steady, a third
+  the middle mast's. A small mono label standing on the horizon by the site says why, with the poll's scrub mark:
+  "JELLYFIN DOWN", "JELLYFIN AND SONARR DOWN", "3 CONTAINERS DOWN" (the count, too, when the names won't fit). Nothing
+  shows while Docker can't be reached (not known isn't down), and the site stops asking for the page's life once the
+  server says Docker isn't connected. Nothing to act on there, so no menu: Server › Services has the rows and their
+  menus. Less motion: the lamps all stand lit, so the label and the floodlight say it.
+- A night watch (idea 13; `nightWatch` in `mission.ts`, `[data-watch]` in `mission.css`): from 23:00 until sunrise the
+  site's lights dim to red, like a darkened control room: the floodlights turn a dim red, the masts' lamps darken, and
+  with no photos the apron's runway flash, its fixtures and its taxiway lights go red too. Once at 23:00, a sweep long;
+  back at sunrise.
 - The day's ascent with its waypoints and the vehicle on it, burning.
 - The launch clock (T- to the next event, T+ during one, the time of day when nothing is left).
 - Glass panels with the pointer's light on them; the strip with its gliding selector; the phone's dock.
@@ -278,22 +304,16 @@ that only Mission shows (with Launchpad's own light and its line in the poll's l
 
 Kept from the design sessions, roughly in the order worth trying.
 
-2. **Dawn and dusk as their own skies.** Today the horizon warms inside one theme. A third and fourth palette
-   (indigo into rose into orange) for the half hour either side of sunrise and sunset, cross-faded.
 3. **Weather that is more than cloud and rain.** Thunder as a far flash behind the cloud; haze from the PSI reading
    as a pale band over the horizon; wind bending the vehicle's vapour.
-6. **A recovery.** After a launch, minutes later, a far point of light comes back down to the horizon and lands.
 7. **Parcels arriving as landings.** "Out for delivery" puts a small descending light in the sky; "Delivered" lands
    it beside the pad. (On hold: Packages was retired on 25 Nov 2026, its data kept.)
-8. **The server as the site's power.** When a container is down, one of the site's floodlights is out, or a mast
-   lamp turns steady instead of blinking. The scene as a status display you learn to read at a glance.
 9. **A mission patch per day.** The date and the day's count of events drawn as a small round patch in the strip;
    a week of them in Review.
 10. **Sound, off by default.** A low rumble on launch, a soft tick for the last ten seconds.
 11. **Depth by scroll on a phone.** The sky's layers part as the page scrolls, as they do under the pointer on a desk.
 12. **Other views' skies.** Money's sky with the month's balance as an altitude line; Training's with the week's
     sessions as waypoints; Learn's with a study timer as the vehicle climbing.
-13. **A night mode for the eyes.** After 23:00 the site's lights dim to red, like a darkened control room.
 14. **Hangar and Apogee in the sky.** Hangar's shed as a silhouette at the far end of the horizon; a faint ring
     high up where Apogee's orbit would be, with a dot on it when a study session is running.
 

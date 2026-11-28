@@ -63,6 +63,8 @@
 /* The runway's are fixtures that flash in turn, the nearest row first (--row), running out to the horizon and resting
    before the next run. On or off, never between, two rows at a time, so each light changes twice a run and nothing else is redrawn. */
 [data-design='mission'] .msh-lamp--seq { background: var(--ms-apron-fixture); box-shadow: none; }
+/* The night watch (mission.css): at 23:00 the apron's lights dim to red with the site's, once. */
+[data-design='mission'] .msh-lamp, [data-design='mission'] .msh-lamp--seq::after { transition: background-color var(--m-sweep) var(--e-out), box-shadow var(--m-sweep) var(--e-out); }
 [data-design='mission'] .msh-lamp--seq::after { content: ''; position: absolute; inset: -35%; border-radius: 50%; background: var(--ms-apron-flash); box-shadow: 0 0 calc(var(--r) * 5) calc(var(--r) * 1.4) var(--ms-apron-flash-glow); opacity: 0; }
 @media (prefers-reduced-motion: no-preference) {
   [data-design='mission'] .msh-lamp--seq::after { animation: mshRabbit var(--ms-apron-cycle) steps(1, end) infinite; animation-delay: calc(var(--row) * var(--ms-apron-step)); }

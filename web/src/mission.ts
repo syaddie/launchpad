@@ -1,6 +1,7 @@
 // The Mission layout's maths, with no page in it (tested in test/mission.test.ts). The scene that draws with it is
 // components/mission/Scene.tsx; the look is mission.css; docs/mission-layout.md says what the layout is.
 
+import type { ContainerInfo } from '../../shared/types';
 
 export type Pt = { x: number; y: number };
 export type Curve = [Pt, Pt, Pt, Pt];
@@ -273,6 +274,64 @@ export function moonPath(lit: number): string {
   const k = Math.max(0, Math.min(1, lit));
   const rx = Math.round(Math.abs(2 * k - 1) * 1000) / 1000;
   return `M0 -1 A1 1 0 0 1 0 1 A${rx} 1 0 0 ${k < 0.5 ? 0 : 1} 0 -1Z`;
+}
+
+/** Dawn's and dusk's own skies (idea 2) take over for this long either side of sunrise and sunset... */
+export const TWILIGHT_MS = 30 * 60_000;
+/** ...and stand at their fullest for this long either side of the moment itself. */
+const TWILIGHT_FULL_MS = 8 * 60_000;
+
+/**
+ * How much of dawn's and of dusk's own sky shows at `now`, 0 to 1, at the sky's place: all of it from eight minutes
+ * before sunrise (or sunset) to eight after, fading out smoothly to none half an hour either side. In hundredths, so
+ * the sky changes at most once a minute, with the clock.
+ */
+export function twilight(now: Date, at = SKY_AT): { dawn: number; dusk: number } {
+  const t = now.getTime();
+  const { rise, set } = sunTimes(now, at);
+  const near = (m: Date) => {
+    const x = Math.max(0, Math.min(1, (TWILIGHT_MS - Math.abs(t - m.getTime())) / (TWILIGHT_MS - TWILIGHT_FULL_MS)));
+    return Math.round(x * x * (3 - 2 * x) * 100) / 100;
+  };
+  return { dawn: near(rise), dusk: near(set) };
+}
+
+/** From this hour until sunrise, the site keeps a night watch (idea 13). */
+export const WATCH_FROM = 23;
+
+/** Whether the site's lights are dimmed to red at `now`: from 23:00 until the next sunrise, like a darkened control room. */
+export function nightWatch(now: Date, at = SKY_AT): boolean {
+  return now.getHours() >= WATCH_FROM || now.getTime() < sunTimes(now, at).rise.getTime();
+}
+
+/** A light's state in Mission's go/no-go poll (the marks the source lights use, mission.css). */
+export type PollMark = 'go' | 'hold' | 'scrub' | 'standby';
+
+/** Up and healthy is go; starting or restarting holds; unhealthy or dead is scrubbed; stopped, made or paused stands by. */
+export function markOf(c: Pick<ContainerInfo, 'state' | 'status'>): PollMark {
+  if (c.state === 'restarting' || /health: starting/i.test(c.status)) return 'hold';
+  if (/unhealthy/i.test(c.status) || c.state === 'dead') return 'scrub';
+  return c.state === 'running' ? 'go' : 'standby';
+}
+
+/**
+ * The server as the site's power (idea 8): the containers that are down, as Services' poll scrubs them (unhealthy or
+ * dead), in Docker's order. Launchpad's own is left out (it's the one drawing the page); one stopped on purpose stands
+ * by and one restarting holds, so neither puts a light out.
+ */
+export function powerDown(list: Pick<ContainerInfo, 'name' | 'state' | 'status' | 'self'>[] | null | undefined): string[] {
+  return (list ?? []).filter((c) => !c.self && markOf(c) === 'scrub').map((c) => c.name);
+}
+
+/**
+ * What the site says about its lights being out: "jellyfin down", "jellyfin and sonarr down", "3 containers down"; the
+ * count too when the names would run past `max` letters.
+ */
+export function powerText(down: string[], max = Infinity): string {
+  if (!down.length) return '';
+  const named = `${down.join(' and ')} down`;
+  if (down.length <= 2 && named.length <= max) return named;
+  return `${down.length} container${down.length === 1 ? '' : 's'} down`;
 }
 
 const two = (n: number) => String(n).padStart(2, '0');
