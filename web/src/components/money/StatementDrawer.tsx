@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { type CSSProperties, memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { fmtMoney, monthName } from '../../../../shared/money';
 import { applyReview, asMove, canBeYou, merchantsToAsk, patchAlike, patchProposal, reviewStatement, splitTip, type Action, type Applied, type Correction, type Proposal, type Review, type Statement } from '../../../../shared/statement';
 import type { BillSuggestion, Money, MoneyCategory, StatementContext, StatementEmail } from '../../../../shared/types';
@@ -26,6 +26,13 @@ const pendingOf = (bills: BillSuggestion[]): StatementEmail[] =>
 
 /** Wants a second look: matched to something, a guessed session, or no category. */
 const toCheck = (p: Proposal) => !!p.match || !!p.email || p.session?.from === 'guess' || (p.entry.kind !== 'move' && !p.entry.category);
+
+/** As the review shows, the lines matched to what's already in Money tick in one after another (styles.css, STATEMENT). */
+const NO_TICKS: ReadonlySet<string> = new Set();
+/** How many tick in; the rest are just there. */
+const TICKS_MAX = 16;
+/** How long they're marked: past the last one's tick in every design. */
+const TICKS_MS = 3200;
 
 /** Lines from before Money starts are only listed once they're asked for. */
 const listed = (p: Proposal) => !(p.early && p.action === 'skip');
@@ -66,6 +73,12 @@ export function StatementDrawer({ statement, money, bills, notify, onApply, onCl
   const [filter, setFilter] = useState<Filter>('all');
   const [correct, setCorrect] = useState<Correction>(false);
   const [open, setOpen] = useState<string | null>(null);
+  const [ticking, setTicking] = useState(NO_TICKS);
+  useEffect(() => {
+    if (!ticking.size) return;
+    const t = window.setTimeout(() => setTicking(NO_TICKS), TICKS_MS);
+    return () => window.clearTimeout(t);
+  }, [ticking]);
   const first = statement.lines[0]?.posted ?? statement.asOf;
   const last = statement.lines[statement.lines.length - 1]?.posted ?? statement.asOf;
 
@@ -85,7 +98,10 @@ export function StatementDrawer({ statement, money, bills, notify, onApply, onCl
   }, [statement]);
 
   useEffect(() => {
-    if (ctx) setReview(reviewStatement(statement, money, ctx, { account: account || undefined, pendingBills: pendingOf(bills) }));
+    if (!ctx) return;
+    const r = reviewStatement(statement, money, ctx, { account: account || undefined, pendingBills: pendingOf(bills) });
+    setReview(r);
+    setTicking(new Set(r.proposals.filter((p) => listed(p) && p.match && p.action === 'merge').map((p) => p.id)));
     // A new account starts the review over; Money changing elsewhere doesn't.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx, account, statement]);
@@ -125,6 +141,8 @@ export function StatementDrawer({ statement, money, bills, notify, onApply, onCl
   const off = bank === null ? 0 : Math.round((bank - preview.balance) * 100) / 100;
   const opening = preview.money.accounts.find((a) => a.id === review.account)?.opening ?? 0;
   const held = bank !== null && statement.available !== null ? Math.round((bank - statement.available) * 100) / 100 : 0;
+  // The matched lines' places in the order they tick in, counted down the list as it's drawn.
+  let tickN = 0;
 
   const apply = () => {
     const a = applyReview(money, review, () => newId('e'), { correct: Math.abs(off) >= 0.005 && correct });
@@ -237,6 +255,7 @@ export function StatementDrawer({ statement, money, bills, notify, onApply, onCl
         {ps.length > 0 && !shown.length && <p className="month-empty">Nothing here.</p>}
         {months.map((key) => {
           const rows = shown.filter((p) => p.entry.date.startsWith(key));
+          const ticks = rows.map((p) => (ticking.has(p.id) && tickN < TICKS_MAX ? tickN++ : undefined));
           const sum = (k: 'in' | 'out') => rows.filter((p) => p.action !== 'skip' && p.entry.kind === k).reduce((s, p) => s + p.entry.amount, 0);
           return (
             <div key={key} className="stm-month">
@@ -246,8 +265,8 @@ export function StatementDrawer({ statement, money, bills, notify, onApply, onCl
                   in {fmtMoney(sum('in'))} · out {fmtMoney(sum('out'))}
                 </span>
               </h3>
-              {rows.map((p) => (
-                <Row key={p.id} p={p} money={money} account={review.account} open={open === p.id} onOpen={toggleOpen} onPatch={patch} onAlike={setAlike} onSplit={split} onMove={makeMove} notify={notify} />
+              {rows.map((p, i) => (
+                <Row key={p.id} p={p} tick={ticks[i]} money={money} account={review.account} open={open === p.id} onOpen={toggleOpen} onPatch={patch} onAlike={setAlike} onSplit={split} onMove={makeMove} notify={notify} />
               ))}
             </div>
           );
@@ -257,8 +276,10 @@ export function StatementDrawer({ statement, money, bills, notify, onApply, onCl
   );
 }
 
-const Row = memo(function Row({ p, money, account, open, onOpen, onPatch, onAlike, onSplit, onMove, notify }: {
+const Row = memo(function Row({ p, tick, money, account, open, onOpen, onPatch, onAlike, onSplit, onMove, notify }: {
   p: Proposal;
+  /** Matched and just shown: its place in the order the matched lines tick in. */
+  tick?: number;
   money: Money;
   account: string;
   open: boolean;
@@ -304,7 +325,7 @@ const Row = memo(function Row({ p, money, account, open, onOpen, onPatch, onAlik
   };
 
   return (
-    <div className={'stm-row' + (skipped ? ' off' : '') + (open ? ' open' : '')}>
+    <div className={'stm-row' + (skipped ? ' off' : '') + (open ? ' open' : '')} data-tick={tick === undefined ? undefined : ''} style={tick ? ({ '--i': tick } as CSSProperties) : undefined}>
       <div className="stm-row-main" {...menuProps(items, `Actions for ${label}`)}>
         {p.match ? (
           <select className="cell pick stm-act" aria-label={`What to do with ${label}`} value={p.action} onChange={(x) => setAction(x.target.value as Action)}>
@@ -366,7 +387,12 @@ const Row = memo(function Row({ p, money, account, open, onOpen, onPatch, onAlik
             )}
             {FROM_NAME[p.from] && !p.email && <span className="stm-from">{FROM_NAME[p.from]}</span>}
           </div>
-          {p.match && <p className={'stm-match' + (p.action === 'merge' ? ' on' : '')}>{mergeText(p)}</p>}
+          {p.match && (
+            <p className={'stm-match' + (p.action === 'merge' ? ' on' : '')}>
+              {p.action === 'merge' && <i className="ph-duotone ph-check-circle stm-match-tick" aria-hidden="true" />}
+              {mergeText(p)}
+            </p>
+          )}
         </div>
         <span className={'ent-amt tnum' + (e.kind === 'in' ? ' in' : '')}>{isMove ? fmtMoney(e.amount) : fmtMoney(e.kind === 'in' ? e.amount : -e.amount, true)}</span>
       </div>

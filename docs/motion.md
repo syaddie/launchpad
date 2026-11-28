@@ -72,8 +72,11 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
   ping, what it brings reports in lit, and an email archived drops back like a spent stage. In You, the time since the
   last cigarette is T+ in the dot-matrix face, ticking; a cigarette logged touches down on the day's line before today's
   bar burns up; a mood picked lights its day in the month and the year; today's pixel twinkles; the nearest countdown
-  counts down in the dot-matrix face and lifts off on its day, once, and past ones are spent stages. See
-  [`mission-layout.md`](mission-layout.md).
+  counts down in the dot-matrix face and lifts off on its day, once, and past ones are spent stages. In Money, a savings
+  goal's bar fills like propellant loading, over a gauge marked in tenths, and a goal just reached launches its card (or
+  its progress in Goals) once; Overview's balance is flown like Home's ascent, solid behind and dotted ahead, with the
+  vehicle at today heading the way the balance goes; an invoice marked paid flares its row; and a statement's matched
+  lines are locked on to in turn as its review shows. See [`mission-layout.md`](mission-layout.md).
 - **Vista** drifts like light on glass: long, soft arrivals and a 7% spring. Its photo drifts so slowly you only notice
   it has moved. Its views don't use the browser's transitions (`--m-view-mode: enter`): the glass blurs the photo
   behind it, which a part pictured on its own, or anything inside a fading container, can't see. So the new view's
@@ -179,11 +182,25 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
   `cigSlamUp`), its count coming in. Today's column is drawn afresh for each one, so it rises from the start, and once
   one has risen it no longer plays the opening's sweep. Only when today's count went up by one: the server's answer
   gives the one just logged its own time, which isn't another.
+- **An invoice marked paid is stamped** (`Owed.tsx`; `owedStampIn`, `owedLeave` in `styles.css`): it stays in its row a
+  moment with "Paid" where its days left were, then fades and goes on to Paid (when its row's `owedLeave` ends; the
+  keyboard's place moves on to the next invoice's tick first). Poster stamps PAID across the row, coming down hard and
+  squashing a touch; Vista's row blooms with a soft light and "Paid" floats up into focus; Focus snaps its tick on and
+  slides "Paid" in; Mission flares the tick, runs a band of light along the row and "Paid" reports in. With less motion
+  "Paid" fades in and the row waits long enough to read it.
+- **A statement's matched lines tick in** (`StatementDrawer.tsx`, `data-tick` with `--i` its place; `stmTickIn`,
+  `stmMatchLight` in `styles.css`): as the review first shows, each line matched to what's already in Money gets its
+  tick in turn and its line lights, sixteen at most, only the once (not again as you change the filter). Vista drifts
+  them in, Focus ticks them close together, Poster stamps each, Mission closes the lock-on corners on each line (as on
+  the day picked in Month) before its tick reports in and flares.
 - **What's new lands once**, the first time this device shows it, not every time its view opens (`useUnseen` in
   `Motion.tsx`, keeping what's been seen in `localStorage`; nothing is new on a device's first run): a new best in
   Training's Your lifts (Mission's flare and line drawing to the new high, `mission.css` TRAINING; the other designs show
   the chip as they always have), and the day's new lessons in the Digest (Mission draws each in behind a lit line, like
-  a downlink, `mission.css` DIGEST AND INBOX; the others show them as they always have).
+  a downlink, `mission.css` DIGEST AND INBOX; the others show them as they always have), and a savings goal just
+  reached (`moneyPotsReached` for an account's own goal, `moneyGoalsReached` for Goals: Mission launches its card, or
+  its progress in its row, once it's on the screen, `useSeenOnScreen`; after a move into it, once the transfer has
+  landed).
 
 ## Alive on its own
 

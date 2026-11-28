@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { addDays, ymd } from '../../../../shared/dates';
 import { fmtMoney, invoiceEntry, type InvoiceRow, invoiceRows, mainAccount, MAX_ENTRIES, MAX_INVOICES, monthName, sortEntries, suggestInvoiceNum } from '../../../../shared/money';
 import type { Invoice, Money, MoneyEntry } from '../../../../shared/types';
@@ -28,6 +28,17 @@ const byPaid = (a: InvoiceRow, b: InvoiceRow) => (a.paidOn > b.paidOn ? -1 : a.p
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const sumOf = (rows: InvoiceRow[]) => rows.reduce((a, r) => a + r.inv.amount, 0);
 
+/** The longest an invoice just paid stays in its row, stamped, if its row's leaving never ends (a page not being drawn). */
+const STAMP_CAP_MS = 4000;
+
+/** Before the row stamped paid goes, the keyboard's place moves on to the next invoice's tick, or the one before. */
+function focusPastStamp() {
+  const row = document.querySelector('tr[data-stamp]');
+  if (!row?.contains(document.activeElement)) return;
+  const tick = (el: Element | null) => el?.querySelector<HTMLElement>('.ent-check') ?? null;
+  (tick(row.nextElementSibling) ?? tick(row.previousElementSibling) ?? document.querySelector<HTMLElement>('.owed-toggle'))?.focus();
+}
+
 /**
  * What people owe you, mostly for gigs. Each invoice is also planned money in on its due
  * date in Month; ticking it here (or there) makes that money done, on the day it came in.
@@ -44,8 +55,21 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
   const [editor, setEditor] = useState<{ inv?: Invoice } | null>(null);
   const names = namesOf(money);
   const rows = invoiceRows(money, today);
+  /** An invoice just marked paid here: it stays in its row a moment, stamped (each design its own way), then goes to Paid. */
+  const [stamped, setStamped] = useState<string | null>(null);
+  const unstamp = () => {
+    focusPastStamp();
+    setStamped(null);
+  };
+  useEffect(() => {
+    if (!stamped) return;
+    const t = window.setTimeout(unstamp, STAMP_CAP_MS);
+    return () => window.clearTimeout(t);
+  }, [stamped]);
   const open = rows.filter((r) => !r.paidOn).sort(byDue);
-  const paid = rows.filter((r) => r.paidOn).sort(byPaid);
+  /** The waiting list as it's shown: with the one being stamped still in it. */
+  const listed = rows.filter((r) => !r.paidOn || r.inv.id === stamped).sort(byDue);
+  const paid = rows.filter((r) => r.paidOn && r.inv.id !== stamped).sort(byPaid);
   const late = open.filter((r) => r.daysLeft < 0);
   const week = open.filter((r) => r.daysLeft >= 0 && r.daysLeft <= 7);
   const recent = paid.filter((r) => dayDiff(parseYmd(r.paidOn), parseYmd(today)) <= 30);
@@ -68,6 +92,7 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
   /** Paid: its money is done, on today. Not paid: planned again, back on the due date. */
   const setPaid = (r: InvoiceRow, on: boolean) => {
     patchEntry(r.entry.id, on ? { planned: false, date: today } : { planned: true });
+    setStamped(on ? r.inv.id : null);
     notify(on ? `${r.inv.num || 'Invoice'} paid: its ${fmtMoney(r.inv.amount)} in Month is now done, dated today.` : `${r.inv.num || 'Invoice'} is owed again: back to planned money in on ${shortDate(r.inv.due)}.`);
   };
   const remove = (r: InvoiceRow) => onChange({ ...money, invoices: money.invoices.filter((i) => i.id !== r.inv.id), entries: money.entries.filter((e) => e.id !== r.entry.id) });
@@ -214,12 +239,26 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
               </tr>
             </thead>
             <tbody>
-              {open.map((row, r) => (
-                <tr key={row.inv.id} className={row.daysLeft < 0 ? 'late' : undefined} {...menuProps(() => rowMenu(row), `Actions for ${label(row)}`)}>
+              {listed.map((row, r) => (
+                <tr
+                  key={row.inv.id}
+                  className={row.paidOn ? 'paid-now' : row.daysLeft < 0 ? 'late' : undefined}
+                  data-stamp={row.paidOn ? '' : undefined}
+                  onAnimationEnd={(e) => row.paidOn && e.target === e.currentTarget && e.animationName === 'owedLeave' && unstamp()}
+                  {...menuProps(() => rowMenu(row), `Actions for ${label(row)}`)}
+                >
                   <td className="c">
-                    <button className="ent-check" title="Tick once you’re paid: its money in Month turns to done" aria-label={`Mark ${row.inv.num || 'invoice'} as paid`} aria-pressed={false} onClick={() => setPaid(row, true)}>
-                      <span className={'ent-tick' + (row.daysLeft < 0 ? ' late' : '')} />
-                    </button>
+                    {row.paidOn ? (
+                      <button className="ent-check ticked" title="Untick if it hasn’t come in after all" aria-label={`Mark ${row.inv.num || 'invoice'} as not paid`} aria-pressed onClick={() => setPaid(row, false)}>
+                        <span className="ent-tick on">
+                          <i className="ph-duotone ph-check" />
+                        </span>
+                      </button>
+                    ) : (
+                      <button className="ent-check" title="Tick once you’re paid: its money in Month turns to done" aria-label={`Mark ${row.inv.num || 'invoice'} as paid`} aria-pressed={false} onClick={() => setPaid(row, true)}>
+                        <span className={'ent-tick' + (row.daysLeft < 0 ? ' late' : '')} />
+                      </button>
+                    )}
                   </td>
                   <td>
                     <TextCell value={row.inv.num} label="Invoice number" r={r} c={0} max={24} className="tnum owed-num-cell" onChange={(v) => patchInv(row.inv.id, { num: v })} />
@@ -240,7 +279,13 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
                     <DateCell value={row.inv.due} label="Payment due" r={r} c={3} onChange={(v) => patchInv(row.inv.id, { due: v })} />
                   </td>
                   <td className="days">
-                    <DaysLeft d={row.daysLeft} />
+                    {row.paidOn ? (
+                      <span className="owed-stamp" role="status">
+                        Paid
+                      </span>
+                    ) : (
+                      <DaysLeft d={row.daysLeft} />
+                    )}
                   </td>
                   <td>
                     <AccountSelect money={money} value={row.entry.account} label="Paid into" onChange={(account) => patchEntry(row.entry.id, { account })} />
@@ -304,9 +349,9 @@ export function Owed({ money, today, onChange, onOpenMonth, notify }: { money: M
               </tbody>
             )}
           </table>
-          {(!rows.length || !open.length) && <EmptyArt kind="clear" />}
+          {(!rows.length || !listed.length) && <EmptyArt kind="clear" />}
           {!rows.length && <p className="month-empty">Nobody owes you anything yet. Add an invoice above when you send one, or make one with New invoice: it goes into Month as planned money in on its due date.</p>}
-          {rows.length > 0 && !open.length && <p className="month-empty">All paid up.</p>}
+          {rows.length > 0 && !listed.length && <p className="month-empty">All paid up.</p>}
         </div>
       </section>
       {editor && <InvoiceDrawer money={money} today={today} editing={editor.inv} onChange={onChange} onClose={() => setEditor(null)} onOpenMonth={onOpenMonth} notify={notify} />}

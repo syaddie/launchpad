@@ -1,7 +1,7 @@
-import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type CSSProperties, type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ACCOUNT_KINDS, accountBalance, addMonths, daysIn, fmtMoney, goalPerMonth, MAX_ACCOUNTS, monthName } from '../../../../shared/money';
 import type { Money, MoneyAccount } from '../../../../shared/types';
-import { Readout } from '../Motion';
+import { Readout, useSeenOnScreen, useUnseen } from '../Motion';
 import { AccountDrawer, MoveDrawer } from './AccountDrawers';
 import { entryTitle, namesOf, shortDate } from './shared';
 
@@ -106,6 +106,8 @@ export function AccountsPanel({ money, today, onChange }: { money: Money; today:
   const positive = sum(share);
   const pct = (r: AccountRow) => Math.round((r.now / positive) * 100);
   const moves = money.entries.filter((e) => e.kind === 'move' && e.date <= today).slice(-4).reverse();
+  // A pot that has just reached its goal launches its card, once (Mission, mission.css).
+  const lifting = useUnseen('moneyPotsReached', rows.filter((r) => !r.a.archived && r.a.goal !== null && r.now >= r.a.goal).map((r) => r.a.id));
 
   return (
     <section className="panel you-panel accts" aria-label="Accounts">
@@ -126,7 +128,7 @@ export function AccountsPanel({ money, today, onChange }: { money: Money; today:
         {rows
           .filter((r) => showArchived || !r.a.archived)
           .map((r) => (
-            <AccountCard key={r.a.id} row={r} today={today} orbit={orbit?.from === r.a.id ? 'from' : orbit?.to === r.a.id ? 'to' : undefined} onOpen={() => setOpen({ kind: 'account', id: r.a.id })} />
+            <AccountCard key={r.a.id} row={r} today={today} lift={lifting.has(r.a.id)} orbit={orbit?.from === r.a.id ? 'from' : orbit?.to === r.a.id ? 'to' : undefined} onOpen={() => setOpen({ kind: 'account', id: r.a.id })} />
           ))}
         <TransferOrbit grid={gridRef} orbit={orbit} />
         {money.accounts.length < MAX_ACCOUNTS && (
@@ -203,12 +205,18 @@ export function AccountsPanel({ money, today, onChange }: { money: Money; today:
   );
 }
 
-/** `orbit`: money just moved from or to this account (Mission's transfer orbit leaves or lands here). */
-function AccountCard({ row: { a, now, end, change }, today, orbit, onOpen }: { row: AccountRow; today: string; orbit?: 'from' | 'to'; onOpen: () => void }) {
+/**
+ * `orbit`: money just moved from or to this account (Mission's transfer orbit leaves or lands here). `lift`: it has just
+ * reached its goal, so its card launches once it's on the screen.
+ */
+function AccountCard({ row: { a, now, end, change }, today, orbit, lift, onOpen }: { row: AccountRow; today: string; orbit?: 'from' | 'to'; lift?: boolean; onOpen: () => void }) {
   const kind = ACCOUNT_KINDS.find((k) => k.key === a.kind) ?? ACCOUNT_KINDS[0];
   const month = today.slice(0, 7);
+  const ref = useRef<HTMLButtonElement>(null);
+  const launch = useSeenOnScreen(ref, !!lift);
+  const fill = a.goal !== null ? `${Math.min(100, Math.max(0, (now / a.goal) * 100))}%` : '';
   return (
-    <button className={'acct-card' + (a.archived ? ' archived' : '')} title={`Change ${a.name}`} data-acct={a.id} data-orbit={orbit} onClick={onOpen}>
+    <button ref={ref} className={'acct-card' + (a.archived ? ' archived' : '')} title={`Change ${a.name}`} data-acct={a.id} data-orbit={orbit} data-liftoff={launch ? '' : undefined} onClick={onOpen}>
       <span className="acct-name">
         <span className="acct-icon">
           <i className={'ph-duotone ' + kind.icon} aria-hidden="true" />
@@ -225,7 +233,7 @@ function AccountCard({ row: { a, now, end, change }, today, orbit, onOpen }: { r
       {a.goal !== null ? (
         <span className="acct-lines">
           <span className="acct-bar" role="img" aria-label={`${Math.round((Math.max(0, now) / a.goal) * 100)}% of the goal`}>
-            <span style={{ width: `${Math.min(100, Math.max(0, (now / a.goal) * 100))}%` }} />
+            <span style={{ width: fill, '--fill': fill } as CSSProperties} />
           </span>
           <span className="meta">
             {fmtMoney(now)} of {fmtMoney(a.goal)}

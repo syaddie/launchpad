@@ -1910,6 +1910,19 @@ i.file-pinned { color: var(--ac); }
 .days-left.soon { background: var(--act); color: var(--acd); }
 .days-left.far { background: none; padding-left: 0; color: var(--t3); }
 .days-left.late { background: var(--wnt); color: var(--wn); font-weight: 600; }
+/* An invoice just marked paid (Owed.tsx) stays in its row a moment, stamped "Paid", then goes on to Paid: here the stamp
+   comes in and the row fades as it leaves; each design stamps it its own way (designs.css, mission.css). The row goes
+   when its owedLeave ends. */
+.owed-stamp { display: inline-flex; align-items: baseline; padding: 1px 10px; border-radius: 12px; background: var(--okt); color: var(--ok); font-size: 13px; font-weight: 600; white-space: nowrap; }
+tr[data-stamp] { --stamp-for: calc(var(--m-sweep) * 1.5); animation: owedLeave var(--m-exit) var(--e-in) var(--stamp-for) forwards; }
+tr[data-stamp] .owed-stamp { animation: owedStampIn var(--m-state) var(--e-out) both; }
+@keyframes owedLeave { to { opacity: 0; } }
+@keyframes owedStampIn { from { opacity: 0; scale: 0.85; } }
+@media (prefers-reduced-motion: reduce) {
+  /* Long enough to read before it goes. */
+  tr[data-stamp] { --stamp-for: 900ms; }
+  @keyframes owedStampIn { from { opacity: 0; } }
+}
 
 /* Overview: the accounts and where the money sits. */
 .accts-head { align-items: flex-start; flex-wrap: wrap; }
@@ -1999,6 +2012,18 @@ i.file-pinned { color: var(--ac); }
 .stm-name-btn:hover { background: var(--hv); }
 .stm-match { margin: 2px 0 0; font-size: 12.5px; color: var(--t2); }
 .stm-match.on { color: var(--acd); }
+.stm-match-tick { display: inline-block; margin-right: 4px; border-radius: 50%; font-size: 14px; vertical-align: -2px; color: var(--ok); }
+/* As a statement's review shows, the lines matched to what's already in Money tick in one after another
+   (StatementDrawer.tsx, data-tick with --i its place): each match's tick lands in turn and its line lights. Each design
+   its own way (designs.css, mission.css). */
+.stm-row { --tick-at: calc(var(--m-move) + var(--i, 0) * var(--m-stagger) * 2.5); }
+.stm-row[data-tick] .stm-match-tick { animation: stmTickIn var(--m-state) var(--e-settle) var(--tick-at) backwards; }
+.stm-row[data-tick] .stm-match { animation: stmMatchLight var(--m-move) var(--e-out) var(--tick-at) backwards; }
+@keyframes stmTickIn { from { opacity: 0; scale: 0.3; } }
+@keyframes stmMatchLight { from { color: var(--t3); } }
+@media (prefers-reduced-motion: reduce) {
+  @keyframes stmTickIn { from { opacity: 0; } }
+}
 .stm-row .ent-amt { margin-top: 6px; min-width: 80px; }
 .stm-tiplist { list-style: none; margin: 0 0 8px 34px; padding: 4px 10px; border-radius: var(--r-m); background: var(--bg); display: flex; flex-direction: column; }
 .stm-tiplist li { display: flex; align-items: baseline; gap: 10px; padding: 6px 0; font-size: 13px; }
@@ -2189,6 +2214,8 @@ button.m-stat { cursor: default; }
 .bal-zero { position: absolute; left: 0; right: 0; border-top: 1.5px solid var(--t3); opacity: 0.6; }
 .bal-today { position: absolute; top: -4px; bottom: 0; width: 0; border-left: 1.5px solid var(--acd); opacity: 0.7; }
 .bal-today span { position: absolute; top: -14px; left: 4px; font-size: 11px; font-weight: 600; color: var(--acd); }
+/* Mission's vehicle at today (mission.css, MONEY › OVERVIEW). */
+.bal-craft { display: none; }
 .bal-cross { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--t3); opacity: 0.5; pointer-events: none; }
 .bal-dot { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; box-shadow: 0 0 0 2px var(--sf); pointer-events: none; }
 .bal-label { text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px; }

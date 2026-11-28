@@ -566,6 +566,40 @@
   @keyframes cigSlamUp { from { opacity: 0.35; } }
 }
 
+/* ---------- Money: an invoice marked paid is stamped, and a statement's matched lines tick in (styles.css has the base) ---------- */
+
+/* Vista drifts: the row blooms with a soft light and fades back, "Paid" floats up into focus, and the matched lines'
+   ticks drift in one by one. */
+[data-design='vista'] tr[data-stamp] { --stamp-for: calc(var(--m-sweep) * 2); }
+[data-design='vista'] tr[data-stamp] > td { animation: owedBloom calc(var(--m-sweep) * 2) var(--e-out) both; }
+@keyframes owedBloom { 0% { background-color: transparent; } 35% { background-color: color-mix(in srgb, var(--ok) 14%, transparent); } 100% { background-color: transparent; } }
+[data-design='vista'] tr[data-stamp] .owed-stamp,
+[data-design='vista'] .stm-row[data-tick] .stm-match-tick { animation: owedDrift var(--m-move) var(--e-out) var(--tick-at, 0s) backwards; }
+@keyframes owedDrift { from { opacity: 0; translate: 0 var(--m-rise); filter: blur(4px); } }
+/* Focus is quick and exact: the tick snaps on, "Paid" slides in from the left, the matched lines tick close together. */
+[data-design='focus'] tr[data-stamp] { --stamp-for: calc(var(--m-sweep) * 1.1); }
+[data-design='focus'] tr[data-stamp] .ent-tick.on { animation: owedPop var(--m-state) var(--e-settle); }
+@keyframes owedPop { from { scale: 0.5; } }
+[data-design='focus'] tr[data-stamp] .owed-stamp { animation: owedQuick var(--m-state) var(--e-out) both; }
+@keyframes owedQuick { from { opacity: 0; translate: calc(var(--m-rise) * -2) 0; } }
+[data-design='focus'] .stm-row { --tick-at: calc(var(--m-move) + var(--i, 0) * var(--m-stagger) * 1.5); }
+/* Poster slams: "PAID" is stamped across the row, coming down hard and squashing a touch as it hits, and each matched
+   line's tick is stamped down in turn. The eases are written out: a keyframe's own timing function doesn't take var(). */
+[data-design='poster'] .owed-stamp { padding: 0 8px; border: 2px solid currentColor; border-radius: 0; background: none; color: var(--ac); font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; rotate: -6deg; }
+[data-design='poster'] tr[data-stamp] .owed-stamp { animation: owedSlam var(--m-move) linear both; }
+@keyframes owedSlam {
+  0% { opacity: 0; scale: 2.4; animation-timing-function: cubic-bezier(0.55, 0, 0.75, 0.2); }
+  70% { opacity: 1; scale: 0.92; animation-timing-function: cubic-bezier(0.83, 0, 0.17, 1); }
+  100% { opacity: 1; scale: 1; }
+}
+[data-design='poster'] .stm-row[data-tick] .stm-match-tick { animation: lpStampIn var(--m-state) var(--e-out) var(--tick-at) backwards; }
+@media (prefers-reduced-motion: reduce) {
+  @keyframes owedDrift { from { opacity: 0; } }
+  @keyframes owedPop { from { opacity: 0.4; } }
+  @keyframes owedQuick { from { opacity: 0; } }
+  @keyframes owedSlam { from { opacity: 0; } }
+}
+
 /* ---------- Learn's rows in each design: they reach to the panel's edge, as far as its sides go ---------- */
 
 [data-design='poster'] :is(.ln-due-row, .ln-class) { margin-inline: -8px; padding-inline: 8px; }
