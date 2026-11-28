@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { api } from '../../api';
-import { along, ascentCurve, clearOf, dayFraction, hoursOf, moonPath, moonTurn, nightWatch, orbPlace, pathTable, powerDown, powerText, seeded, skyPoint, stagesShed, twilight, type PathTable, type SkyWeather } from '../../mission';
+import { along, ascentCurve, clearOf, dayFraction, hoursOf, moonPath, moonTurn, orbPlace, pathTable, seeded, skyPoint, stagesShed, type PathTable, type SkyWeather } from '../../mission';
 import { hm } from '../../util';
+import { api } from '../../api';
+import { nightWatch, powerDown, powerText, twilight } from '../../mission';
 import { Vehicle } from './Mark';
 
 /** An event on the day's ascent: when it starts (its waypoint) and ends (a stage shed). */
@@ -312,7 +313,7 @@ export function MissionScene({ now, dark, narrow, home, events, wx, launch, powe
 
   // ---------- particles and the launch ----------
 
-  const engine = useRef<{ launch: () => boolean } | null>(null);
+  const engine = useRef<{ launch: () => void } | null>(null);
   useEffect(() => {
     const el = ref.current;
     const canvas = fxRef.current;
@@ -454,12 +455,11 @@ export function MissionScene({ now, dark, narrow, home, events, wx, launch, powe
     engine.current = {
       launch: () => {
         const g = live.current.geo;
-        if (L || !g?.site || calm() || el.classList.contains('ms-away') || el.classList.contains('ms-rollout')) return false;
+        if (L || !g?.site || calm() || el.classList.contains('ms-away') || el.classList.contains('ms-rollout')) return;
         readColours();
         L = { t: 0, y: 0, dx: 0, rot: 0 };
         el.classList.add('ms-ignited');
         kick();
-        return true;
       },
     };
     readColours();
@@ -495,7 +495,11 @@ export function MissionScene({ now, dark, narrow, home, events, wx, launch, powe
   useEffect(() => {
     if (launch === launched.current) return;
     launched.current = launch;
-    if (!engine.current?.launch()) return;
+    // It went up if it ignited just now (not if one was already climbing, or it couldn't: off Home, less motion).
+    const el = ref.current;
+    const was = !!el?.classList.contains('ms-ignited');
+    engine.current?.launch();
+    if (was || !el?.classList.contains('ms-ignited')) return;
     const from = Date.now();
     const due = () => {
       window.clearTimeout(recoverTimer.current);
