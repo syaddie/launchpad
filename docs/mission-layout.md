@@ -177,6 +177,31 @@ that only Mission shows (with Launchpad's own light and its line in the poll's l
   it away, Poster wipes it off, Mission jettisons it like a spent stage, dimming and greying as it drops back. The
   Inbox's source light still blinks for each change (idea 21). Less motion: the row fades, then the list closes up at
   once.
+- The time since the last cigarette is mission elapsed time (idea 33; `SinceLast` in `You.tsx`, `elapsedText` in
+  `mission.ts`, `mission.css` YOU): Cigarettes' "Last one" reads "T+06:42:58" in the launch clock's dot-matrix face
+  ("T+1:02:13:45" past a day), so the streak is alive. It steps once a second, on the second of the gap, only while the
+  page is in view, and only the digits that changed relight. Logging one sets it back to zero. Other layouts keep "6 h
+  42 min ago".
+- A cigarette logged lands (idea 34, every layout; `useLogged` in `You.tsx`, `addedOne` in `motion.ts`): its mark drops
+  onto the day's line, and once it's down today's bar rises from where it was and its count comes in. Vista floats it
+  down and rises slowly, Focus is quick with no bounce, Poster slams the mark down (it squashes as it hits) and drives
+  the bar up hard, a touch over, stamping its count; in Mission it's a touchdown: the mark comes down lit, a ring goes
+  out as it touches and it cools to grey, then the bar burns up at a steady rate, lit at its head, and its count
+  relights. From Log one, C, ⌘K or another device; not an Undo, and not the server's answer, which gives the one just
+  logged its own time.
+- Picking a mood lights its day (idea 35; `Flare` in `You.tsx`, `mission.css` YOU): on the month's calendar the day
+  lights as the scan's cells do, cooling to its mood's colour, with one ring going out, and its pixel in the year lights
+  with it. Each pick lights afresh; taking a mood off lights nothing. The month's scan (idea 20) is as it was.
+- Today's pixel twinkles (idea 36; `mission.css` YOU): in Year in pixels a glint around today's square fades and shrinks
+  and comes back every five seconds or so, like the sky's stars. Opacity and scale only; with less motion it stays lit.
+- Countdowns lift off (idea 37; `useLiftoffs` in `You.tsx`, `liftoffs` in `motion.ts`, `mission.css` YOU): the nearest
+  one still to come counts down in the dot-matrix face ("T-05 DAYS"); one due today is in the colour of now, and on its
+  day it lifts off once: it ignites, and what's on it climbs out of the top of the card on a plume of light, slowly then
+  faster, the way the mark leaves its tile, then rolls back into place from below. Once a day for each countdown,
+  remembered on this device across reloads (`launchpad:liftoffs`), and only where it can be seen: in Mission, with the
+  page in view and the card on the screen (on a phone it waits until you scroll down to it). Past ones are spent stages:
+  hollow and dimmed, their bar burnt out to a dashed line, and as the view opens their ember goes out. A countdown has
+  a right-click menu (Edit, Delete) in every layout.
 - Reduced motion: the sky still shows the hour; nothing moves and nothing launches.
 
 ## Not built yet (in the design system, not in the app)
@@ -219,15 +244,6 @@ aerospace quirks. Most are Mission's own; those marked *(every design)* are moti
 way (docs/motion.md). **S** is small, mostly reusing what's there (the Month scan and lock-on corners in `mission.css`,
 `msReport`, `msLiftoff`, `Readout`, `useGlide`); **M** is a new piece. Aerospace words ("T+", "LOS", "go") stay in the
 small mono labels; the messages themselves stay plain.
-
-**You**
-
-33. Cigarettes: the time since the last one as T+ in the matrix face, ticking, so the streak is alive. **S–M**
-34. Logging one drops its mark onto the day's line, and today's bar rises. **S** *(every design)*
-35. Picking a mood lights that day on the month's calendar. **S**
-36. Year in pixels: today's pixel twinkles slowly, like the sky's stars. **S**
-37. Countdowns: the nearest in the matrix face; on its day the card lifts off once (`msLiftoff`); past ones dim like
-    spent stages. **M**
 
 **Learn**
 

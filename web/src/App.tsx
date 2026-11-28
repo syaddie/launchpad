@@ -787,6 +787,7 @@ export function App({ cached }: { cached: AppState | null }) {
           <You
             data={data}
             now={now}
+            design={design}
             addSignal={addCountdown}
             onCountdowns={setCountdowns}
             onLogSmoke={logSmoke}

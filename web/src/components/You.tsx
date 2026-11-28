@@ -1,20 +1,25 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { DOW, MON, addDays, dayDiff, parseYmd, startOfDay, ymd } from '../../../shared/dates';
 import { fmtMoney } from '../../../shared/money';
 import {
   MAX_JOURNAL, MOOD_WORDS, cigPrice, countdownNext, countdownPhrase, countdownProgress, dailyCounts, fmtDuration,
   longestGapMs, moodMonth, moodYear, savedUnderLimit, searchJournal, smokeCountMap, smokeSpend, smokesOn, sortCountdowns,
 } from '../../../shared/trackers';
-import type { AppState, Countdown, Mood, Prefs } from '../../../shared/types';
+import type { AppState, Countdown, DesignKey, Mood, Prefs } from '../../../shared/types';
+import { localGet, localSet } from '../api';
 import { fmtDay, hm, newId } from '../util';
-import { periodStep } from '../motion';
+import { addedOne, liftoffs, periodStep } from '../motion';
+import { daysText, elapsedText } from '../mission';
+import { menuProps } from './ContextMenu';
 import { NoteLines, toggleLine } from './Notes';
-import { Glyphs, Readout, usePeriodScan } from './Motion';
+import { Glyphs, Readout, usePageVisible, usePeriodScan, useSettled } from './Motion';
 import { EmptyArt } from './mission/EmptyArt';
 
 interface Props {
   data: AppState;
   now: Date;
+  /** The layout in use: Mission ticks the time since the last cigarette and lifts a countdown off on its day. */
+  design: DesignKey;
   /** Bumped by ⌘K › Add a countdown to open the form. */
   addSignal: number;
   onCountdowns: (list: Countdown[]) => void;
@@ -25,8 +30,9 @@ interface Props {
 }
 
 /** The "You" view: countdowns, the cigarette log and what it costs, a daily mood and journal, and the year in pixels. */
-export function You({ data, now, addSignal, onCountdowns, onLogSmoke, onUndoSmoke, onMood, onOpenSettings }: Props) {
+export function You({ data, now, design, addSignal, onCountdowns, onLogSmoke, onUndoSmoke, onMood, onOpenSettings }: Props) {
   const counts = useMemo(() => smokeCountMap(data.smokes, data.smokeDays), [data.smokes, data.smokeDays]);
+  const mission = design === 'mission';
   // The day open in the mood panel: today unless an earlier one was picked in its calendar or the year.
   const [picked, setPicked] = useState<string | null>(null);
   const moodRef = useRef<HTMLElement>(null);
@@ -34,26 +40,79 @@ export function You({ data, now, addSignal, onCountdowns, onLogSmoke, onUndoSmok
     setPicked(date === ymd(now) ? null : date);
     moodRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   };
+  // A mood just picked lights its day, in the month and in the year (Mission, mission.css YOU).
+  const [lit, setLit] = useState<Lit | null>(null);
+  useEffect(() => {
+    if (!lit) return;
+    const t = window.setTimeout(() => setLit(null), LIT_MS);
+    return () => window.clearTimeout(t);
+  }, [lit]);
+  const light = (date: string) => setLit((l) => ({ date, n: (l?.n ?? 0) + 1 }));
   return (
     <main className="you">
       {/* What's logged every day first, side by side; then what's coming up beside the year so far. */}
       <div className="you-row">
-        <Cigarettes smokes={data.smokes} counts={counts} prefs={data.prefs} now={now} onLog={onLogSmoke} onUndo={onUndoSmoke} onOpenSettings={onOpenSettings} />
-        <MoodPanel ref={moodRef} moods={data.moods} now={now} picked={picked} onPick={setPicked} onMood={onMood} />
+        <Cigarettes smokes={data.smokes} counts={counts} prefs={data.prefs} now={now} mission={mission} onLog={onLogSmoke} onUndo={onUndoSmoke} onOpenSettings={onOpenSettings} />
+        <MoodPanel ref={moodRef} moods={data.moods} now={now} picked={picked} lit={lit} onPick={setPicked} onMood={onMood} onPicked={light} />
       </div>
       <div className="you-row">
-        <Countdowns list={data.countdowns} now={now} addSignal={addSignal} onChange={onCountdowns} />
-        <YearPixels moods={data.moods} now={now} selected={picked ?? ymd(now)} onOpen={openDay} />
+        <Countdowns list={data.countdowns} now={now} mission={mission} addSignal={addSignal} onChange={onCountdowns} />
+        <YearPixels moods={data.moods} now={now} selected={picked ?? ymd(now)} lit={lit} onOpen={openDay} />
       </div>
     </main>
   );
 }
 
+/** A day whose mood was just picked; `n` counts them, so the same day picked again lights afresh. */
+type Lit = { date: string; n: number };
+/** How long a picked day is marked: past the end of its light. */
+const LIT_MS = 1800;
+
+/** A day's light as its mood is picked: a fresh one each time (keyed by `n`), so it starts over. Mission only. */
+const Flare = ({ lit, day }: { lit: Lit | null; day: string }) => (lit?.date === day ? <i key={lit.n} className="lp-flare" aria-hidden="true" /> : null);
+
 // ---------- countdowns ----------
 
 type Draft = { id: string | null; title: string; date: string; yearly: boolean };
 
-function Countdowns({ list, now, addSignal, onChange }: { list: Countdown[]; now: Date; addSignal: number; onChange: (l: Countdown[]) => void }) {
+/** How long a countdown lifting off is marked: past the end of its liftoff (mission.css, YOU). */
+const LIFTOFF_MS = 3600;
+/** How much later each further countdown due the same day goes. */
+const LIFTOFF_EACH = 600;
+
+/**
+ * The countdowns due today that lift off now: each once a day, remembered on this device across reloads (liftoffs in
+ * motion.ts), and only where it can be seen: in Mission, with the page in view and a card that's due on the screen (on
+ * a phone the panel is far down, so it waits until you get there). `panel` is the countdowns' panel.
+ */
+function useLiftoffs(panel: React.RefObject<HTMLElement | null>, due: string[], today: string, on: boolean): ReadonlySet<string> {
+  const visible = usePageVisible();
+  const sig = `${today}|${due.join(',')}`;
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    const cards = panel.current?.querySelectorAll('.cd-card.due');
+    if (!on || seen || !cards?.length || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver((list) => list.some((e) => e.intersectionRatio >= 0.6) && setSeen(true), { threshold: [0.6, 1] });
+    cards.forEach((c) => io.observe(c));
+    return () => io.disconnect();
+  }, [panel, sig, on, seen]);
+  const [state, setState] = useState(() => ({ sig: null as string | null, record: null as string | null, lifting: new Set<string>() as ReadonlySet<string> }));
+  if (on && visible && seen && state.sig !== sig) {
+    const next = liftoffs(due, localGet('liftoffs'), today);
+    setState({ sig, record: next.record, lifting: next.lift.length ? new Set([...state.lifting, ...next.lift]) : state.lifting });
+  }
+  useEffect(() => {
+    if (state.record !== null) localSet('liftoffs', state.record);
+  }, [state.record]);
+  useEffect(() => {
+    if (!state.lifting.size) return;
+    const t = window.setTimeout(() => setState((s) => ({ ...s, lifting: new Set() })), LIFTOFF_MS + (state.lifting.size - 1) * LIFTOFF_EACH);
+    return () => window.clearTimeout(t);
+  }, [state.lifting]);
+  return state.lifting;
+}
+
+function Countdowns({ list, now, mission, addSignal, onChange }: { list: Countdown[]; now: Date; mission: boolean; addSignal: number; onChange: (l: Countdown[]) => void }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const today = startOfDay(now);
   const blank = (): Draft => ({ id: null, title: '', date: ymd(addDays(startOfDay(new Date()), 7)), yearly: false });
@@ -61,6 +120,20 @@ function Countdowns({ list, now, addSignal, onChange }: { list: Countdown[]; now
     if (addSignal) setDraft(blank());
   }, [addSignal]);
   const sorted = sortCountdowns(list, today);
+  const panel = useRef<HTMLElement>(null);
+  const lifting = useLiftoffs(
+    panel,
+    sorted.filter((c) => countdownNext(c, today).days === 0).map((c) => c.id),
+    ymd(today),
+    mission,
+  );
+  // Mission counts the nearest one still to come down in the launch clock's dot-matrix face (mission.css, YOU).
+  const counting = sorted.find((c) => countdownNext(c, today).days >= 1)?.id;
+  const edit = (c: Countdown) => setDraft({ id: c.id, title: c.title, date: c.date, yearly: c.yearly });
+  const remove = (c: Countdown) => {
+    onChange(list.filter((x) => x.id !== c.id));
+    setDraft(null);
+  };
 
   const save = () => {
     if (!draft || !draft.title.trim() || !draft.date) return;
@@ -74,7 +147,7 @@ function Countdowns({ list, now, addSignal, onChange }: { list: Countdown[]; now
   };
 
   return (
-    <section className="panel you-panel cds" aria-label="Countdowns">
+    <section ref={panel} className="panel you-panel cds" aria-label="Countdowns">
       <div className="panel-head">
         <h2 className="panel-title">Countdowns</h2>
         <button className="btn btn-ghost btn-small" onClick={() => setDraft(blank())}>
@@ -93,28 +166,51 @@ function Countdowns({ list, now, addSignal, onChange }: { list: Countdown[]; now
                 onDraft={setDraft}
                 onSave={save}
                 onCancel={() => setDraft(null)}
-                onDelete={() => {
-                  onChange(list.filter((x) => x.id !== c.id));
-                  setDraft(null);
-                }}
+                onDelete={() => remove(c)}
               />
             );
           }
           const next = countdownNext(c, today);
           const first = i === 0 && next.days >= 0;
+          const face = mission && c.id === counting ? daysText(next.days) : null;
+          const lift = lifting.has(c.id);
           return (
             <button
               key={c.id}
-              className={'cd-card' + (first ? ' first' : '') + (next.days < 0 ? ' past' : '')}
+              className={'cd-card' + (first ? ' first' : '') + (next.days === 0 ? ' due' : '') + (next.days < 0 ? ' past' : '')}
               title="Edit"
-              onClick={() => setDraft({ id: c.id, title: c.title, date: c.date, yearly: c.yearly })}
+              data-liftoff={lift ? '' : undefined}
+              style={lift ? ({ '--i': [...lifting].indexOf(c.id) } as CSSProperties) : undefined}
+              onClick={() => edit(c)}
+              {...menuProps(
+                () => [
+                  { label: 'Edit', icon: 'ph-pencil-simple', onSelect: () => edit(c) },
+                  'sep',
+                  { label: 'Delete', icon: 'ph-trash', danger: true, confirm: `Delete the countdown “${c.title}”?`, onSelect: () => remove(c) },
+                ],
+                c.title,
+              )}
             >
               <span className="cd-top">
                 <span className="cd-title">{c.title}</span>
                 <span className="meta">{fmtDay(next.date)}</span>
               </span>
               <span className="cd-num">
-                {next.days > 1 ? (
+                {face ? (
+                  <>
+                    <span className="ms-matrix cd-met" data-ghost={face.replace(/\d/g, '8')} aria-hidden="true">
+                      {[...face].map((ch, k) => (
+                        <span key={`${k}${ch}`} className="ms-cell">
+                          {ch}
+                        </span>
+                      ))}
+                    </span>
+                    <span className="cd-unit">
+                      <span className="lp-sr">In {next.days} </span>
+                      {next.days === 1 ? 'day' : 'days'}
+                    </span>
+                  </>
+                ) : next.days > 1 ? (
                   <>
                     <span className="serif tnum">
                       <Readout text={String(next.days)} id="countdown-next" />
@@ -189,21 +285,89 @@ function CountdownForm({ draft, onDraft, onSave, onCancel, onDelete }: {
 const UNDO_FOR = 10 * 60_000;
 const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
-function Cigarettes({ smokes, counts, prefs, now, onLog, onUndo, onOpenSettings }: {
+/** How long a cigarette just logged is marked: past the end of the longest way a design brings it in. */
+const LOGGED_MS = 2400;
+
+/**
+ * The cigarettes just logged today, for a moment: where each is among today's, in time (addedOne: one added at a time,
+ * not a restore or a sync of many), and how many there were today before the latest, which today's bar rises from.
+ * `rises` counts them for as long as the panel is open, so each one rises afresh; while it's above 0, today's bar no
+ * longer plays the opening's sweep. Only when today's count goes up by one: the server answers a log with its own time
+ * for it, which replaces the page's and isn't another. Worked out while rendering, so a new dot is marked from the
+ * first frame it's drawn in, and not in the panel's first frames (useSettled): those were there.
+ */
+function useLogged(smokes: string[], now: Date): { drops: readonly number[]; from: number; rises: number } {
+  const settled = useSettled();
+  const [before, setBefore] = useState(smokes);
+  const [state, setState] = useState({ drops: [] as readonly number[], from: 0, rises: 0 });
+  if (smokes !== before) {
+    setBefore(smokes);
+    const was = smokesOn(before, now);
+    const at = settled && smokesOn(smokes, now).length === was.length + 1 ? addedOne(before, smokes) : null;
+    if (at && smokesOn([at], now).length) {
+      const place = was.filter((d) => d.getTime() < Date.parse(at)).length;
+      // Two close together: the first is still coming down, so it stays marked.
+      setState({ drops: [...state.drops.map((i) => (i >= place ? i + 1 : i)), place], from: was.length, rises: state.rises + 1 });
+    }
+  }
+  useEffect(() => {
+    if (!state.drops.length) return;
+    const t = window.setTimeout(() => setState((s) => ({ ...s, drops: [] })), LOGGED_MS);
+    return () => window.clearTimeout(t);
+  }, [state.drops]);
+  return state;
+}
+
+/**
+ * Mission: how long since the last one as mission elapsed time ("T+02:13:45") in the launch clock's dot-matrix face,
+ * so the streak is alive. It steps once a second, on the second of the gap, and only while the page is in view; a
+ * digit that changed relights (its key is its place and value), the others aren't touched.
+ */
+function SinceLast({ at }: { at: number }) {
+  const visible = usePageVisible();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!visible) return;
+    let t = 0;
+    const tick = () => {
+      const n = Date.now();
+      setNow(n);
+      const into = (((n - at) % 1000) + 1000) % 1000;
+      t = window.setTimeout(tick, 1000 - into + 4);
+    };
+    tick();
+    return () => window.clearTimeout(t);
+  }, [visible, at]);
+  const text = elapsedText(now - at);
+  return (
+    <span className="ms-matrix cig-met" data-ghost={text.replace(/\d/g, '8')} aria-hidden="true">
+      {[...text].map((ch, i) => (
+        <span key={`${i}${ch}`} className="ms-cell">
+          {ch}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function Cigarettes({ smokes, counts, prefs, now, mission, onLog, onUndo, onOpenSettings }: {
   smokes: string[];
   counts: Map<string, number>;
   prefs: Prefs;
   now: Date;
+  mission: boolean;
   onLog: () => void;
   onUndo: (at: string) => void;
   onOpenSettings: () => void;
 }) {
   const limit = prefs.cigaretteLimit;
   const today = startOfDay(now);
-  const todays = smokesOn(smokes, now);
+  const todays = smokesOn(smokes, now).sort((a, b) => a.getTime() - b.getTime());
   const count = todays.length;
   const last = smokes[smokes.length - 1];
   const lastAt = last ? new Date(last) : null;
+  const logged = useLogged(smokes, now);
+  const dropping = new Set(logged.drops);
   const canUndo = !!lastAt && now.getTime() - lastAt.getTime() < UNDO_FOR;
   const days = dailyCounts(smokes, today, 14);
   const week = days.slice(7).reduce((a, d) => a + d.count, 0);
@@ -236,11 +400,12 @@ function Cigarettes({ smokes, counts, prefs, now, onLog, onUndo, onOpenSettings 
             </div>
           )}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div className="cig-last" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span className="meta">Last one</span>
-          <span className="serif" style={{ fontSize: 22, lineHeight: 1.1 }}>
+          <span className={'serif' + (mission && lastAt ? ' lp-sr' : '')} style={{ fontSize: 22, lineHeight: 1.1 }}>
             {lastAt ? (now.getTime() - lastAt.getTime() < 60_000 ? 'Just now' : `${fmtDuration(now.getTime() - lastAt.getTime())} ago`) : '—'}
           </span>
+          {mission && lastAt && <SinceLast at={lastAt.getTime()} />}
           {lastAt && <span className="meta">{dayDiff(lastAt, today) === 0 ? `at ${hm(lastAt)}` : `${fmtDay(lastAt)}, ${hm(lastAt)}`}</span>}
         </div>
         <span style={{ flex: 1 }} />
@@ -263,8 +428,10 @@ function Cigarettes({ smokes, counts, prefs, now, onLog, onUndo, onOpenSettings 
         <div className="day-line" role="img" aria-label={count ? `Today at ${todays.map(hm).join(', ')}` : 'None today'}>
           <span className="day-line-track" />
           <span className="day-line-past" style={{ width: `${pct(now)}%` }} />
-          {todays.map((d) => (
-            <span key={d.getTime()} className="day-line-dot" title={hm(d)} style={{ left: `${pct(d)}%` }} />
+          {/* One just logged drops onto the line (styles.css, YOU; each design its own way). By place, not time: the
+              server's time for one just logged replaces the page's, and it's the same dot. */}
+          {todays.map((d, i) => (
+            <span key={i} className="day-line-dot" title={hm(d)} data-drop={dropping.has(i) ? '' : undefined} style={{ left: `${pct(d)}%` }} />
           ))}
           <span className="day-line-now" style={{ left: `${pct(now)}%` }} />
         </div>
@@ -292,8 +459,17 @@ function Cigarettes({ smokes, counts, prefs, now, onLog, onUndo, onOpenSettings 
           {days.map((d, i) => {
             const isToday = i === days.length - 1;
             const high = limit > 0 && d.count > limit;
+            // Today's bar rises from where it was as one is logged: a new column each time (keyed by how many have
+            // risen), so it starts over; once one has, the opening's sweep is done with.
+            const rise = isToday && logged.rises > 0;
             return (
-              <div key={d.date.getTime()} className="cig-col" title={`${fmtDay(d.date)} · ${d.count}`}>
+              <div
+                key={rise ? `rise-${logged.rises}` : d.date.getTime()}
+                className="cig-col"
+                title={`${fmtDay(d.date)} · ${d.count}`}
+                data-rise={rise ? (logged.drops.length ? 'on' : 'done') : undefined}
+                style={rise ? ({ '--from': d.count ? Math.min(1, logged.from / d.count) : 1 } as CSSProperties) : undefined}
+              >
                 <span className="cig-n tnum">{d.count || ''}</span>
                 <span
                   className="cig-bar"
@@ -379,13 +555,17 @@ function CigCost({ counts, prefs, today, onOpenSettings }: { counts: Map<string,
 export const moodColor = (level: number) => `color-mix(in srgb, var(--mood, var(--ac)) ${[18, 36, 56, 78, 100][level - 1]}%, var(--sf))`;
 const moodInk = (level: number) => (level >= 4 ? 'var(--on)' : 'var(--tx)');
 
-function MoodPanel({ ref, moods, now, picked, onPick, onMood }: {
+function MoodPanel({ ref, moods, now, picked, lit, onPick, onMood, onPicked }: {
   ref: React.RefObject<HTMLElement | null>;
   moods: Record<string, Mood>;
   now: Date;
   picked: string | null;
+  /** The day whose mood was just picked: it lights on the calendar. */
+  lit: Lit | null;
   onPick: (date: string | null) => void;
   onMood: (date: string, mood: Mood | null) => void;
+  /** A mood was picked for this day (not taken off). */
+  onPicked: (date: string) => void;
 }) {
   const todayKey = ymd(now);
   const selKey = picked && picked < todayKey ? picked : todayKey;
@@ -419,6 +599,7 @@ function MoodPanel({ ref, moods, now, picked, onPick, onMood }: {
     const note = moods[selKey]?.note ?? '';
     const next = level === l ? 0 : l;
     onMood(selKey, next || note.trim() ? { level: next, note } : null);
+    if (next) onPicked(selKey);
   };
 
   return (
@@ -497,6 +678,7 @@ function MoodPanel({ ref, moods, now, picked, onPick, onMood }: {
             </span>
           ) : (
             <button key={key} title={title} aria-label={title} aria-pressed={key === selKey} className={cls} style={style} onClick={() => onPick(diff === 0 ? null : key)}>
+              <Flare lit={lit} day={key} />
               {i + 1}
             </button>
           );
@@ -622,7 +804,7 @@ function Journal({ date, mood, isToday, onSave }: { date: string; mood: Mood | u
 const MONTH_LETTERS = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
 
 /** Every day of a year as a square, coloured by mood; click one to open it. With a search across the journal. */
-function YearPixels({ moods, now, selected, onOpen }: { moods: Record<string, Mood>; now: Date; selected: string; onOpen: (date: string) => void }) {
+function YearPixels({ moods, now, selected, lit, onOpen }: { moods: Record<string, Mood>; now: Date; selected: string; lit: Lit | null; onOpen: (date: string) => void }) {
   const thisYear = now.getFullYear();
   const first = Object.keys(moods).reduce((a, d) => Math.min(a, Number(d.slice(0, 4)) || a), thisYear);
   const [year, setYear] = useState(thisYear);
@@ -679,7 +861,9 @@ function YearPixels({ moods, now, selected, onOpen }: { moods: Record<string, Mo
               return future ? (
                 <span key={d} className={cls} aria-hidden="true" />
               ) : (
-                <button key={d} role="gridcell" className={cls} title={title} aria-label={title} style={rated ? { background: moodColor(v.level) } : undefined} onClick={() => onOpen(key)} />
+                <button key={d} role="gridcell" className={cls} title={title} aria-label={title} style={rated ? { background: moodColor(v.level) } : undefined} onClick={() => onOpen(key)}>
+                  <Flare lit={lit} day={key} />
+                </button>
               );
             })}
           </div>

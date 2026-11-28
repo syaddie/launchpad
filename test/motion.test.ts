@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { keepGone, landedDay, periodStep, readoutCells, rollDirection, unseen, viewStep } from '../web/src/motion';
+import { addedOne, keepGone, landedDay, liftoffs, periodStep, readoutCells, rollDirection, unseen, viewStep } from '../web/src/motion';
 
 describe('periodStep', () => {
   it('goes next to a later period and prev to an earlier one', () => {
@@ -140,5 +140,51 @@ describe('keepGone', () => {
   it('brings back one put back in', () => {
     const once = keepGone(show(['a', 'b']), ['a'], id, 1000, 3000);
     expect(keepGone(once, ['a', 'b'], id, 1200, 3000)).toEqual(show(['a', 'b']));
+  });
+});
+
+describe('addedOne', () => {
+  const before = ['2026-11-28T01:10:00.000Z', '2026-11-28T03:40:00.000Z'];
+
+  it('is the one just added, wherever it is', () => {
+    expect(addedOne(before, [...before, '2026-11-28T05:02:00.000Z'])).toBe('2026-11-28T05:02:00.000Z');
+    expect(addedOne(before, ['2026-11-27T22:00:00.000Z', ...before])).toBe('2026-11-27T22:00:00.000Z');
+  });
+
+  it('still counts when something old went at the same time', () => {
+    expect(addedOne(before, [before[1], '2026-11-28T05:02:00.000Z'])).toBe('2026-11-28T05:02:00.000Z');
+  });
+
+  it('is nothing for a removal, the same list, or several at once', () => {
+    expect(addedOne(before, [before[0]])).toBeNull();
+    expect(addedOne(before, [...before])).toBeNull();
+    expect(addedOne([], before)).toBeNull();
+    expect(addedOne(before, [...before, 'a', 'b'])).toBeNull();
+  });
+});
+
+describe('liftoffs', () => {
+  const today = '2026-11-28';
+
+  it('lifts off what is due today and has not yet, and remembers it', () => {
+    const first = liftoffs(['c1', 'c2'], null, today);
+    expect(first.lift).toEqual(['c1', 'c2']);
+    expect(liftoffs(['c1', 'c2'], first.record, today).lift).toEqual([]);
+    const later = liftoffs(['c1', 'c2', 'c7'], first.record, today);
+    expect(later.lift).toEqual(['c7']);
+    expect(JSON.parse(later.record)).toEqual({ day: today, ids: ['c1', 'c2', 'c7'] });
+  });
+
+  it('starts afresh on another day, or with a record it cannot read', () => {
+    const yesterday = liftoffs(['c1'], null, '2026-11-27').record;
+    expect(liftoffs(['c1'], yesterday, today).lift).toEqual(['c1']);
+    expect(liftoffs(['c1'], 'not json', today).lift).toEqual(['c1']);
+    expect(liftoffs(['c1'], '[1,2]', today).lift).toEqual(['c1']);
+    expect(JSON.parse(liftoffs(['c1'], yesterday, today).record)).toEqual({ day: today, ids: ['c1'] });
+  });
+
+  it('keeps what lifted off earlier today when nothing is due any more', () => {
+    const rec = liftoffs(['c1'], null, today).record;
+    expect(liftoffs([], rec, today)).toEqual({ lift: [], record: rec });
   });
 });
