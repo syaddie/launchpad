@@ -234,18 +234,22 @@ export interface StudyDay {
   /** Minutes by course id ('' for general study). */
   byCourse: Record<string, number>;
   total: number;
+  /** Each session that day in the order they were studied; the running timer is the one with id 'timer'. */
+  blocks: StudySession[];
 }
 
 /** Monday to Sunday of the week `today` is in. A session counts on the day it started. */
 export function studyWeek(learn: Learn, now: Date): StudyDay[] {
   const mon = weekStart(now);
-  const days: StudyDay[] = Array.from({ length: 7 }, (_, i) => ({ date: addDays(mon, i), byCourse: {}, total: 0 }));
+  const days: StudyDay[] = Array.from({ length: 7 }, (_, i) => ({ date: addDays(mon, i), byCourse: {}, total: 0, blocks: [] }));
   for (const s of withTimer(learn, now)) {
     const i = dayDiff(mon, new Date(s.start));
     if (i < 0 || i > 6) continue;
     days[i].byCourse[s.courseId] = (days[i].byCourse[s.courseId] ?? 0) + s.minutes;
     days[i].total += s.minutes;
+    days[i].blocks.push(s);
   }
+  for (const d of days) d.blocks.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
   return days;
 }
 

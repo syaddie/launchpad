@@ -566,6 +566,16 @@
   @keyframes cigSlamUp { from { opacity: 0.35; } }
 }
 
+/* ---------- Learn: stopping the timer raises its day's column (styles.css has the base) ---------- */
+
+/* Vista drifts: the column rises slowly to its new height. Focus is quick and exact, no bounce. Poster drives it up
+   hard and it stops dead, a touch over before it sits. */
+[data-design='vista'] .ln-study { --rise-for: calc(var(--m-sweep) * 1.4); }
+[data-design='vista'] .ln-day-col > [data-rise]::before { animation-timing-function: var(--e-out); }
+[data-design='focus'] .ln-study { --rise-for: var(--m-move); }
+[data-design='focus'] .ln-day-col > [data-rise]::before { animation-timing-function: var(--e-out); }
+[data-design='poster'] .ln-day-col > [data-rise]::before { animation: cigSlamUp var(--rise-for) linear both; }
+
 /* ---------- Learn's rows in each design: they reach to the panel's edge, as far as its sides go ---------- */
 
 [data-design='poster'] :is(.ln-due-row, .ln-class) { margin-inline: -8px; padding-inline: 8px; }

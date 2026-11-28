@@ -2336,6 +2336,7 @@ button.m-stat { cursor: default; }
 .ln-exam { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px 0; }
 .ln-exam-days { display: flex; align-items: baseline; gap: 4px; }
 .ln-exam-days .serif { font-size: 24px; line-height: 1; }
+.ln-exam-days .ln-exam-word { font-size: 18px; color: var(--acd); }
 
 .ln-courses { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
 .ln-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 16px; border: none; border-radius: var(--r); background: var(--bg); color: var(--tx); font: inherit; text-align: left; cursor: pointer; }
@@ -2353,11 +2354,20 @@ button.m-stat { cursor: default; }
 .ln-day { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
 .ln-day .meta { min-height: 16px; font-size: 11px; white-space: nowrap; }
 .ln-day-col { width: 100%; max-width: 44px; height: 120px; display: flex; flex-direction: column-reverse; gap: 2px; border-radius: var(--r-s); background: var(--hv); overflow: hidden; }
-.ln-day-col span { flex: none; display: block; width: 100%; min-height: 2px; }
+.ln-day-col span { flex: none; display: block; width: 100%; min-height: 2px; background: var(--c); }
 .ln-day.ahead .ln-day-col { background: transparent; box-shadow: inset 0 0 0 1px var(--ln); }
 .ln-day.today .ln-day-col { box-shadow: 0 0 0 1.5px var(--ac); }
 .ln-day-label { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--t3); }
 .ln-day.today .ln-day-label { color: var(--acd); }
+/* A day's sessions are stacked in the order they were studied. The running timer's is pale, as it isn't logged yet. */
+.ln-day-col > .ln-day-run { background: color-mix(in srgb, var(--c) 34%, transparent); }
+/* Stopping the timer, or logging time, raises that day's column by what was studied (useStudyRise in Learn.tsx): the
+   new session's block fills from its foot, as a cigarette logged raises You's bar (cigRise, from --from), up through
+   the pale block the timer was filling. Each design's own way is in designs.css (LEARN), Mission's in mission.css. */
+.ln-study { --rise-for: var(--m-sweep); }
+.ln-day-col > [data-rise] { position: relative; background: transparent; }
+.ln-day-col > [data-rise='timer'] { background: color-mix(in srgb, var(--c) 34%, transparent); }
+.ln-day-col > [data-rise]::before { content: ''; position: absolute; inset: 0; background: var(--c); --from: 0; transform-origin: 50% 100%; animation: cigRise var(--rise-for) var(--e-settle) both; }
 .ln-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12px; color: var(--t2); }
 .ln-legend > span { display: inline-flex; align-items: center; gap: 6px; }
 .ln-weeks-wrap { display: flex; flex-direction: column; gap: 6px; padding-top: 12px; border-top: 1px solid var(--ln); }
