@@ -337,18 +337,4 @@ way (docs/motion.md). **S** is small, mostly reusing what's there (the Month sca
 `msReport`, `msLiftoff`, `Readout`, `useGlide`); **M** is a new piece. Aerospace words ("T+", "LOS", "go") stay in the
 small mono labels; the messages themselves stay plain.
 
-**Money**
-
-All built (ideas 44–47, see Built).
-
-**Server**
-
-All built (ideas 48–55, see Built).
-
-**Review and Music**
-
-All built (ideas 56–59, see Built).
-
-**Settings and phones**
-
-All built (ideas 60–61, see Built).
+All of them are built now (ideas 15–61): see "Built" above.
