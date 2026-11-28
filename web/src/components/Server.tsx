@@ -13,7 +13,8 @@ import { ErrorBoundary } from './ErrorBoundary';
 import { DownloadsPanel } from './Downloads';
 import { FilesPanel } from './Files';
 import { MinecraftPanel } from './Minecraft';
-import { Glide, Readout } from './Motion';
+import { Glide, Readout, useChanges } from './Motion';
+import { LaunchCount } from './mission/Count';
 import { EmptyArt } from './mission/EmptyArt';
 
 const POLL = 5_000;
@@ -321,19 +322,47 @@ function Overview({ data, now, onOpenSettings }: { data: AppState; now: Date; on
 
 // ---------- system ----------
 
-const ARC = 0.75;
+/** How long a ring takes to sweep up as the panel opens (mission.css), after which its scale follows the reading. */
+const OPENING_MS = 2000;
 
+const ARC = 0.75;
+/** Mission's scale round a ring: a mark every 5%, a longer one every 10%, just outside it (x1, y1 to x2, y2). */
+const SCALE = Array.from({ length: 21 }, (_, i) => {
+  const a = ((135 + i * 13.5) * Math.PI) / 180;
+  const out = i % 2 ? 58 : 60.5;
+  const at = (rr: number) => [62 + rr * Math.cos(a), 62 + rr * Math.sin(a)].map((n) => n.toFixed(2));
+  const [x1, y1] = at(55.5);
+  const [x2, y2] = at(out);
+  return { x1, y1, x2, y2 };
+});
+
+/**
+ * A ring for the CPU or the memory in use. In Mission it's an instrument: a scale round it lit up to the reading,
+ * sweeping up from nothing as the panel opens, and above 90% it glows and dims slowly for as long as it stays there.
+ */
 function Gauge({ name, pct, detail }: { name: string; pct: number; detail: string }) {
   const r = 48;
   const c = 2 * Math.PI * r;
   const len = c * ARC;
   const v = Math.min(100, Math.max(0, pct));
+  const [opening, setOpening] = useState(true);
+  useEffect(() => {
+    const t = window.setTimeout(() => setOpening(false), OPENING_MS);
+    return () => window.clearTimeout(t);
+  }, []);
   return (
-    <div className="gauge">
+    <div className={'gauge' + (v >= 85 ? ' gauge--warn' : '') + (v > 90 ? ' gauge--high' : '')} data-opening={opening || undefined} style={{ '--v': Math.max(v, 1) / 100 } as CSSProperties}>
       <div className="gauge-dial">
+        <span className="gauge-pulse" aria-hidden="true" />
         <svg width="124" height="124" viewBox="0 0 124 124" role="img" aria-label={`${name} ${Math.round(v)}%`}>
+          <g className="gauge-scale" aria-hidden="true">
+            {SCALE.map((t, i) => (
+              <line key={i} {...t} className={i * 5 <= v ? 'on' : undefined} style={{ '--i': i } as CSSProperties} />
+            ))}
+          </g>
           <circle cx="62" cy="62" r={r} fill="none" stroke="var(--ln)" strokeWidth="10" strokeLinecap="round" strokeDasharray={`${len} ${c}`} transform="rotate(135 62 62)" />
           <circle
+            className="gauge-val"
             cx="62"
             cy="62"
             r={r}
@@ -445,6 +474,21 @@ const fmtRate = (bps: number) => {
   return `${r.v >= 100 ? Math.round(r.v) : r.v.toFixed(1)} ${r.unit}`;
 };
 
+/**
+ * Counts the readings that moved the window on: one more each time a new reading arrives and the oldest drops off the
+ * other end, so the strip chart can step its paper on by one (not while it's first filling, or when the interface changes).
+ */
+function useStep(pts: { at: string }[]): number {
+  const [state, setState] = useState(() => ({ first: pts[0]?.at, last: pts[pts.length - 1]?.at, n: pts.length, step: 0 }));
+  const first = pts[0]?.at;
+  const last = pts[pts.length - 1]?.at;
+  if (state.last !== last || state.first !== first) {
+    const moved = !!state.last && !!last && last > state.last && pts.length === state.n && pts.length > 1 && pts[pts.length - 2].at === state.last;
+    setState({ first, last, n: pts.length, step: moved ? state.step + 1 : state.step });
+  }
+  return state.step;
+}
+
 function NetworkPanel({ s, onIface }: { s: ServerStats; onIface: (v: string) => void }) {
   const n = s.net;
   const pts = n?.samples ?? [];
@@ -453,6 +497,10 @@ function NetworkPanel({ s, onIface }: { s: ServerStats; onIface: (v: string) => 
   const top = niceMax(peak / unit);
   const line = (k: 'rxBps' | 'txBps') => pts.map((p, i) => `${pts.length > 1 ? (i / (pts.length - 1)) * 300 : 0},${100 - (p[k] / unit / top) * 100}`).join(' ');
   const last = pts[pts.length - 1];
+  const gap = pts.length > 1 ? 300 / (pts.length - 1) : 0;
+  // In Mission it's a strip chart: each reading steps the paper on by one, the minutes ruled across it.
+  const step = useStep(pts);
+  const minutes = pts.flatMap((p, i) => (i && new Date(p.at).getMinutes() !== new Date(pts[i - 1].at).getMinutes() ? [i * gap] : []));
   return (
     <section className="panel srv-panel" aria-label="Network">
       <div className="panel-head">
@@ -471,7 +519,7 @@ function NetworkPanel({ s, onIface }: { s: ServerStats; onIface: (v: string) => 
       </div>
       {n && pts.length > 1 ? (
         <>
-          <div className="mini-chart">
+          <div className="mini-chart net-strip">
             <div className="mini-grid">
               <span />
               <span />
@@ -483,9 +531,16 @@ function NetworkPanel({ s, onIface }: { s: ServerStats; onIface: (v: string) => 
               <span>0</span>
             </div>
             <svg viewBox="0 0 300 100" preserveAspectRatio="none" role="img" aria-label="Network traffic, last 5 minutes">
-              <polyline points={line('txBps')} fill="none" stroke="var(--t3)" strokeWidth="1.5" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-              <polyline points={line('rxBps')} fill="none" stroke="var(--ac)" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+              <g key={step} className={'net-paper' + (step ? ' stepped' : '')} style={{ '--paper-step': `${gap}px` } as CSSProperties}>
+                {minutes.map((x) => (
+                  <line key={x} className="net-minute" x1={x} x2={x} y1="0" y2="100" vectorEffect="non-scaling-stroke" />
+                ))}
+                <polyline points={line('txBps')} fill="none" stroke="var(--t3)" strokeWidth="1.5" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+                <polyline points={line('rxBps')} fill="none" stroke="var(--ac)" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+              </g>
             </svg>
+            {/* The pen, writing the latest reading at the paper's edge. */}
+            <span className="net-pen" aria-hidden="true" style={{ top: `${100 - (last.rxBps / unit / top) * 100}%` }} />
           </div>
           <div className="split meta" style={{ paddingLeft: 34 }}>
             <span>5 min ago</span>
@@ -523,6 +578,9 @@ const RANGES: { key: Range; name: string; ms: number }[] = [
   { key: '30d', name: '30 days', ms: 30 * 86_400_000 },
 ];
 
+/** How long Mission's count runs before a test, T-3 to T-1 (the test itself starts at once). */
+const COUNT_MS = 3000;
+
 /** Tests whose download fell below half the median of the range. */
 export function slowTests(tests: SpeedTest[]): SpeedTest[] {
   if (tests.length < 4) return [];
@@ -552,6 +610,15 @@ function SpeedPanel({ speed, plan, every, now, lastError, onTest, onOpenSettings
   const line = (k: 'downMbps' | 'upMbps') => tests.map((t) => `${x(t).toFixed(1)},${y(t[k]).toFixed(1)}`).join(' ');
   const slow = slowTests(tests);
   const lastSlow = slow[slow.length - 1];
+  // Mission counts T-3 from Test now (then T+ while it runs), and a new result sweeps up once the count is over.
+  const [armed, setArmed] = useState<number | null>(null);
+  const counting = armed !== null;
+  useEffect(() => {
+    if (armed === null || speed.running) return;
+    const t = window.setTimeout(() => setArmed(null), Math.max(0, armed + COUNT_MS - Date.now()));
+    return () => window.clearTimeout(t);
+  }, [armed, speed.running]);
+  const fresh = useChanges([['latest', latest?.at ?? '']], COUNT_MS + 2400).has('latest') && !counting;
 
   // Seven day names, four 6-hour marks, or five dates across the range.
   const ticks =
@@ -565,7 +632,7 @@ function SpeedPanel({ speed, plan, every, now, lastError, onTest, onOpenSettings
           });
 
   return (
-    <section className="panel srv-panel speed" aria-label="Internet speed">
+    <section className="panel srv-panel speed" aria-label="Internet speed" data-fresh={fresh || undefined}>
       <div className="panel-head" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
         <h2 className="panel-title">Internet speed</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -577,9 +644,19 @@ function SpeedPanel({ speed, plan, every, now, lastError, onTest, onOpenSettings
               </button>
             ))}
           </div>
-          <button className="btn btn-secondary btn-small" style={{ padding: '5px 10px' }} disabled={speed.running} onClick={onTest}>
-            <i className={'ph-duotone ' + (speed.running ? 'ph-circle-notch spin' : 'ph-play')} />
-            {speed.running ? 'Testing…' : 'Test now'}
+          <button
+            className="btn btn-secondary btn-small speed-go"
+            style={{ padding: '5px 10px' }}
+            disabled={speed.running || counting}
+            data-count={counting || undefined}
+            onClick={() => {
+              setArmed(Date.now());
+              onTest();
+            }}
+          >
+            <i className={'ph-duotone ' + (speed.running || counting ? 'ph-circle-notch spin' : 'ph-play')} />
+            <span>{speed.running || counting ? 'Testing…' : 'Test now'}</span>
+            {armed !== null && <LaunchCount at={armed} />}
           </button>
         </div>
       </div>
@@ -592,8 +669,8 @@ function SpeedPanel({ speed, plan, every, now, lastError, onTest, onOpenSettings
             ['Ping', latest?.pingMs, 'ms', ''],
             ['Jitter', latest?.jitterMs, 'ms', ''],
           ] as const
-        ).map(([name, v, unit, key]) => (
-          <div key={name} className="speed-stat">
+        ).map(([name, v, unit, key], i) => (
+          <div key={name} className="speed-stat" style={{ '--i': i } as CSSProperties}>
             <span className="meta">
               {key === 'line' && <span className="legend-line" />}
               {key === 'dash' && <span className="legend-dash" />}
@@ -634,6 +711,8 @@ function SpeedPanel({ speed, plan, every, now, lastError, onTest, onOpenSettings
               <polyline points={line('upMbps')} fill="none" stroke="var(--t2)" strokeWidth="1.5" strokeDasharray="4 3" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
               <polyline points={line('downMbps')} fill="none" stroke="var(--ac)" strokeWidth="2.25" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
             </svg>
+            {/* Where the new result landed: Mission sends a ring out from it as the figures sweep up. */}
+            {fresh && latest && Date.parse(latest.at) >= start && <span className="sc-new" aria-hidden="true" style={{ left: `${(x(latest) / 560) * 100}%`, top: `${y(latest.downMbps)}%` }} />}
             {slow.map((t) => (
               <span key={t.at} className="sc-slow" title={`${hm(new Date(t.at))} · ${t.downMbps} Mbps`} style={{ left: `${(x(t) / 560) * 100}%`, top: `${y(t.downMbps)}%` }} />
             ))}
@@ -708,6 +787,8 @@ function ServicesPanel({ s, data, now, onChanged }: { s: ServerStats; data: AppS
   const marks = [...(s.containers ?? []).map(markOf), ...syncs.map((x) => x.mark), ...checks.map((w) => syncMark(true, w.detail, true))];
   const poll = POLL_ORDER.map((m) => ({ m, n: marks.filter((x) => x === m).length })).filter((p) => p.n);
   const nContainers = s.containers?.length ?? 0;
+  // A container whose light changed since the last reading (restarting holds, then it's go; one that went down is scrubbed).
+  const changed = useChanges((s.containers ?? []).map((c): [string, PollMark] => [c.id || c.name, markOf(c)]));
   return (
     <section className="panel srv-panel services" aria-label="Services">
       <div className="panel-head">
@@ -732,7 +813,7 @@ function ServicesPanel({ s, data, now, onChanged }: { s: ServerStats; data: AppS
       )}
       <div className="scroll">
         {s.containers ? (
-          s.containers.map((c, i) => <ContainerRow key={c.id || c.name} c={c} order={i} canRestart={s.canRestart} onLogs={() => setLogsOf(c.id)} onRestarted={restarted(c.name)} notify={(text) => setNote({ text, failed: false })} />)
+          s.containers.map((c, i) => <ContainerRow key={c.id || c.name} c={c} order={i} change={changed.get(c.id || c.name)} canRestart={s.canRestart} onLogs={() => setLogsOf(c.id)} onRestarted={restarted(c.name)} notify={(text) => setNote({ text, failed: false })} />)
         ) : (
           <div className="empty" style={{ gap: 6 }}>
             <EmptyArt kind={s.containersError ? 'scrubbed' : 'away'} />

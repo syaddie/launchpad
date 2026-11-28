@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { along, apron, APRON_ROWS, ascentCurve, clearOf, clockText, countdown, daysText, elapsedText, dayFraction, finalCount, hoursOf, moonPath, moonPhase, moonTimes, moonTurn, orbPlace, pathTable, seeded, skyPoint, skyWeather, stagesShed, sunTimes } from '../web/src/mission';
+import { along, apron, APRON_ROWS, ascentCurve, clearOf, clockText, countdown, countText, daysText, elapsedText, dayFraction, finalCount, hoursOf, moonPath, moonPhase, moonTimes, moonTurn, orbPlace, pathTable, seeded, skyPoint, skyWeather, stagesShed, sunTimes } from '../web/src/mission';
 
 const at = (h: number, m = 0, s = 0) => new Date(2026, 10, 25, h, m, s);
 
@@ -325,5 +325,16 @@ describe('mission elapsed time and days left', () => {
     expect(daysText(27)).toBe('T-27');
     expect(daysText(124)).toBe('T-124');
     expect(daysText(-3)).toBe('T-00');
+  });
+  it('counts to a start as T-3, T-2, T-1, then T+ minutes and seconds', () => {
+    expect(countText(0)).toBe('T-3');
+    expect(countText(999)).toBe('T-3');
+    expect(countText(1000)).toBe('T-2');
+    expect(countText(2999)).toBe('T-1');
+    expect(countText(3000)).toBe('T+00:00');
+    expect(countText(7400)).toBe('T+00:04');
+    expect(countText((3 + 90) * 1000)).toBe('T+01:30');
+    expect(countText(-2000)).toBe('T-3');
+    expect(countText(1500, 5)).toBe('T-4');
   });
 });

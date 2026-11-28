@@ -429,6 +429,17 @@ export function elapsedText(ms: number): string {
   return `T+${days ? `${days}:` : ''}${clockText((s % 86_400) * 1000)}`;
 }
 
+/**
+ * A count to a start for the dot-matrix face, from the moment it was asked for: "T-3", "T-2", "T-1", then, once it's
+ * under way, minutes and seconds since: "T+00:04", "T+01:30". Never below "T-3".
+ */
+export function countText(ms: number, from = 3): string {
+  const s = Math.floor(Math.max(0, ms) / 1000);
+  if (s < from) return `T-${from - s}`;
+  const up = s - from;
+  return `T+${two(Math.floor(up / 60))}:${two(up % 60)}`;
+}
+
 /** A countdown's days left for the dot-matrix face: "T-05", "T-27", "T-124". */
 export function daysText(days: number): string {
   return `T-${two(Math.max(0, days))}`;

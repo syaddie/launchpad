@@ -162,6 +162,33 @@ export function useArrived(ids: string[]): ReadonlySet<string> {
   return state.fresh;
 }
 
+/** How long a change of state stays marked, for what it sets off to play. */
+const CHANGED_MS = 2400;
+
+/**
+ * What changed since the last reading, by key: each key whose value isn't the one it had the reading before, with
+ * where it came from, marked for a moment (`hold` ms after the latest change), so a light can flare as it goes from
+ * hold to go, or a row as its download finishes. A key that's new, and anything before the component has settled (an
+ * old reading giving way to a fresh one as it opens), isn't a change. `values` is each key with its value now.
+ */
+export function useChanges<V extends string>(values: [string, V][], hold = CHANGED_MS): ReadonlyMap<string, { from: V; to: V }> {
+  const settled = useSettled();
+  const sig = values.map(([k, v]) => `${k}\t${v}`).join('\n');
+  const [state, setState] = useState(() => ({ sig, values: new Map(values), changed: new Map<string, { from: V; to: V }>() }));
+  if (state.sig !== sig) {
+    const now = settled ? values.filter(([k, v]) => state.values.has(k) && state.values.get(k) !== v) : [];
+    const changed = now.length ? new Map(state.changed) : state.changed;
+    for (const [k, v] of now) changed.set(k, { from: state.values.get(k)!, to: v });
+    setState({ sig, values: new Map(values), changed });
+  }
+  useEffect(() => {
+    if (!state.changed.size) return;
+    const t = window.setTimeout(() => setState((s) => ({ ...s, changed: new Map() })), hold);
+    return () => window.clearTimeout(t);
+  }, [state.changed, hold]);
+  return state.changed;
+}
+
 /** How long a row taken out of a list is kept, marked gone, for its FoldRow to see it go. */
 const GONE_MS = 3000;
 

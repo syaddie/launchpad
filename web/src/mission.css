@@ -971,6 +971,125 @@
 [data-design='mission'] .svc-poll .ms-mark { width: 8px; height: 8px; border-width: 1.5px; }
 [data-design='mission'] .services > .panel-head { flex-wrap: wrap; row-gap: 4px; }
 
+/* A container changing state (Containers.tsx marks its row data-change for a moment, with data-from): one restarting
+   holds, its light blinking slowly for as long as it does; coming back it's go with a flare, its light ringing and a
+   band of light running along its row; one that went down is scrubbed, its light slammed in, red. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .services .container-row .svc-mark.ms-mark--hold, [data-design='mission'] .mc-head .mc-light.ms-mark--hold { animation: msReport var(--m-move) var(--e-settle) both, msHold calc(var(--m-sweep) * 1.6) linear infinite; animation-delay: calc(var(--m-state) + var(--m-stagger) * var(--i, 0)), 0s; }
+  [data-design='mission'] .services .container-row[data-change='go'] .svc-mark { animation: msReport var(--m-move) var(--e-settle) both, msGoFlare calc(var(--m-sweep) * 1.4) var(--e-out); }
+  [data-design='mission'] .container-row[data-change='go'] { background: linear-gradient(90deg, transparent 33.3%, color-mix(in srgb, var(--ok) 20%, transparent) 50%, transparent 66.7%) no-repeat 100% 0 / 300% 100%; animation: msRowSweep calc(var(--m-sweep) * 1.2) var(--e-io) both; }
+  [data-design='mission'] .services .container-row[data-change='scrub'] .svc-mark, [data-design='mission'] .mc-head[data-ran='scrub'] .mc-light { animation: msScrub calc(var(--m-sweep) * 1.1) var(--e-out) both; }
+  [data-design='mission'] .container-row[data-change='scrub'], [data-design='mission'] .mc-head[data-ran='scrub'] .chip { animation: msScrubFlash calc(var(--m-sweep) * 1.8) var(--e-out); }
+}
+@keyframes msHold { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0.3; } }
+@keyframes msGoFlare { from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 70%, transparent), 0 0 14px 3px color-mix(in srgb, var(--ok) 70%, transparent); } to { box-shadow: 0 0 0 10px transparent, 0 0 0 0 transparent; } }
+/* The scrubbed light is a diamond at 0.82 of its size; it comes in large and lands there. */
+@keyframes msScrub { 0% { opacity: 0; scale: 2.4; box-shadow: 0 0 16px 5px var(--wn); } 35% { opacity: 1; scale: 0.62; } 60% { scale: 0.92; } 100% { box-shadow: 0 0 0 0 transparent; } }
+@keyframes msScrubFlash { from { background-color: color-mix(in srgb, var(--wn) 18%, transparent); } }
+
+/* The CPU and memory rings are instruments: a scale round each, lit up to the reading. As the panel opens the ring
+   sweeps up from nothing at a steady rate and the scale lights behind it; above 90% a glow round the ring rises and
+   falls slowly for as long as it stays there (faded, so nothing is repainted for it). */
+[data-design='mission'] .gauge .gauge-scale { display: inline; }
+[data-design='mission'] .gauge-scale line { stroke: color-mix(in srgb, var(--t3) 55%, transparent); stroke-width: 1.5; stroke-linecap: round; transition: stroke var(--m-state) var(--e-out); }
+[data-design='mission'] .gauge-scale line.on { stroke: var(--ac); }
+[data-design='mission'] .gauge--warn .gauge-scale line.on { stroke: var(--wn); }
+[data-design='mission'] .gauge--high .gauge-pulse { display: block; position: absolute; left: 0; top: 0; width: 124px; height: 124px; border-radius: 50%; pointer-events: none; background: radial-gradient(closest-side, transparent 70%, color-mix(in srgb, var(--wn) 55%, transparent) 84%, transparent 100%); mask: conic-gradient(from 225deg, #000 270deg, transparent 0); opacity: 0.2; }
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .gauge[data-opening] .gauge-val { animation: msGaugeSweep calc(var(--m-sweep) * 1.4) linear var(--m-state) both; }
+  [data-design='mission'] .gauge[data-opening] .gauge-scale line.on { animation: msScaleLit var(--m-state) var(--e-out) both; animation-delay: calc(var(--m-state) + var(--m-sweep) * 1.4 * var(--i) / 20 / var(--v, 1)); }
+  [data-design='mission'] .gauge--high .gauge-pulse { animation: msGaugePulse calc(var(--m-sweep) * 2.6) var(--e-io) infinite alternate; }
+}
+@keyframes msGaugeSweep { from { stroke-dasharray: 0.01 400; } }
+@keyframes msScaleLit { from { stroke: color-mix(in srgb, var(--t3) 55%, transparent); } }
+@keyframes msGaugePulse { from { opacity: 0.2; } to { opacity: 1; } }
+
+/* Network is a strip chart: each reading steps the paper on by one, a quick step that settles, as a recorder's does;
+   the minutes are ruled across it, and a pen at its edge writes the latest reading. */
+[data-design='mission'] .net-strip svg { clip-path: inset(-8px 0 -8px 0); }
+[data-design='mission'] .net-strip .net-minute { display: inline; stroke: var(--ln); stroke-width: 1; stroke-dasharray: 2 3; }
+[data-design='mission'] .net-strip .net-pen { display: block; position: absolute; right: -4px; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%; background: var(--ac); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ac) 22%, transparent), 0 0 10px var(--ac); pointer-events: none; transition: top var(--m-move) var(--e-settle); }
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .net-paper.stepped { animation: msPaperStep var(--m-move) var(--e-settle); }
+}
+@keyframes msPaperStep { from { translate: var(--paper-step) 0; } }
+
+/* Test now counts T-3 in the dot-matrix face, in the colour of now, then T+ while the test runs (Count.tsx); Start on a
+   Minecraft server does the same. When a result lands its figures sweep up in turn and a ring goes out from its point
+   on the chart. */
+[data-design='mission'] .btn .ms-count { display: inline-block; font-size: 14px; letter-spacing: 0.06em; color: var(--ms-ignition-ink); text-shadow: 0 0 8px var(--ms-ignition-glow); }
+[data-design='mission'] .btn[data-count] { min-width: 86px; justify-content: center; background: var(--ms-ignition-soft); border-color: transparent; box-shadow: none; }
+[data-design='mission'] .btn[data-count]:disabled { opacity: 1; }
+[data-design='mission'] .btn[data-count] > :not(.ms-count) { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .speed[data-fresh] .speed-stat .serif { animation: msSweepUp calc(var(--m-sweep) * 1.1) var(--e-out) both; animation-delay: calc(var(--m-stagger) * 2 * var(--i, 0)); }
+  [data-design='mission'] .speed[data-fresh] .sc-plot .sc-new { display: block; position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; box-shadow: 0 0 0 2px var(--ac), 0 0 10px var(--ac); pointer-events: none; opacity: 0; animation: msRingOut calc(var(--m-sweep) * 1.4) var(--e-out) var(--m-move) forwards; }
+}
+@keyframes msSweepUp { from { clip-path: inset(100% -6px -6px -6px); translate: 0 0.35em; text-shadow: 0 0 16px var(--ac); } to { clip-path: inset(-6px -6px -6px -6px); } }
+
+/* Minecraft: the server has a light (go; hold while it starts; scrubbed when it stopped without being asked here, or
+   Launchpad gave up restarting it; standby). Coming up is an ignition: its chip flares hot and its light rings.
+   Stopping on its own is scrubbed, as a container going down is. A light for each player aboard; one boarding reports
+   in and rings. The list's lights say what its dots did. */
+[data-design='mission'] .mc-head .mc-light { display: block; }
+[data-design='mission'] .mc-row { grid-template-columns: 10px minmax(0, 1fr) auto; }
+[data-design='mission'] .mc-row > .dot { display: none; }
+[data-design='mission'] .mc-row .mc-mark { display: block; }
+[data-design='mission'] .mc-where .mc-crew { display: inline-flex; align-items: center; gap: 4px; font: 500 11px/14px var(--f-mono); color: var(--t3); }
+[data-design='mission'] .mc-crew > i { position: relative; width: 8px; height: 8px; border-width: 1.5px; }
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .mc-head[data-ran='up'] .chip { animation: msIgnite calc(var(--m-sweep) * 1.6) var(--e-out); }
+  [data-design='mission'] .mc-head[data-ran='up'] .mc-light { animation: msGoFlare calc(var(--m-sweep) * 1.4) var(--e-out); }
+  [data-design='mission'] .mc-crew > i[data-new] { animation: msReport var(--m-move) var(--e-settle) both; }
+  [data-design='mission'] .mc-crew > i[data-new]::after { content: ''; position: absolute; inset: -1.5px; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--ok); opacity: 0; animation: msRingOut var(--m-sweep) var(--e-out) calc(var(--m-move) * 0.5) forwards; }
+}
+
+/* Dragging files over Files: the lock-on corners close in on the panel, its drop zone, and hold there while the files
+   are over it, in place of the dashed outline. */
+[data-design='mission'] .files-panel.dragging { outline: none; }
+[data-design='mission'] .files-panel.dragging::after {
+  content: '';
+  position: absolute;
+  inset: 8px;
+  z-index: 5;
+  border-radius: calc(var(--r) - 2px);
+  pointer-events: none;
+  background:
+    linear-gradient(var(--ac) 0 0) 0 0 / 22px 2.5px, linear-gradient(var(--ac) 0 0) 0 0 / 2.5px 22px,
+    linear-gradient(var(--ac) 0 0) 100% 0 / 22px 2.5px, linear-gradient(var(--ac) 0 0) 100% 0 / 2.5px 22px,
+    linear-gradient(var(--ac) 0 0) 0 100% / 22px 2.5px, linear-gradient(var(--ac) 0 0) 0 100% / 2.5px 22px,
+    linear-gradient(var(--ac) 0 0) 100% 100% / 22px 2.5px, linear-gradient(var(--ac) 0 0) 100% 100% / 2.5px 22px,
+    color-mix(in srgb, var(--ac) 7%, transparent);
+  background-repeat: no-repeat;
+  animation: msLockIn var(--m-move) var(--e-settle) both;
+}
+@keyframes msLockIn { from { opacity: 0; scale: 1.08; } }
+
+/* Downloads: while one moves, a sheen runs along its bar now and then (moved across, not repainted); when it's done its
+   row flares: its icon or chip lights and a band of light runs along it. */
+[data-design='mission'] .dl-bar[data-moving] > span { position: relative; overflow: hidden; }
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .dl-bar[data-moving] > span::after { content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 40%; background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.6), transparent); translate: -100% 0; animation: msSheen calc(var(--m-sweep) * 3) var(--e-io) infinite; }
+  [data-design='mission'] .dl-item[data-landed] { background: linear-gradient(90deg, transparent 33.3%, color-mix(in srgb, var(--ac) 22%, transparent) 50%, transparent 66.7%) no-repeat 100% 0 / 300% 100%; animation: msRowSweep calc(var(--m-sweep) * 1.2) var(--e-io) both; }
+  [data-design='mission'] .dl-item[data-landed] > .ph-duotone:first-child { animation: msGlyphGlow calc(var(--m-sweep) * 1.6) var(--e-out); }
+  [data-design='mission'] .dl-item.torrent[data-landed] > .chip { animation: msTickFlare calc(var(--m-sweep) * 1.2) var(--e-out); }
+}
+@keyframes msSheen { 0% { translate: -100% 0; } 55%, 100% { translate: 260% 0; } }
+
+/* A new Terminal tab switches on like an old tube: a point of light spreads into a line across the screen, the line
+   opens into the screen, and its light fades off it (bright on a dark screen, deep on a light one). */
+@media (prefers-reduced-motion: no-preference) {
+  [data-design='mission'] .term-shell[data-fresh] { animation: msTubeOn calc(var(--m-sweep) * 1.4) linear both, lpFadeIn calc(var(--m-sweep) * 0.12) linear both; }
+  [data-design='mission'] .term-shell[data-fresh]::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; background: color-mix(in srgb, var(--ac) 62%, var(--tx)); animation: msTubeGlow calc(var(--m-sweep) * 1.4) linear both; }
+}
+@keyframes msTubeOn {
+  0% { scale: 0.03 0.006; animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); }
+  32% { scale: 1 0.006; animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1); }
+  68% { scale: 1 1; }
+  100% { scale: 1 1; }
+}
+@keyframes msTubeGlow { 0%, 32% { opacity: 1; } 46% { opacity: 0.22; } 80%, 100% { opacity: 0; } }
+
 /* =====================================================================
    LOSS OF SIGNAL
    ===================================================================== */
@@ -1063,4 +1182,9 @@
   [data-design='mission'] .dg-card[data-new] { animation: lpFadeIn var(--m-state) var(--e-out) both; }
   @keyframes msJettison { to { opacity: 0; } }
   @keyframes msDotOut { to { opacity: 0; } }
+  /* Server: a ring over 90% glows without rising and falling, a new tab's screen and a count's figures just appear,
+     and nothing steps, sweeps, blinks, rings or slams. */
+  [data-design='mission'] .gauge--high .gauge-pulse { opacity: 0.75; }
+  [data-design='mission'] .term-shell[data-fresh] { animation: lpFadeIn var(--m-state) var(--e-out) both; }
+  [data-design='mission'] .net-strip .net-pen { transition: none; }
 }

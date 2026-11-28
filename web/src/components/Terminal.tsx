@@ -104,11 +104,16 @@ interface ShellHandle {
   close: () => void;
 }
 
+/** How long a new tab's screen takes to switch on in Mission. */
+const FRESH_MS = 1400;
+
 /** One shell on the server, over /api/terminal. It stays mounted while hidden so the screen is kept between tabs and views. */
-function Shell({ session, onSession, hidden, publicKey, onStatus, onFailed, onCwd, ref }: {
+function Shell({ session, onSession, hidden, fresh, publicKey, onStatus, onFailed, onCwd, ref }: {
   session: string | null;
   onSession: (id: string | null) => void;
   hidden: boolean;
+  /** Just opened as a new tab: Mission switches its screen on like an old tube's, a line that opens into the screen. */
+  fresh?: boolean;
   publicKey: string;
   onStatus: (s: Status) => void;
   /** The connection was refused: the parent checks whether the host key changed. */
@@ -317,7 +322,7 @@ function Shell({ session, onSession, hidden, publicKey, onStatus, onFailed, onCw
           : null;
 
   return (
-    <div className="term-shell" style={hidden ? { display: 'none' } : undefined}>
+    <div className="term-shell" data-fresh={fresh || undefined} style={hidden ? { display: 'none' } : undefined}>
       <div ref={box} className="term-box" data-selectable="" />
       {overlay && (
         <div className="term-overlay" role="status">
@@ -389,6 +394,13 @@ export function TerminalPanel({ target, publicKey, hidden, cd, onFailed }: {
   const [snippetsOpen, setSnippetsOpen] = useState(() => localGet('snippetsOpen') === '1');
   const handles = useRef(new Map<string, ShellHandle>());
   const { tabs, active } = saved;
+  // The tab just added with +, for as long as its screen takes to switch on (mission.css).
+  const [fresh, setFresh] = useState<string | null>(null);
+  useEffect(() => {
+    if (!fresh) return;
+    const t = window.setTimeout(() => setFresh(null), FRESH_MS);
+    return () => window.clearTimeout(t);
+  }, [fresh]);
 
   const update = (fn: (v: SavedTabs) => SavedTabs) =>
     setSaved((v) => {
@@ -403,6 +415,7 @@ export function TerminalPanel({ target, publicKey, hidden, cd, onFailed }: {
     if (tabs.length >= MAX_TABS) return;
     const t: ShellTab = { key: newKey(), name: nextName(tabs), session: null };
     update((v) => ({ tabs: [...v.tabs, t], active: t.key }));
+    setFresh(t.key);
   };
 
   const closeTab = (key: string) => {
@@ -500,6 +513,7 @@ export function TerminalPanel({ target, publicKey, hidden, cd, onFailed }: {
               session={t.session}
               onSession={(id) => setSession(t.key, id)}
               hidden={hidden || t.key !== active}
+              fresh={t.key === fresh}
               publicKey={publicKey}
               onStatus={(s) => setStatuses((m) => (m[t.key] === s ? m : { ...m, [t.key]: s }))}
               onFailed={onFailed}

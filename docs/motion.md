@@ -60,7 +60,12 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
   vehicle on the ascent brightens; as each event ends, that vehicle sheds a spent stage that falls away. Every period
   with arrows changes with Money › Month's scan. Learn's study timer is T+ in the dot-matrix face and starting it is an
   ignition; while it runs its block in today's column is propellant loading, lit at its head, and stopping it burns the
-  colour up through it; an exam inside a week is in the colour of now; Server › Services is a go/no-go poll that reports in; moving money sends a point of light on an arc between
+  colour up through it; an exam inside a week is in the colour of now; Server › Services is a go/no-go poll that reports in, and a
+  container holding, coming back go with a flare or going down scrubbed shows it as it happens; Server's CPU and
+  memory rings are instruments that sweep up as they open and glow over 90%, Network is a stepping strip chart, Test
+  now and a Minecraft server's Start count T-3 in the dot-matrix face (a server coming up is an ignition, a crash
+  scrubbed, each player aboard a light), a moving download has a sheen and a finished one flares, dragging files over
+  Files locks the corners on, and a new Terminal tab switches on like an old tube; moving money sends a point of light on an arc between
   the two accounts before their balances roll; losing the server puts the source lights out one at a time, and they
   report back in when it's back; empty states have a drawing of the site (pad clear, vehicle away, launch scrubbed).
   Anything saved blinks its source's light in the strip, like a packet going up (`uplink.ts`); "Loading…" is a scan line
@@ -196,6 +201,11 @@ Broadsheet, Console, Bento and Horizon, and their motion, were retired on 25 Nov
   tick in turn and its line lights, sixteen at most, only the once (not again as you change the filter). Vista drifts
   them in, Focus ticks them close together, Poster stamps each, Mission closes the lock-on corners on each line (as on
   the day picked in Month) before its tick reports in and flares.
+- **A change of state between readings** (`useChanges` in `Motion.tsx`: each key whose value isn't the one it had the
+  reading before, with where it came from, marked for a moment; nothing as a view opens or for something new): a
+  container's light in Services, a download or torrent finishing, a Minecraft server coming up or stopping, a player
+  boarding, a new speed test result. Only Mission shows them (`mission.css` SERVER); the other designs show the new
+  state as they always have.
 - **What's new lands once**, the first time this device shows it, not every time its view opens (`useUnseen` in
   `Motion.tsx`, keeping what's been seen in `localStorage`; nothing is new on a device's first run): a new best in
   Training's Your lifts (Mission's flare and line drawing to the new high, `mission.css` TRAINING; the other designs show
@@ -214,7 +224,9 @@ nothing is repainted for it), and the runway lights on Mission's apron when Home
 run every few seconds). In Mission, a running study timer's digits relight as they change and its dot breathes a
 beacon (scaled); in the other layouts its clock rolls a digit a second (moved, not redrawn); and an empty state's drawing has its mast lamp blinking with the site's (stepped). The time since the
 last cigarette steps once a second (only the digits that changed are redrawn, and only while the page is in view), and
-today's pixel in the year twinkles (faded and scaled). Busy states
+today's pixel in the year twinkles (faded and scaled). On Server in Mission, a ring over 90% glows up and down
+(faded), a container or a Minecraft server on hold blinks its light (stepped), a moving download's bar has a sheen
+now and then (moved across, not redrawn), and Network's paper steps on once a reading (moved). Busy states
 (a spinner, a skeleton line, Mission's acquiring line and satellite, Training's downlink, the Inbox's ping) move only
 while something is being waited for. The tab's title changes once a second only while it counts to an event inside the
 hour or a running study timer.

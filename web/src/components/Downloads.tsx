@@ -6,7 +6,7 @@ import { api, localGet, localSet, type TorrentAdd } from '../api';
 import { fmtBytes, hm } from '../util';
 import { menuProps } from './ContextMenu';
 import { Copyable } from './Copyable';
-import { Glide } from './Motion';
+import { Glide, useChanges } from './Motion';
 import { EmptyArt } from './mission/EmptyArt';
 
 const POLL = 2000;
@@ -626,6 +626,8 @@ function DownloadList({ info, error, shellReady, onChanged, onOpenFolder }: {
       .catch((e: Error) => setActError(e.message));
   const jobs = info?.jobs ?? [];
   const finished = jobs.some((j) => j.state !== 'starting' && j.state !== 'downloading');
+  // A download that just finished flares its row in Mission.
+  const changed = useChanges(jobs.map((j): [string, string] => [j.id, j.state]));
   return (
     <section className="panel srv-panel dl-list" aria-label="Downloads">
       <div className="panel-head">
@@ -653,6 +655,7 @@ function DownloadList({ info, error, shellReady, onChanged, onOpenFolder }: {
             <JobRow
               key={j.id}
               j={j}
+              landed={changed.get(j.id)?.to === 'done'}
               onCancel={() => act(api.cancelDownload(j.id))}
               onRetry={() =>
                 act(api.startDownload(j.url, j.dir, j.video ? { via: 'video', format: j.video.format } : j.ig ? { limit: j.ig.limit ?? undefined, metadata: j.ig.metadata } : undefined))
@@ -743,7 +746,7 @@ export function siteIcon(site: VideoSite | string | null, format: VideoFormat): 
   return 'ph-film-strip';
 }
 
-function JobRow({ j, onCancel, onRetry, onOpenFolder }: { j: DownloadJob; onCancel: () => void; onRetry: () => void; onOpenFolder: () => void }) {
+function JobRow({ j, landed, onCancel, onRetry, onOpenFolder }: { j: DownloadJob; landed?: boolean; onCancel: () => void; onRetry: () => void; onOpenFolder: () => void }) {
   const going = j.state === 'starting' || j.state === 'downloading';
   const pct = j.video ? videoPercent(j) : j.ig ? igPercent(j.ig) : j.total ? (j.received / j.total) * 100 : null;
   const left = j.total && j.bps ? (j.total - j.received) / j.bps : null;
@@ -775,7 +778,7 @@ function JobRow({ j, onCancel, onRetry, onOpenFolder }: { j: DownloadJob; onCanc
     j.name,
   );
   return (
-    <div className="dl-item" {...menu}>
+    <div className="dl-item" data-landed={landed || undefined} {...menu}>
       <i
         className={'ph-duotone ' + (j.state === 'done' ? (partly ? 'ph-warning-circle' : 'ph-check-circle') : j.state === 'failed' ? 'ph-warning-circle' : j.state === 'cancelled' ? 'ph-x-circle' : kindIcon)}
         style={{ color: j.state === 'failed' || partly ? 'var(--wn)' : j.state === 'done' ? 'var(--ac)' : 'var(--t3)' }}
@@ -785,7 +788,7 @@ function JobRow({ j, onCancel, onRetry, onOpenFolder }: { j: DownloadJob; onCanc
           {j.name}
         </span>
         {going && (
-          <div className={'dl-bar' + (pct === null ? ' unknown' : '')}>
+          <div className={'dl-bar' + (pct === null ? ' unknown' : '')} data-moving={(j.state === 'downloading' && pct !== null) || undefined}>
             <span style={{ width: `${pct ?? 30}%` }} />
           </div>
         )}
@@ -963,6 +966,7 @@ function Torrents({ info, error, onInfo, onOpenFolder }: { info: TorrentsInfo | 
   const [turtleBusy, setTurtleBusy] = useState(false);
 
   const list = info?.torrents ?? [];
+  const finishedNow = useChanges(list.map((t): [string, string] => [t.hash, t.progress < 1 ? 'going' : 'done']));
   const sp = info?.configured && !info.error ? info.speed : null;
   const line = sp ? speedLine(sp) : null;
   const recent = (info?.retired ?? []).filter((r) => Date.now() - Date.parse(r.at) < 24 * 3_600_000).slice(0, 3);
@@ -1028,6 +1032,7 @@ function Torrents({ info, error, onInfo, onOpenFolder }: { info: TorrentsInfo | 
               <div
                 key={t.hash}
                 className={'dl-item torrent' + (expanded ? ' open' : '')}
+                data-landed={finishedNow.get(t.hash)?.to === 'done' || undefined}
                 {...menuProps(
                   () => [
                     { label: canResume(t) ? 'Resume' : 'Pause', icon: canResume(t) ? 'ph-play' : 'ph-pause', onSelect: () => act(api.torrentAction([t.hash], canResume(t) ? 'start' : 'stop')) },
@@ -1046,7 +1051,7 @@ function Torrents({ info, error, onInfo, onOpenFolder }: { info: TorrentsInfo | 
                     {t.name}
                   </button>
                   {going && (
-                    <div className="dl-bar">
+                    <div className="dl-bar" data-moving={(t.status === 'downloading' && t.dlBps > 0) || undefined}>
                       <span style={{ width: `${t.progress * 100}%`, background: t.status === 'paused' || t.status === 'stalled' ? 'var(--t3)' : undefined }} />
                     </div>
                   )}

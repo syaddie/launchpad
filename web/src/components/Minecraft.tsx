@@ -8,7 +8,8 @@ import { McBackupsView, fmtSize, fmtWhen } from './McBackups';
 import { McCommandSheet } from './McCommandSheet';
 import { McCrashesView, savedOf } from './McCrashes';
 import { McPlayersView } from './McPlayers';
-import { Glide } from './Motion';
+import { Glide, useChanges } from './Motion';
+import { LaunchCount } from './mission/Count';
 import { EmptyArt } from './mission/EmptyArt';
 
 const LOG_EVERY = 1500;
@@ -23,6 +24,8 @@ const START_EVERY = 3_000;
 const START_WAIT = 60_000;
 const STAY_UP = 6_000;
 const FINDING_ICON = { error: 'ph-x-circle', warn: 'ph-warning', info: 'ph-info' } as const;
+/** The most players Mission shows a light for; past that it says how many more. */
+const CREW_MAX = 12;
 
 type View = 'console' | 'players' | 'backups' | 'crashes';
 const VIEWS: { key: View; name: string; icon: string }[] = [
@@ -167,6 +170,7 @@ export function MinecraftPanel({ onFailed }: { onFailed: () => void }) {
             list.map((s) => (
               <button key={s.id} className={'mc-row' + (chosen?.id === s.id ? ' active' : '')} onClick={() => choose(s.id)} aria-current={chosen?.id === s.id || undefined}>
                 <span className="dot" style={{ width: 8, height: 8, background: s.running ? 'var(--ac)' : 'var(--ln)' }} />
+                <i className={'ms-mark mc-mark ms-mark--' + (s.running ? 'go' : s.gaveUp ? 'scrub' : 'standby')} aria-hidden="true" />
                 <span className="mc-row-text">
                   <span className="mc-row-name">{s.name}</span>
                   <span className="meta mono">{s.job ? (s.job === 'backup' ? 'Backing up…' : 'Restoring…') : s.session ? `${s.mux} ${s.session}` : 'not in tmux or screen'}</span>
@@ -216,6 +220,20 @@ function Console({ s, onChanged, onSaved, onEdit }: { s: McStatus; onChanged: ()
   const [view, setViewState] = useState<View>(() => VIEWS.find((v) => v.key === localGet('mcView'))?.key ?? 'console');
   const [meters, setMeters] = useState<McMeters | null>(null);
   const [crashOpen, setCrashOpen] = useState<string | null>(null);
+  // Mission's light for it, and its count from Start: when Start was pressed, and whether it stopped without being
+  // asked to (a stop or restart typed here is asked; anything else is a crash, as far as this page can tell).
+  const [armed, setArmed] = useState<number | null>(null);
+  const [crashed, setCrashed] = useState(false);
+  const stopping = useRef(false);
+  const upBefore = useRef(s.running);
+  useEffect(() => {
+    if (upBefore.current && !s.running && !stopping.current) setCrashed(true);
+    if (s.running) setCrashed(false);
+    if (upBefore.current !== s.running) stopping.current = false;
+    upBefore.current = s.running;
+  }, [s.running]);
+  const ran = useChanges([[s.id, s.running ? 'up' : 'down']]).get(s.id)?.to;
+  const crew = useChanges([['crew', String(s.running ? (meters?.online ?? 0) : 0)]]).get('crew');
   const explainStatus = useExplainStatus();
   const ex = useExplain(explainStatus);
   // False once this console is gone, so a Start that's still waiting stops quietly.
@@ -297,6 +315,7 @@ function Console({ s, onChanged, onSaved, onEdit }: { s: McStatus; onChanged: ()
     api
       .mcCommand(s.id, c)
       .then(() => {
+        if (/^\/?(stop|restart)$/i.test(c)) stopping.current = true;
         setNote(null);
         setCmd('');
         history.current = [c, ...history.current.filter((h) => h !== c)].slice(0, HISTORY);
@@ -357,6 +376,8 @@ function Console({ s, onChanged, onSaved, onEdit }: { s: McStatus; onChanged: ()
   const start = () => {
     setBusy(true);
     setStarting(true);
+    setArmed(Date.now());
+    setCrashed(false);
     setDiag(null);
     api
       .mcStart(s.id)
@@ -373,6 +394,7 @@ function Console({ s, onChanged, onSaved, onEdit }: { s: McStatus; onChanged: ()
         if (!alive.current) return;
         setBusy(false);
         setStarting(false);
+        setArmed(null);
       });
   };
 
@@ -427,18 +449,23 @@ function Console({ s, onChanged, onSaved, onEdit }: { s: McStatus; onChanged: ()
 
   const canType = s.running && s.attached;
   const parts = meterParts(meters);
+  const online = s.running ? (meters?.online ?? 0) : 0;
+  const mark = s.running ? 'go' : starting ? 'hold' : crashed || s.gaveUp ? 'scrub' : 'standby';
   return (
     <div className="mc-console">
-      <div className="mc-head">
+      {/* Mission: coming up is an ignition, and stopping on its own is scrubbed (data-ran, for a moment). */}
+      <div className="mc-head" data-ran={ran === 'up' ? 'up' : ran === 'down' && crashed ? 'scrub' : undefined}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+          <i className={'ms-mark mc-light ms-mark--' + mark} aria-hidden="true" />
           <h2 className="panel-title mc-title">{s.name}</h2>
           <span className={'chip ' + (s.running ? 'chip-accent' : 'chip-neutral')}>{s.running ? 'Running' : 'Stopped'}</span>
         </div>
         <div className="mc-tools">
           {!s.running && s.saved && s.start && (
-            <button className="btn btn-primary btn-small" disabled={busy || starting || !!s.job} title={s.job ? `Wait for the ${s.job} to finish` : undefined} onClick={start}>
+            <button className="btn btn-primary btn-small mc-start" disabled={busy || starting || !!s.job} title={s.job ? `Wait for the ${s.job} to finish` : undefined} data-count={armed !== null || undefined} onClick={start}>
               <i className="ph-duotone ph-play" />
-              Start
+              <span>Start</span>
+              {armed !== null && <LaunchCount at={armed} />}
             </button>
           )}
           {canType && (
@@ -468,6 +495,15 @@ function Console({ s, onChanged, onSaved, onEdit }: { s: McStatus; onChanged: ()
           {s.dir || 'Folder unknown'}
           {s.pid ? ` · pid ${s.pid}` : ''}
         </span>
+        {/* Mission: a light for each player aboard; one boarding reports in. The meters say how many in words. */}
+        {online > 0 && (
+          <span className="mc-crew" aria-hidden="true">
+            {Array.from({ length: Math.min(online, CREW_MAX) }, (_, i) => (
+              <i key={i} className="ms-mark ms-mark--go" data-new={(crew && i >= Number(crew.from) && i < Number(crew.to)) || undefined} />
+            ))}
+            {online > CREW_MAX && <span>+{online - CREW_MAX}</span>}
+          </span>
+        )}
         {parts.length > 0 && (
           <span className="mc-meters" aria-label="Meters">
             {parts.map((p) => (
